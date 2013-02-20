@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7CB8E4B16D51EE200D3007B</string>
+						<string>F7CB915816D596BC00D3007B</string>
 						<key>history</key>
 						<array>
 							<string>F7E9375316D455D100C7AEC3</string>
@@ -364,12 +364,15 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7CB8E4A16D51EE200D3007B</string>
+										<string>F7CB915716D596BC00D3007B</string>
 										<key>history</key>
 										<array>
-											<string>F7CB8C5C16D4CD9C00D3007B</string>
 											<string>F7CB8C5D16D4CD9C00D3007B</string>
-											<string>F7CB8E4516D51EC600D3007B</string>
+											<string>F7CB8EC916D53B9B00D3007B</string>
+											<string>F7CB900916D5733B00D3007B</string>
+											<string>F7CB900B16D5733B00D3007B</string>
+											<string>F7CB914A16D595BB00D3007B</string>
+											<string>F7CB914B16D595BB00D3007B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -606,7 +609,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {930, 374}}</string>
 								<key>RubberWindowFrame</key>
-								<string>508 196 930 656 0 0 1440 878 </string>
+								<string>292 211 930 656 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -632,7 +635,7 @@
 								<key>Frame</key>
 								<string>{{0, 379}, {930, 236}}</string>
 								<key>RubberWindowFrame</key>
-								<string>508 196 930 656 0 0 1440 878 </string>
+								<string>292 211 930 656 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXBuildResultsModule</string>
@@ -664,7 +667,7 @@
 			<key>WindowContentMinSize</key>
 			<string>486 300</string>
 			<key>WindowString</key>
-			<string>508 196 930 656 0 0 1440 878 </string>
+			<string>292 211 930 656 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
