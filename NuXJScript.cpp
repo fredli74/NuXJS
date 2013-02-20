@@ -18,12 +18,75 @@ typedef unsigned char Byte;
 
 double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
-// FIX : should probably sep. internal format (== drop int type), became complicated
+// Based on code from PikaScript
+String intToString(int i, int radix = 10, int minLength = 1) {
+	assert(2 <= radix && radix <= 16);
+	assert(0 <= minLength && minLength <= sizeof (int) * 8);
+	Char buffer[sizeof (int) * 8 + 1], * p = buffer + sizeof (int) * 8 + 1, * e = p - minLength;
+	for (int x = i; p > e || x != 0; x /= radix) {
+		assert(p >= buffer + 2);
+		*--p = "fedcba9876543210123456789abcdef"[15 + x % radix];														// Mirrored hex string to handle negative x.
+	}
+	if (i < 0) *--p = '-';
+	return String(p, buffer + sizeof (i) * 8 + 1 - p);
+}
+
+// Based on code from PikaScript
+static String doubleToString(double d, int precision = 13) {
+	assert(1 <= precision && precision <= 24);
+
+	const double EPSILON = 1.0e-300;
+	const double SMALL = 1.0e-5;
+	const double LARGE = 1.0e+10;
+
+	double x = fabs(d);
+	if (x <= EPSILON) return "0";
+
+	Char buffer[32];
+	Char* bp = buffer + 2;
+	Char* dp = bp;
+	Char* pp = dp + 1;
+	Char* ep = pp + precision;
+	
+	double y = x;	
+	for (; x >= 10.0 && pp < ep; x *= 0.1) ++pp;																		// Normalize values > 10 and move period position.
+
+	if (pp >= ep || y <= SMALL || y >= LARGE) {																			// Exponential treatment of very small or large values.
+		double e = floor(log10(y) + 1.0e-10);
+		String exps(e >= 0 ? "e+" : "e");
+		exps += intToString(static_cast<int>(e));
+		int maxp = 15;																									// Limit precision because of rounding errors in log10 etc
+		for (double f = fabs(e); f >= 8; f /= 10) --maxp;
+		return (doubleToString(d * pow(0.1, e), std::min(maxp, precision)) += exps);
+	}
+	for (; x < 1.0 && dp < buffer + 32; ++ep, x *= 10.0) {																// For values < 1, spit out leading 0's and increase precision.
+		*dp++ = '0';
+		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
+	}
+	for (; dp < ep; ) {																									// Exhaust all remaining digits of mantissa into buffer.
+		unsigned int ix = static_cast<unsigned int>(x);
+		*dp++ = ix + '0';
+		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
+		x = (x - ix) * 10.0;
+	}
+	if (x >= 5) {																										// If remainder is >= 5, increment trailing 9's...
+		while (dp[-1] == '9') *--dp = '0';
+		if (dp == bp) *--bp = '1';																						// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
+		else dp[-1]++;
+		if (dp[-1] == '1') --ep;																						// We incremented a 0, cut precision (afterwards, a bit Q&D).
+	}
+	*pp = '.';
+	if (ep > pp) while (ep[-1] == '0') --ep;
+	if (ep - 1 == pp) --ep;
+	if (d < 0) *--bp = '-';	
+	return String(bp, ep - bp);
+}
+
 class Value {
-	public:		Value() : format(UNDEFINED_FORMAT) { }
-	public:		Value(const bool b) : format(BOOLEAN_FORMAT), b(b) { }
-	public:		Value(const Int32 i) : format(INT_FORMAT), i(i) { }
-	public:		Value(const double d) : format(DOUBLE_FORMAT), d(d) { }
+	public:		Value() : type(UNDEFINED_TYPE) { }
+	public:		Value(const bool b) : type(BOOLEAN_TYPE), b(b) { }
+	public:		Value(const Int32 i) : type(NUMBER_TYPE), d(i) { }
+	public:		Value(const double d) : type(NUMBER_TYPE), d(d) { }
 	public:		enum Type {
 					UNDEFINED_TYPE = 0
 					, NULL_TYPE = 1
@@ -32,82 +95,66 @@ class Value {
 					, STRING_TYPE = 4
 					, OBJECT_TYPE = 5
 				};
-	public:		enum Format {
-					UNDEFINED_FORMAT = 0
-					, NULL_FORMAT = 2
-					, BOOLEAN_FORMAT = 4
-					, INT_FORMAT = 6
-					, DOUBLE_FORMAT = 7
-					, STRING_FORMAT = 8
-				};
-	public:		static Type typeFromFormat(Format f) { return static_cast<Type>(f >> 1); }
-	public:		Format format;
+	public:		Type type;
 	public:		union {
 					bool b;
-					Int32 i;
 					double d;
 					String* s;
 				};
 	public:		operator bool() const {
-					switch (format) {
+					switch (type) {
 						default: assert(0);
-						case UNDEFINED_FORMAT: return false;
-						case NULL_FORMAT: return false;
-						case BOOLEAN_FORMAT: return b;
-						case INT_FORMAT: return (i != 0);
-						case DOUBLE_FORMAT: return (d != 0.0);
-					}
-				}
-	public:		operator Int32() const {
-					switch (format) {
-						default: assert(0);
-						case UNDEFINED_FORMAT: return NaN();
-						case NULL_FORMAT: return 0;
-						case BOOLEAN_FORMAT: return b ? 1 : 0;
-						case INT_FORMAT: return i;
-						case DOUBLE_FORMAT: return static_cast<Int32>(d);
+						case UNDEFINED_TYPE: return false;
+						case NULL_TYPE: return false;
+						case BOOLEAN_TYPE: return b;
+						case NUMBER_TYPE: return (d != 0.0);
 					}
 				}
 	public:		operator double() const {
-					switch (format) {
+					switch (type) {
 						default: assert(0);
-						case UNDEFINED_FORMAT: return NaN();
-						case NULL_FORMAT: return 0.0;
-						case BOOLEAN_FORMAT: return b ? 1.0 : 0.0;
-						case INT_FORMAT: return i;
-						case DOUBLE_FORMAT: return d;
+						case UNDEFINED_TYPE: return NaN();
+						case NULL_TYPE: return 0.0;
+						case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
+						case NUMBER_TYPE: return d;
 					}
 				}
 	public:		bool operator==(const Value& o) const {
-					if (format != o.format) return false;
-					switch (format) {
+					if (type != o.type) return false;
+					switch (type) {
 						default: assert(0);
-						case UNDEFINED_FORMAT: return true;
-						case NULL_FORMAT: return true;
-						case BOOLEAN_FORMAT: return b == o.b;
-						case INT_FORMAT: return i == o.i;
-						case DOUBLE_FORMAT: return d == o.d;
+						case UNDEFINED_TYPE: return true;
+						case NULL_TYPE: return true;
+						case BOOLEAN_TYPE: return b == o.b;
+						case NUMBER_TYPE: return d == o.d;
 					}
 				}
 	public:		bool operator<(const Value& o) const {
-					if (format < o.format) return true;
-					switch (format) {
+					if (type < o.type) return true;
+					switch (type) {
 						default: assert(0);
-						case UNDEFINED_FORMAT: return false;
-						case NULL_FORMAT: return false;
-						case BOOLEAN_FORMAT: return b < o.b;
-						case INT_FORMAT: return i < o.i;
-						case DOUBLE_FORMAT: return d < o.d;
+						case UNDEFINED_TYPE: return false;
+						case NULL_TYPE: return false;
+						case BOOLEAN_TYPE: return b < o.b;
+						case NUMBER_TYPE: return d < o.d;
+					}
+				}
+	public:		String toString() const {
+					switch (type) {
+						default: assert(0);
+						case UNDEFINED_TYPE: return "undefined";
+						case NULL_TYPE: return "null";
+						case BOOLEAN_TYPE: return b ? "true" : "false";
+						case NUMBER_TYPE: return doubleToString(d);
 					}
 				}
 	protected:	bool compareStrictly(const Value& o) const {
-					switch (format) {
+					switch (type) {
 						default: assert(0);
-						case UNDEFINED_FORMAT: return true;
-						case NULL_FORMAT: return true;
-						case BOOLEAN_FORMAT: return b == o.b;
-						case INT_FORMAT:
-						case DOUBLE_FORMAT: {
+						case UNDEFINED_TYPE: return true;
+						case NULL_TYPE: return true;
+						case BOOLEAN_TYPE: return b == o.b;
+						case NUMBER_TYPE: {
 							double thisNumber = (double)(*this);
 							double otherNumber = (double)(o);
 						// FIX : necessary to avoid optimizing away?
@@ -117,19 +164,19 @@ class Value {
 					}
 				}
 	public:		bool isStrictlyEqualTo(const Value& o) const {
-					if (typeFromFormat(format) != typeFromFormat(o.format)) return false;
+					if (type != o.type) return false;
 					else return compareStrictly(o);
 				}
 	public:		bool isEqualTo(const Value& o) const {
-					if (typeFromFormat(format) == typeFromFormat(o.format)) return compareStrictly(o);
+					if (type == o.type) return compareStrictly(o);
 					else {
-						if (format == NULL_FORMAT && o.format == UNDEFINED_FORMAT) return true;
-						if (format == UNDEFINED_FORMAT && o.format == NULL_FORMAT) return true;
+						if (type == NULL_TYPE && o.type == UNDEFINED_TYPE) return true;
+						if (type == UNDEFINED_TYPE && o.type == NULL_TYPE) return true;
 						// If Type(x) is Number and Type(y) is String,
 						// return the result of the comparison x == ToNumber(y).
 						// If Type(x) is String and Type(y) is Number,
 						// return the result of the comparison ToNumber(x) == y.
-						if (format == BOOLEAN_FORMAT || o.format == BOOLEAN_FORMAT)
+						if (type == BOOLEAN_TYPE || o.type == BOOLEAN_TYPE)
 							return (double)(*this) == (double)(o);
 						// If Type(x) is either String or Number and Type(y) is Object,
 						// return the result of the comparison x == ToPrimitive(y).
@@ -139,7 +186,7 @@ class Value {
 					}
 				}
 	public:		Value isLessThan(const Value& o) const {
-					// if (format == STRING_FORMAT && o.format == STRING_FORMAT)
+					// if (type == STRING_TYPE && o.type == STRING_TYPE)
 					double thisNumber = (double)(*this);
 					double otherNumber = (double)(o);
 					if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
@@ -227,15 +274,15 @@ class VM {
 							case MUL_OP: vsp[1] = (double)vsp[1] * (double)vsp[0]; pop(vsp, 1); break;
 							case DIV_OP: vsp[1] = (double)vsp[1] / (double)vsp[0]; pop(vsp, 1); break;
 							case MOD_OP: vsp[1] = fmod(vsp[1], vsp[0]); pop(vsp, 1); break;
-							case OR_OP: vsp[1] = vsp[1] | vsp[0]; pop(vsp, 1); break;
-							case XOR_OP: vsp[1] = vsp[1] ^ vsp[0]; pop(vsp, 1); break;
-							case AND_OP: vsp[1] = vsp[1] & vsp[0]; pop(vsp, 1); break;
-							case SHL_OP: vsp[1] = vsp[1] << vsp[0]; pop(vsp, 1); break;
-							case SHR_OP: vsp[1] = vsp[1] >> vsp[0]; pop(vsp, 1); break;
-							case USHR_OP: vsp[1] = (Int32)((UInt32)((Int32)vsp[1]) >> vsp[0]); pop(vsp, 1); break;
+							case OR_OP: vsp[1] = (Int32)vsp[1] | (Int32)vsp[0]; pop(vsp, 1); break;
+							case XOR_OP: vsp[1] = (Int32)vsp[1] ^ (Int32)vsp[0]; pop(vsp, 1); break;
+							case AND_OP: vsp[1] = (Int32)vsp[1] & (Int32)vsp[0]; pop(vsp, 1); break;
+							case SHL_OP: vsp[1] = (Int32)vsp[1] << (Int32)vsp[0]; pop(vsp, 1); break;
+							case SHR_OP: vsp[1] = (Int32)vsp[1] >> (Int32)vsp[0]; pop(vsp, 1); break;
+							case USHR_OP: vsp[1] = (Int32)((UInt32)((Int32)vsp[1]) >> (Int32)vsp[0]); pop(vsp, 1); break;
 							case PLUS_OP: vsp[0] = (double)vsp[0]; break;
 							case MINUS_OP: vsp[0] = -(double)vsp[0]; break;
-							case BIT_NOT_OP: vsp[0] = ~vsp[0]; break;
+							case BIT_NOT_OP: vsp[0] = ~(Int32)(vsp[0]); break;
 							case NOT_OP: vsp[0] = Value(!vsp[0]); break;
 							case STRICTLY_EQ_OP: vsp[1] = (vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
 							case EQ_OP: vsp[1] = vsp[1].isEqualTo(vsp[0]); pop(vsp, 1); break;
@@ -611,7 +658,7 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
 						/* else continue */
 			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
 				double d = parseNumber(p, e);
-				v = XValue(XValue::CONSTANT, (static_cast<Int32>(d) == d) ? Value(static_cast<Int32>(d)) : Value(d));
+				v = XValue(XValue::CONSTANT, Value(d));
 				break;
 			}
 			default: {
@@ -709,7 +756,7 @@ int main(int argc, const char* argv[]) {
 			VM vm(cstack, cstack + 1024, vstack, vstack + 1024);
 			vm.run(1000);
 			std::cout << "On stack: " << (1023 - (cstack[1023].vsp - vstack)) << std::endl;
-			std::cout << "=" << static_cast<double>(vstack[1023]) << std::endl;
+			std::cout << "=" << vstack[1023].toString() << std::endl;
 		}
 		catch (const std::exception& x) {
 			std::cout << "Exception: " << x.what() << std::endl;

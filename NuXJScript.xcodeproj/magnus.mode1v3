@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7CB8D7416D5073E00D3007B</string>
+						<string>F7CB8DBE16D50E0600D3007B</string>
 						<key>history</key>
 						<array>
 							<string>F7E9375316D455D100C7AEC3</string>
@@ -364,12 +364,12 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7CB8D7316D5073E00D3007B</string>
+										<string>F7CB8DBD16D50E0600D3007B</string>
 										<key>history</key>
 										<array>
 											<string>F7CB8C5C16D4CD9C00D3007B</string>
 											<string>F7CB8C5D16D4CD9C00D3007B</string>
-											<string>F7CB8D7216D5073E00D3007B</string>
+											<string>F7CB8DBC16D50E0600D3007B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -567,14 +567,15 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7CB8D7516D5073E00D3007B</string>
+		<string>F7CB8DBF16D50E0600D3007B</string>
+		<string>F7CB8DC016D50E0600D3007B</string>
 		<string>F7CB8C0C16D4C6AA00D3007B</string>
 		<string>F7CB8C0D16D4C6AA00D3007B</string>
+		<string>1C78EAAD065D492600B07095</string>
+		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F7902A6116D2935B00FA5B07</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
-		<string>1CD10A99069EF8BA00B06720</string>
 	</array>
 	<key>WindowString</key>
 	<string>4 56 1436 822 0 0 1440 878 </string>
@@ -605,14 +606,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 0}, {500, 218}}</string>
+								<string>{{0, 0}, {930, 374}}</string>
 								<key>RubberWindowFrame</key>
-								<string>46 332 500 500 0 0 1440 878 </string>
+								<string>508 196 930 656 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
 							<key>Proportion</key>
-							<string>218pt</string>
+							<string>374pt</string>
 						</dict>
 						<dict>
 							<key>BecomeActive</key>
@@ -631,9 +632,9 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 223}, {500, 236}}</string>
+								<string>{{0, 379}, {930, 236}}</string>
 								<key>RubberWindowFrame</key>
-								<string>46 332 500 500 0 0 1440 878 </string>
+								<string>508 196 930 656 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXBuildResultsModule</string>
@@ -642,7 +643,7 @@
 						</dict>
 					</array>
 					<key>Proportion</key>
-					<string>459pt</string>
+					<string>615pt</string>
 				</dict>
 			</array>
 			<key>Name</key>
@@ -665,7 +666,7 @@
 			<key>WindowContentMinSize</key>
 			<string>486 300</string>
 			<key>WindowString</key>
-			<string>46 332 500 500 0 0 1440 878 </string>
+			<string>508 196 930 656 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
@@ -793,7 +794,7 @@
 			<key>WindowToolGUID</key>
 			<string>1CD10A99069EF8BA00B06720</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>
@@ -925,7 +926,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {935, 511}}</string>
 								<key>RubberWindowFrame</key>
-								<string>299 209 935 552 0 0 1440 878 </string>
+								<string>603 274 935 552 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXDebugCLIModule</string>
@@ -954,11 +955,11 @@
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.consoleV3</string>
 			<key>WindowString</key>
-			<string>299 209 935 552 0 0 1440 878 </string>
+			<string>603 274 935 552 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>
