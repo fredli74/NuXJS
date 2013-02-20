@@ -17,18 +17,29 @@ typedef unsigned char Byte;
 
 double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
+// FIX : should probably sep. internal format (== drop int type), became complicated
 class Value {
 	public:		Value() : format(UNDEFINED_FORMAT) { }
+	public:		Value(const bool b) : format(BOOLEAN_FORMAT), b(b) { }
 	public:		Value(const int i) : format(INT_FORMAT), i(i) { }
 	public:		Value(const double d) : format(DOUBLE_FORMAT), d(d) { }
-	public:		enum Format {
-					UNDEFINED_FORMAT
-					, NULL_FORMAT
-					, BOOLEAN_FORMAT
-					, INT_FORMAT
-					, DOUBLE_FORMAT
-					, STRING_FORMAT
+	public:		enum Type {
+					UNDEFINED_TYPE = 0
+					, NULL_TYPE = 1
+					, BOOLEAN_TYPE = 2
+					, NUMBER_TYPE = 3
+					, STRING_TYPE = 4
+					, OBJECT_TYPE = 5
 				};
+	public:		enum Format {
+					UNDEFINED_FORMAT = 0
+					, NULL_FORMAT = 2
+					, BOOLEAN_FORMAT = 4
+					, INT_FORMAT = 6
+					, DOUBLE_FORMAT = 7
+					, STRING_FORMAT = 8
+				};
+	public:		static Type typeFromFormat(Format f) { return static_cast<Type>(f >> 1); }
 	public:		Format format;
 	public:		union {
 					bool b;
@@ -36,6 +47,16 @@ class Value {
 					double d;
 					String* s;
 				};
+	public:		operator bool() const {
+					switch (format) {
+						default: assert(0);
+						case UNDEFINED_FORMAT: return false;
+						case NULL_FORMAT: return false;
+						case BOOLEAN_FORMAT: return b;
+						case INT_FORMAT: return (i != 0);
+						case DOUBLE_FORMAT: return (d != 0.0);
+					}
+				}
 	public:		operator int() const {
 					switch (format) {
 						default: assert(0);
@@ -78,6 +99,58 @@ class Value {
 						case DOUBLE_FORMAT: return d < o.d;
 					}
 				}
+	protected:	bool compareStrictly(const Value& o) const {
+					switch (format) {
+						default: assert(0);
+						case UNDEFINED_FORMAT: return true;
+						case NULL_FORMAT: return true;
+						case BOOLEAN_FORMAT: return b == o.b;
+						case INT_FORMAT:
+						case DOUBLE_FORMAT: {
+							double thisNumber = (double)(*this);
+							double otherNumber = (double)(o);
+						// FIX : necessary to avoid optimizing away?
+						//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
+							return thisNumber == otherNumber;
+						}
+					}
+				}
+	public:		bool isStrictlyEqualTo(const Value& o) const {
+					if (typeFromFormat(format) != typeFromFormat(o.format)) return false;
+					else return compareStrictly(o);
+				}
+	public:		bool isEqualTo(const Value& o) const {
+					if (typeFromFormat(format) == typeFromFormat(o.format)) return compareStrictly(o);
+					else {
+						if (format == NULL_FORMAT && o.format == UNDEFINED_FORMAT) return true;
+						if (format == UNDEFINED_FORMAT && o.format == NULL_FORMAT) return true;
+						// If Type(x) is Number and Type(y) is String,
+						// return the result of the comparison x == ToNumber(y).
+						// If Type(x) is String and Type(y) is Number,
+						// return the result of the comparison ToNumber(x) == y.
+						if (format == BOOLEAN_FORMAT || o.format == BOOLEAN_FORMAT)
+							return (double)(*this) == (double)(o);
+						// If Type(x) is either String or Number and Type(y) is Object,
+						// return the result of the comparison x == ToPrimitive(y).
+						// If Type(x) is Object and Type(y) is either String or Number,
+						// return the result of the comparison ToPrimitive(x) == y.
+						return false;
+					}
+				}
+	public:		Value isLessThan(const Value& o) const {
+					// if (format == STRING_FORMAT && o.format == STRING_FORMAT)
+					double thisNumber = (double)(*this);
+					double otherNumber = (double)(o);
+					if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
+					return (thisNumber < otherNumber);
+				//	FIX : need to check?
+				//	If nx is +0 and ny is −0, return false.
+				//	If nx is −0 and ny is +0, return false.
+				//	If nx is +∞, return false.
+				//	If ny is +∞, return true.
+				//	If ny is −∞, return false.
+				//	If nx is −∞, return true.
+				}
 };
 
 class Function {
@@ -95,21 +168,14 @@ struct Context {
 class VM {
 	public:		enum Op {
 					INVALID_OP = -1
-					, CONST_OP
-					, READ_INDEXED_OP
-					, WRITE_INDEXED_OP
-					, READ_NAMED_OP
-					, WRITE_NAMED_OP
-					, ADD_OP
-					, SUB_OP
-					, MUL_OP
-					, DIV_OP
-					, MOD_OP
-					, OR_OP
-					, XOR_OP
-					, AND_OP
-					, PLUS_OP
-					, NEG_OP
+					, POP_OP, REPUSH_OP, CONST_OP
+					, READ_INDEXED_OP, WRITE_INDEXED_OP, READ_NAMED_OP, WRITE_NAMED_OP
+					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP
+					, OR_OP, XOR_OP, AND_OP
+					, SHL_OP, SHR_OP, USHR_OP
+					, PLUS_OP, MINUS_OP
+					, BIT_NOT_OP, NOT_OP
+					, STRICTLY_EQ_OP, EQ_OP, LT_OP, GT_OP
 					, RETURN_OP
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
@@ -117,16 +183,17 @@ class VM {
 						, csp(cstackEnd - 1) {
 				}
 	protected:	void push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
-	protected:	const Value& pop(Value*& vsp) { assert(vsp < vstackEnd); return *vsp++; }
 	protected:	void pop(Value*& vsp, int count) { assert(vsp + count <= vstackEnd); vsp += count; }
 	protected:	UInt32 readUInt32(const Byte*& ip) { UInt32 v = *reinterpret_cast<const UInt32*>(ip); ip += 4; return v; }
-	public:		void run(int count) {
+	public:		bool run(int count) {
 					const Byte* ip = csp->ip;
 					Value* vsp = csp->vsp;
 					const Value* cp = csp->cp;
 					Value* lp = csp->lp;
 					while (--count >= 0) {
 						switch (*ip++) {
+							case POP_OP: pop(vsp, 1); break;
+							case REPUSH_OP: push(vsp, vsp[0]); break;
 							case CONST_OP: push(vsp, cp[readUInt32(ip)]); break;
 							case READ_INDEXED_OP: push(vsp, lp[readUInt32(ip)]); break;
 							case WRITE_INDEXED_OP: lp[readUInt32(ip)] = vsp[0]; break;
@@ -140,10 +207,21 @@ class VM {
 							case OR_OP: vsp[1] = vsp[1] | vsp[0]; pop(vsp, 1); break;
 							case XOR_OP: vsp[1] = vsp[1] ^ vsp[0]; pop(vsp, 1); break;
 							case AND_OP: vsp[1] = vsp[1] & vsp[0]; pop(vsp, 1); break;
+							case SHL_OP: vsp[1] = vsp[1] << vsp[0]; pop(vsp, 1); break;
+							case SHR_OP: vsp[1] = vsp[1] >> vsp[0]; pop(vsp, 1); break;
+							case USHR_OP: vsp[1] = (int)((unsigned int)((int)vsp[1]) >> vsp[0]); pop(vsp, 1); break;
 							case PLUS_OP: vsp[0] = (double)vsp[0]; break;
-							case NEG_OP: vsp[0] = -(double)vsp[0]; break;
+							case MINUS_OP: vsp[0] = -(double)vsp[0]; break;
+							case BIT_NOT_OP: vsp[0] = ~vsp[0]; break;
+							case NOT_OP: vsp[0] = Value(!vsp[0]); break;
+							case STRICTLY_EQ_OP: vsp[1] = (vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+							case EQ_OP: vsp[1] = vsp[1].isEqualTo(vsp[0]); pop(vsp, 1); break;
+							case LT_OP: vsp[1] = vsp[1].isLessThan(vsp[0]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+							case GT_OP: vsp[1] = vsp[0].isLessThan(vsp[1]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 							case RETURN_OP: {
-								if (++csp == cstackEnd) return;
+								csp->ip = ip;
+								csp->vsp = vsp;
+								if (++csp == cstackEnd) return true;
 								ip = csp->ip;
 								vsp = csp->vsp;
 								cp = csp->cp;
@@ -154,6 +232,7 @@ class VM {
 					}
 					csp->ip = ip;
 					csp->vsp = vsp;
+					return false;
 				}
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
@@ -162,8 +241,11 @@ class VM {
 	protected:	Context* csp;
 };
 
-enum Precedence { GROUP_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, ASSIGN_PREC, LOWEST_PREC };
-enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT };
+enum Precedence {
+	GROUP_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
+	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
+};
+enum OperatorType { GROUP, UNARY, BINARY, BINARY_NOT, ASSIGNMENT, POST_UNARY };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -177,12 +259,22 @@ struct OperatorInfo {
 
 const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, VM::INVALID_OP },
-	{ "+", 0, PREFIX_PREC, LEFT_TO_RIGHT, UNARY, VM::PLUS_OP },
-	{ "-", 0, PREFIX_PREC, LEFT_TO_RIGHT, UNARY, VM::NEG_OP }
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::ADD_OP },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::SUB_OP },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::PLUS_OP },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::PLUS_OP },
+	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::MINUS_OP },
+	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::BIT_NOT_OP },
+	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::NOT_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
+	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICTLY_EQ_OP },
+	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::EQ_OP },
 	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::INVALID_OP },
+	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::USHR_OP },
+	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHR_OP },
+	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHL_OP },
 	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::ADD_OP },
 	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SUB_OP },
 	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::MUL_OP },
@@ -191,6 +283,11 @@ const OperatorInfo POST_OPS[] = {
 	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::AND_OP },
 	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::XOR_OP },
 	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::OR_OP },
+	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::USHR_OP },
+	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHR_OP },
+	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHL_OP },
+	{ "++", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::ADD_OP },
+	{ "--", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::SUB_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::ADD_OP },
 	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::SUB_OP },
 	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MUL_OP },
@@ -198,16 +295,18 @@ const OperatorInfo POST_OPS[] = {
 	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MOD_OP },
 	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, VM::AND_OP },
 	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, VM::XOR_OP },
-	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, VM::OR_OP }
+	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, VM::OR_OP },
+	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::STRICTLY_EQ_OP },
+	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::EQ_OP },
+	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::GT_OP }, 
+	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LT_OP }, 
+	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::LT_OP }, 
+	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GT_OP }
 };
 
 class Compiler {
 	public:		struct XValue {
-					enum Type {
-						STACKED
-						, CONSTANT
-						, INDEXED
-					};
+					enum Type { STACKED, STACKED_NOT, CONSTANT, INDEXED };
 					XValue() : t(STACKED) { }
 					XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 					Type t;
@@ -229,6 +328,7 @@ class Compiler {
 	public:		double parseNumber(StringIt& p, const StringIt& e);
 	public:		bool token(StringIt& p, const StringIt& e, const Char* t);
 	public:		void makeRValue(XValue& v);
+	public:		void makeAssignment(XValue& v);
 	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
 	public:		std::vector<Byte>& code;
@@ -356,8 +456,17 @@ void Compiler::makeRValue(XValue& v) {
 	switch (v.t) {
 		default: assert(0);
 		case XValue::STACKED: return;
+		case XValue::STACKED_NOT: emit(VM::NOT_OP); break;
 		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, v.v); break;
 		case XValue::INDEXED: emitWithUInt32(VM::READ_INDEXED_OP, static_cast<int>(v.v)); break;
+	}
+	v = XValue(XValue::STACKED);
+}
+
+void Compiler::makeAssignment(XValue& v) {
+	switch (v.t) {
+		default: throw std::runtime_error("Invalid lvalue");
+		case XValue::INDEXED: emitWithUInt32(VM::WRITE_INDEXED_OP, static_cast<int>(v.v)); break;
 	}
 	v = XValue(XValue::STACKED);
 }
@@ -365,44 +474,70 @@ void Compiler::makeRValue(XValue& v) {
 bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
 	for (int i = 0; i < opCount; ++i) {
-		if (precedence > opList[i].prec - (opList[i].assoc == RIGHT_TO_LEFT ? 1 : 0)
-				&& token(p, e, opList[i].token)) {
-			XValue rv;
-			parseExpression(p, e, rv, (opList[i].closeToken != 0 ? LOWEST_PREC : opList[i].prec));
-			if (opList[i].closeToken != 0 && !token(p, e, opList[i].closeToken)) {
-				throw std::runtime_error(std::string("Expected ") + opList[i].closeToken);
-			}
-			switch (opList[i].type) {
-				case GROUP: {
+		const OperatorInfo& op = opList[i];
+		if (precedence > op.prec - (op.assoc == RIGHT_TO_LEFT ? 1 : 0) && token(p, e, op.token)) {
+			if (op.type == POST_UNARY) {
+				switch (v.t) {
+					default: throw std::runtime_error("Invalid lvalue");
+					case XValue::INDEXED: {
+						XValue lv(v);
+						makeRValue(lv);
+						emit(VM::REPUSH_OP);
+						emitWithConstant(VM::CONST_OP, Value(1.0)); 
+						emit(op.vmOp);
+						makeAssignment(v);
+						emit(VM::POP_OP);
+					}
 					break;
 				}
-				case UNARY: {
-					makeRValue(rv);
-					emit(opList[i].vmOp);
-					break;
+			} else {
+				XValue rv;
+				parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
+				if (op.closeToken != 0 && !token(p, e, op.closeToken)) {
+					throw std::runtime_error(std::string("Expected ") + op.closeToken);
 				}
-				case BINARY: {
-					makeRValue(v);
-					makeRValue(rv);
-					emit(opList[i].vmOp);
-					break;
-				}
-				case ASSIGNMENT: {
-					XValue lv(v);
-					if (opList[i].vmOp != VM::INVALID_OP) {
+				switch (op.type) {
+					case GROUP: {
+						v = rv;
+						break;
+					}
+					case UNARY: {
+						if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
+							v = rv;
+							XValue lv(v);
+							makeRValue(lv);
+							emitWithConstant(VM::CONST_OP, Value(1.0)); 
+							emit(op.vmOp);
+							makeAssignment(v);
+						} else {
+							v = rv;
+							makeRValue(v);
+							emit(op.vmOp);
+						}
+						break;
+					}
+					case BINARY:
+					case BINARY_NOT: {
 						makeRValue(v);
 						makeRValue(rv);
-						emit(opList[i].vmOp);
-					} else {
-						makeRValue(rv);
+						emit(op.vmOp);
+						if (op.type == BINARY_NOT) v.t = XValue::STACKED_NOT;
+						break;
 					}
-					switch (lv.t) {
-						default: throw std::runtime_error("Invalid lvalue");
-						case XValue::INDEXED: emitWithUInt32(VM::WRITE_INDEXED_OP, static_cast<int>(lv.v)); break;
+					case ASSIGNMENT: {
+						XValue lv(v);
+						if (op.vmOp != VM::INVALID_OP) {
+							makeRValue(lv);
+							makeRValue(rv);
+							emit(op.vmOp);
+						} else {
+							makeRValue(rv);
+						}
+						makeAssignment(v);
+						break;
 					}
-					break;
+					default: assert(0);
 				}
-				default: assert(0);
 			}
 			return true;
 		}
@@ -454,6 +589,37 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
     while (parseOperator(p, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) { }
 }
 
+static UInt32 getUInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
+	assert(e - it >= 4);
+	UInt32 i = *reinterpret_cast<const UInt32*>(&*it);
+	it += 4;
+	return i;
+}
+
+static void disassemble(const std::vector<Byte>& code, const std::vector<Value>& constants) {
+	const char* OP_STRINGS[] = {
+		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED"
+		, "ADD", "SUB", "MUL", "DIV", "MOD"
+		, "OR", "XOR", "AND"
+		, "SHL", "SHR", "USHR"
+		, "PLUS", "MINUS"
+		, "BIT_NOT", "NOT"
+		, "STRICTLY_EQ", "EQ", "LT", "GT"
+		, "RETURN"
+	};
+	std::vector<Byte>::const_iterator it = code.begin();
+	std::vector<Byte>::const_iterator e = code.end();
+	while (it != e) {
+		std::cout << OP_STRINGS[*it];
+		switch (*it++) {
+			case VM::READ_INDEXED_OP:
+			case VM::WRITE_INDEXED_OP: std::cout << " @" << getUInt32(it, e); break;
+			case VM::CONST_OP: std::cout << " @" << getUInt32(it, e); break;
+		}
+		std::cout << std::endl;
+	}
+}
+
 int main(int argc, const char* argv[]) {
 	std::vector<Byte> code;
 	std::vector<Value> constants;
@@ -471,8 +637,11 @@ int main(int argc, const char* argv[]) {
 			StringIt e = s.end();
 			Compiler::XValue v;
 			compiler.parseExpression(p, e, v);
+			compiler.eatWhite(p, e);
+			if (p != e) throw std::runtime_error("Syntax error");
 			compiler.makeRValue(v);
 			code.push_back(VM::RETURN_OP);
+			disassemble(code, constants);
 			
 			std::cout << "Code: " << code.size() << std::endl;
 			std::cout << "Constants: " << constants.size() << std::endl;
@@ -486,7 +655,8 @@ int main(int argc, const char* argv[]) {
 			cstack[1023].lp = locals.data();
 			VM vm(cstack, cstack + 1024, vstack, vstack + 1024);
 			vm.run(1000);
-			std::cout << static_cast<double>(vstack[1023]) << std::endl;
+			std::cout << "On stack: " << (1023 - (cstack[1023].vsp - vstack)) << std::endl;
+			std::cout << "=" << static_cast<double>(vstack[1023]) << std::endl;
 		}
 		catch (const std::exception& x) {
 			std::cout << "Exception: " << x.what() << std::endl;
