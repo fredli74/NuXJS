@@ -216,10 +216,10 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E936E716D44D7000C7AEC3</string>
+						<string>F7E9375216D455D100C7AEC3</string>
 						<key>history</key>
 						<array>
-							<string>F7E936D816D44D0B00C7AEC3</string>
+							<string>F7E9371B16D4518000C7AEC3</string>
 						</array>
 					</dict>
 					<key>SplitCount</key>
@@ -256,7 +256,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E936E816D44D7000C7AEC3</string>
+						<string>F7E9375316D455D100C7AEC3</string>
 						<key>history</key>
 						<array>
 							<string>F7902BC316D3063F00FA5B07</string>
@@ -392,7 +392,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>stl_function.h</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -400,14 +400,15 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>stl_function.h</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7E936E616D44D7000C7AEC3</string>
+										<string>F7E9375016D455D100C7AEC3</string>
 										<key>history</key>
 										<array>
-											<string>F7E9359C16D4344F00C7AEC3</string>
+											<string>F7E9373416D4538C00C7AEC3</string>
+											<string>F7E9373516D4538C00C7AEC3</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -607,11 +608,11 @@
 	<array>
 		<string>F7E935DC16D4384C00C7AEC3</string>
 		<string>F7E935DD16D4384C00C7AEC3</string>
-		<string>1C78EAAD065D492600B07095</string>
-		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F7902A6116D2935B00FA5B07</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
+		<string>F74E7E0316D1A3E7003A6AB6</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>F7902A5D16D2935B00FA5B07</string>
 	</array>
 	<key>WindowString</key>
@@ -636,7 +637,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CD0528F0623707200166675</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>stl_function.h</string>
 								<key>StatusBarVisibility</key>
 								<true/>
 							</dict>
@@ -707,7 +708,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -996,7 +997,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

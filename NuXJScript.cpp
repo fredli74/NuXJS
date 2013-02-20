@@ -56,6 +56,28 @@ class Value {
 						case DOUBLE_FORMAT: return d;
 					}
 				}
+	public:		bool operator==(const Value& o) const {
+					if (format != o.format) return false;
+					switch (format) {
+						default: assert(0);
+						case UNDEFINED_FORMAT: return true;
+						case NULL_FORMAT: return true;
+						case BOOLEAN_FORMAT: return b == o.b;
+						case INT_FORMAT: return i == o.i;
+						case DOUBLE_FORMAT: return d == o.d;
+					}
+				}
+	public:		bool operator<(const Value& o) const {
+					if (format < o.format) return true;
+					switch (format) {
+						default: assert(0);
+						case UNDEFINED_FORMAT: return false;
+						case NULL_FORMAT: return false;
+						case BOOLEAN_FORMAT: return b < o.b;
+						case INT_FORMAT: return i < o.i;
+						case DOUBLE_FORMAT: return d < o.d;
+					}
+				}
 };
 
 class Function {
@@ -72,7 +94,7 @@ struct Context {
 
 class VM {
 	public:		enum Op {
-					NOP = -1
+					INVALID_OP = -1
 					, CONST_OP
 					, READ_INDEXED_OP
 					, WRITE_INDEXED_OP
@@ -107,7 +129,7 @@ class VM {
 						switch (*ip++) {
 							case CONST_OP: push(vsp, cp[readUInt32(ip)]); break;
 							case READ_INDEXED_OP: push(vsp, lp[readUInt32(ip)]); break;
-							case WRITE_INDEXED_OP: lp[readUInt32(ip)] = pop(vsp); break;
+							case WRITE_INDEXED_OP: lp[readUInt32(ip)] = vsp[0]; break;
 							case READ_NAMED_OP: break;
 							case WRITE_NAMED_OP: break;
 							case ADD_OP: vsp[1] = (double)vsp[1] + (double)vsp[0]; pop(vsp, 1); break;
@@ -140,8 +162,8 @@ class VM {
 	protected:	Context* csp;
 };
 
-enum Precedence { GROUP_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOWEST_PREC };
-enum OperatorType { UNARY, BINARY };
+enum Precedence { GROUP_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, ASSIGN_PREC, LOWEST_PREC };
+enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -154,12 +176,21 @@ struct OperatorInfo {
 };
 
 const OperatorInfo PRE_OPS[] = {
-	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, UNARY, VM::NOP },
+	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, VM::INVALID_OP },
 	{ "+", 0, PREFIX_PREC, LEFT_TO_RIGHT, UNARY, VM::PLUS_OP },
 	{ "-", 0, PREFIX_PREC, LEFT_TO_RIGHT, UNARY, VM::NEG_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
+	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::INVALID_OP },
+	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::ADD_OP },
+	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SUB_OP },
+	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::MUL_OP },
+	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::DIV_OP },
+	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::MOD_OP },
+	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::AND_OP },
+	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::XOR_OP },
+	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::OR_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::ADD_OP },
 	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::SUB_OP },
 	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MUL_OP },
@@ -171,12 +202,14 @@ const OperatorInfo POST_OPS[] = {
 };
 
 class Compiler {
-	public:		struct ExpressionValue {
+	public:		struct XValue {
 					enum Type {
 						STACKED
 						, CONSTANT
 						, INDEXED
 					};
+					XValue() : t(STACKED) { }
+					XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 					Type t;
 					Value v;
 				};
@@ -195,11 +228,13 @@ class Compiler {
 	public:		void emitWithConstant(VM::Op op, const Value& constant);
 	public:		double parseNumber(StringIt& p, const StringIt& e);
 	public:		bool token(StringIt& p, const StringIt& e, const Char* t);
-	public:		bool parseOperator(StringIt& p, const StringIt& e, ExpressionValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	public:		void parseExpression(StringIt& p, const StringIt& e, ExpressionValue& v, Precedence precedence = LOWEST_PREC);
+	public:		void makeRValue(XValue& v);
+	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
+	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
 	public:		std::vector<Byte>& code;
 	public:		std::vector<Value>& constants;
 	public:		std::vector<Value>& locals;
+	public:		std::map<Value, int> definedConstants;
 	public:		std::map<String, int> localIdentifiers;
 };
 
@@ -289,8 +324,14 @@ void Compiler::emitWithUInt32(VM::Op op, UInt32 i) {
 }
 
 void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
-	constants.push_back(constant);
-	emitWithUInt32(op, constants.size() - 1);
+	std::map<Value, int>::const_iterator it = definedConstants.find(constant);
+	if (it == definedConstants.end()) {
+		constants.push_back(constant);
+		definedConstants[constant] = constants.size() - 1;
+		emitWithUInt32(op, constants.size() - 1);
+	} else {
+		emitWithUInt32(op, it->second);
+	}
 }
 
 double Compiler::parseNumber(StringIt& p, const StringIt& e) {
@@ -311,23 +352,65 @@ bool Compiler::token(StringIt& p, const StringIt& e, const Char* t) {
 	return false;
 }
 
-bool Compiler::parseOperator(StringIt& p, const StringIt& e, ExpressionValue& v, Precedence precedence
+void Compiler::makeRValue(XValue& v) {
+	switch (v.t) {
+		default: assert(0);
+		case XValue::STACKED: return;
+		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, v.v); break;
+		case XValue::INDEXED: emitWithUInt32(VM::READ_INDEXED_OP, static_cast<int>(v.v)); break;
+	}
+	v = XValue(XValue::STACKED);
+}
+
+bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
 	for (int i = 0; i < opCount; ++i) {
 		if (precedence > opList[i].prec - (opList[i].assoc == RIGHT_TO_LEFT ? 1 : 0)
 				&& token(p, e, opList[i].token)) {
-			parseExpression(p, e, v, (opList[i].closeToken != 0 ? LOWEST_PREC : opList[i].prec));
+			XValue rv;
+			parseExpression(p, e, rv, (opList[i].closeToken != 0 ? LOWEST_PREC : opList[i].prec));
 			if (opList[i].closeToken != 0 && !token(p, e, opList[i].closeToken)) {
 				throw std::runtime_error(std::string("Expected ") + opList[i].closeToken);
 			}
-			if (opList[i].vmOp != VM::NOP) emit(opList[i].vmOp);
+			switch (opList[i].type) {
+				case GROUP: {
+					break;
+				}
+				case UNARY: {
+					makeRValue(rv);
+					emit(opList[i].vmOp);
+					break;
+				}
+				case BINARY: {
+					makeRValue(v);
+					makeRValue(rv);
+					emit(opList[i].vmOp);
+					break;
+				}
+				case ASSIGNMENT: {
+					XValue lv(v);
+					if (opList[i].vmOp != VM::INVALID_OP) {
+						makeRValue(v);
+						makeRValue(rv);
+						emit(opList[i].vmOp);
+					} else {
+						makeRValue(rv);
+					}
+					switch (lv.t) {
+						default: throw std::runtime_error("Invalid lvalue");
+						case XValue::INDEXED: emitWithUInt32(VM::WRITE_INDEXED_OP, static_cast<int>(lv.v)); break;
+					}
+					break;
+				}
+				default: assert(0);
+			}
 			return true;
 		}
 	}
 	return false;
 }
 
-void Compiler::parseExpression(StringIt& p, const StringIt& e, ExpressionValue& v, Precedence precedence) {
+void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
     eatWhite(p, e);
 	if (p == e) throw std::runtime_error("Unexpected end of string");
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
@@ -338,14 +421,13 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, ExpressionValue& 
 							StringIt q = parseHex(p + 2, e, i);
 							if (q == p) throw std::runtime_error("Invalid number");
 							p = q;
-							emitWithConstant(VM::CONST_OP, static_cast<int>(i));
+							v = XValue(XValue::CONSTANT, static_cast<int>(i));
 							break;
 						}
 						/* else continue */
 			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
-				Value v;
 				double d = parseNumber(p, e);
-				emitWithConstant(VM::CONST_OP, (static_cast<int>(d) == d) ? Value(static_cast<int>(d)) : Value(d));
+				v = XValue(XValue::CONSTANT, (static_cast<int>(d) == d) ? Value(static_cast<int>(d)) : Value(d));
 				break;
 			}
 			default: {
@@ -362,7 +444,7 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, ExpressionValue& 
 					locals.push_back(Value());
 					localIdentifiers[identifier] = index;
 				}
-				emitWithUInt32(VM::READ_INDEXED_OP, index);
+				v = XValue(XValue::INDEXED, index);
 				p = q;
 				break;
 			}
@@ -373,21 +455,28 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, ExpressionValue& 
 }
 
 int main(int argc, const char* argv[]) {
+	std::vector<Byte> code;
+	std::vector<Value> constants;
+	std::vector<Value> locals;
+	Compiler compiler(code, constants, locals);
 	do {
 		try {
-			std::vector<Byte> code;
-			std::vector<Value> constants;
-			std::vector<Value> locals;
-			Compiler compiler(code, constants, locals);
+			code.clear();
+			
 			String s;
 			std::getline(std::cin, s);
 			if (s.empty()) return 0;
 			
 			StringIt p = s.begin();
 			StringIt e = s.end();
-			Compiler::ExpressionValue v;
+			Compiler::XValue v;
 			compiler.parseExpression(p, e, v);
+			compiler.makeRValue(v);
 			code.push_back(VM::RETURN_OP);
+			
+			std::cout << "Code: " << code.size() << std::endl;
+			std::cout << "Constants: " << constants.size() << std::endl;
+			std::cout << "Locals: " << locals.size() << std::endl;
 
 			Value vstack[1024];
 			Context cstack[1024];
@@ -396,7 +485,6 @@ int main(int argc, const char* argv[]) {
 			cstack[1023].cp = constants.data();
 			cstack[1023].lp = locals.data();
 			VM vm(cstack, cstack + 1024, vstack, vstack + 1024);
-			for (int i = 0; i < locals.size(); ++i) locals[i] = i;
 			vm.run(1000);
 			std::cout << static_cast<double>(vstack[1023]) << std::endl;
 		}
