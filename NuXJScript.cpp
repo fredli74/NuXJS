@@ -241,10 +241,10 @@ class VM {
 					, READ_INDEXED_OP, WRITE_INDEXED_OP, READ_NAMED_OP, WRITE_NAMED_OP
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP
 					, OR_OP, XOR_OP, AND_OP
-					, SHL_OP, SHR_OP, USHR_OP
+					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP
 					, PLUS_OP, MINUS_OP
 					, BIT_NOT_OP, NOT_OP
-					, STRICTLY_EQ_OP, EQ_OP, LT_OP, GT_OP
+					, STRICTLY_EQ_OP, STRICTLY_NEQ_OP, EQ_OP, NEQ_OP, LT_OP, LEQ_OP, GT_OP, GEQ_OP
 					, JT_OP, JF_OP
 					, RETURN_OP
 				};
@@ -279,15 +279,19 @@ class VM {
 							case AND_OP: vsp[1] = (Int32)vsp[1] & (Int32)vsp[0]; pop(vsp, 1); break;
 							case SHL_OP: vsp[1] = (Int32)vsp[1] << (Int32)vsp[0]; pop(vsp, 1); break;
 							case SHR_OP: vsp[1] = (Int32)vsp[1] >> (Int32)vsp[0]; pop(vsp, 1); break;
-							case USHR_OP: vsp[1] = (Int32)((UInt32)((Int32)vsp[1]) >> (Int32)vsp[0]); pop(vsp, 1); break;
+							case UNSIGNED_SHR_OP: vsp[1] = (Int32)((UInt32)((Int32)vsp[1]) >> (Int32)vsp[0]); pop(vsp, 1); break;
 							case PLUS_OP: vsp[0] = (double)vsp[0]; break;
 							case MINUS_OP: vsp[0] = -(double)vsp[0]; break;
 							case BIT_NOT_OP: vsp[0] = ~(Int32)(vsp[0]); break;
 							case NOT_OP: vsp[0] = Value(!vsp[0]); break;
-							case STRICTLY_EQ_OP: vsp[1] = (vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+							case STRICTLY_EQ_OP: vsp[1] = vsp[1].isStrictlyEqualTo(vsp[0]); pop(vsp, 1); break;
+							case STRICTLY_NEQ_OP: vsp[1] = !vsp[1].isStrictlyEqualTo(vsp[0]); pop(vsp, 1); break;
 							case EQ_OP: vsp[1] = vsp[1].isEqualTo(vsp[0]); pop(vsp, 1); break;
+							case NEQ_OP: vsp[1] = !vsp[1].isEqualTo(vsp[0]); pop(vsp, 1); break;
 							case LT_OP: vsp[1] = vsp[1].isLessThan(vsp[0]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+							case LEQ_OP: vsp[1] = !vsp[0].isLessThan(vsp[1]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 							case GT_OP: vsp[1] = vsp[0].isLessThan(vsp[1]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+							case GEQ_OP: vsp[1] = !vsp[1].isLessThan(vsp[0]); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 							case JT_OP: if (vsp[0]) ip += readInt32(ip); else { ip += 4; pop(vsp, 1); } break;
 							case JF_OP: if (!vsp[0]) ip += readInt32(ip); else { ip += 4; pop(vsp, 1); } break;
 							case RETURN_OP: {
@@ -315,9 +319,9 @@ class VM {
 
 enum Precedence {
 	GROUP_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
-	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
+	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
-enum OperatorType { GROUP, UNARY, BINARY, BINARY_NOT, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR };
+enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -344,7 +348,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICTLY_EQ_OP },
 	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::EQ_OP },
 	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::INVALID_OP },
-	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::USHR_OP },
+	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::UNSIGNED_SHR_OP },
 	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHR_OP },
 	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHL_OP },
 	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::ADD_OP },
@@ -355,13 +359,13 @@ const OperatorInfo POST_OPS[] = {
 	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::AND_OP },
 	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::XOR_OP },
 	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::OR_OP },
-	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::USHR_OP },
+	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::UNSIGNED_SHR_OP },
 	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHR_OP },
 	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHL_OP },
 	{ "++", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::ADD_OP },
 	{ "--", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::SUB_OP },
 	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, VM::JF_OP },
-	{ "||", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, VM::JT_OP },
+	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, VM::JT_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::ADD_OP },
 	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::SUB_OP },
 	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MUL_OP },
@@ -370,17 +374,17 @@ const OperatorInfo POST_OPS[] = {
 	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, VM::AND_OP },
 	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, VM::XOR_OP },
 	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, VM::OR_OP },
-	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::STRICTLY_EQ_OP },
-	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::EQ_OP },
-	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::GT_OP }, 
+	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICTLY_NEQ_OP },
+	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::NEQ_OP },
+	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LEQ_OP }, 
 	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LT_OP }, 
-	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY_NOT, VM::LT_OP }, 
+	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GEQ_OP }, 
 	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GT_OP }
 };
 
 class Compiler {
 	public:		struct XValue {
-					enum Type { STACKED, STACKED_NOT, CONSTANT, INDEXED };
+					enum Type { STACKED, CONSTANT, INDEXED };
 					XValue() : t(STACKED) { }
 					XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 					Type t;
@@ -530,7 +534,6 @@ void Compiler::makeRValue(XValue& v) {
 	switch (v.t) {
 		default: assert(0);
 		case XValue::STACKED: return;
-		case XValue::STACKED_NOT: emit(VM::NOT_OP); break;
 		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, v.v); break;
 		case XValue::INDEXED: emitWithInt32(VM::READ_INDEXED_OP, static_cast<Int32>(v.v)); break;
 	}
@@ -601,25 +604,16 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 						emitWithConstant(VM::CONST_OP, Value(1.0)); 
 						emit(op.vmOp);
 						makeAssignment(v);
-					} else if (op.vmOp == VM::NOT_OP) {
-						if (v.t == XValue::STACKED) v.t = XValue::STACKED_NOT;
-						else if (v.t == XValue::STACKED_NOT) v.t = XValue::STACKED;
-						else {
-							makeRValue(v);
-							v.t = XValue::STACKED_NOT;
-						}
 					} else {
 						makeRValue(v);
 						emit(op.vmOp);
 					}
 					break;
 				}
-				case BINARY:
-				case BINARY_NOT: {
+				case BINARY: {
 					makeRValue(v);
 					makeRValue(rv);
 					emit(op.vmOp);
-					if (op.type == BINARY_NOT) v.t = XValue::STACKED_NOT;
 					break;
 				}
 				case ASSIGNMENT: {
@@ -697,10 +691,10 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED"
 		, "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
-		, "SHL", "SHR", "USHR"
+		, "SHL", "SHR", "UNSIGNED_SHR"
 		, "PLUS", "MINUS"
 		, "BIT_NOT", "NOT"
-		, "STRICTLY_EQ", "EQ", "LT", "GT"
+		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JT", "JF"
 		, "RETURN"
 	};
