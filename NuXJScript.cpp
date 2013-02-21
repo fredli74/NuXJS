@@ -1,6 +1,5 @@
 #include "assert.h"
 #include <cmath>
-#include <string>
 #include <algorithm>
 #include <exception>
 #include <stdexcept>
@@ -8,67 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
-
-typedef char Char;
-typedef std::string String;
-typedef std::string::const_iterator StringIt;
-typedef int Int32;
-typedef unsigned int UInt32;
-typedef unsigned char Byte;
-
-class GCItem;
-class GCHeap {
-	public:		template<class T> T* manage(T* object) { add(object); return object; }
-	public:		void mark(GCItem* object);
-	public:		int sweep();
-	public:		int size() const { return objects.size(); }
-	protected:	void add(GCItem* object);
-	protected:	std::vector<GCItem*> objects;
-};
-
-class GCItem {
-	friend class GCHeap;
-	public:		GCItem() : _gcHeap(0) { }
-	public:		GCHeap* gcHeap() const { return _gcHeap; }
-	public:		virtual void gcMark(GCHeap* heap) { }
-	public:		virtual ~GCItem() { }
-	protected:	GCHeap* _gcHeap;
-};
-
-int GCHeap::sweep() {
-	int count = 0;
-	for (std::vector<GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
-		if (*it != 0 && (*it)->_gcHeap == this) {
-			delete *it;
-			*it = 0;
-			count++;
-		}
-	}
-	objects.clear();
-	return count;
-}
-
-void GCHeap::add(GCItem* object) {
-	assert(object->_gcHeap == 0);
-	objects.push_back(object);
-	object->_gcHeap = this;
-}
-
-void GCHeap::mark(GCItem* object) {
-	if (object != 0 && object->_gcHeap != this && object->_gcHeap != 0) {
-		objects.push_back(object);
-		object->_gcHeap = this;
-		object->gcMark(this);
-	}
-}
-
-class GCString : public GCItem {
-	public:		GCString(const String& s) : s(s) { }
-	public:		String s;
-	public:		virtual ~GCString() { std::cout << "Deleting " << s.c_str() << std::endl; }
-};
-
-double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
+#include "NuXJScript.h"
 
 static StringIt parseHex(StringIt p, const StringIt& e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
@@ -207,230 +146,69 @@ static String unescape(StringIt& p, const StringIt& e) {
 	return (d += String(b, p++));
 }
 
-class GCString UNDEFINED_STRING("undefined");
-class GCString NULL_STRING("null");
-class GCString FALSE_STRING("false");
-class GCString TRUE_STRING("true");
-
-class Object;
-
-class Value {
-	public:		explicit Value() : type(UNDEFINED_TYPE) { }
-	public:		explicit Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
-	public:		explicit Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
-	public:		explicit Value(double d) : type(NUMBER_TYPE), d(d) { }
-	public:		explicit Value(GCString* s) : type(STRING_TYPE), s(s) { }
-	public:		explicit Value(Object* o) : type(OBJECT_TYPE), o(o) { }
-	
-	public:		enum Type {
-					UNDEFINED_TYPE = 0
-					, NULL_TYPE = 1
-					, BOOLEAN_TYPE = 2
-					, NUMBER_TYPE = 3
-					, STRING_TYPE = 4
-					, OBJECT_TYPE = 5
-				};
-	public:		Type type;
-	
-	public:		union {
-					bool b;
-					double d;
-					GCString* s;
-					Object* o;
-				};
-				
-	public:		bool toBool() const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return false;
-						case NULL_TYPE: return false;
-						case BOOLEAN_TYPE: return b;
-						case NUMBER_TYPE: return (d != 0.0);
+class StringObject : public Object {
+	public:		StringObject(const String& s) : s(s) { }
+	public:		virtual bool getProperty(StringObject* name, Value& v) {
+					UInt32 i;
+					StringIt p = name->s.begin();
+					StringIt e = name->s.end();
+					StringIt q = parseUnsignedInt(p, e, i);
+					if (q == e && 0 <= i && i < s.size()) {
+						v = Value(gcHeap()->manage(new StringObject(String(1, s[i]))));
+						return true;
 					}
+					return false;
 				}
-				
-	public:		Int32 toInt() const { return static_cast<int>(toDouble()); }
-	
-	public:		double toDouble() const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return NaN();
-						case NULL_TYPE: return 0.0;
-						case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
-						case NUMBER_TYPE: return d;
-						case STRING_TYPE: {
-							double v;
-							StringIt p = s->s.begin();
-							StringIt e = s->s.end();
-							StringIt q = parseDouble(p, e, v);
-							if (q == p) return NaN();
-							p = q;
-							return v;
-						}
-					}
-				}
-				
-	public:		String toString() const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return "undefined";
-						case NULL_TYPE: return "null";
-						case BOOLEAN_TYPE: return b ? "true" : "false";
-						case NUMBER_TYPE: return doubleToString(d);
-						case STRING_TYPE: return s->s;
-					}
-				}
-				
-	public:		GCString* toString(GCHeap* heap) const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return &UNDEFINED_STRING;
-						case NULL_TYPE: return &NULL_STRING;
-						case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
-						case NUMBER_TYPE: return heap->manage(new GCString(doubleToString(d)));
-						case STRING_TYPE: return s;
-case OBJECT_TYPE: return heap->manage(new GCString("<object>"));
-					}
-				}
-				
-	public:		Object* toObject(GCHeap* heap) const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return 0;
-						case NULL_TYPE: return 0;
-						case BOOLEAN_TYPE: /* FIX */ return 0;
-						case NUMBER_TYPE: /* FIX */ return 0;
-						case STRING_TYPE: /* FIX */ return 0;
-						case OBJECT_TYPE: return o;
-					}
-				}
-				
-	public:		bool operator==(const Value& y) const {
-					if (type != y.type) return false;
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return true;
-						case NULL_TYPE: return true;
-						case BOOLEAN_TYPE: return b == y.b;
-						case NUMBER_TYPE: return d == y.d;
-						case STRING_TYPE: return s->s == y.s->s;
-					}
-				}
-				
-	public:		bool operator<(const Value& y) const {
-					if (type < y.type) return true;
-					if (type > y.type) return false;
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return false;
-						case NULL_TYPE: return false;
-						case BOOLEAN_TYPE: return b < y.b;
-						case NUMBER_TYPE: return d < y.d;
-						case STRING_TYPE: return s->s < y.s->s;
-					}
-				}
-				
-	protected:	bool compareStrictly(const Value& y) const {
-					switch (type) {
-						default: assert(0);
-						case UNDEFINED_TYPE: return true;
-						case NULL_TYPE: return true;
-						case BOOLEAN_TYPE: return b == y.b;
-						case NUMBER_TYPE: {
-							double thisNumber = toDouble();
-							double otherNumber = y.toDouble();
-						// FIX : necessary to avoid optimizing away?
-						//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
-							return thisNumber == otherNumber;
-						}
-						case STRING_TYPE: return (s == y.s || s->s == y.s->s);
-						case OBJECT_TYPE: return o == y.o;
-					}
-				}
-				
-	public:		bool isStrictlyEqualTo(const Value& y) const {
-					if (type != y.type) return false;
-					else return compareStrictly(y);
-				}
-				
-	public:		bool isEqualTo(const Value& y) const {
-					if (type == y.type) return compareStrictly(y);
-					else {
-						if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
-						if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
-						// If Type(x) is Number and Type(y) is String,
-						// return the result of the comparison x == ToNumber(y).
-						// If Type(x) is String and Type(y) is Number,
-						// return the result of the comparison ToNumber(x) == y.
-						if (type == BOOLEAN_TYPE || y.type == BOOLEAN_TYPE)
-							return toDouble() == y.toDouble();
-						// If Type(x) is either String or Number and Type(y) is Object,
-						// return the result of the comparison x == ToPrimitive(y).
-						// If Type(x) is Object and Type(y) is either String or Number,
-						// return the result of the comparison ToPrimitive(x) == y.
-						return false;
-					}
-				}
-				
-	public:		bool isLessThan(const Value& y) const {
-					// if (type == STRING_TYPE && y.type == STRING_TYPE)
-					double thisNumber = toDouble();
-					double otherNumber = y.toDouble();
-					// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
-					return thisNumber < otherNumber;
-				//	FIX : need to check?
-				//	If nx is +0 and ny is −0, return false.
-				//	If nx is −0 and ny is +0, return false.
-				//	If nx is +∞, return false.
-				//	If ny is +∞, return true.
-				//	If ny is −∞, return false.
-				//	If nx is −∞, return true.
-				}
-				
-	public:		bool isLessThanOrEqualTo(const Value& y) const {
-					// if (type == STRING_TYPE && y.type == STRING_TYPE)
-					double thisNumber = toDouble();
-					double otherNumber = y.toDouble();
-					// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
-					return thisNumber <= otherNumber;
-				//	FIX : need to check?
-				//	If nx is +0 and ny is −0, return false.
-				//	If nx is −0 and ny is +0, return false.
-				//	If nx is +∞, return false.
-				//	If ny is +∞, return true.
-				//	If ny is −∞, return false.
-				//	If nx is −∞, return true.
-				}
-				
-	public:		Value add(GCHeap* heap, const Value& y) const {
-					if (type == STRING_TYPE || y.type == STRING_TYPE) {
-						String rs = y.toString(heap)->s;
-						if (rs.empty()) return *this;
-						String ls = toString(heap)->s;
-						if (ls.empty()) return y;
-						return Value(heap->manage(new GCString(ls + rs)));
-					}
-					return Value(toDouble() + y.toDouble());
-				}
-				
-	public:		void mark(GCHeap* heap) const;
+	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
+	public:		virtual ~StringObject() { std::cout << "Deleting " << s.c_str() << std::endl; }
+	public:		String s;
 };
 
-struct ComparePropertyName {
-	bool operator() (GCString* a, GCString* b) const {
+int GCHeap::sweep() {
+	int count = 0;
+	for (std::vector<GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
+		if (*it != 0 && (*it)->_gcHeap == this) {
+			delete *it;
+			*it = 0;
+			count++;
+		}
+	}
+	objects.clear();
+	return count;
+}
+
+void GCHeap::add(GCItem* object) {
+	assert(object->_gcHeap == 0);
+	objects.push_back(object);
+	object->_gcHeap = this;
+}
+
+void GCHeap::mark(GCItem* object) {
+	if (object != 0 && object->_gcHeap != this && object->_gcHeap != 0) {
+		objects.push_back(object);
+		object->_gcHeap = this;
+		object->garbageCollectAndMark(this);
+	}
+}
+
+double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
+
+struct StringObjectCompare {
+	bool operator() (StringObject* a, StringObject* b) const {
 		return (a != b && a->s < b->s);
 	}
 };
 
-class Object : public GCItem {
-	protected:	typedef std::map<GCString*, Value, ComparePropertyName> PropertyMap;
-	public:		Value getProperty(GCString* name) {
+class UserObject : public Object {
+	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> PropertyMap;
+	public:		virtual bool getProperty(StringObject* name, Value& v) {
 					PropertyMap::const_iterator it = properties.find(name);
-					if (it == properties.end()) return Value();
-					else return it->second;
+					if (it == properties.end()) return false;
+					v = it->second;
+					return true;
 				}
-	public:		void setProperty(GCString* name, const Value& v) { properties[name] = v; }
-	public:		virtual void gcMark(GCHeap* heap) {
+	public:		virtual bool setProperty(StringObject* name, const Value& v) { properties[name] = v; return true; }
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
 					for (PropertyMap::iterator it = properties.begin(), e = properties.end(); it != e; ++it) {
 						heap->mark(it->first);
 						it->second.mark(heap);
@@ -439,6 +217,197 @@ class Object : public GCItem {
 	protected:	PropertyMap properties;
 };
 
+class StringObject UNDEFINED_STRING("undefined");
+class StringObject NULL_STRING("null");
+class StringObject FALSE_STRING("false");
+class StringObject TRUE_STRING("true");
+
+Value::Value() : type(UNDEFINED_TYPE) { }
+Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
+Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
+Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
+Value::Value(StringObject* s) : type(STRING_TYPE), s(s) { }
+Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
+
+StringObject* Value::getString() const {
+	assert(type == STRING_TYPE);
+	return s;
+}
+
+bool Value::toBool() const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return false;
+		case NULL_TYPE: return false;
+		case BOOLEAN_TYPE: return b;
+		case NUMBER_TYPE: return (d != 0.0);
+	}
+}
+
+Int32 Value::toInt() const { return static_cast<int>(toDouble()); } // FIX : should do modulo, see http://www.ecma-international.org/ecma-262/5.1/#sec-9.6
+
+double Value::toDouble() const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return NaN();
+		case NULL_TYPE: return 0.0;
+		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
+		case NUMBER_TYPE: return d;
+		case STRING_TYPE: {
+			double v;
+			StringIt p = s->s.begin();
+			StringIt e = s->s.end();
+			StringIt q = parseDouble(p, e, v);
+			if (q == p) return NaN();
+			p = q;
+			return v;
+		}
+	}
+}
+
+String Value::toString() const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return "undefined";
+		case NULL_TYPE: return "null";
+		case BOOLEAN_TYPE: return b ? "true" : "false";
+		case NUMBER_TYPE: return doubleToString(d);
+		case STRING_TYPE: return s->s;
+	}
+}
+
+StringObject* Value::toString(GCHeap* heap) const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
+		case NULL_TYPE: return &NULL_STRING;
+		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
+		case NUMBER_TYPE: return heap->manage(new StringObject(doubleToString(d)));
+		case STRING_TYPE: return s;
+case OBJECT_TYPE: return heap->manage(new StringObject("<object>"));
+	}
+}
+
+Object* Value::toObject(GCHeap* heap) const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return 0;
+		case NULL_TYPE: return 0;
+		case BOOLEAN_TYPE: /* FIX */ return 0;
+		case NUMBER_TYPE: /* FIX */ return 0;
+		case STRING_TYPE: return s;
+		case OBJECT_TYPE: return o;
+	}
+}
+
+bool Value::operator==(const Value& y) const {
+	if (type != y.type) return false;
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return true;
+		case NULL_TYPE: return true;
+		case BOOLEAN_TYPE: return b == y.b;
+		case NUMBER_TYPE: return d == y.d;
+		case STRING_TYPE: return s->s == y.s->s;
+	}
+}
+
+bool Value::operator<(const Value& y) const {
+	if (type < y.type) return true;
+	if (type > y.type) return false;
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return false;
+		case NULL_TYPE: return false;
+		case BOOLEAN_TYPE: return b < y.b;
+		case NUMBER_TYPE: return d < y.d;
+		case STRING_TYPE: return s->s < y.s->s;
+	}
+}
+
+bool Value::compareStrictly(const Value& y) const {
+	switch (type) {
+		default: assert(0);
+		case UNDEFINED_TYPE: return true;
+		case NULL_TYPE: return true;
+		case BOOLEAN_TYPE: return b == y.b;
+		case NUMBER_TYPE: {
+			double thisNumber = toDouble();
+			double otherNumber = y.toDouble();
+		// FIX : necessary to avoid optimizing away?
+		//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
+			return thisNumber == otherNumber;
+		}
+		case STRING_TYPE: return (s == y.s || s->s == y.s->s);
+		case OBJECT_TYPE: return o == y.o;
+	}
+}
+
+bool Value::isStrictlyEqualTo(const Value& y) const {
+	if (type != y.type) return false;
+	else return compareStrictly(y);
+}
+
+bool Value::isEqualTo(const Value& y) const {
+	if (type == y.type) return compareStrictly(y);
+	else {
+		if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
+		if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
+		// If Type(x) is Number and Type(y) is String,
+		// return the result of the comparison x == ToNumber(y).
+		// If Type(x) is String and Type(y) is Number,
+		// return the result of the comparison ToNumber(x) == y.
+		if (type == BOOLEAN_TYPE || y.type == BOOLEAN_TYPE)
+			return toDouble() == y.toDouble();
+		// If Type(x) is either String or Number and Type(y) is Object,
+		// return the result of the comparison x == ToPrimitive(y).
+		// If Type(x) is Object and Type(y) is either String or Number,
+		// return the result of the comparison ToPrimitive(x) == y.
+		return false;
+	}
+}
+
+bool Value::isLessThan(const Value& y) const {
+	// if (type == STRING_TYPE && y.type == STRING_TYPE)
+	double thisNumber = toDouble();
+	double otherNumber = y.toDouble();
+	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
+	return thisNumber < otherNumber;
+//	FIX : need to check?
+//	If nx is +0 and ny is −0, return false.
+//	If nx is −0 and ny is +0, return false.
+//	If nx is +∞, return false.
+//	If ny is +∞, return true.
+//	If ny is −∞, return false.
+//	If nx is −∞, return true.
+}
+
+bool Value::isLessThanOrEqualTo(const Value& y) const {
+	// if (type == STRING_TYPE && y.type == STRING_TYPE)
+	double thisNumber = toDouble();
+	double otherNumber = y.toDouble();
+	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
+	return thisNumber <= otherNumber;
+//	FIX : need to check?
+//	If nx is +0 and ny is −0, return false.
+//	If nx is −0 and ny is +0, return false.
+//	If nx is +∞, return false.
+//	If ny is +∞, return true.
+//	If ny is −∞, return false.
+//	If nx is −∞, return true.
+}
+
+Value Value::add(GCHeap* heap, const Value& y) const {
+	if (type == STRING_TYPE || y.type == STRING_TYPE) {
+		String rs = y.toString(heap)->s;
+		if (rs.empty()) return *this;
+		String ls = toString(heap)->s;
+		if (ls.empty()) return y;
+		return Value(heap->manage(new StringObject(ls + rs)));
+	}
+	return Value(toDouble() + y.toDouble());
+}
+				
 void Value::mark(GCHeap* heap) const {
 	switch (type) {
 		case STRING_TYPE: heap->mark(s); break;
@@ -446,38 +415,95 @@ void Value::mark(GCHeap* heap) const {
 	}
 }
 
-class Function {
+class Function : public Object {
+	protected:	typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
+	public:		Function(StringObject* source) : source(source) { }
+	public:		bool lookupLocalName(StringObject* name, Int32& index) const {
+					LocalNameMap::const_iterator it = localNames.find(name);
+					if (it == localNames.end()) return false;
+					index = it->second;
+					return true;
+				}
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
+					heap->mark(source);
+					// FIX : subs
+					for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
+						it->mark(heap);
+					}
+					for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it) {
+						heap->mark(it->first);
+					}
+				}
+	public:		StringObject* source;
 	public:		std::vector<Byte> code;
 	public:		std::vector<Value> constants;
+	protected:	LocalNameMap localNames;
+};
+
+class Closure : public Object {
+	public:		Closure(Function* function, Object* parentClosure) : function(function), parentClosure(parentClosure) { }
+	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
+	public:		virtual bool getProperty(StringObject* name, Value& v) {
+					Int32 index;
+					if (function->lookupLocalName(name, index)) {
+						assert(0 <= index && index < locals.size());
+						v = locals[index];
+						return true;
+					} else {
+						if (dynamicLocals.get() != 0) {
+							DynamicMap::const_iterator it = dynamicLocals->find(name);
+							if (it != dynamicLocals->end()) {
+								v = it->second;
+								return true;
+							}
+						}
+						return parentClosure->getProperty(name, v);
+					}
+				}
+	public:		virtual bool setProperty(StringObject* name, const Value& v) {
+					Int32 index;
+					if (function->lookupLocalName(name, index)) {
+						assert(0 <= index && index < locals.size());
+						locals[index] = v;
+						return true;
+					} else {
+						if (dynamicLocals.get() != 0) {
+							DynamicMap::iterator it = dynamicLocals->find(name);
+							if (it != dynamicLocals->end()) {
+								it->second = v;
+								return true;
+							}
+						}
+						return parentClosure->setProperty(name, v);
+					}
+				}
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
+					heap->mark(function);
+					heap->mark(parentClosure);
+					// FIX : subs
+					for (std::vector<Value>::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
+						it->mark(heap);
+					}
+					if (dynamicLocals.get() != 0) {
+						for (DynamicMap::iterator it = dynamicLocals->begin(), e = dynamicLocals->end(); it != e; ++it) {
+							heap->mark(it->first);
+							it->second.mark(heap);
+						}
+					}
+				}
+	protected:	Function* const function;
+	protected:	Object* const parentClosure; // FIX : could actually insert a dynamic closure here instead of always having one
+	protected:	std::vector<Value> locals;
+	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
 };
 
 struct Context {
-	const Byte* ip;
-	Value* vsp;
-	const Value* cp;
-	Value* lp;
+	const Byte* instructionPointer;
+	Value* vstackPointer;
+	const Value* constants;
+	Value* locals;
+	Object* closure;
 };
-
-// !(a || (b && (c || d) && e) || f)
-
-/*
-a
-JT_OP -> l1
-b
-JF_OP -> l2
-c
-JT_OP -> l3
-d
-l3:
-l2:
-JF_OP -> l4
-e
-l4:
-l1:
-JT_OP -> l5
-f
-l5:
-*/
 
 class VM : public GCItem {
 	public:		enum Op {
@@ -490,25 +516,30 @@ class VM : public GCItem {
 					, PLUS_OP, MINUS_OP
 					, BIT_NOT_OP, NOT_OP
 					, STRICTLY_EQ_OP, STRICTLY_NEQ_OP, EQ_OP, NEQ_OP, LT_OP, LEQ_OP, GT_OP, GEQ_OP
-					, JT_OP, JF_OP
+					, JMP_OP, JT_OP, JF_OP
 					, RETURN_OP
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 						: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-						, csp(cstackEnd - 1) {
+						, cstackPointer(cstackEnd - 1) {
 				}
-	public:		virtual void gcMark(GCHeap* heap) {
-					if (csp == cstackEnd) return;
-					for (Value* vsp = csp->vsp; vsp != vstackEnd; ++vsp) vsp->mark(heap);
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
+					if (cstackPointer == cstackEnd) return;
+					for (Value* vsp = cstackPointer->vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
+					for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->closure);
 				}
 	protected:	void push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
 	protected:	void pop(Value*& vsp, int count) { assert(vsp + count <= vstackEnd); vsp += count; }
 	protected:	Int32 readInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
+	protected:	void error() {
+					throw std::runtime_error("error"); // FIX
+				}
 	public:		bool run(Int32 count) {
-					const Byte* ip = csp->ip;
-					Value* vsp = csp->vsp;
-					const Value* cp = csp->cp;
-					Value* lp = csp->lp;
+					const Byte* ip = cstackPointer->instructionPointer;
+					Value* vsp = cstackPointer->vstackPointer;
+					const Value* cp = cstackPointer->constants;
+					Value* lp = cstackPointer->locals;
+					Object* closure = cstackPointer->closure;
 					GCHeap* h = gcHeap();
 					while (--count >= 0) {
 						switch (*ip++) {
@@ -517,10 +548,31 @@ class VM : public GCItem {
 							case CONST_OP: push(vsp, cp[readInt32(ip)]); break;
 							case READ_INDEXED_OP: push(vsp, lp[readInt32(ip)]); break;
 							case WRITE_INDEXED_OP: lp[readInt32(ip)] = vsp[0]; break;
-							case READ_NAMED_OP: break;
-							case WRITE_NAMED_OP: break;
-							case GET_PROPERTY_OP: vsp[1] = vsp[1].toObject(h)->getProperty(vsp[0].toString(h)); pop(vsp, 1); break;
-							case SET_PROPERTY_OP: vsp[2].toObject(h)->setProperty(vsp[1].toString(h), vsp[0]); vsp[2] = vsp[0]; pop(vsp, 2); break;
+							case READ_NAMED_OP: {
+								Value v;
+								bool success = closure->getProperty(cp[readInt32(ip)].getString(), v);
+								if (!success) error();
+								push(vsp, v);
+								break;
+							}
+							case WRITE_NAMED_OP:  {
+								bool success = closure->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
+								if (!success) error();
+								break;
+							}
+							case GET_PROPERTY_OP: {
+								Value v;
+								vsp[1].toObject(h)->getProperty(vsp[0].toString(h), v);
+								vsp[1] = v;
+								pop(vsp, 1);
+								break;
+							}
+							case SET_PROPERTY_OP: {
+								vsp[2].toObject(h)->setProperty(vsp[1].toString(h), vsp[0]);
+								vsp[2] = vsp[0];
+								pop(vsp, 2);
+								break;
+							}
 							case ADD_OP: vsp[1] = vsp[1].add(h, vsp[0]); pop(vsp, 1); break;
 							case SUB_OP: vsp[1] = Value(vsp[1].toDouble() - vsp[0].toDouble()); pop(vsp, 1); break;
 							case MUL_OP: vsp[1] = Value(vsp[1].toDouble() * vsp[0].toDouble()); pop(vsp, 1); break;
@@ -544,36 +596,37 @@ class VM : public GCItem {
 							case LEQ_OP: vsp[1] = Value(vsp[1].isLessThanOrEqualTo(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 							case GT_OP: vsp[1] = Value(vsp[0].isLessThan(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 							case GEQ_OP: vsp[1] = Value(vsp[0].isLessThanOrEqualTo(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-							case JT_OP: if (vsp[0].toBool()) ip += readInt32(ip); else { ip += 4; pop(vsp, 1); } break;
-							case JF_OP: if (!vsp[0].toBool()) ip += readInt32(ip); else { ip += 4; pop(vsp, 1); } break;
+							case JMP_OP: ip += readInt32(ip); break;
+							case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
+							case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
 							case RETURN_OP: {
-								csp->ip = ip;
-								csp->vsp = vsp;
-								if (++csp == cstackEnd) return true;
-								ip = csp->ip;
-								vsp = csp->vsp;
-								cp = csp->cp;
-								lp = csp->lp;
+								cstackPointer->instructionPointer = ip;
+								cstackPointer->vstackPointer = vsp;
+								if (++cstackPointer == cstackEnd) return true;
+								ip = cstackPointer->instructionPointer;
+								vsp = cstackPointer->vstackPointer;
+								cp = cstackPointer->constants;
+								lp = cstackPointer->locals;
 								break;
 							}
 						}
 					}
-					csp->ip = ip;
-					csp->vsp = vsp;
+					cstackPointer->instructionPointer = ip;
+					cstackPointer->vstackPointer = vsp;
 					return false;
 				}
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
 	protected:	Value* const vstackStart;
 	protected:	Value* const vstackEnd;
-	protected:	Context* csp;
+	protected:	Context* cstackPointer;
 };
 
 enum Precedence {
 	GROUP_PREC, PROPERTY_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
-	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
+	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
-enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT };
+enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -633,13 +686,17 @@ const OperatorInfo POST_OPS[] = {
 	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GEQ_OP }, 
 	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GT_OP },
 	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, VM::INVALID_OP },
-	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, VM::INVALID_OP }
+	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, VM::INVALID_OP },
+	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, VM::INVALID_OP }
 };
+
+enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT };
+const char* STATEMENT_TOKENS[] = { "var", "if", "while", "do" };
 
 class Compiler : public GCItem {
 	public:		struct XValue {
-					enum Type { STACKED, CONSTANT, INDEXED, PROPERTY };
-					XValue() : t(STACKED) { }
+					enum Type { NONE, STACKED, CONSTANT, INDEXED, NAMED, PROPERTY };
+					XValue() : t(NONE) { }
 					XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 					Type t;
 					Value v;
@@ -647,7 +704,7 @@ class Compiler : public GCItem {
 
 	public:		Compiler(std::vector<Byte>& code, std::vector<Value>& constants
 						, std::vector<Value>& locals) : code(code), constants(constants), locals(locals) { }
-	public:		virtual void gcMark(GCHeap* heap) {
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
 					for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
 						it->first.mark(heap);
 					}
@@ -659,14 +716,17 @@ class Compiler : public GCItem {
 	public:		void emitWithInt32(VM::Op op, Int32 i);
 	public:		void emitWithConstant(VM::Op op, const Value& constant);
 	public:		double parseNumber(StringIt& p, const StringIt& e);
-	public:		bool token(StringIt& p, const StringIt& e, const Char* t);
+	public:		bool eatToken(StringIt& p, const StringIt& e, const Char* t);
 	public:		void makeRValue(XValue& v);
 	public:		void makeAssignment(XValue& v);
 	public:		XValue parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
 	public:		void parseRValueOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
 	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
-	protected:	String parseIdentifier(StringIt& p, const StringIt& e);
+	public:		void parseStatement(StringIt& p, const StringIt& e);
+	public:		void parseStatementList(StringIt& p, const StringIt& e);
+	protected:	bool isLeadingIdentifierChar(Char c);
+	protected:	void parseIdentifier(StringIt& p, const StringIt& e);
 	public:		std::vector<Byte>& code;
 	public:		std::vector<Value>& constants;
 	public:		std::vector<Value>& locals;
@@ -737,10 +797,15 @@ double Compiler::parseNumber(StringIt& p, const StringIt& e) {
 	return v;
 }
 
-bool Compiler::token(StringIt& p, const StringIt& e, const Char* t) {
+bool Compiler::isLeadingIdentifierChar(Char c) {
+	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
+}
+
+bool Compiler::eatToken(StringIt& p, const StringIt& e, const Char* t) {
+	assert(*t != 0);
 	StringIt q = p;
 	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
-	if (*t == 0) {
+	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (q == e || !isLeadingIdentifierChar(*q)))) {
 		p = q;
 		return true;
 	}
@@ -753,6 +818,7 @@ void Compiler::makeRValue(XValue& xv) {
 		case XValue::STACKED: return;
 		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, xv.v); break;
 		case XValue::INDEXED: emitWithInt32(VM::READ_INDEXED_OP, xv.v.toInt()); break;
+		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(VM::GET_PROPERTY_OP); break;
 	}
 	xv = XValue(XValue::STACKED);
@@ -762,6 +828,7 @@ void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
 		default: throw std::runtime_error("Invalid lvalue");
 		case XValue::INDEXED: emitWithInt32(VM::WRITE_INDEXED_OP, xv.v.toInt()); break;
+		case XValue::NAMED: emitWithConstant(VM::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(VM::SET_PROPERTY_OP); break;
 	}
 	xv = XValue(XValue::STACKED);
@@ -770,7 +837,7 @@ void Compiler::makeAssignment(XValue& xv) {
 Compiler::XValue Compiler::parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op) {
 	XValue rv;
 	parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
-	if (op.closeToken != 0 && !token(p, e, op.closeToken)) {
+	if (op.closeToken != 0 && !eatToken(p, e, op.closeToken)) {
 		throw std::runtime_error(std::string("Expected ") + op.closeToken);
 	}
 	return rv;
@@ -785,7 +852,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 		, int opCount, const OperatorInfo* opList) {
 	StringIt b = p;
 	int i = 0;
-	while (i < opCount && !token(p, e, opList[i].token)) ++i;
+	while (i < opCount && !eatToken(p, e, opList[i].token)) ++i;
 	if (i >= opCount) return false;
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
@@ -811,17 +878,34 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 		}
 		case LOGICAL_AND_OR: {
 			makeRValue(v);
+			emit(VM::REPUSH_OP);
 			emitWithInt32(op.vmOp, 0);
 			int offset = code.size() - 4;
-			parseExpression(p, e, v, op.prec);
-			makeRValue(v);
+			emit(VM::POP_OP);
+			parseRValueOperand(p, e, op);
 			*reinterpret_cast<Int32*>(&code[offset]) = code.size() - offset - 4;
 			break;
+		}
+		case CONDITIONAL: {
+			makeRValue(v);
+			emitWithInt32(VM::JF_OP, 0);	// FIX : sub
+			int offsetA = code.size() - 4;
+			parseRValueOperand(p, e, op);
+			emitWithInt32(VM::JMP_OP, 0);
+			int offsetB = code.size() - 4;
+			*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+			parseExpression(p, e, v, op.prec);
+			makeRValue(v);
+			*reinterpret_cast<Int32*>(&code[offsetB]) = code.size() - offsetB - 4;
+			break;			
 		}
 		case PROPERTY_DOT: {
 			makeRValue(v);
 			eatWhite(p, e);
-			emitWithConstant(VM::CONST_OP, Value(gcHeap()->manage(new GCString(parseIdentifier(p, e)))));
+			StringIt b = p;
+			parseIdentifier(p, e);
+			if (p == b) throw std::runtime_error("Expected identifier");
+			emitWithConstant(VM::CONST_OP, Value(gcHeap()->manage(new StringObject(String(b, p)))));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -876,14 +960,10 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 	return true;
 }
 
-String Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
-	StringIt b = p;
-	if (p != e && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '$' || *p == '_')) {
-		while (++p != e && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9')
-				|| *p == '$' || *p == '_')) { }
+void Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
+	if (p != e && isLeadingIdentifierChar(*p)) {
+		while (++p != e && isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9')) { }
 	}
-	if (p == b) throw std::runtime_error("Invalid identifier");
-	return String(b, p);
 }
 
 void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
@@ -892,41 +972,170 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		assert(p != e);
 		switch (*p) {
-			case '0':	if (p + 1 != e && p[1] == 'x') {
-							UInt32 i;
-							StringIt q = parseHex(p + 2, e, i);
-							if (q == p) throw std::runtime_error("Invalid number");
-							p = q;
-							v = XValue(XValue::CONSTANT, Value((Int32)(i)));
-							break;
-						}
-						/* else continue */
+			case '0': {
+				if (p + 1 != e && p[1] == 'x') {
+					UInt32 i;
+					StringIt q = parseHex(p + 2, e, i);
+					if (q == p) throw std::runtime_error("Invalid number");
+					p = q;
+					v = XValue(XValue::CONSTANT, Value((Int32)(i)));
+					break;
+				}
+				/* else continue */
+			}
 			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
 				double d = parseNumber(p, e);
 				v = XValue(XValue::CONSTANT, Value(d));
 				break;
 			}
 			case '\'': case '"': {
-				v = XValue(XValue::CONSTANT, Value(gcHeap()->manage(new GCString(unescape(p, e)))));
+				v = XValue(XValue::CONSTANT, Value(gcHeap()->manage(new StringObject(unescape(p, e)))));
 				break;
 			}
 			default: {
-				String identifier = parseIdentifier(p, e);
+				StringIt b = p;
+				parseIdentifier(p, e);
+				if (p == b) return; // FIX : any prettier way?
+				String identifier = String(b, p);
 				Int32 index;
 				std::map<String, Int32>::const_iterator it = localIdentifiers.find(identifier);
-				if (it != localIdentifiers.end()) index = it->second;
-				else {
-					index = locals.size();
-					locals.push_back(Value());
-					localIdentifiers[identifier] = index;
+				if (it != localIdentifiers.end()) {
+					index = it->second;
+					v = XValue(XValue::INDEXED, Value(index));
+				} else {
+					v = XValue(XValue::NAMED, Value(gcHeap()->manage(new StringObject(identifier))));
 				}
-				v = XValue(XValue::INDEXED, Value(index));
 				break;
 			}
 		}
     }
-    eatWhite(p, e);
-    while (parseOperator(p, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) { }
+	StringIt q = p;
+    eatWhite(q, e);
+    while (parseOperator(q, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) p = q;
+}
+
+void Compiler::parseStatement(StringIt& p, const StringIt& e) {
+	eatWhite(p, e);
+	if (p == e) return;
+	
+	int i = sizeof (STATEMENT_TOKENS) / sizeof (*STATEMENT_TOKENS) - 1;
+	while (i >= 0 && !eatToken(p, e, STATEMENT_TOKENS[i])) --i;
+	if (i < 0) {
+		XValue xv;
+		parseExpression(p, e, xv);
+		switch (xv.t) {
+			case XValue::STACKED: emit(VM::POP_OP); break;
+			case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
+		}
+	} else {
+		eatWhite(p, e);
+		switch (static_cast<Statement>(i)) {
+			case VAR_STATEMENT: {
+				while (p != e) {
+					StringIt b = p;
+					parseIdentifier(p, e);
+					if (p == b) throw std::runtime_error("Expected identifier");
+					String identifier(b, p);
+					Int32 index;
+					std::map<String, Int32>::const_iterator it = localIdentifiers.find(identifier);
+					if (it != localIdentifiers.end()) index = it->second;
+					else {
+						index = locals.size();
+						locals.push_back(Value());
+						localIdentifiers[identifier] = index;
+					}
+					StringIt q = p;
+					eatWhite(q, e);
+					if (eatToken(q, e, "=")) {
+						p = q;
+						XValue v;
+						parseExpression(p, e, v); // FIX : SUB
+						makeRValue(v);
+						emitWithInt32(VM::WRITE_INDEXED_OP, index);
+						emit(VM::POP_OP);
+						q = p;
+						eatWhite(q, e);
+					}
+					if (!eatToken(q, e, ",")) break;
+					p = q;
+					eatWhite(p, e);
+				}
+				break;
+			}
+			
+			case IF_STATEMENT: {
+				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				XValue v; // FIX : sub
+				parseExpression(p, e, v); // FIX : SUB
+				makeRValue(v);
+				eatWhite(p, e);
+				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
+				int offsetA = code.size() - 4;
+				parseStatement(p, e);
+				StringIt q = p;
+				eatWhite(q, e);
+				if (eatToken(q, e, "else")) {
+					p = q;
+					emitWithInt32(VM::JMP_OP, 0);
+					int offsetB = code.size() - 4;
+					*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+					parseStatement(p, e);
+					*reinterpret_cast<Int32*>(&code[offsetB]) = code.size() - offsetB - 4;
+				} else {
+					*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+				}				
+				break;
+			}
+
+			case WHILE_STATEMENT: {
+				int offsetB = code.size();
+				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				XValue v; // FIX : sub
+				parseExpression(p, e, v); // FIX : SUB
+				makeRValue(v);
+				eatWhite(p, e);
+				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
+				int offsetA = code.size() - 4;
+				parseStatement(p, e);
+				emitWithInt32(VM::JMP_OP, offsetB - (code.size() + 1) - 4);
+				*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+				break;
+			}
+
+			case DO_WHILE_STATEMENT: {
+				int offset = code.size();
+				parseStatement(p, e);
+				eatWhite(p, e);
+				if (!eatToken(p, e, "while")) throw std::runtime_error("Expected 'while'");
+				eatWhite(p, e);
+				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				XValue v; // FIX : sub
+				parseExpression(p, e, v); // FIX : SUB
+				makeRValue(v);
+				eatWhite(p, e);
+				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				emitWithInt32(VM::JT_OP, offset - (code.size() + 1) - 4);
+				break;
+			}
+			
+			default: assert(0);
+		}
+	}
+}
+
+void Compiler::parseStatementList(StringIt& p, const StringIt& e) {
+	StringIt b;
+	do {
+		StringIt b = p;
+		parseStatement(p, e);
+		StringIt q = p;
+		eatWhite(p, e);
+		if (p == e) break;
+		else if (eatToken(p, e, ";")) eatWhite(p, e);
+		else if (std::find(q, p, '\n') == p) throw std::runtime_error("Syntax error");
+	} while (p != e && b != p);
 }
 
 static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
@@ -945,7 +1154,7 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 		, "PLUS", "MINUS"
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
-		, "JT", "JF"
+		, "JMP", "JT", "JF"
 		, "RETURN"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
@@ -955,10 +1164,13 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 		std::cout << (it - b) << ':' << OP_STRINGS[*it];
 		switch (*it++) {
 			case VM::JT_OP:
-			case VM::JF_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
+			case VM::JF_OP:
+			case VM::JMP_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
 			case VM::READ_INDEXED_OP:
 			case VM::WRITE_INDEXED_OP: std::cout << " $" << getInt32(it, e); break;
-			case VM::CONST_OP: std::cout << " #" << getInt32(it, e); break;
+			case VM::CONST_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
+			case VM::READ_NAMED_OP:
+			case VM::WRITE_NAMED_OP: std::cout << " " << constants[getInt32(it, e)].getString()->s; break;
 		}
 		std::cout << std::endl;
 	}
@@ -970,73 +1182,85 @@ int main(int argc, const char* argv[]) {
 	std::vector<Value> locals;
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
+	Object* globals = heap->manage(new UserObject());
 	Compiler* compiler = heap->manage(new Compiler(code, constants, locals));
+	String source;
 	do {
 		try {
 			code.clear();
 			
 			String s;
 			std::getline(std::cin, s);
-			if (s.empty()) return 0;
-			
-			StringIt p = s.begin();
-			StringIt e = s.end();
-			Compiler::XValue v;
-			compiler->parseExpression(p, e, v);
-			compiler->eatWhite(p, e);
-			if (p != e) throw std::runtime_error("Syntax error");
-			compiler->makeRValue(v);
-			code.push_back(VM::RETURN_OP);
-			disassemble(code, constants);
-	static bool firstTime = true;
-	if (firstTime) {
-		Object* o = heap->manage(new Object());
-		locals[0] = Value(o);
-		o->setProperty(heap->manage(new GCString("sune")), Value(heap->manage(new GCString("banan"))));
-		firstTime = false;
-	}
-			
-			std::cout << "Code: " << code.size() << std::endl;
-			std::cout << "Constants: " << constants.size() << std::endl;
-			std::cout << "Locals: " << locals.size() << std::endl;
-
-			Value vstack[1024];
-			Context cstack[1024];
-			cstack[1023].ip = code.data();
-			cstack[1023].vsp = &vstack[1024];
-			cstack[1023].cp = constants.data();
-			cstack[1023].lp = locals.data();
-			VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
-			bool done = false;
-			
-			do {
-				done = vm->run(1000);
-				Value v = vstack[1023];
+			if (!s.empty()) {
+				source += s + "\n";
+			} else {
+				StringIt p = source.begin();
+				StringIt e = source.end();
+		/*
+				Compiler::XValue v;
+				compiler->parseExpression(p, e, v);
+				compiler->eatWhite(p, e);
+				if (p != e) throw std::runtime_error("Syntax error");
+				compiler->makeRValue(v);
+		*/
+				compiler->parseStatementList(p, e);
+				code.push_back(VM::RETURN_OP);
+				disassemble(code, constants);
+		static bool firstTime = true;
+		if (firstTime) {
+			Object* o = heap->manage(new UserObject());
+			locals[0] = Value(o);
+			o->setProperty(heap->manage(new StringObject("sune")), Value(heap->manage(new StringObject("banan"))));
+			firstTime = false;
+		}
 				
-				newHeap = new GCHeap();
-				newHeap->mark(compiler);
-				newHeap->mark(vm);
-				v.mark(newHeap);
-				for (std::vector<Value>::const_iterator it = locals.begin(); it != locals.end(); ++it) it->mark(newHeap);
-				for (std::vector<Value>::const_iterator it = constants.begin(); it != constants.end(); ++it) it->mark(newHeap);
-				int sweptCount = heap->sweep();
-				std::swap(heap, newHeap);
-				delete newHeap;
-				newHeap = 0;
+				std::cout << "Code: " << code.size() << std::endl;
+				std::cout << "Constants: " << constants.size() << std::endl;
+				std::cout << "Locals: " << locals.size() << std::endl;
 
-				std::cout << "Kept: " << heap->size() << std::endl;
-				std::cout << "Swept: " << sweptCount << std::endl;
-				if (done) {
-					std::cout << "On stack: " << (1023 - (cstack[1023].vsp - vstack)) << std::endl;
-					std::cout << "=" << (v.toString(heap))->s.c_str() << std::endl;
-				}
-			} while (!done);
+				Value vstack[1024];
+				Context cstack[1024];
+				cstack[1023].instructionPointer = code.data();
+				cstack[1023].vstackPointer = &vstack[1024];
+				cstack[1023].constants = constants.data();
+				cstack[1023].locals = locals.data();
+				cstack[1023].closure = globals;
+				VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
+				bool done = false;
+				
+				do {
+					done = vm->run(10000000);
+					Value v = vstack[1023];
+					
+					newHeap = new GCHeap();
+					newHeap->mark(compiler);
+					newHeap->mark(vm);
+					newHeap->mark(globals);
+					v.mark(newHeap);
+					for (std::vector<Value>::const_iterator it = locals.begin(); it != locals.end(); ++it) it->mark(newHeap);
+					for (std::vector<Value>::const_iterator it = constants.begin(); it != constants.end(); ++it) it->mark(newHeap);
+					int sweptCount = heap->sweep();
+					std::swap(heap, newHeap);
+					delete newHeap;
+					newHeap = 0;
+
+					std::cout << "Kept: " << heap->size() << std::endl;
+					std::cout << "Swept: " << sweptCount << std::endl;
+					if (done) {
+						std::cout << "On stack: " << (1024 - (cstack[1023].vstackPointer - vstack)) << std::endl;
+						std::cout << "=" << (v.toString(heap))->s.c_str() << std::endl;
+					}
+				} while (!done);
+				source = String();
+			}
 		}
 		catch (const std::exception& x) {
 			std::cout << "Exception: " << x.what() << std::endl;
+			source = String();
 		}
 		catch (...) {
 			std::cout << "Unknown exception" << std::endl;
+			source = String();
 		}
 	} while (true);
 	return 0;

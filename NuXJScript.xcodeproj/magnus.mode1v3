@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7CB915816D596BC00D3007B</string>
+						<string>F7CB93D516D6E7F600D3007B</string>
 						<key>history</key>
 						<array>
 							<string>F7E9375316D455D100C7AEC3</string>
@@ -310,7 +310,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>1</integer>
+									<integer>2</integer>
 									<integer>0</integer>
 								</array>
 							</array>
@@ -364,7 +364,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7CB915716D596BC00D3007B</string>
+										<string>F7CB93D416D6E7F600D3007B</string>
 										<key>history</key>
 										<array>
 											<string>F7CB8C5D16D4CD9C00D3007B</string>
@@ -372,7 +372,9 @@
 											<string>F7CB900916D5733B00D3007B</string>
 											<string>F7CB900B16D5733B00D3007B</string>
 											<string>F7CB914A16D595BB00D3007B</string>
-											<string>F7CB914B16D595BB00D3007B</string>
+											<string>F7CB919416D627A500D3007B</string>
+											<string>F7CB929B16D67F4E00D3007B</string>
+											<string>F7CB935E16D6DB3C00D3007B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -925,9 +927,9 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 0}, {935, 511}}</string>
+								<string>{{0, 0}, {931, 511}}</string>
 								<key>RubberWindowFrame</key>
-								<string>505 274 935 552 0 0 1440 878 </string>
+								<string>509 274 931 552 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXDebugCLIModule</string>
@@ -956,7 +958,7 @@
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.consoleV3</string>
 			<key>WindowString</key>
-			<string>505 274 935 552 0 0 1440 878 </string>
+			<string>509 274 931 552 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
