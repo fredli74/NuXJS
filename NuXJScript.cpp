@@ -1018,6 +1018,12 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 	eatWhite(p, e);
 	if (p == e) return;
 	
+	if (eatToken(p, e, "{")) {
+		parseStatementList(p, e);
+		if (!eatToken(p, e, "}")) throw std::runtime_error("Expected identifier");
+		return;
+	}
+	
 	int i = sizeof (STATEMENT_TOKENS) / sizeof (*STATEMENT_TOKENS) - 1;
 	while (i >= 0 && !eatToken(p, e, STATEMENT_TOKENS[i])) --i;
 	if (i < 0) {
@@ -1123,18 +1129,18 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			default: assert(0);
 		}
 	}
+	StringIt q = p;
+	eatWhite(q, e);
+	if (q != e && *q != '}' && !eatToken(q, e, ";") && std::find(p, q, '\n') == q)
+		throw std::runtime_error("Syntax error");
+	p = q;
 }
 
 void Compiler::parseStatementList(StringIt& p, const StringIt& e) {
 	StringIt b;
 	do {
-		StringIt b = p;
+		b = p;
 		parseStatement(p, e);
-		StringIt q = p;
-		eatWhite(p, e);
-		if (p == e) break;
-		else if (eatToken(p, e, ";")) eatWhite(p, e);
-		else if (std::find(q, p, '\n') == p) throw std::runtime_error("Syntax error");
 	} while (p != e && b != p);
 }
 
