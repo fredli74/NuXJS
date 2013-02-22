@@ -147,22 +147,29 @@ static String unescape(StringIt& p, const StringIt& e) {
 }
 
 class StringObject : public Object {
+	public:		static StringObject* newString(GCHeap* heap, const String& s);
 	public:		StringObject(const String& s) : s(s) { }
-	public:		virtual bool getProperty(StringObject* name, Value& v) {
-					UInt32 i;
-					StringIt p = name->s.begin();
-					StringIt e = name->s.end();
-					StringIt q = parseUnsignedInt(p, e, i);
-					if (q == e && 0 <= i && i < s.size()) {
-						v = Value(gcHeap()->manage(new StringObject(String(1, s[i]))));
-						return true;
-					}
-					return false;
-				}
+	public:		virtual bool getProperty(StringObject* name, Value& v);
 	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
 	public:		virtual ~StringObject() { std::cout << "Deleting " << s.c_str() << std::endl; }
 	public:		String s;
 };
+
+StringObject* StringObject::newString(GCHeap* heap, const String& s) {
+	return heap->manage(new StringObject(s));
+}
+
+bool StringObject::getProperty(StringObject* name, Value& v) {
+	UInt32 i;
+	StringIt p = name->s.begin();
+	StringIt e = name->s.end();
+	StringIt q = parseUnsignedInt(p, e, i);
+	if (q == e && 0 <= i && i < s.size()) {
+		v = Value(newString(gcHeap(), String(1, s[i])));
+		return true;
+	}
+	return false;
+}
 
 int GCHeap::sweep() {
 	int count = 0;
@@ -217,12 +224,12 @@ class UserObject : public Object {
 	protected:	PropertyMap properties;
 };
 
-class StringObject UNDEFINED_STRING("undefined");
-class StringObject NULL_STRING("null");
-class StringObject FALSE_STRING("false");
-class StringObject TRUE_STRING("true");
+StringObject UNDEFINED_STRING("undefined");
+StringObject NULL_STRING("null");
+StringObject FALSE_STRING("false");
+StringObject TRUE_STRING("true");
 
-Value::Value() : type(UNDEFINED_TYPE) { }
+Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
@@ -264,17 +271,19 @@ double Value::toDouble() const {
 		}
 	}
 }
-
-String Value::toString() const {
-	switch (type) {
-		default: assert(0);
-		case UNDEFINED_TYPE: return "undefined";
-		case NULL_TYPE: return "null";
-		case BOOLEAN_TYPE: return b ? "true" : "false";
-		case NUMBER_TYPE: return doubleToString(d);
-		case STRING_TYPE: return s->s;
-	}
-}
+			
+			// FIX : drop
+			String Value::toString() const {
+				switch (type) {
+					default: assert(0);
+					case UNDEFINED_TYPE: return "undefined";
+					case NULL_TYPE: return "null";
+					case BOOLEAN_TYPE: return b ? "true" : "false";
+					case NUMBER_TYPE: return doubleToString(d);
+					case STRING_TYPE: return s->s;
+case OBJECT_TYPE: return "<object>";
+				}
+			}
 
 StringObject* Value::toString(GCHeap* heap) const {
 	switch (type) {
@@ -282,9 +291,9 @@ StringObject* Value::toString(GCHeap* heap) const {
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
 		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
-		case NUMBER_TYPE: return heap->manage(new StringObject(doubleToString(d)));
+		case NUMBER_TYPE: return StringObject::newString(heap, doubleToString(d));
 		case STRING_TYPE: return s;
-case OBJECT_TYPE: return heap->manage(new StringObject("<object>"));
+case OBJECT_TYPE: return StringObject::newString(heap, "<object>");
 	}
 }
 
@@ -309,6 +318,7 @@ bool Value::operator==(const Value& y) const {
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->s == y.s->s;
+		case OBJECT_TYPE: return o == y.o;
 	}
 }
 
@@ -322,6 +332,7 @@ bool Value::operator<(const Value& y) const {
 		case BOOLEAN_TYPE: return b < y.b;
 		case NUMBER_TYPE: return d < y.d;
 		case STRING_TYPE: return s->s < y.s->s;
+		case OBJECT_TYPE: return o < y.o;
 	}
 }
 
@@ -403,7 +414,7 @@ Value Value::add(GCHeap* heap, const Value& y) const {
 		if (rs.empty()) return *this;
 		String ls = toString(heap)->s;
 		if (ls.empty()) return y;
-		return Value(heap->manage(new StringObject(ls + rs)));
+		return Value(StringObject::newString(heap, ls + rs));
 	}
 	return Value(toDouble() + y.toDouble());
 }
@@ -415,12 +426,13 @@ void Value::mark(GCHeap* heap) const {
 	}
 }
 
+typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
+
 class Function : public Object {
-	protected:	typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
-	public:		Function(StringObject* source) : source(source) { }
+	public:		Function() : source(0), argumentsCount(0), localsCount(0) { }
 	public:		bool lookupLocalName(StringObject* name, Int32& index) const {
-					LocalNameMap::const_iterator it = localNames.find(name);
-					if (it == localNames.end()) return false;
+					LocalNameMap::const_iterator it = locals.find(name);
+					if (it == locals.end()) return false;
 					index = it->second;
 					return true;
 				}
@@ -430,14 +442,16 @@ class Function : public Object {
 					for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
 						it->mark(heap);
 					}
-					for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it) {
+					for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
 						heap->mark(it->first);
 					}
 				}
 	public:		StringObject* source;
 	public:		std::vector<Byte> code;
 	public:		std::vector<Value> constants;
-	protected:	LocalNameMap localNames;
+	public:		Int32 argumentsCount;
+	public:		Int32 localsCount; // including arguments
+	public:		LocalNameMap locals;
 };
 
 class Closure : public Object {
@@ -497,135 +511,113 @@ class Closure : public Object {
 	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
 };
 
-struct Context {
-	const Byte* instructionPointer;
-	Value* vstackPointer;
-	const Value* constants;
-	Value* locals;
-	Object* closure;
-};
+VM::VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
+		: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
+		, cstackPointer(cstackEnd - 1) {
+}
 
-class VM : public GCItem {
-	public:		enum Op {
-					INVALID_OP = -1
-					, POP_OP, REPUSH_OP, CONST_OP
-					, READ_INDEXED_OP, WRITE_INDEXED_OP, READ_NAMED_OP, WRITE_NAMED_OP, GET_PROPERTY_OP, SET_PROPERTY_OP
-					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP
-					, OR_OP, XOR_OP, AND_OP
-					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP
-					, PLUS_OP, MINUS_OP
-					, BIT_NOT_OP, NOT_OP
-					, STRICTLY_EQ_OP, STRICTLY_NEQ_OP, EQ_OP, NEQ_OP, LT_OP, LEQ_OP, GT_OP, GEQ_OP
-					, JMP_OP, JT_OP, JF_OP
-					, RETURN_OP
-				};
-	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
-						: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-						, cstackPointer(cstackEnd - 1) {
-				}
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					if (cstackPointer == cstackEnd) return;
-					for (Value* vsp = cstackPointer->vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
-					for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->closure);
-				}
-	protected:	void push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
-	protected:	void pop(Value*& vsp, int count) { assert(vsp + count <= vstackEnd); vsp += count; }
-	protected:	Int32 readInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
-	protected:	void error() {
-					throw std::runtime_error("error"); // FIX
-				}
-	public:		bool run(Int32 count) {
-					const Byte* ip = cstackPointer->instructionPointer;
-					Value* vsp = cstackPointer->vstackPointer;
-					const Value* cp = cstackPointer->constants;
-					Value* lp = cstackPointer->locals;
-					Object* closure = cstackPointer->closure;
-					GCHeap* h = gcHeap();
-					while (--count >= 0) {
-						switch (*ip++) {
-							case POP_OP: pop(vsp, 1); break;
-							case REPUSH_OP: push(vsp, vsp[0]); break;
-							case CONST_OP: push(vsp, cp[readInt32(ip)]); break;
-							case READ_INDEXED_OP: push(vsp, lp[readInt32(ip)]); break;
-							case WRITE_INDEXED_OP: lp[readInt32(ip)] = vsp[0]; break;
-							case READ_NAMED_OP: {
-								Value v;
-								bool success = closure->getProperty(cp[readInt32(ip)].getString(), v);
-								if (!success) error();
-								push(vsp, v);
-								break;
-							}
-							case WRITE_NAMED_OP:  {
-								bool success = closure->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
-								if (!success) error();
-								break;
-							}
-							case GET_PROPERTY_OP: {
-								Value v;
-								vsp[1].toObject(h)->getProperty(vsp[0].toString(h), v);
-								vsp[1] = v;
-								pop(vsp, 1);
-								break;
-							}
-							case SET_PROPERTY_OP: {
-								vsp[2].toObject(h)->setProperty(vsp[1].toString(h), vsp[0]);
-								vsp[2] = vsp[0];
-								pop(vsp, 2);
-								break;
-							}
-							case ADD_OP: vsp[1] = vsp[1].add(h, vsp[0]); pop(vsp, 1); break;
-							case SUB_OP: vsp[1] = Value(vsp[1].toDouble() - vsp[0].toDouble()); pop(vsp, 1); break;
-							case MUL_OP: vsp[1] = Value(vsp[1].toDouble() * vsp[0].toDouble()); pop(vsp, 1); break;
-							case DIV_OP: vsp[1] = Value(vsp[1].toDouble() / vsp[0].toDouble()); pop(vsp, 1); break;
-							case MOD_OP: vsp[1] = Value(fmod(vsp[1].toDouble(), vsp[0].toDouble())); pop(vsp, 1); break;
-							case OR_OP: vsp[1] = Value(vsp[1].toInt() | vsp[0].toInt()); pop(vsp, 1); break;
-							case XOR_OP: vsp[1] = Value(vsp[1].toInt() ^ vsp[0].toInt()); pop(vsp, 1); break;
-							case AND_OP: vsp[1] = Value(vsp[1].toInt() & vsp[0].toInt()); pop(vsp, 1); break;
-							case SHL_OP: vsp[1] = Value(vsp[1].toInt() << vsp[0].toInt()); pop(vsp, 1); break;
-							case SHR_OP: vsp[1] = Value(vsp[1].toInt() >> vsp[0].toInt()); pop(vsp, 1); break;
-							case UNSIGNED_SHR_OP: vsp[1] = Value((Int32)((UInt32)(vsp[1].toInt()) >> vsp[0].toInt())); pop(vsp, 1); break;
-							case PLUS_OP: vsp[0] = Value(vsp[0].toDouble()); break;
-							case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
-							case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
-							case NOT_OP: vsp[0] = Value(!vsp[0].toBool()); break;
-							case STRICTLY_EQ_OP: vsp[1] = Value(vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
-							case STRICTLY_NEQ_OP: vsp[1] = Value(!vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
-							case EQ_OP: vsp[1] = Value(vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
-							case NEQ_OP: vsp[1] = Value(!vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
-							case LT_OP: vsp[1] = Value(vsp[1].isLessThan(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-							case LEQ_OP: vsp[1] = Value(vsp[1].isLessThanOrEqualTo(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-							case GT_OP: vsp[1] = Value(vsp[0].isLessThan(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-							case GEQ_OP: vsp[1] = Value(vsp[0].isLessThanOrEqualTo(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-							case JMP_OP: ip += readInt32(ip); break;
-							case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
-							case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
-							case RETURN_OP: {
-								cstackPointer->instructionPointer = ip;
-								cstackPointer->vstackPointer = vsp;
-								if (++cstackPointer == cstackEnd) return true;
-								ip = cstackPointer->instructionPointer;
-								vsp = cstackPointer->vstackPointer;
-								cp = cstackPointer->constants;
-								lp = cstackPointer->locals;
-								break;
-							}
-						}
-					}
-					cstackPointer->instructionPointer = ip;
-					cstackPointer->vstackPointer = vsp;
-					return false;
-				}
-	protected:	Context* const cstackStart;
-	protected:	Context* const cstackEnd;
-	protected:	Value* const vstackStart;
-	protected:	Value* const vstackEnd;
-	protected:	Context* cstackPointer;
-};
+void VM::garbageCollectAndMark(GCHeap* heap) {
+	if (cstackPointer == cstackEnd) return;
+	for (Value* vsp = cstackPointer->vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
+	for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->closure);
+}
 
-enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
-	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
-};
+void VM::push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
+void VM::pop(Value*& vsp, int count) { assert(vsp + count <= vstackEnd); vsp += count; }
+Int32 VM::readInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
+
+void VM::error() {
+	throw std::runtime_error("error"); // FIX
+}
+
+bool VM::run(Int32 count) {
+	const Byte* ip = cstackPointer->instructionPointer;
+	Value* vsp = cstackPointer->vstackPointer;
+	const Value* cp = cstackPointer->constants;
+	Value* lp = cstackPointer->locals;
+	Object* closure = cstackPointer->closure;
+	GCHeap* h = gcHeap();
+	while (--count >= 0) {
+		switch (*ip++) {
+			case POP_OP: pop(vsp, 1); break;
+			case REPUSH_OP: push(vsp, vsp[0]); break;
+			case CONST_OP: push(vsp, cp[readInt32(ip)]); break;
+			case READ_INDEXED_OP: push(vsp, lp[readInt32(ip)]); break;
+			case WRITE_INDEXED_OP: lp[readInt32(ip)] = vsp[0]; break;
+			case READ_NAMED_OP: {
+				Value v;
+				bool success = closure->getProperty(cp[readInt32(ip)].getString(), v);
+				if (!success) error();
+				push(vsp, v);
+				break;
+			}
+			case WRITE_NAMED_OP:  {
+				bool success = closure->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
+				if (!success) error();
+				break;
+			}
+			case GET_PROPERTY_OP: {
+				Value v;
+				Object* o = vsp[1].toObject(h);
+				if (o == 0) error();
+				o->getProperty(vsp[0].toString(h), v);
+				vsp[1] = v;
+				pop(vsp, 1);
+				break;
+			}
+			case SET_PROPERTY_OP: {
+				Object* o = vsp[2].toObject(h);
+				if (o == 0) error();
+				o->setProperty(vsp[1].toString(h), vsp[0]);
+				vsp[2] = vsp[0];
+				pop(vsp, 2);
+				break;
+			}
+			case ADD_OP: vsp[1] = vsp[1].add(h, vsp[0]); pop(vsp, 1); break;
+			case SUB_OP: vsp[1] = Value(vsp[1].toDouble() - vsp[0].toDouble()); pop(vsp, 1); break;
+			case MUL_OP: vsp[1] = Value(vsp[1].toDouble() * vsp[0].toDouble()); pop(vsp, 1); break;
+			case DIV_OP: vsp[1] = Value(vsp[1].toDouble() / vsp[0].toDouble()); pop(vsp, 1); break;
+			case MOD_OP: vsp[1] = Value(fmod(vsp[1].toDouble(), vsp[0].toDouble())); pop(vsp, 1); break;
+			case OR_OP: vsp[1] = Value(vsp[1].toInt() | vsp[0].toInt()); pop(vsp, 1); break;
+			case XOR_OP: vsp[1] = Value(vsp[1].toInt() ^ vsp[0].toInt()); pop(vsp, 1); break;
+			case AND_OP: vsp[1] = Value(vsp[1].toInt() & vsp[0].toInt()); pop(vsp, 1); break;
+			case SHL_OP: vsp[1] = Value(vsp[1].toInt() << vsp[0].toInt()); pop(vsp, 1); break;
+			case SHR_OP: vsp[1] = Value(vsp[1].toInt() >> vsp[0].toInt()); pop(vsp, 1); break;
+			case UNSIGNED_SHR_OP: vsp[1] = Value((Int32)((UInt32)(vsp[1].toInt()) >> vsp[0].toInt())); pop(vsp, 1); break;
+			case PLUS_OP: vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
+			case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
+			case NOT_OP: vsp[0] = Value(!vsp[0].toBool()); break;
+			case STRICTLY_EQ_OP: vsp[1] = Value(vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+			case STRICTLY_NEQ_OP: vsp[1] = Value(!vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+			case EQ_OP: vsp[1] = Value(vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
+			case NEQ_OP: vsp[1] = Value(!vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
+			case LT_OP: vsp[1] = Value(vsp[1].isLessThan(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case LEQ_OP: vsp[1] = Value(vsp[1].isLessThanOrEqualTo(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GT_OP: vsp[1] = Value(vsp[0].isLessThan(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GEQ_OP: vsp[1] = Value(vsp[0].isLessThanOrEqualTo(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case JMP_OP: ip += readInt32(ip); break;
+			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
+			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
+			case RETURN_OP: {
+				cstackPointer->instructionPointer = ip;
+				cstackPointer->vstackPointer = vsp;
+				if (++cstackPointer == cstackEnd) return true;
+				ip = cstackPointer->instructionPointer;
+				vsp = cstackPointer->vstackPointer;
+				cp = cstackPointer->constants;
+				lp = cstackPointer->locals;
+				break;
+			}
+		}
+	}
+	cstackPointer->instructionPointer = ip;
+	cstackPointer->vstackPointer = vsp;
+	return false;
+}
+
+/* --- Compiler --- */
+
 enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
@@ -691,48 +683,35 @@ const OperatorInfo POST_OPS[] = {
 };
 
 enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT };
-const char* STATEMENT_TOKENS[] = { "var", "if", "while", "do" };
-
-class Compiler : public GCItem {
-	public:		struct XValue {
-					enum Type { NONE, STACKED, CONSTANT, INDEXED, NAMED, PROPERTY };
-					XValue() : t(NONE) { }
-					XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
-					Type t;
-					Value v;
-				};
-
-	public:		Compiler(std::vector<Byte>& code, std::vector<Value>& constants
-						, std::vector<Value>& locals) : code(code), constants(constants), locals(locals) { }
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
-						it->first.mark(heap);
-					}
-				}
-	public:		bool isComment(const StringIt& p, const StringIt& e);
-	public:		void eatComment(StringIt& p, const StringIt& e);
-	public:		void eatWhite(StringIt& p, const StringIt& e);
-	public:		void emit(VM::Op op);
-	public:		void emitWithInt32(VM::Op op, Int32 i);
-	public:		void emitWithConstant(VM::Op op, const Value& constant);
-	public:		double parseNumber(StringIt& p, const StringIt& e);
-	public:		bool eatToken(StringIt& p, const StringIt& e, const Char* t);
-	public:		void makeRValue(XValue& v);
-	public:		void makeAssignment(XValue& v);
-	public:		XValue parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
-	public:		void parseRValueOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
-	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
-	public:		void parseStatement(StringIt& p, const StringIt& e);
-	public:		void parseStatementList(StringIt& p, const StringIt& e);
-	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier(StringIt& p, const StringIt& e);
-	public:		std::vector<Byte>& code;
-	public:		std::vector<Value>& constants;
-	public:		std::vector<Value>& locals;
-	public:		std::map<Value, Int32> definedConstants;
-	public:		std::map<String, Int32> localIdentifiers;
+/* Built with QuickHashMaker.pika */
+static int findStatementToken(int n /* string length */, const char* s /* zero-terminated string */) {
+	static const char* STRINGS[4] = {
+		"var", "if", "while", "do"
+	};
+	static const int QUICK_HASH_TABLE[4] = {
+		3, 1, 0, 2
+	};
+	if (n < 2 || n > 5) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(s[0]) & 3];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
+
+struct Compiler::XValue {
+	enum Type { NONE, STACKED, CONSTANT, INDEXED, NAMED, PROPERTY };
+	XValue() : t(NONE) { }
+	XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
+	Type t;
+	Value v;
+};
+
+Compiler::Compiler(Function* function) : function(function) { }
+
+void Compiler::garbageCollectAndMark(GCHeap* heap) {
+	heap->mark(function);
+	for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
+		it->first.mark(heap);
+	}
+}
 
 bool Compiler::isComment(const StringIt& p, const StringIt& e) {
 	return (p != e && p + 1 != e && *p == '/' && (p[1] == '/' || p[1] == '*'));
@@ -769,10 +748,12 @@ void Compiler::eatWhite(StringIt& p, const StringIt& e) {
 }
 
 void Compiler::emit(VM::Op op) {
+	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 }
 
 void Compiler::emitWithInt32(VM::Op op, Int32 i) {
+	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 	code.resize(code.size() + 4);
 	*reinterpret_cast<Int32*>(&code[code.size() - 4]) = i;
@@ -781,6 +762,7 @@ void Compiler::emitWithInt32(VM::Op op, Int32 i) {
 void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
+		std::vector<Value>& constants = function->constants;
 		constants.push_back(constant);
 		definedConstants[constant] = constants.size() - 1;
 		emitWithInt32(op, constants.size() - 1);
@@ -810,6 +792,10 @@ bool Compiler::eatToken(StringIt& p, const StringIt& e, const Char* t) {
 		return true;
 	}
 	return false;
+}
+
+void Compiler::eatToken(StringIt& p, const StringIt& e) {
+	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
 void Compiler::makeRValue(XValue& xv) {
@@ -877,6 +863,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			break;
 		}
 		case LOGICAL_AND_OR: {
+			std::vector<Byte>& code = function->code;
 			makeRValue(v);
 			emit(VM::REPUSH_OP);
 			emitWithInt32(op.vmOp, 0);
@@ -887,6 +874,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			break;
 		}
 		case CONDITIONAL: {
+			std::vector<Byte>& code = function->code;
 			makeRValue(v);
 			emitWithInt32(VM::JF_OP, 0);	// FIX : sub
 			int offsetA = code.size() - 4;
@@ -905,7 +893,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			StringIt b = p;
 			parseIdentifier(p, e);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(VM::CONST_OP, Value(gcHeap()->manage(new StringObject(String(b, p)))));
+			emitWithConstant(VM::CONST_OP, Value(StringObject::newString(gcHeap(), String(b, p))));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -966,46 +954,109 @@ void Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
 	}
 }
 
+enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL };
+
+/* Built with QuickHashMaker.pika */
+static int findLiteralToken(int n /* string length */, const char* s /* zero-terminated string */) {
+	static const char* STRINGS[4] = {
+		"null", "false", "true", "function"
+	};
+	static const int QUICK_HASH_TABLE[4] = {
+		0, 1, 3, 2
+	};
+	if (n < 4 || n > 8) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(n - s[2]) & 3];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+
+void Compiler::expectToken(StringIt& p, const StringIt& e, const Char* token) {
+	if (!eatToken(p, e, token)) throw std::runtime_error(String("Expected '") + token + "'");
+}
+
 void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
     eatWhite(p, e);
 	if (p == e) throw std::runtime_error("Unexpected end of string");
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
-		assert(p != e);
-		switch (*p) {
-			case '0': {
-				if (p + 1 != e && p[1] == 'x') {
-					UInt32 i;
-					StringIt q = parseHex(p + 2, e, i);
-					if (q == p) throw std::runtime_error("Invalid number");
-					p = q;
-					v = XValue(XValue::CONSTANT, Value((Int32)(i)));
+		StringIt q = p;
+		eatToken(q, e);
+		int i = findLiteralToken(q - p, &*p);
+		if (i >= 0) {
+			p = q;
+			switch (static_cast<Literal>(i)) {
+				case NULL_LITERAL: v = XValue(XValue::CONSTANT, Value(Value::NULL_TYPE)); break;
+				case FALSE_LITERAL: v = XValue(XValue::CONSTANT, Value(false)); break;
+				case TRUE_LITERAL: v = XValue(XValue::CONSTANT, Value(true)); break;
+				case FUNCTION_LITERAL: {
+					Function* func = gcHeap()->manage(new Function());
+					eatWhite(p, e);
+					// FIX : the optional function identifier
+					expectToken(p, e, "(");
+					eatWhite(p, e);
+					while (p != e && *p != ')') {
+						if (func->argumentsCount != 0) {
+							expectToken(p, e, ",");
+							eatWhite(p, e);
+						}
+						StringIt b = p;
+						parseIdentifier(p, e);
+						if (p == b) throw std::runtime_error("Expected identifier");
+						func->locals[StringObject::newString(gcHeap(), String(b, p))] = func->localsCount;
+						func->localsCount++;
+						func->argumentsCount++;
+						eatWhite(p, e);
+					}
+					expectToken(p, e, ")");
+					eatWhite(p, e);
+					expectToken(p, e, "{");
+					{
+						Compiler* funcCompiler = gcHeap()->manage(new Compiler(func));
+						funcCompiler->parseStatementList(p, e);
+					}
+					expectToken(p, e, "}");
+					v = XValue(XValue::CONSTANT, Value(func));
 					break;
 				}
-				/* else continue */
+				default: assert(0);
 			}
-			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
-				double d = parseNumber(p, e);
-				v = XValue(XValue::CONSTANT, Value(d));
-				break;
-			}
-			case '\'': case '"': {
-				v = XValue(XValue::CONSTANT, Value(gcHeap()->manage(new StringObject(unescape(p, e)))));
-				break;
-			}
-			default: {
-				StringIt b = p;
-				parseIdentifier(p, e);
-				if (p == b) return; // FIX : any prettier way?
-				String identifier = String(b, p);
-				Int32 index;
-				std::map<String, Int32>::const_iterator it = localIdentifiers.find(identifier);
-				if (it != localIdentifiers.end()) {
-					index = it->second;
-					v = XValue(XValue::INDEXED, Value(index));
-				} else {
-					v = XValue(XValue::NAMED, Value(gcHeap()->manage(new StringObject(identifier))));
+		} else {
+			assert(p != e);
+			switch (*p) {
+				case '0': {
+					if (p + 1 != e && p[1] == 'x') {
+						UInt32 i;
+						StringIt q = parseHex(p + 2, e, i);
+						if (q == p) throw std::runtime_error("Invalid number");
+						p = q;
+						v = XValue(XValue::CONSTANT, Value((Int32)(i)));
+						break;
+					}
+					/* else continue */
 				}
-				break;
+				case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
+					double d = parseNumber(p, e);
+					v = XValue(XValue::CONSTANT, Value(d));
+					break;
+				}
+				case '\'': case '"': {
+					v = XValue(XValue::CONSTANT, Value(StringObject::newString(gcHeap(), unescape(p, e))));
+					break;
+				}
+				default: {
+					StringIt b = p;
+					parseIdentifier(p, e);
+					if (p == b) return; // FIX : any prettier way?
+					StringObject* identifier = StringObject::newString(gcHeap(), String(b, p));
+					Int32 index;
+					LocalNameMap& nameMap = function->locals;
+					LocalNameMap::const_iterator it = nameMap.find(identifier);
+					if (it != nameMap.end()) {
+						index = it->second;
+						v = XValue(XValue::INDEXED, Value(index));
+					} else {
+						v = XValue(XValue::NAMED, Value(identifier));
+					}
+					break;
+				}
 			}
 		}
     }
@@ -1020,12 +1071,13 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 	
 	if (eatToken(p, e, "{")) {
 		parseStatementList(p, e);
-		if (!eatToken(p, e, "}")) throw std::runtime_error("Expected identifier");
+		expectToken(p, e, "}");
 		return;
 	}
 	
-	int i = sizeof (STATEMENT_TOKENS) / sizeof (*STATEMENT_TOKENS) - 1;
-	while (i >= 0 && !eatToken(p, e, STATEMENT_TOKENS[i])) --i;
+	StringIt q = p;
+	eatToken(q, e);
+	int i = findStatementToken(q - p, &*p);
 	if (i < 0) {
 		XValue xv;
 		parseExpression(p, e, xv);
@@ -1034,21 +1086,22 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
 		}
 	} else {
+		p = q;
 		eatWhite(p, e);
 		switch (static_cast<Statement>(i)) {
 			case VAR_STATEMENT: {
 				while (p != e) {
-					StringIt b = p;
+					StringIt b = p; // FIX : sub
 					parseIdentifier(p, e);
 					if (p == b) throw std::runtime_error("Expected identifier");
-					String identifier(b, p);
+					StringObject* identifier = StringObject::newString(gcHeap(), String(b, p));
 					Int32 index;
-					std::map<String, Int32>::const_iterator it = localIdentifiers.find(identifier);
-					if (it != localIdentifiers.end()) index = it->second;
+					LocalNameMap& nameMap = function->locals;
+					LocalNameMap::const_iterator it = nameMap.find(identifier);
+					if (it != nameMap.end()) index = it->second;
 					else {
-						index = locals.size();
-						locals.push_back(Value());
-						localIdentifiers[identifier] = index;
+						index = function->localsCount++;
+						nameMap[identifier] = index;
 					}
 					StringIt q = p;
 					eatWhite(q, e);
@@ -1070,12 +1123,13 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			}
 			
 			case IF_STATEMENT: {
-				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				std::vector<Byte>& code = function->code;
+				expectToken(p, e, "(");
 				XValue v; // FIX : sub
 				parseExpression(p, e, v); // FIX : SUB
 				makeRValue(v);
 				eatWhite(p, e);
-				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				expectToken(p, e, ")");
 				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
 				int offsetA = code.size() - 4;
 				parseStatement(p, e);
@@ -1095,13 +1149,14 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			}
 
 			case WHILE_STATEMENT: {
+				std::vector<Byte>& code = function->code;
 				int offsetB = code.size();
-				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				expectToken(p, e, "(");
 				XValue v; // FIX : sub
 				parseExpression(p, e, v); // FIX : SUB
 				makeRValue(v);
 				eatWhite(p, e);
-				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				expectToken(p, e, ")");
 				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
 				int offsetA = code.size() - 4;
 				parseStatement(p, e);
@@ -1111,17 +1166,18 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			}
 
 			case DO_WHILE_STATEMENT: {
+				std::vector<Byte>& code = function->code;
 				int offset = code.size();
 				parseStatement(p, e);
 				eatWhite(p, e);
-				if (!eatToken(p, e, "while")) throw std::runtime_error("Expected 'while'");
+				expectToken(p, e, "while");
 				eatWhite(p, e);
-				if (!eatToken(p, e, "(")) throw std::runtime_error("Expected '('");
+				expectToken(p, e, "(");
 				XValue v; // FIX : sub
 				parseExpression(p, e, v); // FIX : SUB
 				makeRValue(v);
 				eatWhite(p, e);
-				if (!eatToken(p, e, ")")) throw std::runtime_error("Expected ')'");
+				expectToken(p, e, ")");
 				emitWithInt32(VM::JT_OP, offset - (code.size() + 1) - 4);
 				break;
 			}
@@ -1129,7 +1185,8 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			default: assert(0);
 		}
 	}
-	StringIt q = p;
+	
+	q = p;
 	eatWhite(q, e);
 	if (q != e && *q != '}' && !eatToken(q, e, ";") && std::find(p, q, '\n') == q)
 		throw std::runtime_error("Syntax error");
@@ -1183,17 +1240,16 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 }
 
 int main(int argc, const char* argv[]) {
-	std::vector<Byte> code;
-	std::vector<Value> constants;
 	std::vector<Value> locals;
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
-	Compiler* compiler = heap->manage(new Compiler(code, constants, locals));
+	Function* function = heap->manage(new Function());
+	Compiler* compiler = heap->manage(new Compiler(function));
 	String source;
 	do {
 		try {
-			code.clear();
+			function->code.clear();
 			
 			String s;
 			std::getline(std::cin, s);
@@ -1210,25 +1266,26 @@ int main(int argc, const char* argv[]) {
 				compiler->makeRValue(v);
 		*/
 				compiler->parseStatementList(p, e);
-				code.push_back(VM::RETURN_OP);
-				disassemble(code, constants);
+				function->code.push_back(VM::RETURN_OP);
+				locals.resize(function->localsCount);
+				disassemble(function->code, function->constants);
 		static bool firstTime = true;
 		if (firstTime) {
 			Object* o = heap->manage(new UserObject());
 			locals[0] = Value(o);
-			o->setProperty(heap->manage(new StringObject("sune")), Value(heap->manage(new StringObject("banan"))));
+			o->setProperty(StringObject::newString(heap, "sune"), Value(StringObject::newString(heap, "banan")));
 			firstTime = false;
 		}
 				
-				std::cout << "Code: " << code.size() << std::endl;
-				std::cout << "Constants: " << constants.size() << std::endl;
+				std::cout << "Code: " << function->code.size() << std::endl;
+				std::cout << "Constants: " << function->constants.size() << std::endl;
 				std::cout << "Locals: " << locals.size() << std::endl;
 
 				Value vstack[1024];
 				Context cstack[1024];
-				cstack[1023].instructionPointer = code.data();
+				cstack[1023].instructionPointer = function->code.data();
 				cstack[1023].vstackPointer = &vstack[1024];
-				cstack[1023].constants = constants.data();
+				cstack[1023].constants = function->constants.data();
 				cstack[1023].locals = locals.data();
 				cstack[1023].closure = globals;
 				VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
@@ -1244,7 +1301,7 @@ int main(int argc, const char* argv[]) {
 					newHeap->mark(globals);
 					v.mark(newHeap);
 					for (std::vector<Value>::const_iterator it = locals.begin(); it != locals.end(); ++it) it->mark(newHeap);
-					for (std::vector<Value>::const_iterator it = constants.begin(); it != constants.end(); ++it) it->mark(newHeap);
+					for (std::vector<Value>::const_iterator it = function->constants.begin(); it != function->constants.end(); ++it) it->mark(newHeap);
 					int sweptCount = heap->sweep();
 					std::swap(heap, newHeap);
 					delete newHeap;
