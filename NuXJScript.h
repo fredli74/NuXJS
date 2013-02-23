@@ -142,6 +142,16 @@ class Function : public UserObject {
 	protected:	Object* const closure;
 };
 
+#if 0
+class ArgumentsObject : public UserObject {
+	public:		typedef UserObject super;
+	public:		ArgumentsObject(Frame* frame);
+	public:		virtual bool getProperty(StringObject* name, Value& v);
+	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	protected:	Frame* frame;
+};
+#endif
+
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(Function* function);
@@ -206,8 +216,9 @@ public:	Value* vstackPointer;
 };
 
 enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
-	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
+	GROUP_PREC, PROPERTY_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
+	, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC
+	, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
 class OperatorInfo;

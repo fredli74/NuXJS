@@ -463,6 +463,21 @@ void Function::garbageCollectAndMark(GCHeap* heap) {
 	super::garbageCollectAndMark(heap);
 }
 
+#if 0
+/* --- ArgumentsObject --- */
+
+ArgumentsObject(Frame* frame) : frame(frame) { }
+
+bool ArgumentsObject::getProperty(StringObject* name, Value& v) {
+	if (name->s == "length") return 
+}
+
+void ArgumentsObject::garbageCollectAndMark(GCHeap* heap) {
+	heap->mark(frame);
+	super::garbageCollectAndMark(heap);
+}
+#endif
+
 /* --- Frame --- */
 
 Frame::Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())

@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E9033B16D901B00053457F</string>
+						<string>F7E9035516D90A4F0053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88216D85C06002E9567</string>
@@ -257,7 +257,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E9033C16D901B00053457F</string>
+						<string>F7E9035616D90A4F0053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88916D85C06002E9567</string>
@@ -297,7 +297,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E9033D16D901B00053457F</string>
+						<string>F7E9035716D90A4F0053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88B16D85C06002E9567</string>
@@ -445,7 +445,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7E9033A16D901B00053457F</string>
+										<string>F7E9035416D90A4F0053457F</string>
 										<key>history</key>
 										<array>
 											<string>F7CB8EC916D53B9B00D3007B</string>
@@ -454,8 +454,8 @@
 											<string>F7CB914A16D595BB00D3007B</string>
 											<string>F7CB919416D627A500D3007B</string>
 											<string>F710F7CC16D84847002E9567</string>
-											<string>F7E9031E16D900A20053457F</string>
-											<string>F7E9033916D901B00053457F</string>
+											<string>F7E9035216D90A4F0053457F</string>
+											<string>F7E9035316D90A4F0053457F</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -653,7 +653,7 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7E9033E16D901B00053457F</string>
+		<string>F7E9035816D90A4F0053457F</string>
 		<string>F7E902EA16D8EE4E0053457F</string>
 		<string>F7E902EB16D8EE4E0053457F</string>
 		<string>1CD10A99069EF8BA00B06720</string>
@@ -661,8 +661,8 @@
 		<string>F761C66C16D6F9EC00F4A853</string>
 		<string>F710F88516D85C06002E9567</string>
 		<string>F710F88016D85C06002E9567</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
+		<string>1C78EAAD065D492600B07095</string>
 	</array>
 	<key>WindowString</key>
 	<string>4 56 1436 822 0 0 1440 878 </string>
@@ -686,7 +686,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CD0528F0623707200166675</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>NuXJScript.h</string>
 								<key>StatusBarVisibility</key>
 								<true/>
 							</dict>
