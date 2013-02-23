@@ -33,6 +33,7 @@ class GCItem {
 
 class Object;
 class StringObject;
+class FunctionDef;
 class Function;
 
 class Value {
@@ -43,6 +44,7 @@ class Value {
 					, NUMBER_TYPE = 3
 					, STRING_TYPE = 4
 					, OBJECT_TYPE = 5
+					, FUNCTION_TYPE = 6
 				};
 	
 	public:		explicit Value(Type type = UNDEFINED_TYPE);
@@ -53,6 +55,7 @@ class Value {
 	public:		explicit Value(Object* o);
 	
 	public:		StringObject* getString() const;
+	public:		FunctionDef* getFunctionDef() const;
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
@@ -79,16 +82,18 @@ class Value {
 };
 
 class Object : public GCItem {
+	public:		virtual Function* asFunction() { return 0; } // FIX : no
+	public:		virtual FunctionDef* asFunctionDef() { return 0; }
 	public:		virtual bool getProperty(StringObject* name, Value& v) { return false; }
 	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
 };
 
+class Frame;
+
 struct Context {
 	const Byte* instructionPointer;
-	Value* vstackPointer;
-	const Value* constants;
-	Value* locals;
-	Object* closure;
+	Frame* frame;
+	Value thisValue;
 };
 
 class VM : public GCItem {
@@ -103,7 +108,8 @@ class VM : public GCItem {
 					, BIT_NOT_OP, NOT_OP
 					, STRICTLY_EQ_OP, STRICTLY_NEQ_OP, EQ_OP, NEQ_OP, LT_OP, LEQ_OP, GT_OP, GEQ_OP
 					, JMP_OP, JT_OP, JF_OP
-					, RETURN_OP
+					, CALL_OP, RETURN_OP, THIS_OP, VOID_OP
+					, GEN_FUNC_OP
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
@@ -117,17 +123,18 @@ class VM : public GCItem {
 	protected:	Value* const vstackStart;
 	protected:	Value* const vstackEnd;
 	protected:	Context* cstackPointer;
+public:	Value* vstackPointer;
 };
 
 enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
+	GROUP_PREC, PROPERTY_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC
 	, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
 class OperatorInfo;
 class Compiler : public GCItem {
 	public:		struct XValue;
-	public:		Compiler(Function* function);
+	public:		Compiler(FunctionDef* function);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	public:		bool isComment(const StringIt& p, const StringIt& e);
 	public:		void eatComment(StringIt& p, const StringIt& e);
@@ -140,8 +147,10 @@ class Compiler : public GCItem {
 	public:		void parseRValueOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
 	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
+	public:		bool parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
 	public:		void parseStatement(StringIt& p, const StringIt& e);
 	public:		void parseStatementList(StringIt& p, const StringIt& e);
+	public:		void finish();
 	protected:	bool eatToken(StringIt& p, const StringIt& e, const Char* t);
 	protected:	void expectToken(StringIt& p, const StringIt& e, const Char* t);
 	protected:	void eatToken(StringIt& p, const StringIt& e);
@@ -149,7 +158,7 @@ class Compiler : public GCItem {
 	protected:	void makeAssignment(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(StringIt& p, const StringIt& e);
-	protected:	Function* function;
+	protected:	FunctionDef* function;
 	protected:	std::map<Value, Int32> definedConstants;
 };
 

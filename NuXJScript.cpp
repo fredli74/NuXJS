@@ -64,7 +64,7 @@ static String intToString(int i, int radix = 10, int minLength = 1) {
 }
 
 // Based on code from PikaScript
-static String doubleToString(double d, int precision = 16) {
+static String doubleToString(double d, int precision = 15) {
 	assert(1 <= precision && precision <= 24);
 
 	const double EPSILON = 1.0e-300;
@@ -235,6 +235,12 @@ Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
 Value::Value(StringObject* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
+
+FunctionDef* Value::getFunctionDef() const {
+	assert(type == OBJECT_TYPE);
+	assert(o->asFunctionDef() != 0);
+	return reinterpret_cast<FunctionDef*>(o);
+}
 
 StringObject* Value::getString() const {
 	assert(type == STRING_TYPE);
@@ -428,8 +434,9 @@ void Value::mark(GCHeap* heap) const {
 
 typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
 
-class Function : public Object {
-	public:		Function() : source(0), argumentsCount(0), localsCount(0) { }
+class FunctionDef : public Object {
+	public:		FunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
+	public:		virtual FunctionDef* asFunctionDef() { return this; }
 	public:		bool lookupLocalName(StringObject* name, Int32& index) const {
 					LocalNameMap::const_iterator it = locals.find(name);
 					if (it == locals.end()) return false;
@@ -446,6 +453,7 @@ class Function : public Object {
 						heap->mark(it->first);
 					}
 				}
+	public:		const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 	public:		StringObject* source;
 	public:		std::vector<Byte> code;
 	public:		std::vector<Value> constants;
@@ -454,12 +462,28 @@ class Function : public Object {
 	public:		LocalNameMap locals;
 };
 
-class Closure : public Object {
-	public:		Closure(Function* function, Object* parentClosure) : function(function), parentClosure(parentClosure) { }
+class Function : public UserObject {
+	friend class Frame;
+	public:		Function(FunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
+	public:		virtual Function* asFunction() { return this; }
+	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
+					heap->mark(definition);
+					heap->mark(closure);
+				}
+	public:		FunctionDef* getDefinition() const { return definition; }
+	public:		Object*  getClosure() const { return closure; }
+	protected:	FunctionDef* const definition;
+	protected:	Object* const closure;
+};
+
+class Frame : public Object {
+	public:		Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())
+						, locals(std::max(function->definition->localsCount, 1)) {
+				}
 	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
 	public:		virtual bool getProperty(StringObject* name, Value& v) {
 					Int32 index;
-					if (function->lookupLocalName(name, index)) {
+					if (functionDef->lookupLocalName(name, index)) {
 						assert(0 <= index && index < locals.size());
 						v = locals[index];
 						return true;
@@ -471,12 +495,12 @@ class Closure : public Object {
 								return true;
 							}
 						}
-						return parentClosure->getProperty(name, v);
+						return closure->getProperty(name, v);
 					}
 				}
 	public:		virtual bool setProperty(StringObject* name, const Value& v) {
 					Int32 index;
-					if (function->lookupLocalName(name, index)) {
+					if (functionDef->lookupLocalName(name, index)) {
 						assert(0 <= index && index < locals.size());
 						locals[index] = v;
 						return true;
@@ -488,12 +512,12 @@ class Closure : public Object {
 								return true;
 							}
 						}
-						return parentClosure->setProperty(name, v);
+						return closure->setProperty(name, v);
 					}
 				}
 	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					heap->mark(function);
-					heap->mark(parentClosure);
+					heap->mark(functionDef);
+					heap->mark(closure);
 					// FIX : subs
 					for (std::vector<Value>::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
 						it->mark(heap);
@@ -505,21 +529,23 @@ class Closure : public Object {
 						}
 					}
 				}
-	protected:	Function* const function;
-	protected:	Object* const parentClosure; // FIX : could actually insert a dynamic closure here instead of always having one
+	public:		FunctionDef* getFunctionDef() { return functionDef; }
+	public:		Value* getLocalsPointer() { return &locals[0]; }
+	protected:	FunctionDef* const functionDef;
+	protected:	Object* const closure;
 	protected:	std::vector<Value> locals;
 	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
 };
 
 VM::VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-		, cstackPointer(cstackEnd - 1) {
+		, cstackPointer(cstackEnd - 1), vstackPointer(vstackEnd) {
 }
 
 void VM::garbageCollectAndMark(GCHeap* heap) {
 	if (cstackPointer == cstackEnd) return;
-	for (Value* vsp = cstackPointer->vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
-	for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->closure);
+	for (Value* vsp = vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
+	for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->frame);
 }
 
 void VM::push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
@@ -531,11 +557,11 @@ void VM::error() {
 }
 
 bool VM::run(Int32 count) {
+	Value* vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
-	Value* vsp = cstackPointer->vstackPointer;
-	const Value* cp = cstackPointer->constants;
-	Value* lp = cstackPointer->locals;
-	Object* closure = cstackPointer->closure;
+	Frame* frame = cstackPointer->frame;
+	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
+	Value* lp = frame->getLocalsPointer();
 	GCHeap* h = gcHeap();
 	while (--count >= 0) {
 		switch (*ip++) {
@@ -546,13 +572,13 @@ bool VM::run(Int32 count) {
 			case WRITE_INDEXED_OP: lp[readInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v;
-				bool success = closure->getProperty(cp[readInt32(ip)].getString(), v);
+				bool success = frame->getProperty(cp[readInt32(ip)].getString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = closure->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
+				bool success = frame->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
@@ -600,25 +626,93 @@ bool VM::run(Int32 count) {
 			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
 			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
 			case RETURN_OP: {
-				cstackPointer->instructionPointer = ip;
-				cstackPointer->vstackPointer = vsp;
-				if (++cstackPointer == cstackEnd) return true;
+				if (++cstackPointer == cstackEnd) {
+					cstackPointer->instructionPointer = ip;
+					vstackPointer = vsp;
+					return true;
+				}
 				ip = cstackPointer->instructionPointer;
-				vsp = cstackPointer->vstackPointer;
-				cp = cstackPointer->constants;
-				lp = cstackPointer->locals;
+				frame = cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				break;
+			}
+			case CALL_OP: {
+				int n = readInt32(ip);
+				Object* o = vsp[n].toObject(h);
+				if (o == 0) error();
+				Function* f = o->asFunction();
+				if (f == 0) error();
+				frame = h->manage(new Frame(f));
+				cstackPointer->instructionPointer = ip;
+				--cstackPointer;
+				cstackPointer->frame = frame;
+				cstackPointer->thisValue = Value(); // FIX
+				FunctionDef* def = frame->getFunctionDef();
+				ip = &def->code[0];
+				cp = def->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				for (int i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
+				pop(vsp, n + 1);
+				break;
+			}
+			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
+			case VOID_OP: push(vsp, Value()); break;
+			case GEN_FUNC_OP: {
+				push(vsp, Value(h->manage(new Function(cp[readInt32(ip)].getFunctionDef(), frame))));
 				break;
 			}
 		}
 	}
 	cstackPointer->instructionPointer = ip;
-	cstackPointer->vstackPointer = vsp;
+	vstackPointer = vsp;
 	return false;
+}
+
+static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
+	assert(e - it >= 4);
+	Int32 i = *reinterpret_cast<const Int32*>(&*it);
+	it += 4;
+	return i;
+}
+
+static void disassemble(const std::vector<Byte>& code, const std::vector<Value>& constants) {
+	const char* OP_STRINGS[] = {
+		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
+		, "ADD", "SUB", "MUL", "DIV", "MOD"
+		, "OR", "XOR", "AND"
+		, "SHL", "SHR", "UNSIGNED_SHR"
+		, "PLUS", "MINUS"
+		, "BIT_NOT", "NOT"
+		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
+		, "JMP", "JT", "JF"
+		, "CALL", "RETURN", "THIS", "VOID"
+		, "GEN_FUNC"
+	};
+	std::vector<Byte>::const_iterator b = code.begin();
+	std::vector<Byte>::const_iterator it = b;
+	std::vector<Byte>::const_iterator e = code.end();
+	while (it != e) {
+		std::cout << (it - b) << ':' << OP_STRINGS[*it];
+		switch (*it++) {
+			case VM::JT_OP:
+			case VM::JF_OP:
+			case VM::JMP_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
+			case VM::READ_INDEXED_OP:
+			case VM::WRITE_INDEXED_OP: std::cout << " $" << getInt32(it, e); break;
+			case VM::CALL_OP: std::cout << " *" << getInt32(it, e); break;
+			case VM::CONST_OP:
+			case VM::GEN_FUNC_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
+			case VM::READ_NAMED_OP:
+			case VM::WRITE_NAMED_OP: std::cout << " " << constants[getInt32(it, e)].getString()->s; break;
+		}
+		std::cout << std::endl;
+	}
 }
 
 /* --- Compiler --- */
 
-enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL };
+enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL, FUNCTION_CALL };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -679,32 +773,33 @@ const OperatorInfo POST_OPS[] = {
 	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GT_OP },
 	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, VM::INVALID_OP },
 	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, VM::INVALID_OP },
-	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, VM::INVALID_OP }
+	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, VM::INVALID_OP },
+	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, VM::INVALID_OP }
 };
 
-enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT };
+enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, RETURN_STATEMENT };
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const char* s /* zero-terminated string */) {
-	static const char* STRINGS[4] = {
-		"var", "if", "while", "do"
+	static const char* STRINGS[5] = {
+		"var", "if", "while", "do", "return"
 	};
-	static const int QUICK_HASH_TABLE[4] = {
-		3, 1, 0, 2
+	static const int QUICK_HASH_TABLE[8] = {
+		2, 0, -1, -1, -1, 4, 1, 3
 	};
-	if (n < 2 || n > 5) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(s[0]) & 3];
+	if (n < 2 || n > 6) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(s[1]) & 7];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
 struct Compiler::XValue {
-	enum Type { NONE, STACKED, CONSTANT, INDEXED, NAMED, PROPERTY };
+	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
 	XValue() : t(NONE) { }
 	XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 	Type t;
 	Value v;
 };
 
-Compiler::Compiler(Function* function) : function(function) { }
+Compiler::Compiler(FunctionDef* function) : function(function) { }
 
 void Compiler::garbageCollectAndMark(GCHeap* heap) {
 	heap->mark(function);
@@ -801,13 +896,13 @@ void Compiler::eatToken(StringIt& p, const StringIt& e) {
 void Compiler::makeRValue(XValue& xv) {
 	switch (xv.t) {
 		default: assert(0);
-		case XValue::STACKED: return;
+		case XValue::PUSHED: return;
 		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, xv.v); break;
 		case XValue::INDEXED: emitWithInt32(VM::READ_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(VM::GET_PROPERTY_OP); break;
 	}
-	xv = XValue(XValue::STACKED);
+	xv = XValue(XValue::PUSHED);
 }
 
 void Compiler::makeAssignment(XValue& xv) {
@@ -817,14 +912,15 @@ void Compiler::makeAssignment(XValue& xv) {
 		case XValue::NAMED: emitWithConstant(VM::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(VM::SET_PROPERTY_OP); break;
 	}
-	xv = XValue(XValue::STACKED);
+	xv = XValue(XValue::PUSHED);
 }
 
 Compiler::XValue Compiler::parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op) {
 	XValue rv;
 	parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
-	if (op.closeToken != 0 && !eatToken(p, e, op.closeToken)) {
-		throw std::runtime_error(std::string("Expected ") + op.closeToken);
+	if (op.closeToken != 0) {
+		eatWhite(p, e);
+		expectToken(p, e, op.closeToken);
 	}
 	return rv;
 }
@@ -862,6 +958,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			}
 			break;
 		}
+		
 		case LOGICAL_AND_OR: {
 			std::vector<Byte>& code = function->code;
 			makeRValue(v);
@@ -873,6 +970,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			*reinterpret_cast<Int32*>(&code[offset]) = code.size() - offset - 4;
 			break;
 		}
+		
 		case CONDITIONAL: {
 			std::vector<Byte>& code = function->code;
 			makeRValue(v);
@@ -887,6 +985,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			*reinterpret_cast<Int32*>(&code[offsetB]) = code.size() - offsetB - 4;
 			break;			
 		}
+		
 		case PROPERTY_DOT: {
 			makeRValue(v);
 			eatWhite(p, e);
@@ -897,12 +996,33 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
+		
+		case FUNCTION_CALL: {
+			makeRValue(v);
+			eatWhite(p, e);
+			int count = 0;
+			while (p != e && *p != ')') {
+				if (count != 0) {
+					expectToken(p, e, ",");
+					eatWhite(p, e);
+				}
+				parseExpression(p, e, v, COMMA_PREC);
+				makeRValue(v);
+				eatWhite(p, e);
+				++count;
+			}
+			expectToken(p, e, ")");
+			emitWithInt32(VM::CALL_OP, count);
+			break;
+		}
+		
 		default: {
 			switch (op.type) {
 				case GROUP: {
 					v = parseOperand(p, e, op);
 					break;
 				}
+				
 				case UNARY: {
 					v = parseOperand(p, e, op);
 					if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
@@ -917,12 +1037,14 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 					}
 					break;
 				}
+				
 				case BINARY: {
 					makeRValue(v);
 					parseRValueOperand(p, e, op);
 					emit(op.vmOp);
 					break;
 				}
+				
 				case ASSIGNMENT: {
 					XValue lv(v);
 					if (op.vmOp != VM::INVALID_OP) {
@@ -935,12 +1057,14 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 					makeAssignment(v);
 					break;
 				}
+				
 				case PROPERTY_BRACKETS: {
 					makeRValue(v);
 					parseRValueOperand(p, e, op);
 					v = XValue(XValue::PROPERTY);
 					break;
 				}
+				
 				default: assert(0);
 			}
 		}
@@ -954,18 +1078,18 @@ void Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
 	}
 }
 
-enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL };
+enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 /* Built with QuickHashMaker.pika */
 static int findLiteralToken(int n /* string length */, const char* s /* zero-terminated string */) {
-	static const char* STRINGS[4] = {
-		"null", "false", "true", "function"
+	static const char* STRINGS[5] = {
+		"null", "false", "true", "function", "this"
 	};
-	static const int QUICK_HASH_TABLE[4] = {
-		0, 1, 3, 2
+	static const int QUICK_HASH_TABLE[8] = {
+		0, 2, -1, 3, -1, -1, 1, 4
 	};
 	if (n < 4 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(n - s[2]) & 3];
+	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
@@ -973,9 +1097,9 @@ void Compiler::expectToken(StringIt& p, const StringIt& e, const Char* token) {
 	if (!eatToken(p, e, token)) throw std::runtime_error(String("Expected '") + token + "'");
 }
 
-void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
-    eatWhite(p, e);
-	if (p == e) throw std::runtime_error("Unexpected end of string");
+bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
+	eatWhite(p, e);
+	if (p == e) return false;
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		StringIt q = p;
 		eatToken(q, e);
@@ -986,8 +1110,13 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
 				case NULL_LITERAL: v = XValue(XValue::CONSTANT, Value(Value::NULL_TYPE)); break;
 				case FALSE_LITERAL: v = XValue(XValue::CONSTANT, Value(false)); break;
 				case TRUE_LITERAL: v = XValue(XValue::CONSTANT, Value(true)); break;
+				case THIS_LITERAL: {
+					emit(VM::THIS_OP);
+					v = XValue(XValue::PUSHED); break;
+					break;
+				}
 				case FUNCTION_LITERAL: {
-					Function* func = gcHeap()->manage(new Function());
+					FunctionDef* func = gcHeap()->manage(new FunctionDef());
 					eatWhite(p, e);
 					// FIX : the optional function identifier
 					expectToken(p, e, "(");
@@ -1011,9 +1140,11 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
 					{
 						Compiler* funcCompiler = gcHeap()->manage(new Compiler(func));
 						funcCompiler->parseStatementList(p, e);
+						funcCompiler->finish();
 					}
 					expectToken(p, e, "}");
-					v = XValue(XValue::CONSTANT, Value(func));
+					emitWithConstant(VM::GEN_FUNC_OP, Value(func)); 
+					v = XValue(XValue::PUSHED);
 					break;
 				}
 				default: assert(0);
@@ -1044,7 +1175,7 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
 				default: {
 					StringIt b = p;
 					parseIdentifier(p, e);
-					if (p == b) return; // FIX : any prettier way?
+					if (p == b) return false; // fix : nicer way?
 					StringObject* identifier = StringObject::newString(gcHeap(), String(b, p));
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
@@ -1062,13 +1193,19 @@ void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Preced
     }
 	StringIt q = p;
     eatWhite(q, e);
-    while (parseOperator(q, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) p = q;
+    while (parseOperator(q, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
+		p = q;
+		eatWhite(q, e);
+	}
+	return true;
+}
+
+void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
+	if (!parseOptionalExpression(p, e, v, precedence)) throw std::runtime_error("Expected expression");
 }
 
 void Compiler::parseStatement(StringIt& p, const StringIt& e) {
-	eatWhite(p, e);
-	if (p == e) return;
-	
+	eatWhite(p, e);	
 	if (eatToken(p, e, "{")) {
 		parseStatementList(p, e);
 		expectToken(p, e, "}");
@@ -1080,17 +1217,18 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 	int i = findStatementToken(q - p, &*p);
 	if (i < 0) {
 		XValue xv;
-		parseExpression(p, e, xv);
-		switch (xv.t) {
-			case XValue::STACKED: emit(VM::POP_OP); break;
-			case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
+		if (parseOptionalExpression(p, e, xv)) {
+			switch (xv.t) {
+				case XValue::PUSHED: emit(VM::POP_OP); break;
+				case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
+			}
 		}
 	} else {
 		p = q;
 		eatWhite(p, e);
 		switch (static_cast<Statement>(i)) {
 			case VAR_STATEMENT: {
-				while (p != e) {
+				while (true) {
 					StringIt b = p; // FIX : sub
 					parseIdentifier(p, e);
 					if (p == b) throw std::runtime_error("Expected identifier");
@@ -1182,6 +1320,14 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 				break;
 			}
 			
+			case RETURN_STATEMENT: {
+				XValue v;
+				if (parseOptionalExpression(p, e, v)) makeRValue(v);
+				else emit(VM::VOID_OP);
+				emit(VM::RETURN_OP);
+				break;
+			}
+			
 			default: assert(0);
 		}
 	}
@@ -1201,42 +1347,10 @@ void Compiler::parseStatementList(StringIt& p, const StringIt& e) {
 	} while (p != e && b != p);
 }
 
-static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
-	assert(e - it >= 4);
-	Int32 i = *reinterpret_cast<const Int32*>(&*it);
-	it += 4;
-	return i;
-}
-
-static void disassemble(const std::vector<Byte>& code, const std::vector<Value>& constants) {
-	const char* OP_STRINGS[] = {
-		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
-		, "ADD", "SUB", "MUL", "DIV", "MOD"
-		, "OR", "XOR", "AND"
-		, "SHL", "SHR", "UNSIGNED_SHR"
-		, "PLUS", "MINUS"
-		, "BIT_NOT", "NOT"
-		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
-		, "JMP", "JT", "JF"
-		, "RETURN"
-	};
-	std::vector<Byte>::const_iterator b = code.begin();
-	std::vector<Byte>::const_iterator it = b;
-	std::vector<Byte>::const_iterator e = code.end();
-	while (it != e) {
-		std::cout << (it - b) << ':' << OP_STRINGS[*it];
-		switch (*it++) {
-			case VM::JT_OP:
-			case VM::JF_OP:
-			case VM::JMP_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
-			case VM::READ_INDEXED_OP:
-			case VM::WRITE_INDEXED_OP: std::cout << " $" << getInt32(it, e); break;
-			case VM::CONST_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
-			case VM::READ_NAMED_OP:
-			case VM::WRITE_NAMED_OP: std::cout << " " << constants[getInt32(it, e)].getString()->s; break;
-		}
-		std::cout << std::endl;
-	}
+void Compiler::finish() {
+	emit(VM::VOID_OP);
+	emit(VM::RETURN_OP);
+disassemble(function->code, function->constants);
 }
 
 int main(int argc, const char* argv[]) {
@@ -1244,12 +1358,12 @@ int main(int argc, const char* argv[]) {
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
-	Function* function = heap->manage(new Function());
-	Compiler* compiler = heap->manage(new Compiler(function));
+	FunctionDef* functionDef = heap->manage(new FunctionDef());
+	Compiler* compiler = heap->manage(new Compiler(functionDef));
 	String source;
 	do {
 		try {
-			function->code.clear();
+			functionDef->code.clear();
 			
 			String s;
 			std::getline(std::cin, s);
@@ -1266,9 +1380,8 @@ int main(int argc, const char* argv[]) {
 				compiler->makeRValue(v);
 		*/
 				compiler->parseStatementList(p, e);
-				function->code.push_back(VM::RETURN_OP);
-				locals.resize(function->localsCount);
-				disassemble(function->code, function->constants);
+				compiler->finish();
+				locals.resize(functionDef->localsCount);
 		static bool firstTime = true;
 		if (firstTime) {
 			Object* o = heap->manage(new UserObject());
@@ -1277,17 +1390,17 @@ int main(int argc, const char* argv[]) {
 			firstTime = false;
 		}
 				
-				std::cout << "Code: " << function->code.size() << std::endl;
-				std::cout << "Constants: " << function->constants.size() << std::endl;
+				std::cout << "Code: " << functionDef->code.size() << std::endl;
+				std::cout << "Constants: " << functionDef->constants.size() << std::endl;
 				std::cout << "Locals: " << locals.size() << std::endl;
+				
+				Function* function = heap->manage(new Function(functionDef, globals));
+				Frame* frame = heap->manage(new Frame(function));
 
 				Value vstack[1024];
 				Context cstack[1024];
-				cstack[1023].instructionPointer = function->code.data();
-				cstack[1023].vstackPointer = &vstack[1024];
-				cstack[1023].constants = function->constants.data();
-				cstack[1023].locals = locals.data();
-				cstack[1023].closure = globals;
+				cstack[1023].instructionPointer = functionDef->code.data();
+				cstack[1023].frame = frame;
 				VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
 				bool done = false;
 				
@@ -1301,7 +1414,7 @@ int main(int argc, const char* argv[]) {
 					newHeap->mark(globals);
 					v.mark(newHeap);
 					for (std::vector<Value>::const_iterator it = locals.begin(); it != locals.end(); ++it) it->mark(newHeap);
-					for (std::vector<Value>::const_iterator it = function->constants.begin(); it != function->constants.end(); ++it) it->mark(newHeap);
+					for (std::vector<Value>::const_iterator it = functionDef->constants.begin(); it != functionDef->constants.end(); ++it) it->mark(newHeap);
 					int sweptCount = heap->sweep();
 					std::swap(heap, newHeap);
 					delete newHeap;
@@ -1310,7 +1423,7 @@ int main(int argc, const char* argv[]) {
 					std::cout << "Kept: " << heap->size() << std::endl;
 					std::cout << "Swept: " << sweptCount << std::endl;
 					if (done) {
-						std::cout << "On stack: " << (1024 - (cstack[1023].vstackPointer - vstack)) << std::endl;
+						std::cout << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
 						std::cout << "=" << (v.toString(heap))->s.c_str() << std::endl;
 					}
 				} while (!done);
