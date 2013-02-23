@@ -44,7 +44,6 @@ class Value {
 					, NUMBER_TYPE = 3
 					, STRING_TYPE = 4
 					, OBJECT_TYPE = 5
-					, FUNCTION_TYPE = 6
 				};
 	
 	public:		explicit Value(Type type = UNDEFINED_TYPE);
@@ -82,6 +81,7 @@ class Value {
 };
 
 class Object : public GCItem {
+	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
 	public:		virtual FunctionDef* asFunctionDef() { return 0; }
 	public:		virtual bool getProperty(StringObject* name, Value& v) { return false; }
@@ -89,6 +89,7 @@ class Object : public GCItem {
 };
 
 class StringObject : public Object {
+	public:		typedef Object super;
 	public:		static StringObject* newString(GCHeap* heap, const String& s);
 	public:		StringObject(const String& s);
 	public:		virtual bool getProperty(StringObject* name, Value& v);
@@ -106,6 +107,7 @@ struct StringObjectCompare {
 typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
 
 class FunctionDef : public Object {
+	public:		typedef Object super;
 	public:		FunctionDef();
 	public:		virtual FunctionDef* asFunctionDef();
 	public:		bool lookupLocalName(StringObject* name, Int32& index) const;
@@ -120,6 +122,7 @@ class FunctionDef : public Object {
 };
 
 class UserObject : public Object {
+	public:		typedef Object super;
 	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> PropertyMap;
 	public:		virtual bool getProperty(StringObject* name, Value& v);
 	public:		virtual bool setProperty(StringObject* name, const Value& v);
@@ -128,6 +131,7 @@ class UserObject : public Object {
 };
 
 class Function : public UserObject {
+	public:		typedef UserObject super;
 	friend class Frame;
 	public:		Function(FunctionDef* definition, Object* closure);
 	public:		virtual Function* asFunction();
@@ -138,8 +142,20 @@ class Function : public UserObject {
 	protected:	Object* const closure;
 };
 
-
-class Frame;
+class Frame : public Object {
+	public:		typedef Object super;
+	public:		Frame(Function* function);
+	public:		virtual bool getProperty(StringObject* name, Value& v);
+	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		FunctionDef* getFunctionDef();
+	public:		Value* getLocalsPointer();
+	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
+	protected:	FunctionDef* const functionDef;
+	protected:	Object* const closure;
+	protected:	std::vector<Value> locals;
+	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
+};
 
 struct Context {
 	const Byte* instructionPointer;
@@ -148,19 +164,31 @@ struct Context {
 };
 
 class VM : public GCItem {
+	public:		typedef GCItem super;
 	public:		enum Op {
 					INVALID_OP = -1
-					, POP_OP, REPUSH_OP, CONST_OP
-					, READ_INDEXED_OP, WRITE_INDEXED_OP, READ_NAMED_OP, WRITE_NAMED_OP, GET_PROPERTY_OP, SET_PROPERTY_OP
-					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP
-					, OR_OP, XOR_OP, AND_OP
-					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP
-					, PLUS_OP, MINUS_OP
-					, BIT_NOT_OP, NOT_OP
-					, STRICTLY_EQ_OP, STRICTLY_NEQ_OP, EQ_OP, NEQ_OP, LT_OP, LEQ_OP, GT_OP, GEQ_OP
-					, JMP_OP, JT_OP, JF_OP
-					, CALL_OP, RETURN_OP, THIS_OP, VOID_OP
-					, GEN_FUNC_OP
+					, POP_OP										// stack: value ->
+					, REPUSH_OP										// stack: value -> value, value
+					, CONST_OP										// immediate: const index, stack: -> constant
+					, READ_INDEXED_OP								// immediate: local index, stack: -> value
+					, WRITE_INDEXED_OP								// immediate: local index, stack: value -> value
+					, READ_NAMED_OP									// immediate: const index (name), stack: -> value
+					, WRITE_NAMED_OP								// immediate: const index (name), stack: value > value
+					, GET_PROPERTY_OP								// stack: name, object -> value
+					, SET_PROPERTY_OP								// stack: name, object -> value
+					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: right value, left value -> result value
+					, OR_OP, XOR_OP, AND_OP							// stack: right value, left value -> result value
+					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP				// stack: right value, left value -> result value
+					, PLUS_OP, MINUS_OP, BIT_NOT_OP, NOT_OP			// stack: value -> value
+					, STRICT_EQ_OP, STRICT_NEQ_OP, EQ_OP, NEQ_OP	// stack: value -> boolean
+					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
+					, JMP_OP										// immediate: offset
+					, JT_OP, JF_OP									// immediate: offset, stack: boolean ->
+					, CALL_GLOBAL_OP								// immediate: n, stack: n * args, function -> return value
+					, CALL_METHOD_OP								// immediate: n, stack: n * args, name, object -> return value
+					, RETURN_OP
+					, THIS_OP, VOID_OP								// stack: -> constant value
+					, GEN_FUNC_OP									// immediate: const index, stack: -> function
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
@@ -184,6 +212,7 @@ enum Precedence {
 
 class OperatorInfo;
 class Compiler : public GCItem {
+	public:		typedef GCItem super;
 	public:		struct XValue;
 	public:		Compiler(FunctionDef* function);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);

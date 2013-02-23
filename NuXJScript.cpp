@@ -213,6 +213,7 @@ void UserObject::garbageCollectAndMark(GCHeap* heap) {
 		heap->mark(it->first);
 		it->second.mark(heap);
 	}
+	super::garbageCollectAndMark(heap);
 }
 
 StringObject UNDEFINED_STRING("undefined");
@@ -444,6 +445,7 @@ void FunctionDef::garbageCollectAndMark(GCHeap* heap) {
 	for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
 		heap->mark(it->first);
 	}
+	super::garbageCollectAndMark(heap);
 }
 
 const Value* FunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
@@ -458,68 +460,71 @@ Object*  Function::getClosure() const { return closure; }
 void Function::garbageCollectAndMark(GCHeap* heap) {
 	heap->mark(definition);
 	heap->mark(closure);
+	super::garbageCollectAndMark(heap);
 }
 
-class Frame : public Object {
-	public:		Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())
-						, locals(std::max(function->definition->localsCount, 1)) {
-				}
-	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
-	public:		virtual bool getProperty(StringObject* name, Value& v) {
-					Int32 index;
-					if (functionDef->lookupLocalName(name, index)) {
-						assert(0 <= index && index < locals.size());
-						v = locals[index];
-						return true;
-					} else {
-						if (dynamicLocals.get() != 0) {
-							DynamicMap::const_iterator it = dynamicLocals->find(name);
-							if (it != dynamicLocals->end()) {
-								v = it->second;
-								return true;
-							}
-						}
-						return closure->getProperty(name, v);
-					}
-				}
-	public:		virtual bool setProperty(StringObject* name, const Value& v) {
-					Int32 index;
-					if (functionDef->lookupLocalName(name, index)) {
-						assert(0 <= index && index < locals.size());
-						locals[index] = v;
-						return true;
-					} else {
-						if (dynamicLocals.get() != 0) {
-							DynamicMap::iterator it = dynamicLocals->find(name);
-							if (it != dynamicLocals->end()) {
-								it->second = v;
-								return true;
-							}
-						}
-						return closure->setProperty(name, v);
-					}
-				}
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					heap->mark(functionDef);
-					heap->mark(closure);
-					// FIX : subs
-					for (std::vector<Value>::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
-						it->mark(heap);
-					}
-					if (dynamicLocals.get() != 0) {
-						for (DynamicMap::iterator it = dynamicLocals->begin(), e = dynamicLocals->end(); it != e; ++it) {
-							heap->mark(it->first);
-							it->second.mark(heap);
-						}
-					}
-				}
-	public:		FunctionDef* getFunctionDef() { return functionDef; }
-	public:		Value* getLocalsPointer() { return &locals[0]; }
-	protected:	FunctionDef* const functionDef;
-	protected:	Object* const closure;
-	protected:	std::vector<Value> locals;
-	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
-};
+/* --- Frame --- */
+
+Frame::Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())
+		, locals(std::max(function->definition->localsCount, 1)) {
+}
+
+FunctionDef* Frame::getFunctionDef() { return functionDef; }
+Value* Frame::getLocalsPointer() { return &locals[0]; }
+
+bool Frame::getProperty(StringObject* name, Value& v) {
+	Int32 index;
+	if (functionDef->lookupLocalName(name, index)) {
+		assert(0 <= index && index < locals.size());
+		v = locals[index];
+		return true;
+	} else {
+		if (dynamicLocals.get() != 0) {
+			DynamicMap::const_iterator it = dynamicLocals->find(name);
+			if (it != dynamicLocals->end()) {
+				v = it->second;
+				return true;
+			}
+		}
+		return closure->getProperty(name, v);
+	}
+}
+
+bool Frame::setProperty(StringObject* name, const Value& v) {
+	Int32 index;
+	if (functionDef->lookupLocalName(name, index)) {
+		assert(0 <= index && index < locals.size());
+		locals[index] = v;
+		return true;
+	} else {
+		if (dynamicLocals.get() != 0) {
+			DynamicMap::iterator it = dynamicLocals->find(name);
+			if (it != dynamicLocals->end()) {
+				it->second = v;
+				return true;
+			}
+		}
+		return closure->setProperty(name, v);
+	}
+}
+
+void Frame::garbageCollectAndMark(GCHeap* heap) {
+	heap->mark(functionDef);
+	heap->mark(closure);
+	// FIX : subs
+	for (std::vector<Value>::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
+		it->mark(heap);
+	}
+	if (dynamicLocals.get() != 0) {
+		for (DynamicMap::iterator it = dynamicLocals->begin(), e = dynamicLocals->end(); it != e; ++it) {
+			heap->mark(it->first);
+			it->second.mark(heap);
+		}
+	}
+	super::garbageCollectAndMark(heap);
+}
+
+/* --- VM --- */
 
 VM::VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
@@ -530,6 +535,7 @@ void VM::garbageCollectAndMark(GCHeap* heap) {
 	if (cstackPointer == cstackEnd) return;
 	for (Value* vsp = vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
 	for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->frame);
+	super::garbageCollectAndMark(heap);
 }
 
 void VM::push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
@@ -567,11 +573,9 @@ bool VM::run(Int32 count) {
 				break;
 			}
 			case GET_PROPERTY_OP: {
-				Value v;
 				Object* o = vsp[1].toObject(h);
 				if (o == 0) error();
-				o->getProperty(vsp[0].toString(h), v);
-				vsp[1] = v;
+				o->getProperty(vsp[0].toString(h), vsp[1]);
 				pop(vsp, 1);
 				break;
 			}
@@ -598,8 +602,8 @@ bool VM::run(Int32 count) {
 			case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
 			case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP: vsp[0] = Value(!vsp[0].toBool()); break;
-			case STRICTLY_EQ_OP: vsp[1] = Value(vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
-			case STRICTLY_NEQ_OP: vsp[1] = Value(!vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+			case STRICT_EQ_OP: vsp[1] = Value(vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
+			case STRICT_NEQ_OP: vsp[1] = Value(!vsp[1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
 			case EQ_OP: vsp[1] = Value(vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
 			case NEQ_OP: vsp[1] = Value(!vsp[1].isEqualTo(vsp[0])); pop(vsp, 1); break;
 			case LT_OP: vsp[1] = Value(vsp[1].isLessThan(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
@@ -621,7 +625,32 @@ bool VM::run(Int32 count) {
 				lp = frame->getLocalsPointer();
 				break;
 			}
-			case CALL_OP: {
+			case CALL_METHOD_OP: { // FIX : share...
+				int n = readInt32(ip);
+
+				Object* thisObject = vsp[n + 1].toObject(h);
+				if (thisObject == 0) error();
+				Value v;
+				thisObject->getProperty(vsp[n].toString(h), v);
+
+				Object* o = v.toObject(h);
+				if (o == 0) error();
+				Function* f = o->asFunction();
+				if (f == 0) error();
+				frame = h->manage(new Frame(f));
+				cstackPointer->instructionPointer = ip;
+				--cstackPointer;
+				cstackPointer->frame = frame;
+				cstackPointer->thisValue = Value(thisObject);
+				FunctionDef* def = frame->getFunctionDef();
+				ip = &def->code[0];
+				cp = def->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				for (int i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
+				pop(vsp, n + 2);
+				break;
+			}
+			case CALL_GLOBAL_OP: {
 				int n = readInt32(ip);
 				Object* o = vsp[n].toObject(h);
 				if (o == 0) error();
@@ -670,7 +699,7 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JT", "JF"
-		, "CALL", "RETURN", "THIS", "VOID"
+		, "CALL_GLOBAL", "CALL_METHOD", "RETURN", "THIS", "VOID"
 		, "GEN_FUNC"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
@@ -684,7 +713,8 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 			case VM::JMP_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
 			case VM::READ_INDEXED_OP:
 			case VM::WRITE_INDEXED_OP: std::cout << " $" << getInt32(it, e); break;
-			case VM::CALL_OP: std::cout << " *" << getInt32(it, e); break;
+			case VM::CALL_GLOBAL_OP:
+			case VM::CALL_METHOD_OP: std::cout << " *" << getInt32(it, e); break;
 			case VM::CONST_OP:
 			case VM::GEN_FUNC_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
 			case VM::READ_NAMED_OP:
@@ -720,7 +750,7 @@ const OperatorInfo PRE_OPS[] = {
 };
 
 const OperatorInfo POST_OPS[] = {
-	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICTLY_EQ_OP },
+	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICT_EQ_OP },
 	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::EQ_OP },
 	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::INVALID_OP },
 	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::UNSIGNED_SHR_OP },
@@ -749,7 +779,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, VM::AND_OP },
 	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, VM::XOR_OP },
 	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, VM::OR_OP },
-	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICTLY_NEQ_OP },
+	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICT_NEQ_OP },
 	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::NEQ_OP },
 	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LEQ_OP }, 
 	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LT_OP }, 
@@ -790,6 +820,7 @@ void Compiler::garbageCollectAndMark(GCHeap* heap) {
 	for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
 		it->first.mark(heap);
 	}
+	super::garbageCollectAndMark(heap);
 }
 
 bool Compiler::isComment(const StringIt& p, const StringIt& e) {
@@ -976,7 +1007,9 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 		}
 		
 		case FUNCTION_CALL: {
-			makeRValue(v);
+			VM::Op op = VM::CALL_GLOBAL_OP;
+			if (v.t == XValue::PROPERTY) op = VM::CALL_METHOD_OP;
+			else makeRValue(v);
 			eatWhite(p, e);
 			int count = 0;
 			while (p != e && *p != ')') {
@@ -990,7 +1023,8 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 				++count;
 			}
 			expectToken(p, e, ")");
-			emitWithInt32(VM::CALL_OP, count);
+			emitWithInt32(op, count);
+			v = XValue(XValue::PUSHED);
 			break;
 		}
 		
@@ -1332,7 +1366,6 @@ disassemble(function->code, function->constants);
 }
 
 int main(int argc, const char* argv[]) {
-	std::vector<Value> locals;
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
@@ -1359,18 +1392,10 @@ int main(int argc, const char* argv[]) {
 		*/
 				compiler->parseStatementList(p, e);
 				compiler->finish();
-				locals.resize(functionDef->localsCount);
-		static bool firstTime = true;
-		if (firstTime) {
-			Object* o = heap->manage(new UserObject());
-			locals[0] = Value(o);
-			o->setProperty(StringObject::newString(heap, "sune"), Value(StringObject::newString(heap, "banan")));
-			firstTime = false;
-		}
 				
 				std::cout << "Code: " << functionDef->code.size() << std::endl;
 				std::cout << "Constants: " << functionDef->constants.size() << std::endl;
-				std::cout << "Locals: " << locals.size() << std::endl;
+				std::cout << "Locals: " << functionDef->localsCount << std::endl;
 				
 				Function* function = heap->manage(new Function(functionDef, globals));
 				Frame* frame = heap->manage(new Frame(function));
@@ -1390,9 +1415,8 @@ int main(int argc, const char* argv[]) {
 					newHeap->mark(compiler);
 					newHeap->mark(vm);
 					newHeap->mark(globals);
+					newHeap->mark(functionDef);
 					v.mark(newHeap);
-					for (std::vector<Value>::const_iterator it = locals.begin(); it != locals.end(); ++it) it->mark(newHeap);
-					for (std::vector<Value>::const_iterator it = functionDef->constants.begin(); it != functionDef->constants.end(); ++it) it->mark(newHeap);
 					int sweptCount = heap->sweep();
 					std::swap(heap, newHeap);
 					delete newHeap;
@@ -1400,6 +1424,7 @@ int main(int argc, const char* argv[]) {
 
 					std::cout << "Kept: " << heap->size() << std::endl;
 					std::cout << "Swept: " << sweptCount << std::endl;
+					
 					if (done) {
 						std::cout << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
 						std::cout << "=" << (v.toString(heap))->s.c_str() << std::endl;

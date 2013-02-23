@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E902D916D8D3CC0053457F</string>
+						<string>F7E9033B16D901B00053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88216D85C06002E9567</string>
@@ -257,7 +257,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E902DA16D8D3CC0053457F</string>
+						<string>F7E9033C16D901B00053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88916D85C06002E9567</string>
@@ -297,7 +297,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E902DB16D8D3CC0053457F</string>
+						<string>F7E9033D16D901B00053457F</string>
 						<key>history</key>
 						<array>
 							<string>F710F88B16D85C06002E9567</string>
@@ -445,7 +445,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7E902D816D8D3CC0053457F</string>
+										<string>F7E9033A16D901B00053457F</string>
 										<key>history</key>
 										<array>
 											<string>F7CB8EC916D53B9B00D3007B</string>
@@ -454,8 +454,8 @@
 											<string>F7CB914A16D595BB00D3007B</string>
 											<string>F7CB919416D627A500D3007B</string>
 											<string>F710F7CC16D84847002E9567</string>
-											<string>F7E902D616D8D3CC0053457F</string>
-											<string>F7E902D716D8D3CC0053457F</string>
+											<string>F7E9031E16D900A20053457F</string>
+											<string>F7E9033916D901B00053457F</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -653,10 +653,15 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
+		<string>F7E9033E16D901B00053457F</string>
+		<string>F7E902EA16D8EE4E0053457F</string>
+		<string>F7E902EB16D8EE4E0053457F</string>
+		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F761C66C16D6F9EC00F4A853</string>
 		<string>F710F88516D85C06002E9567</string>
 		<string>F710F88016D85C06002E9567</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -676,8 +681,6 @@
 					<key>Dock</key>
 					<array>
 						<dict>
-							<key>BecomeActive</key>
-							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -700,6 +703,8 @@
 							<string>374pt</string>
 						</dict>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -861,13 +866,13 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1CD10A99069EF8BA00B06720</string>
-				<string>F710F65416D78FCA002E9567</string>
+				<string>F7E902E216D8EE4E0053457F</string>
 				<string>1C162984064C10D400B95A72</string>
-				<string>F710F65516D78FCA002E9567</string>
-				<string>F710F65616D78FCA002E9567</string>
-				<string>F710F65716D78FCA002E9567</string>
-				<string>F710F65816D78FCA002E9567</string>
-				<string>F710F65916D78FCA002E9567</string>
+				<string>F7E902E316D8EE4E0053457F</string>
+				<string>F7E902E416D8EE4E0053457F</string>
+				<string>F7E902E516D8EE4E0053457F</string>
+				<string>F7E902E616D8EE4E0053457F</string>
+				<string>F7E902E716D8EE4E0053457F</string>
 			</array>
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.debugV3</string>
@@ -1031,7 +1036,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C78EAAD065D492600B07095</string>
-				<string>F710F65A16D78FCA002E9567</string>
+				<string>F7E902E816D8EE4E0053457F</string>
 				<string>1C78EAAC065D492600B07095</string>
 			</array>
 			<key>ToolbarConfiguration</key>
