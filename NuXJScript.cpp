@@ -943,19 +943,13 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 	}
 	switch (op.type) {
 		case POST_UNARY: {
-			switch (v.t) {
-				default: throw std::runtime_error("Invalid lvalue");
-				case XValue::INDEXED: {
-					XValue lv(v);
-					makeRValue(lv);
-					emit(VM::REPUSH_OP);
-					emitWithConstant(VM::CONST_OP, Value(1.0)); 
-					emit(op.vmOp);
-					makeAssignment(v);
-					emit(VM::POP_OP);
-				}
-				break;
-			}
+			XValue lv(v);
+			makeRValue(lv);
+			emit(VM::REPUSH_OP);
+			emitWithConstant(VM::CONST_OP, Value(1.0)); 
+			emit(op.vmOp);
+			makeAssignment(v);
+			emit(VM::POP_OP);
 			break;
 		}
 		
