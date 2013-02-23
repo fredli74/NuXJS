@@ -146,14 +146,11 @@ static String unescape(StringIt& p, const StringIt& e) {
 	return (d += String(b, p++));
 }
 
-class StringObject : public Object {
-	public:		static StringObject* newString(GCHeap* heap, const String& s);
-	public:		StringObject(const String& s) : s(s) { }
-	public:		virtual bool getProperty(StringObject* name, Value& v);
-	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
-	public:		virtual ~StringObject() { std::cout << "Deleting " << s.c_str() << std::endl; }
-	public:		String s;
-};
+/* --- StringObject --- */
+
+StringObject::StringObject(const String& s) : s(s) { }
+bool StringObject::setProperty(StringObject* name, const Value& v) { return false; }
+StringObject::~StringObject() { std::cout << "Deleting " << s.c_str() << std::endl; }
 
 StringObject* StringObject::newString(GCHeap* heap, const String& s) {
 	return heap->manage(new StringObject(s));
@@ -200,29 +197,23 @@ void GCHeap::mark(GCItem* object) {
 
 double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
-struct StringObjectCompare {
-	bool operator() (StringObject* a, StringObject* b) const {
-		return (a != b && a->s < b->s);
-	}
-};
+/* --- UserObject --- */
 
-class UserObject : public Object {
-	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> PropertyMap;
-	public:		virtual bool getProperty(StringObject* name, Value& v) {
-					PropertyMap::const_iterator it = properties.find(name);
-					if (it == properties.end()) return false;
-					v = it->second;
-					return true;
-				}
-	public:		virtual bool setProperty(StringObject* name, const Value& v) { properties[name] = v; return true; }
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					for (PropertyMap::iterator it = properties.begin(), e = properties.end(); it != e; ++it) {
-						heap->mark(it->first);
-						it->second.mark(heap);
-					}
-				}
-	protected:	PropertyMap properties;
-};
+bool UserObject::setProperty(StringObject* name, const Value& v) { properties[name] = v; return true; }
+
+bool UserObject::getProperty(StringObject* name, Value& v) {
+	PropertyMap::const_iterator it = properties.find(name);
+	if (it == properties.end()) return false;
+	v = it->second;
+	return true;
+}
+
+void UserObject::garbageCollectAndMark(GCHeap* heap) {
+	for (PropertyMap::iterator it = properties.begin(), e = properties.end(); it != e; ++it) {
+		heap->mark(it->first);
+		it->second.mark(heap);
+	}
+}
 
 StringObject UNDEFINED_STRING("undefined");
 StringObject NULL_STRING("null");
@@ -432,49 +423,42 @@ void Value::mark(GCHeap* heap) const {
 	}
 }
 
-typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
+/* --- FunctionDef --- */
 
-class FunctionDef : public Object {
-	public:		FunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
-	public:		virtual FunctionDef* asFunctionDef() { return this; }
-	public:		bool lookupLocalName(StringObject* name, Int32& index) const {
-					LocalNameMap::const_iterator it = locals.find(name);
-					if (it == locals.end()) return false;
-					index = it->second;
-					return true;
-				}
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					heap->mark(source);
-					// FIX : subs
-					for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
-						it->mark(heap);
-					}
-					for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
-						heap->mark(it->first);
-					}
-				}
-	public:		const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
-	public:		StringObject* source;
-	public:		std::vector<Byte> code;
-	public:		std::vector<Value> constants;
-	public:		Int32 argumentsCount;
-	public:		Int32 localsCount; // including arguments
-	public:		LocalNameMap locals;
-};
+FunctionDef::FunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
+FunctionDef* FunctionDef::asFunctionDef() { return this; }
 
-class Function : public UserObject {
-	friend class Frame;
-	public:		Function(FunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
-	public:		virtual Function* asFunction() { return this; }
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) {
-					heap->mark(definition);
-					heap->mark(closure);
-				}
-	public:		FunctionDef* getDefinition() const { return definition; }
-	public:		Object*  getClosure() const { return closure; }
-	protected:	FunctionDef* const definition;
-	protected:	Object* const closure;
-};
+bool FunctionDef::lookupLocalName(StringObject* name, Int32& index) const {
+	LocalNameMap::const_iterator it = locals.find(name);
+	if (it == locals.end()) return false;
+	index = it->second;
+	return true;
+}
+
+void FunctionDef::garbageCollectAndMark(GCHeap* heap) {
+	heap->mark(source);
+	// FIX : subs
+	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
+		it->mark(heap);
+	}
+	for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
+		heap->mark(it->first);
+	}
+}
+
+const Value* FunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
+
+/* --- Function --- */
+
+Function::Function(FunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
+Function* Function::asFunction() { return this; }
+FunctionDef* Function::getDefinition() const { return definition; }
+Object*  Function::getClosure() const { return closure; }
+
+void Function::garbageCollectAndMark(GCHeap* heap) {
+	heap->mark(definition);
+	heap->mark(closure);
+}
 
 class Frame : public Object {
 	public:		Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())

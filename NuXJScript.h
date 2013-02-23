@@ -88,6 +88,57 @@ class Object : public GCItem {
 	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
 };
 
+class StringObject : public Object {
+	public:		static StringObject* newString(GCHeap* heap, const String& s);
+	public:		StringObject(const String& s);
+	public:		virtual bool getProperty(StringObject* name, Value& v);
+	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual ~StringObject();
+	public:		String s;
+};
+
+struct StringObjectCompare {
+	bool operator() (StringObject* a, StringObject* b) const {
+		return (a != b && a->s < b->s);
+	}
+};
+
+typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
+
+class FunctionDef : public Object {
+	public:		FunctionDef();
+	public:		virtual FunctionDef* asFunctionDef();
+	public:		bool lookupLocalName(StringObject* name, Int32& index) const;
+	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		const Value* getConstantsPointer() const;
+	public:		StringObject* source;
+	public:		std::vector<Byte> code;
+	public:		std::vector<Value> constants;
+	public:		Int32 argumentsCount;
+	public:		Int32 localsCount; // including arguments
+	public:		LocalNameMap locals;
+};
+
+class UserObject : public Object {
+	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> PropertyMap;
+	public:		virtual bool getProperty(StringObject* name, Value& v);
+	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	protected:	PropertyMap properties;
+};
+
+class Function : public UserObject {
+	friend class Frame;
+	public:		Function(FunctionDef* definition, Object* closure);
+	public:		virtual Function* asFunction();
+	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		FunctionDef* getDefinition() const;
+	public:		Object*  getClosure() const;
+	protected:	FunctionDef* const definition;
+	protected:	Object* const closure;
+};
+
+
 class Frame;
 
 struct Context {
