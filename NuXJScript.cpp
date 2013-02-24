@@ -11,6 +11,8 @@
 
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
+// FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
+
 static StringIt parseHex(StringIt p, const StringIt& e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
@@ -125,30 +127,40 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 
 const int ESCAPE_CODE_COUNT = 10;
 
-static String unescape(StringIt& p, const StringIt& e) {
-	assert(p <= e);
-	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'',  'a',  'b',  'f',  'n',  'r',  't',  'v' };
-	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\a', '\b', '\f', '\n', '\r', '\t', '\v' };
+static size_t unescapedMaxLength(StringIt p, const StringIt& e) {
+	assert(p <= e && (*p == '"' || *p == '\''));
+	Char endChar = *p;
+	size_t l = 0;
+	while (++p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+		if (*p == '\\' && p + 1 < e) ++p;
+		++l;
+	}
+	return l;
+}
+	
+static Char* unescape(Char* buffer, StringIt& p, const StringIt& e) {	
+	assert(p <= e && (*p == '"' || *p == '\''));
+	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
+	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
 	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Invalid string literal");
 	Char endChar = *p;
-	String d;
 	StringIt b = ++p;
-	while (p < e && *p != endChar) {
-	/* FIX :	if (*p == '\\' && p + 1 < e) {
-			d += String(b, p);
-			const Char* f = find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
-			long l;
+	Char* d = buffer;
+	while (p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+		if (*p == '\\' && p + 1 < e) {
+			d = std::copy(b, p, d);
+			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
+			UInt32 l;
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
-			else if (*p == 'x') { b = ++p; l = hexToLong<String>(p, (e - p > 2 ? p + 2 : e)); }
-			else if (*p == 'u') { b = ++p; l = hexToLong<String>(p, (e - p > 4 ? p + 4 : e)); }
-			else { b = p; l = stringToLong<String>(p, e); }
+			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
+			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
 			if (p == b) throw std::runtime_error("Invalid escape character");
 			b = p;
-			d += Char(l);
-		} else*/ ++p;
+			*d++ = Char(l);
+		} else ++p;
 	}
-	if (p >= e) throw std::runtime_error("Unterminated string");
-	return (d += String(b, p++));
+	if (p >= e || *p != endChar) throw std::runtime_error("Unterminated string");
+	return std::copy(b, p++, d);
 }
 
 /* --- StringObject --- */
@@ -157,8 +169,8 @@ StringObject::StringObject(const Char* sz) : chars(strlen(sz)), hash(0) { std::c
 StringObject::StringObject(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
 
 StringObject::StringObject(const StringObject* l, const StringObject* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
-	std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
-	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), chars.data() + l->chars.size());
+	Char* e = std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
+	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
 }
 
 bool StringObject::setProperty(StringObject* name, const Value& v) { return false; }
@@ -358,6 +370,7 @@ void UserObject::garbageCollectAndMark(GCHeap* heap) {
 	super::garbageCollectAndMark(heap);
 }
 
+StringObject EMPTY_STRING("");
 StringObject UNDEFINED_STRING("undefined");
 StringObject NULL_STRING("null");
 StringObject FALSE_STRING("false");
@@ -1247,7 +1260,7 @@ static int findLiteralToken(int n /* string length */, const char* s /* zero-ter
 };
 
 void Compiler::expectToken(StringIt& p, const StringIt& e, const Char* token) {
-	if (!eatToken(p, e, token)) throw std::runtime_error(String("Expected '") + token + "'");
+	if (!eatToken(p, e, token)) throw std::runtime_error(std::string("Expected '") + token + "'");
 }
 
 bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
@@ -1322,8 +1335,11 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 					break;
 				}
 				case '\'': case '"': {
-					String s(unescape(p, e));
-					v = XValue(XValue::CONSTANT, Value(StringObject::newHashedString(gcHeap(), s.data(), s.data() + s.size())));
+					size_t maxLength = unescapedMaxLength(p, e);
+					QuickArray<Char, 64> buffer(maxLength);
+					Char* unescapeEnd = unescape(buffer, p, e);
+					assert(unescapeEnd <= buffer + maxLength);
+					v = XValue(XValue::CONSTANT, Value(StringObject::newHashedString(gcHeap(), buffer, unescapeEnd)));
 					break;
 				}
 				default: {
@@ -1511,12 +1527,13 @@ disassemble(gcHeap(), function->code, function->constants);
 #include <fstream>
 
 int main(int argc, const char* argv[]) {
+	static const StringObject LF_STRING("\n");
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
 	FunctionDef* functionDef = heap->manage(new FunctionDef());
 	Compiler* compiler = heap->manage(new Compiler(functionDef));
-	String source;
+	StringObject* source = &EMPTY_STRING;
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
 	if (argc >= 2) {
@@ -1530,10 +1547,12 @@ int main(int argc, const char* argv[]) {
 			String s;
 			std::getline(*inStream, s);
 			if (!s.empty()) {
-				source += s + "\n";
+				StringObject line(s.c_str());
+				source = heap->manage(new StringObject(source, &line));
+				source = heap->manage(new StringObject(source, &LF_STRING));
 			} else {
-				StringIt p = source.data();
-				StringIt e = p + source.size();
+				StringIt p = source->accessChars();
+				StringIt e = p + source->getLength();
 		/*
 				Compiler::XValue v;
 				compiler->parseExpression(p, e, v);
@@ -1568,6 +1587,7 @@ int main(int argc, const char* argv[]) {
 					newHeap->mark(vm);
 					newHeap->mark(globals);
 					newHeap->mark(functionDef);
+					newHeap->mark(source);
 					v.mark(newHeap);
 					int sweptCount = heap->sweep();
 					std::swap(heap, newHeap);
@@ -1585,16 +1605,16 @@ int main(int argc, const char* argv[]) {
 						std::cout << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;
 					}
 				} while (!done);
-				source = String();
+				source = &EMPTY_STRING;
 			}
 		}
 		catch (const std::exception& x) {
 			std::cout << "Exception: " << x.what() << std::endl;
-			source = String();
+			source = &EMPTY_STRING;
 		}
 		catch (...) {
 			std::cout << "Unknown exception" << std::endl;
-			source = String();
+			source = &EMPTY_STRING;
 		}
 	}
 	return 0;

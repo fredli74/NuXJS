@@ -324,12 +324,13 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7CD471516DA7E2B00101EF2</string>
+										<string>F7CD47AE16DA8B0C00101EF2</string>
 										<key>history</key>
 										<array>
 											<string>F7CD468416DA6FC500101EF2</string>
-											<string>F7CD471316DA7E2B00101EF2</string>
-											<string>F7CD471416DA7E2B00101EF2</string>
+											<string>F7CD474F16DA87C100101EF2</string>
+											<string>F7CD475116DA87C100101EF2</string>
+											<string>F7CD479316DA89C500101EF2</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -527,7 +528,6 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7CD470916DA7DD900101EF2</string>
 		<string>F7CD466C16DA6BF800101EF2</string>
 		<string>F7CD466D16DA6BF800101EF2</string>
 		<string>1C78EAAD065D492600B07095</string>
@@ -552,6 +552,8 @@
 					<key>Dock</key>
 					<array>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -574,8 +576,6 @@
 							<string>374pt</string>
 						</dict>
 						<dict>
-							<key>BecomeActive</key>
-							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -884,7 +884,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {1111, 590}}</string>
 								<key>RubberWindowFrame</key>
-								<string>205 186 1111 631 0 0 1440 878 </string>
+								<string>175 233 1111 631 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXDebugCLIModule</string>
@@ -913,7 +913,7 @@
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.consoleV3</string>
 			<key>WindowString</key>
-			<string>205 186 1111 631 0 0 1440 878 </string>
+			<string>175 233 1111 631 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>

@@ -157,6 +157,7 @@ class Table {
 class StringObject : public Object {
 	public:		typedef Object super;
 	public:		static StringObject* newHashedString(GCHeap* heap, const Char* b, const Char* e);
+	public:		StringObject();
 	public:		StringObject(const Char* sz);
 	public:		StringObject(const Char* b, const Char* e);
 	public:		StringObject(const StringObject* l, const StringObject* r);
