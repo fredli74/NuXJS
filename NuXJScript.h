@@ -5,7 +5,6 @@
 #include <string>
 
 typedef char Char;
-typedef const Char* StringIt;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;

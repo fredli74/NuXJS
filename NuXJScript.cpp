@@ -13,18 +13,18 @@ static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
 // FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
 
-static StringIt parseHex(StringIt p, const Char* e, UInt32& i) {
+static const Char* parseHex(const Char* p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
 	return p;
 }
 
-static StringIt parseUnsignedInt(StringIt p, const Char* e, UInt32& i) {
+static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && *p >= '0' && *p <= '9'; ++p) i = i * 10 + (*p - '0');
 	return p;
 }
 
-static StringIt parseInt(StringIt p, const Char* e, Int32& i) {
+static const Char* parseInt(const Char* p, const Char* e, Int32& i) {
 	bool negative = (e - p >= 2 && ((*p == '+' || *p == '-') && p[1] >= '0' && p[1] <= '9') ? (*p++ == '-') : false);
 	UInt32 ui;
 	p = parseUnsignedInt(p, e, ui);
@@ -32,16 +32,16 @@ static StringIt parseInt(StringIt p, const Char* e, Int32& i) {
 	return p;
 }
 
-static StringIt parseDouble(StringIt p, const Char* e, double& v) {
+static const Char* parseDouble(const Char* p, const Char* e, double& v) {
 	assert(p <= e);
 	double d = 0;
-	StringIt q = p;
+	const Char* q = p;
 	double sign = (e - q > 1 && (*q == '+' || *q == '-') ? (*q++ == '-' ? -1.0 : 1.0) : 1.0);
 	if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) {
 		v = 0.0;
 		return p;
 	}
-	StringIt b = q;
+	const Char* b = q;
 	while (q != e && *q >= '0' && *q <= '9') d = d * 10.0 + (*q++ - '0');
 	if (q != e && *q == '.') {
 		double f = 1.0;
@@ -53,7 +53,7 @@ static StringIt parseDouble(StringIt p, const Char* e, double& v) {
 	}
 	if (q != e && (*q == 'E' || *q == 'e')) {
 		Int32 i;
-		StringIt t = parseInt(q + 1, e, i);
+		const Char* t = parseInt(q + 1, e, i);
 		if (t != q + 1) { d *= pow(10, static_cast<double>(i)); q = t; }
 	}
 	v = d * sign;
@@ -127,7 +127,7 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 
 const int ESCAPE_CODE_COUNT = 10;
 
-static size_t unescapedMaxLength(StringIt p, const Char* e) {
+static size_t unescapedMaxLength(const Char* p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	Char endChar = *p;
 	size_t l = 0;
@@ -144,7 +144,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
 	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Invalid string literal");
 	Char endChar = *p;
-	StringIt b = ++p;
+	const Char* b = ++p;
 	Char* d = buffer;
 	while (p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
 		if (*p == '\\' && p + 1 < e) {
@@ -183,9 +183,9 @@ String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
 
 bool String::getProperty(String* name, Value& v) {
 	UInt32 i;
-	StringIt p = name->chars.data();
-	StringIt e = p + name->chars.size();
-	StringIt q = parseUnsignedInt(p, e, i);
+	const Char* p = name->chars.data();
+	const Char* e = p + name->chars.size();
+	const Char* q = parseUnsignedInt(p, e, i);
 	if (q == e && i < chars.size()) {
 		v = Value(gcHeap()->manage(new String(chars.data() + i, chars.data() + i + 1)));
 		return true;
@@ -421,9 +421,8 @@ double Value::toDouble() const {
 		case NUMBER_TYPE: return d;
 		case STRING_TYPE: {
 			double v;
-			StringIt p = s->accessChars();
-			StringIt e = p + s->getLength();
-			StringIt q = parseDouble(p, e, v);
+			const Char* p = s->accessChars();
+			const Char* q = parseDouble(p, p + s->getLength(), v);
 			if (q == p) return NaN();
 			p = q;
 			return v;
@@ -1039,7 +1038,7 @@ void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
 
 double Compiler::parseNumber(const Char*& p, const Char* e) {
 	double v;
-	StringIt q = parseDouble(p, e, v);
+	const Char* q = parseDouble(p, e, v);
 	if (q == p) throw std::runtime_error("Invalid number");
 	p = q;
 	return v;
@@ -1051,7 +1050,7 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 
 bool Compiler::eatToken(const Char*& p, const Char* e, const Char* t) {
 	assert(*t != 0);
-	StringIt q = p;
+	const Char* q = p;
 	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
 	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (q == e || !isLeadingIdentifierChar(*q)))) {
 		p = q;
@@ -1103,7 +1102,7 @@ void Compiler::parseRValueOperand(const Char*& p, const Char* e, const OperatorI
 
 bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
-	StringIt b = p;
+	const Char* b = p;
 	int i = 0;
 	while (i < opCount && !eatToken(p, e, opList[i].token)) ++i;
 	if (i >= opCount) return false;
@@ -1154,7 +1153,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		case PROPERTY_DOT: {
 			makeRValue(v);
 			eatWhite(p, e);
-			StringIt b = p;
+			const Char* b = p;
 			parseIdentifier(p, e);
 			if (p == b) throw std::runtime_error("Expected identifier");
 			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(gcHeap(), b, p)));
@@ -1269,7 +1268,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 	eatWhite(p, e);
 	if (p == e) return false;
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
-		StringIt q = p;
+		const Char* q = p;
 		eatToken(q, e);
 		int i = findLiteralToken(q - p, &*p);
 		if (i >= 0) {
@@ -1294,7 +1293,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 							expectToken(p, e, ",");
 							eatWhite(p, e);
 						}
-						StringIt b = p;
+						const Char* b = p;
 						parseIdentifier(p, e);
 						if (p == b) throw std::runtime_error("Expected identifier");
 						func->locals[String::newHashedString(gcHeap(), b, p)] = func->localsCount;
@@ -1323,7 +1322,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
 						UInt32 i;
-						StringIt q = parseHex(p + 2, e, i);
+						const Char* q = parseHex(p + 2, e, i);
 						if (q == p) throw std::runtime_error("Invalid number");
 						p = q;
 						v = XValue(XValue::CONSTANT, Value((Int32)(i)));
@@ -1345,7 +1344,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 					break;
 				}
 				default: {
-					StringIt b = p;
+					const Char* b = p;
 					parseIdentifier(p, e);
 					if (p == b) return false; // fix : nicer way?
 					String* identifier = String::newHashedString(gcHeap(), b, p);
@@ -1363,7 +1362,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 			}
 		}
     }
-	StringIt q = p;
+	const Char* q = p;
     eatWhite(q, e);
     while (parseOperator(q, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
 		p = q;
@@ -1384,7 +1383,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 		return;
 	}
 	
-	StringIt q = p;
+	const Char* q = p;
 	eatToken(q, e);
 	int i = findStatementToken(q - p, &*p);
 	if (i < 0) {
@@ -1402,7 +1401,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 		switch (static_cast<Statement>(i)) {
 			case VAR_STATEMENT: {
 				while (true) {
-					StringIt b = p; // FIX : sub
+					const Char* b = p; // FIX : sub
 					parseIdentifier(p, e);
 					if (p == b) throw std::runtime_error("Expected identifier");
 					String* identifier = String::newHashedString(gcHeap(), b, p);
@@ -1414,7 +1413,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 						index = function->localsCount++;
 						nameMap[identifier] = index;
 					}
-					StringIt q = p;
+					const Char* q = p;
 					eatWhite(q, e);
 					if (eatToken(q, e, "=")) {
 						p = q;
@@ -1444,7 +1443,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
 				int offsetA = code.size() - 4;
 				parseStatement(p, e);
-				StringIt q = p;
+				const Char* q = p;
 				eatWhite(q, e);
 				if (eatToken(q, e, "else")) {
 					p = q;
@@ -1513,7 +1512,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 }
 
 void Compiler::parseStatementList(const Char*& p, const Char* e) {
-	StringIt b;
+	const Char* b;
 	do {
 		b = p;
 		parseStatement(p, e);
@@ -1553,8 +1552,8 @@ int main(int argc, const char* argv[]) {
 				source = heap->manage(new String(source, &line));
 				source = heap->manage(new String(source, &LF_STRING));
 			} else {
-				StringIt p = source->accessChars();
-				StringIt e = p + source->getLength();
+				const Char* p = source->accessChars();
+				const Char* e = p + source->getLength();
 		/*
 				Compiler::XValue v;
 				compiler->parseExpression(p, e, v);
