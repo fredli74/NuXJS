@@ -6,10 +6,14 @@
 
 typedef char Char;
 typedef std::string String;
-typedef std::string::const_iterator StringIt;
+typedef const Char* StringIt;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
+
+const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
+const UInt32 BUILT_IN_LOCALS_COUNT = 8;
+const size_t STRING_BUILT_IN_LENGTH = 16;
 
 // FIX : name
 template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
@@ -51,8 +55,8 @@ class GCHeap {
 	public:		static GCHeap* markAndSweep(GCHeap* original);
 	public:		template<class T> T* manage(T* object) { add(object); return object; }
 	public:		void mark(GCItem* object);
-	public:		int sweep();
-	public:		int size() const { return objects.size(); }
+	public:		size_t sweep();
+	public:		size_t size() const;
 	protected:	void add(GCItem* object);
 	protected:	std::vector<GCItem*> objects;
 };
@@ -125,22 +129,52 @@ class Object : public GCItem {
 	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
 };
 
+class Table {
+	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
+	protected:	static UInt32 suggestN(UInt32 count); // FIX : keep?
+	public:		typedef UInt32 HashType;
+	public:		struct Bucket {
+					Bucket();
+					HashType hash;
+					StringObject* key;
+					Value value;
+				};
+	public:		Table(UInt32 n = TABLE_BUILT_IN_N);
+	public:		const Bucket* getFirst() const;
+	public:		const Bucket* getNext(const Bucket* b) const;
+	public:		const Bucket* lookup(StringObject* key);
+	public:		void assign(StringObject* key, const Value& value);
+	public:		void erase(StringObject* key);
+	public:		void mark(GCHeap* heap);
+	protected:	void update(StringObject* key, const Value& value);
+	protected:	Bucket* find(StringObject* key, HashType hash) const;
+	protected:	UInt32 rebuild(UInt32 newN);
+	protected:	UInt32 n; ///< Size of member table is two to the power of n.
+	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
+	protected:	UInt32 loadCount; ///< Count of buckets with defined keys.
+};
+
 class StringObject : public Object {
 	public:		typedef Object super;
 	public:		static StringObject* newString(GCHeap* heap, const String& s);
 	public:		static StringObject* newHashedString(GCHeap* heap, const String& s);
 	public:		StringObject(const String& s);
-	public:		size_t calcHash() const;
+	public:		StringObject(const StringObject* l, const StringObject* r);
+	public:		Table::HashType calcHash() const;
 	public:		bool equals(const StringObject* o) const;
+	public:		bool isLessThan(const StringObject* o) const;
+	public:		size_t getLength() const;
+	public:		const Char* accessChars() const;
+	public:		std::wstring toStdString() const;
 	public:		virtual bool getProperty(StringObject* name, Value& v);
 	public:		virtual bool setProperty(StringObject* name, const Value& v);
-	public:		String s;
+	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
 
 struct StringObjectCompare {
 	bool operator() (StringObject* a, StringObject* b) const {
-		return (a != b && a->s < b->s);
+		return (a != b && a->isLessThan(b));
 	}
 };
 
@@ -159,31 +193,6 @@ class FunctionDef : public Object {
 	public:		Int32 argumentsCount;
 	public:		Int32 localsCount; // including arguments
 	public:		LocalNameMap locals;
-};
-
-const size_t TABLE_BUILT_IN_N = 3;
-
-class Table {
-	protected:	static size_t calcMaxLoad(size_t bucketCount);
-	protected:	static size_t suggestN(size_t count); // FIX : keep?
-	public:		struct Bucket {
-					Bucket();
-					StringObject* key;
-					Value value;
-				};
-	public:		Table(size_t n = TABLE_BUILT_IN_N);
-	public:		const Bucket* getFirst() const;
-	public:		const Bucket* getNext(const Bucket* b) const;
-	public:		const Bucket* lookup(StringObject* key);
-	public:		void assign(StringObject* key, const Value& value);
-	public:		void erase(StringObject* key);
-	public:		void mark(GCHeap* heap);
-	protected:	void update(StringObject* key, const Value& value);
-	protected:	Bucket* find(StringObject* key) const;
-	protected:	size_t rebuild(int newN);
-	protected:	size_t n; ///< Size of member table is two to the power of n.
-	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
-	protected:	size_t loadCount; ///< Count of buckets with defined keys.
 };
 
 class UserObject : public Object {
@@ -216,8 +225,6 @@ class ArgumentsObject : public UserObject {
 };
 #endif
 
-const int BUILT_IN_LOCALS_COUNT = 8;
-
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(Function* function);
@@ -226,11 +233,9 @@ class Frame : public Object {
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	public:		FunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
-	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
 	protected:	FunctionDef* const functionDef;
 	protected:	Object* const closure;
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
-	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
 };
 
 struct Context {

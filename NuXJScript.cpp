@@ -9,6 +9,8 @@
 #include <map>
 #include "NuXJScript.h"
 
+static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
+
 static StringIt parseHex(StringIt p, const StringIt& e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
@@ -33,13 +35,19 @@ static StringIt parseDouble(StringIt p, const StringIt& e, double& v) {
 	double d = 0;
 	StringIt q = p;
 	double sign = (e - q > 1 && (*q == '+' || *q == '-') ? (*q++ == '-' ? -1.0 : 1.0) : 1.0);
-	if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) return p;
+	if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) {
+		v = 0.0;
+		return p;
+	}
 	StringIt b = q;
 	while (q != e && *q >= '0' && *q <= '9') d = d * 10.0 + (*q++ - '0');
 	if (q != e && *q == '.') {
 		double f = 1.0;
 		while (++q != e && *q >= '0' && *q <= '9') d += (*q - '0') * (f *= 0.1);
-		if (q == b + 1) return p;
+		if (q == b + 1) {
+			v = 0.0;
+			return p;
+		}
 	}
 	if (q != e && (*q == 'E' || *q == 'e')) {
 		Int32 i;
@@ -70,6 +78,9 @@ static String doubleToString(double d, int precision = 15) {
 	const double EPSILON = 1.0e-300;
 	const double SMALL = 1.0e-6;
 	const double LARGE = 1.0e+21;
+
+	int i = static_cast<int>(d);
+	if (i == d) return intToString(i);
 
 	if (std::isnan(d)) return "NaN";
 	
@@ -124,7 +135,7 @@ static String unescape(StringIt& p, const StringIt& e) {
 	assert(p <= e);
 	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'',  'a',  'b',  'f',  'n',  'r',  't',  'v' };
 	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\a', '\b', '\f', '\n', '\r', '\t', '\v' };
-	if (p >= e || *p != '"' && *p != '\'') throw std::runtime_error("Invalid string literal");
+	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Invalid string literal");
 	Char endChar = *p;
 	String d;
 	StringIt b = ++p;
@@ -148,7 +159,13 @@ static String unescape(StringIt& p, const StringIt& e) {
 
 /* --- StringObject --- */
 
-StringObject::StringObject(const String& s) : s(s), hash(0) { }
+StringObject::StringObject(const String& s) : chars(s.size()), hash(0) { std::copy(s.begin(), s.end(), chars.data()); }
+
+StringObject::StringObject(const StringObject* l, const StringObject* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
+	std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
+	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), chars.data() + l->chars.size());
+}
+
 bool StringObject::setProperty(StringObject* name, const Value& v) { return false; }
 
 StringObject* StringObject::newString(GCHeap* heap, const String& s) {
@@ -163,35 +180,24 @@ StringObject* StringObject::newHashedString(GCHeap* heap, const String& s) {
 
 bool StringObject::getProperty(StringObject* name, Value& v) {
 	UInt32 i;
-	StringIt p = name->s.begin();
-	StringIt e = name->s.end();
+	StringIt p = name->chars.data();
+	StringIt e = p + name->chars.size();
 	StringIt q = parseUnsignedInt(p, e, i);
-	if (q == e && 0 <= i && i < s.size()) {
-		v = Value(newString(gcHeap(), String(1, s[i])));
+	if (q == e && i < chars.size()) {
+		v = Value(newString(gcHeap(), String(1, chars[i])));
 		return true;
 	}
 	v = Value();
 	return false;
 }
 
-// FIX : good implementation?
-size_t StringObject::calcHash() const {
+Table::HashType StringObject::calcHash() const {
 	if (hash == 0) {
-		size_t l = s.size();
-		size_t x = 1972;
-		size_t i = 0;
-		while (i < 16 && i < l) {
-			x = x * 0xA9B51D1B + s[i];
-			++i;
-		}
-		if (i < l) {
-			int s0 = (x & 7);
-			int s1 = 7 - s0;
-			while (i + 8 <= l) {
-				x = x * 0x4822FFE7 + s[i + s0];
-				x = x * 0x27DE97DB + s[i + s1];
-				i += 8;
-			}
+		size_t l = chars.size();
+		UInt32 x = 2166136261U;
+		for (size_t i = 0; i < l; ++i) {
+			x *= 16777619;
+			x += chars[i];
 		}
 		hash = (x == 0 ? x + 1 : x);
 	}
@@ -199,13 +205,30 @@ size_t StringObject::calcHash() const {
 }
 
 bool StringObject::equals(const StringObject* o) const {
-	return (this == o || ((hash == o->hash || hash == 0 || o->hash == 0) && s == o->s));
+	if (this == o) return true;
+	if (hash != o->hash && hash != 0 && o->hash != 0) return false;
+	size_t l = chars.size();
+	if (l != o->chars.size()) return false;
+	for (int i = 0; i < l; ++i) if (chars[i] != o->chars[i]) return false;
+	return true;
 }
+
+bool StringObject::isLessThan(const StringObject* o) const {
+	if (this == o) return false;
+	size_t l = std::min(chars.size(), o->chars.size());
+	for (int i = 0; i < l; ++i) if (chars[i] != o->chars[i]) return (chars[i] < o->chars[i]);
+	return chars.size() < o->chars.size();
+}
+
+size_t StringObject::getLength() const { return chars.size(); }
+const Char* StringObject::accessChars() const { return chars.data(); }
+std::wstring StringObject::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
+
 
 /* --- GCHeap --- */
 
-int GCHeap::sweep() {
-	int count = 0;
+size_t GCHeap::sweep() {
+	size_t count = 0;
 	for (std::vector<GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
 		if (*it != 0 && (*it)->_gcHeap == this) {
 			delete *it;
@@ -216,6 +239,8 @@ int GCHeap::sweep() {
 	objects.clear();
 	return count;
 }
+
+size_t GCHeap::size() const { return objects.size(); }
 
 void GCHeap::add(GCItem* object) {
 	assert(object->_gcHeap == 0);
@@ -231,23 +256,21 @@ void GCHeap::mark(GCItem* object) {
 	}
 }
 
-double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
-
 /* --- Table --- */
 
 Table::Bucket::Bucket() : key(0), value(Value::DELETED_TYPE) { }
 
-size_t Table::calcMaxLoad(size_t bucketCount) {
+UInt32 Table::calcMaxLoad(UInt32 bucketCount) {
 	return (bucketCount - (bucketCount >> 3) - 1);
 }
 
-size_t Table::suggestN(size_t count) { // FIX : keep?
-	size_t n = 0;
+UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
+	UInt32 n = 0;
 	while (count >= calcMaxLoad(1U << n)) ++n;
 	return n;
 }
 
-Table::Table(size_t n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
+Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
 
 const Table::Bucket* Table::getFirst() const { return getNext(&buckets[0]); }
 
@@ -258,53 +281,59 @@ const Table::Bucket* Table::getNext(const Bucket* b) const {
 	return (b == e ? 0 : b);
 }
 
-const Table::Bucket* Table::lookup(StringObject* key) { Bucket* b = find(key); return (b->key != 0 ? b : 0); }
+const Table::Bucket* Table::lookup(StringObject* key) {
+	const Bucket* b = find(key, key->calcHash());
+	return (b->key != 0 ? b : 0);
+}
+
 void Table::assign(StringObject* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
 void Table::erase(StringObject* key) { update(key, Value(Value::DELETED_TYPE)); }
 
 void Table::mark(GCHeap* heap) {
-	size_t rebuildLoadCount = 0;
-	for (size_t i = 0; i < buckets.size(); ++i) {
+	UInt32 rebuildLoadCount = 0;
+	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		heap->mark(buckets[i].key);
 		buckets[i].value.mark(heap);
 		if (!buckets[i].value.isDeleted()) rebuildLoadCount++;
 	}
 	if (rebuildLoadCount != loadCount) {
-		size_t check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
+		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
 		assert(check == rebuildLoadCount);
 	}
 }
 
 void Table::update(StringObject* key, const Value& value) {
-	Bucket* b = find(key);
+	HashType hash = key->calcHash();
+	Bucket* b = find(key, hash);
 	if (b->key == 0) {
 		if (loadCount >= calcMaxLoad(buckets.size())) {
-			rebuild(n + 1);
+			rebuild(n + 2);
 			assert(loadCount < calcMaxLoad(buckets.size()));
-			b = find(key);
+			b = find(key, hash);
 			assert(b->key == 0);
 		}
 		++loadCount;
+		b->hash = hash;
 		b->key = key;
 	}
 	b->value = value;
 }
 
-Table::Bucket* Table::find(StringObject* key) const {
-	size_t mask = (buckets.size() - 1);
-	size_t i = key->calcHash() & mask;
-	while (buckets[i].key != 0 && !buckets[i].key->equals(key)) i = (i + 1) & mask;
+Table::Bucket* Table::find(StringObject* key, HashType hash) const {
+	UInt32 mask = (buckets.size() - 1);
+	UInt32 i = hash & mask;
+	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->equals(key))) i = (i + 1) & mask;
 	return &buckets[i];
 }
 
-size_t Table::rebuild(int newN) {
+UInt32 Table::rebuild(UInt32 newN) {
 	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> newBuckets(1U << newN);
-	size_t newLoadCount = 0;
-	size_t mask = (1U << newN) - 1;
-	for (size_t i = 0; i < buckets.size(); ++i) {
+	UInt32 newLoadCount = 0;
+	UInt32 mask = (1U << newN) - 1;
+	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		if (!buckets[i].value.isDeleted()) {
 			assert(buckets[i].key != 0);
-			size_t j = buckets[i].key->calcHash() & mask;
+			UInt32 j = buckets[i].key->calcHash() & mask;
 			while (newBuckets[j].key != 0) j = (j + 1) & mask;
 			newBuckets[j] = buckets[i];
 			++newLoadCount;
@@ -373,7 +402,7 @@ bool Value::toBool() const {
 	}
 }
 
-Int32 Value::toInt() const { return static_cast<int>(toDouble()); } // FIX : should do modulo, see http://www.ecma-international.org/ecma-262/5.1/#sec-9.6
+Int32 Value::toInt() const { return static_cast<Int32>(toDouble()); } // FIX : should do modulo, see http://www.ecma-international.org/ecma-262/5.1/#sec-9.6
 
 double Value::toDouble() const {
 	switch (type) {
@@ -384,8 +413,8 @@ double Value::toDouble() const {
 		case NUMBER_TYPE: return d;
 		case STRING_TYPE: {
 			double v;
-			StringIt p = s->s.begin();
-			StringIt e = s->s.end();
+			StringIt p = s->accessChars();
+			StringIt e = p + s->getLength();
 			StringIt q = parseDouble(p, e, v);
 			if (q == p) return NaN();
 			p = q;
@@ -402,7 +431,7 @@ double Value::toDouble() const {
 					case NULL_TYPE: return "null";
 					case BOOLEAN_TYPE: return b ? "true" : "false";
 					case NUMBER_TYPE: return doubleToString(d);
-					case STRING_TYPE: return s->s;
+					case STRING_TYPE: { const Char* p = s->accessChars(); return String(p, p + s->getLength()); }
 case OBJECT_TYPE: return "<object>";
 				}
 			}
@@ -455,7 +484,7 @@ bool Value::operator<(const Value& y) const {
 		case DELETED_TYPE: return false;
 		case BOOLEAN_TYPE: return b < y.b;
 		case NUMBER_TYPE: return d < y.d;
-		case STRING_TYPE: return s->s < y.s->s;
+		case STRING_TYPE: return s->isLessThan(y.s);
 		case OBJECT_TYPE: return o < y.o;
 	}
 }
@@ -534,11 +563,9 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 
 Value Value::add(GCHeap* heap, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
-		String rs = y.toString(heap)->s;
-		if (rs.empty()) return *this;
-		String ls = toString(heap)->s;
-		if (ls.empty()) return y;
-		return Value(StringObject::newString(heap, ls + rs));
+		if (y.s->getLength() == 0) return *this;
+		if (s->getLength() == 0) return y;
+		return Value(heap->manage(new StringObject(s, y.s)));
 	}
 	return Value(toDouble() + y.toDouble());
 }
@@ -547,6 +574,7 @@ void Value::mark(GCHeap* heap) const {
 	switch (type) {
 		case STRING_TYPE: heap->mark(s); break;
 		case OBJECT_TYPE: heap->mark(o); break;
+		default: break;
 	}
 }
 
@@ -613,6 +641,8 @@ Frame::Frame(Function* function) : functionDef(function->getDefinition()), closu
 FunctionDef* Frame::getFunctionDef() { return functionDef; }
 Value* Frame::getLocalsPointer() { return &locals[0]; }
 
+// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a closure above maybe?
+
 bool Frame::getProperty(StringObject* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
@@ -620,13 +650,6 @@ bool Frame::getProperty(StringObject* name, Value& v) {
 		v = locals[index];
 		return true;
 	} else {
-		if (dynamicLocals.get() != 0) {
-			DynamicMap::const_iterator it = dynamicLocals->find(name);
-			if (it != dynamicLocals->end()) {
-				v = it->second;
-				return true;
-			}
-		}
 		return closure->getProperty(name, v);
 	}
 }
@@ -638,13 +661,6 @@ bool Frame::setProperty(StringObject* name, const Value& v) {
 		locals[index] = v;
 		return true;
 	} else {
-		if (dynamicLocals.get() != 0) {
-			DynamicMap::iterator it = dynamicLocals->find(name);
-			if (it != dynamicLocals->end()) {
-				it->second = v;
-				return true;
-			}
-		}
 		return closure->setProperty(name, v);
 	}
 }
@@ -653,13 +669,7 @@ void Frame::garbageCollectAndMark(GCHeap* heap) {
 	heap->mark(functionDef);
 	heap->mark(closure);
 	// FIX : subs
-	for (size_t i = 0; i < locals.size(); ++i) locals[i].mark(heap);
-	if (dynamicLocals.get() != 0) {
-		for (DynamicMap::iterator it = dynamicLocals->begin(), e = dynamicLocals->end(); it != e; ++it) {
-			heap->mark(it->first);
-			it->second.mark(heap);
-		}
-	}
+	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
 	super::garbageCollectAndMark(heap);
 }
 
@@ -765,7 +775,7 @@ bool VM::run(Int32 count) {
 				break;
 			}
 			case CALL_METHOD_OP: { // FIX : share...
-				int n = readInt32(ip);
+				Int32 n = readInt32(ip);
 
 				Object* thisObject = vsp[n + 1].toObject(h);
 				if (thisObject == 0) error();
@@ -785,12 +795,12 @@ bool VM::run(Int32 count) {
 				ip = &def->code[0];
 				cp = def->getConstantsPointer();
 				lp = frame->getLocalsPointer();
-				for (int i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
+				for (Int32 i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
 				pop(vsp, n + 2);
 				break;
 			}
 			case CALL_GLOBAL_OP: {
-				int n = readInt32(ip);
+				Int32 n = readInt32(ip);
 				Object* o = vsp[n].toObject(h);
 				if (o == 0) error();
 				Function* f = o->asFunction();
@@ -804,7 +814,7 @@ bool VM::run(Int32 count) {
 				ip = &def->code[0];
 				cp = def->getConstantsPointer();
 				lp = frame->getLocalsPointer();
-				for (int i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
+				for (Int32 i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
 				pop(vsp, n + 1);
 				break;
 			}
@@ -857,7 +867,7 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 			case VM::CONST_OP:
 			case VM::GEN_FUNC_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
 			case VM::READ_NAMED_OP:
-			case VM::WRITE_NAMED_OP: std::cout << " " << constants[getInt32(it, e)].getString()->s; break;
+			case VM::WRITE_NAMED_OP: std::wcout << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 		}
 		std::cout << std::endl;
 	}
@@ -1150,7 +1160,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			if (v.t == XValue::PROPERTY) op = VM::CALL_METHOD_OP;
 			else makeRValue(v);
 			eatWhite(p, e);
-			int count = 0;
+			Int32 count = 0;
 			while (p != e && *p != ')') {
 				if (count != 0) {
 					expectToken(p, e, ",");
@@ -1225,7 +1235,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 
 void Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
 	if (p != e && isLeadingIdentifierChar(*p)) {
-		while (++p != e && isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9')) { }
+		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
 	}
 }
 
@@ -1372,6 +1382,7 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 			switch (xv.t) {
 				case XValue::PUSHED: emit(VM::POP_OP); break;
 				case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
+				default: break;
 			}
 		}
 	} else {
@@ -1504,6 +1515,8 @@ void Compiler::finish() {
 disassemble(function->code, function->constants);
 }
 
+#include <fstream>
+
 int main(int argc, const char* argv[]) {
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
@@ -1511,17 +1524,23 @@ int main(int argc, const char* argv[]) {
 	FunctionDef* functionDef = heap->manage(new FunctionDef());
 	Compiler* compiler = heap->manage(new Compiler(functionDef));
 	String source;
-	do {
+	std::auto_ptr<std::ifstream> inputFileStream;
+	std::istream* inStream = &std::cin;
+	if (argc >= 2) {
+		inputFileStream.reset(new std::ifstream(argv[1]));
+		inStream = inputFileStream.get();
+	}
+	while (inStream->good()) {
 		try {
 			functionDef->code.clear();
 			
 			String s;
-			std::getline(std::cin, s);
+			std::getline(*inStream, s);
 			if (!s.empty()) {
 				source += s + "\n";
 			} else {
-				StringIt p = source.begin();
-				StringIt e = source.end();
+				StringIt p = source.data();
+				StringIt e = p + source.size();
 		/*
 				Compiler::XValue v;
 				compiler->parseExpression(p, e, v);
@@ -1567,7 +1586,7 @@ int main(int argc, const char* argv[]) {
 					
 					if (done) {
 						std::cout << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
-						std::cout << "=" << (v.toString(heap))->s.c_str() << std::endl;
+						std::wcout << L"=" << (v.toString(heap))->toStdString() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
 						std::cout << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;
@@ -1584,6 +1603,6 @@ int main(int argc, const char* argv[]) {
 			std::cout << "Unknown exception" << std::endl;
 			source = String();
 		}
-	} while (true);
+	}
 	return 0;
 }
