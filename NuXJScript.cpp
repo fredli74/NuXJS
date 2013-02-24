@@ -1,3 +1,30 @@
+// TODO
+//
+// for (;;)
+// for (in)
+// switch
+// break, continue etc (with labels!)
+// native calls (and returns)
+// exceptions (and catching both virtual and native)
+// proper string comparisons (< etc)
+// void operator
+// typeof, instanceof, in operators
+// new operator
+// delete operator
+// prototype support
+// eval support
+// arguments container
+// array object (length property support, optimized for numerical indexes?)
+// count (and run-time check) necessary value stack depth for functions
+// jump optimizations
+// pop void optimization (almost always occurs with a return;)
+// don't accept lf's after ++ etc (automatic ; insertion logic)
+// divide by 0 checks? NaN checks?
+// basic library (math, string, array ops)
+// virtual machine should include gc etc
+// also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
+// take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+
 #include "assert.h"
 #include <cmath>
 #include <algorithm>
@@ -8,6 +35,13 @@
 #include <limits>
 #include <map>
 #include "NuXJScript.h"
+
+// FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
+static int strncmp(const Char* a, const char* b, size_t n) {
+	int i = 0;
+	while (i < n && a[i] == b[i] && a[i] != 0 && b[i] != 0) ++i;
+	return (i == n ? 0 : a[i] - b[i]);
+}
 
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
@@ -165,7 +199,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 
 /* --- String --- */
 
-String::String(const Char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
+String::String(const char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
 String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
 
 String::String(const String* l, const String* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
@@ -173,7 +207,7 @@ String::String(const String* l, const String* r) : chars(l->chars.size() + r->ch
 	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
 }
 
-bool String::setProperty(String* name, const Value& v) { return false; }
+bool String::setProperty(const String* name, const Value& v) { return false; }
 
 String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
 	String* o = heap->manage(new String(b, e));
@@ -181,7 +215,7 @@ String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
 	return o;
 }
 
-bool String::getProperty(String* name, Value& v) {
+bool String::getProperty(const String* name, Value& v) {
 	UInt32 i;
 	const Char* p = name->chars.data();
 	const Char* e = p + name->chars.size();
@@ -227,12 +261,11 @@ size_t String::getLength() const { return chars.size(); }
 const Char* String::accessChars() const { return chars.data(); }
 std::wstring String::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
 
-
 /* --- GCHeap --- */
 
 size_t GCHeap::sweep() {
 	size_t count = 0;
-	for (std::vector<GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
+	for (std::vector<const GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
 		if (*it != 0 && (*it)->_gcHeap == this) {
 			delete *it;
 			*it = 0;
@@ -245,17 +278,17 @@ size_t GCHeap::sweep() {
 
 size_t GCHeap::size() const { return objects.size(); }
 
-void GCHeap::add(GCItem* object) {
+void GCHeap::add(const GCItem* object) {
 	assert(object->_gcHeap == 0);
 	objects.push_back(object);
 	object->_gcHeap = this;
 }
 
-void GCHeap::mark(GCItem* object) {
+void GCHeap::mark(const GCItem* object) {
 	if (object != 0 && object->_gcHeap != this && object->_gcHeap != 0) {
 		objects.push_back(object);
 		object->_gcHeap = this;
-		object->garbageCollectAndMark(this);
+		const_cast<GCItem*>(object)->gcMark(this);
 	}
 }
 
@@ -284,13 +317,13 @@ const Table::Bucket* Table::getNext(const Bucket* b) const {
 	return (b == e ? 0 : b);
 }
 
-const Table::Bucket* Table::lookup(String* key) {
+const Table::Bucket* Table::lookup(const String* key) {
 	const Bucket* b = find(key, key->calcHash());
 	return (b->key != 0 ? b : 0);
 }
 
-void Table::assign(String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
-void Table::erase(String* key) { update(key, Value(Value::DELETED_TYPE)); }
+void Table::assign(const String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
+void Table::erase(const String* key) { update(key, Value(Value::DELETED_TYPE)); }
 
 void Table::mark(GCHeap* heap) {
 	UInt32 rebuildLoadCount = 0;
@@ -305,7 +338,7 @@ void Table::mark(GCHeap* heap) {
 	}
 }
 
-void Table::update(String* key, const Value& value) {
+void Table::update(const String* key, const Value& value) {
 	HashType hash = key->calcHash();
 	Bucket* b = find(key, hash);
 	if (b->key == 0) {
@@ -322,7 +355,7 @@ void Table::update(String* key, const Value& value) {
 	b->value = value;
 }
 
-Table::Bucket* Table::find(String* key, HashType hash) const {
+Table::Bucket* Table::find(const String* key, HashType hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
 	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->equals(key))) i = (i + 1) & mask;
@@ -350,12 +383,12 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- UserObject --- */
 
-bool UserObject::setProperty(String* name, const Value& v) {
+bool UserObject::setProperty(const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
 }
 
-bool UserObject::getProperty(String* name, Value& v) {
+bool UserObject::getProperty(const String* name, Value& v) {
 	const Table::Bucket* b = properties.lookup(name);
 	if (b != 0) {
 		v = b->value;
@@ -365,9 +398,9 @@ bool UserObject::getProperty(String* name, Value& v) {
 	return false;
 }
 
-void UserObject::garbageCollectAndMark(GCHeap* heap) {
+void UserObject::gcMark(GCHeap* heap) {
 	properties.mark(heap);
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
 String EMPTY_STRING("");
@@ -389,10 +422,9 @@ Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::isDeleted() const { return type == DELETED_TYPE; }
 
-FunctionDef* Value::getFunctionDef() const {
+ScriptFunctionDef* Value::getFunctionDef() const {
 	assert(type == OBJECT_TYPE);
-	assert(o->asFunctionDef() != 0);
-	return reinterpret_cast<FunctionDef*>(o);
+	return reinterpret_cast<ScriptFunctionDef*>(o);
 }
 
 String* Value::getString() const {
@@ -584,19 +616,18 @@ void Value::mark(GCHeap* heap) const {
 	}
 }
 
-/* --- FunctionDef --- */
+/* --- ScriptFunctionDef --- */
 
-FunctionDef::FunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
-FunctionDef* FunctionDef::asFunctionDef() { return this; }
+ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
 
-bool FunctionDef::lookupLocalName(String* name, Int32& index) const {
+bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const {
 	LocalNameMap::const_iterator it = locals.find(name);
 	if (it == locals.end()) return false;
 	index = it->second;
 	return true;
 }
 
-void FunctionDef::garbageCollectAndMark(GCHeap* heap) {
+void ScriptFunctionDef::gcMark(GCHeap* heap) {
 	heap->mark(source);
 	// FIX : subs
 	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
@@ -605,22 +636,29 @@ void FunctionDef::garbageCollectAndMark(GCHeap* heap) {
 	for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
 		heap->mark(it->first);
 	}
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
-const Value* FunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
+const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 
 /* --- Function --- */
 
-Function::Function(FunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
 Function* Function::asFunction() { return this; }
-FunctionDef* Function::getDefinition() const { return definition; }
-Object*  Function::getClosure() const { return closure; }
 
-void Function::garbageCollectAndMark(GCHeap* heap) {
+/* --- ScriptFunction --- */
+
+ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
+ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
+Object* ScriptFunction::getClosure() const { return closure; }
+
+void ScriptFunction::call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
+	vm->enterCall(this, argc, argv, thisValue);
+}
+
+void ScriptFunction::gcMark(GCHeap* heap) {
 	heap->mark(definition);
 	heap->mark(closure);
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
 #if 0
@@ -628,28 +666,28 @@ void Function::garbageCollectAndMark(GCHeap* heap) {
 
 ArgumentsObject(Frame* frame) : frame(frame) { }
 
-bool ArgumentsObject::getProperty(String* name, Value& v) {
+bool ArgumentsObject::getProperty(const String* name, Value& v) {
 	if (name->s == "length") return 
 }
 
-void ArgumentsObject::garbageCollectAndMark(GCHeap* heap) {
+void ArgumentsObject::gcMark(GCHeap* heap) {
 	heap->mark(frame);
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 #endif
 
 /* --- Frame --- */
 
-Frame::Frame(Function* function) : functionDef(function->getDefinition()), closure(function->getClosure())
-		, locals(std::max(function->definition->localsCount, 1)) {
+Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), closure(function->getClosure())
+		, locals(std::max(functionDef->localsCount, 1)) {
 }
 
-FunctionDef* Frame::getFunctionDef() { return functionDef; }
+ScriptFunctionDef* Frame::getFunctionDef() { return functionDef; }
 Value* Frame::getLocalsPointer() { return &locals[0]; }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a closure above maybe?
 
-bool Frame::getProperty(String* name, Value& v) {
+bool Frame::getProperty(const String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -660,7 +698,7 @@ bool Frame::getProperty(String* name, Value& v) {
 	}
 }
 
-bool Frame::setProperty(String* name, const Value& v) {
+bool Frame::setProperty(const String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -671,26 +709,26 @@ bool Frame::setProperty(String* name, const Value& v) {
 	}
 }
 
-void Frame::garbageCollectAndMark(GCHeap* heap) {
+void Frame::gcMark(GCHeap* heap) {
 	heap->mark(functionDef);
 	heap->mark(closure);
 	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
 /* --- VM --- */
 
 VM::VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-		, cstackPointer(cstackEnd - 1), vstackPointer(vstackEnd) {
+		, cstackPointer(cstackEnd), vstackPointer(vstackEnd) {
 }
 
-void VM::garbageCollectAndMark(GCHeap* heap) {
+void VM::gcMark(GCHeap* heap) {
 	if (cstackPointer == cstackEnd) return;
 	for (Value* vsp = vstackPointer; vsp != vstackEnd; ++vsp) vsp->mark(heap);
 	for (Context* csp = cstackPointer; csp != cstackEnd; ++csp) heap->mark(csp->frame);
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
 void VM::push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
@@ -700,6 +738,19 @@ Int32 VM::readInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>
 void VM::error() {
 	throw std::runtime_error("error"); // FIX
 }
+
+void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
+	ScriptFunctionDef* def = func->getDefinition();
+	Frame* frame = gcHeap()->manage(new Frame(func));
+	--cstackPointer;
+	cstackPointer->frame = frame;
+	cstackPointer->thisValue = thisValue;
+	cstackPointer->instructionPointer = &def->code[0];
+	Value* lp = frame->getLocalsPointer();
+	for (Int32 i = std::min(argc, def->argumentsCount) - 1; i >= 0; --i) lp[i] = argv[i];
+}
+
+void VM::returnFromNative(const Value& v) { push(vstackPointer, v); }
 
 bool VM::run(Int32 count) {
 	Value* vsp = vstackPointer;
@@ -782,27 +833,22 @@ bool VM::run(Int32 count) {
 			}
 			case CALL_METHOD_OP: { // FIX : share...
 				Int32 n = readInt32(ip);
-
 				Object* thisObject = vsp[n + 1].toObject(h);
 				if (thisObject == 0) error();
 				Value v;
 				thisObject->getProperty(vsp[n].toString(h), v);
-
 				Object* o = v.toObject(h);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				frame = h->manage(new Frame(f));
 				cstackPointer->instructionPointer = ip;
-				--cstackPointer;
-				cstackPointer->frame = frame;
-				cstackPointer->thisValue = Value(thisObject);
-				FunctionDef* def = frame->getFunctionDef();
-				ip = &def->code[0];
-				cp = def->getConstantsPointer();
+				vstackPointer = vsp + n + 2;
+				f->call(this, n, vsp, Value(thisObject));
+				vsp = vstackPointer;
+				ip = cstackPointer->instructionPointer;
+				frame = cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
 				lp = frame->getLocalsPointer();
-				for (Int32 i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
-				pop(vsp, n + 2);
 				break;
 			}
 			case CALL_GLOBAL_OP: {
@@ -811,23 +857,20 @@ bool VM::run(Int32 count) {
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				frame = h->manage(new Frame(f));
 				cstackPointer->instructionPointer = ip;
-				--cstackPointer;
-				cstackPointer->frame = frame;
-				cstackPointer->thisValue = Value(); // FIX
-				FunctionDef* def = frame->getFunctionDef();
-				ip = &def->code[0];
-				cp = def->getConstantsPointer();
+				vstackPointer = vsp + n + 1;
+				f->call(this, n, vsp, Value());
+				vsp = vstackPointer;
+				ip = cstackPointer->instructionPointer;
+				frame = cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
 				lp = frame->getLocalsPointer();
-				for (Int32 i = std::min(n, def->argumentsCount) - 1; i >= 0; --i) lp[i] = vsp[i];
-				pop(vsp, n + 1);
 				break;
 			}
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value()); break;
 			case GEN_FUNC_OP: {
-				push(vsp, Value(h->manage(new Function(cp[readInt32(ip)].getFunctionDef(), frame))));
+				push(vsp, Value(h->manage(new ScriptFunction(cp[readInt32(ip)].getFunctionDef(), frame))));
 				break;
 			}
 		}
@@ -948,7 +991,7 @@ const OperatorInfo POST_OPS[] = {
 
 enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, RETURN_STATEMENT };
 /* Built with QuickHashMaker.pika */
-static int findStatementToken(int n /* string length */, const char* s /* zero-terminated string */) {
+static int findStatementToken(int n /* string length */, const Char* s) {
 	static const char* STRINGS[5] = {
 		"var", "if", "while", "do", "return"
 	};
@@ -968,14 +1011,14 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(FunctionDef* function) : function(function) { }
+Compiler::Compiler(ScriptFunctionDef* function) : function(function) { }
 
-void Compiler::garbageCollectAndMark(GCHeap* heap) {
+void Compiler::gcMark(GCHeap* heap) {
 	heap->mark(function);
 	for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
 		it->first.mark(heap);
 	}
-	super::garbageCollectAndMark(heap);
+	super::gcMark(heap);
 }
 
 bool Compiler::isComment(const Char* p, const Char* e) {
@@ -1048,7 +1091,7 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
-bool Compiler::eatToken(const Char*& p, const Char* e, const Char* t) {
+bool Compiler::eatToken(const Char*& p, const Char* e, const char* t) {
 	assert(*t != 0);
 	const Char* q = p;
 	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
@@ -1248,7 +1291,7 @@ void Compiler::parseIdentifier(const Char*& p, const Char* e) {
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 /* Built with QuickHashMaker.pika */
-static int findLiteralToken(int n /* string length */, const char* s /* zero-terminated string */) {
+static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
 	static const char* STRINGS[5] = {
 		"null", "false", "true", "function", "this"
 	};
@@ -1260,7 +1303,7 @@ static int findLiteralToken(int n /* string length */, const char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::expectToken(const Char*& p, const Char* e, const Char* token) {
+void Compiler::expectToken(const Char*& p, const Char* e, const char* token) {
 	if (!eatToken(p, e, token)) throw std::runtime_error(std::string("Expected '") + token + "'");
 }
 
@@ -1283,7 +1326,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 					break;
 				}
 				case FUNCTION_LITERAL: {
-					FunctionDef* func = gcHeap()->manage(new FunctionDef());
+					ScriptFunctionDef* func = gcHeap()->manage(new ScriptFunctionDef());
 					eatWhite(p, e);
 					// FIX : the optional function identifier
 					expectToken(p, e, "(");
@@ -1527,12 +1570,23 @@ disassemble(gcHeap(), function->code, function->constants);
 
 #include <fstream>
 
+	class PrintFunction : public NativeFunction {
+		public:		typedef NativeFunction super;
+		public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
+						String* s = (argc >= 1 ? argv[0].toString(gcHeap()) : &EMPTY_STRING);
+						std::wcout << s->toStdString().c_str() << std::endl;
+						vm->returnFromNative();
+					}
+	};
+
 int main(int argc, const char* argv[]) {
 	static const String LF_STRING("\n");
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
-	FunctionDef* functionDef = heap->manage(new FunctionDef());
+	static String PRINT_STRING("print");
+	globals->setProperty(&PRINT_STRING, Value(heap->manage(new PrintFunction()))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
+	ScriptFunctionDef* functionDef = heap->manage(new ScriptFunctionDef());
 	Compiler* compiler = heap->manage(new Compiler(functionDef));
 	String* source = &EMPTY_STRING;
 	std::auto_ptr<std::ifstream> inputFileStream;
@@ -1568,14 +1622,10 @@ int main(int argc, const char* argv[]) {
 				std::cout << "Constants: " << functionDef->constants.size() << std::endl;
 				std::cout << "Locals: " << functionDef->localsCount << std::endl;
 				
-				Function* function = heap->manage(new Function(functionDef, globals));
-				Frame* frame = heap->manage(new Frame(function));
-
 				Value vstack[1024];
 				Context cstack[1024];
-				cstack[1023].instructionPointer = functionDef->code.data();
-				cstack[1023].frame = frame;
 				VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
+				vm->enterCall(heap->manage(new ScriptFunction(functionDef, globals)), 0, 0, Value(globals));
 				bool done = false;
 				
 				clock_t start = ::clock();
@@ -1600,7 +1650,7 @@ int main(int argc, const char* argv[]) {
 					
 					if (done) {
 						std::cout << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
-						std::wcout << L"=" << (v.toString(heap))->toStdString() << std::endl;
+						std::wcout << L"=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
 						std::cout << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;

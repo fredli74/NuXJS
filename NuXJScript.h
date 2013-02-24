@@ -4,7 +4,7 @@
 #include "assert.h"
 #include <string>
 
-typedef char Char;
+typedef unsigned short Char;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
@@ -53,26 +53,25 @@ class GCItem;
 class GCHeap {
 	public:		static GCHeap* markAndSweep(GCHeap* original);
 	public:		template<class T> T* manage(T* object) { add(object); return object; }
-	public:		void mark(GCItem* object);
+	public:		void mark(const GCItem* object);
 	public:		size_t sweep();
 	public:		size_t size() const;
-	protected:	void add(GCItem* object);
-	protected:	std::vector<GCItem*> objects;
+	protected:	void add(const GCItem* object);
+	protected:	std::vector<const GCItem*> objects;
 };
 
 class GCItem {
 	friend class GCHeap;
 	public:		GCItem() : _gcHeap(0) { }
 	public:		GCHeap* gcHeap() const { return _gcHeap; }
-	public:		virtual void garbageCollectAndMark(GCHeap* heap) { }
+	public:		virtual void gcMark(GCHeap* heap) { }
 	public:		virtual ~GCItem() { }
-	protected:	GCHeap* _gcHeap;
+	protected:	mutable GCHeap* _gcHeap;
 };
 
 class Object;
 class String;
-class FunctionDef;
-class Function;
+class ScriptFunctionDef;
 
 class Value {
 	public:		enum Type {
@@ -94,7 +93,7 @@ class Value {
 	
 	public:		bool isDeleted() const;
 	public:		String* getString() const;
-	public:		FunctionDef* getFunctionDef() const;
+	public:		ScriptFunctionDef* getFunctionDef() const;
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
@@ -119,12 +118,12 @@ class Value {
 				};
 };
 
+class Function;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
-	public:		virtual FunctionDef* asFunctionDef() { return 0; }
-	public:		virtual bool getProperty(String* name, Value& v) { return false; }
-	public:		virtual bool setProperty(String* name, const Value& v) { return false; }
+	public:		virtual bool getProperty(const String* name, Value& v) { return false; }
+	public:		virtual bool setProperty(const String* name, const Value& v) { return false; }
 };
 
 class Table {
@@ -134,18 +133,18 @@ class Table {
 	public:		struct Bucket {
 					Bucket();
 					HashType hash;
-					String* key;
+					const String* key;
 					Value value;
 				};
 	public:		Table(UInt32 n = TABLE_BUILT_IN_N);
 	public:		const Bucket* getFirst() const;
 	public:		const Bucket* getNext(const Bucket* b) const;
-	public:		const Bucket* lookup(String* key);
-	public:		void assign(String* key, const Value& value);
-	public:		void erase(String* key);
+	public:		const Bucket* lookup(const String* key);
+	public:		void assign(const String* key, const Value& value);
+	public:		void erase(const String* key);
 	public:		void mark(GCHeap* heap);
-	protected:	void update(String* key, const Value& value);
-	protected:	Bucket* find(String* key, HashType hash) const;
+	protected:	void update(const String* key, const Value& value);
+	protected:	Bucket* find(const String* key, HashType hash) const;
 	protected:	UInt32 rebuild(UInt32 newN);
 	protected:	UInt32 n; ///< Size of member table is two to the power of n.
 	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
@@ -156,7 +155,7 @@ class String : public Object {
 	public:		typedef Object super;
 	public:		static String* newHashedString(GCHeap* heap, const Char* b, const Char* e);
 	public:		String();
-	public:		String(const Char* sz);
+	public:		String(const char* sz);
 	public:		String(const Char* b, const Char* e);
 	public:		String(const String* l, const String* r);
 	public:		Table::HashType calcHash() const;
@@ -165,26 +164,25 @@ class String : public Object {
 	public:		size_t getLength() const;
 	public:		const Char* accessChars() const;
 	public:		std::wstring toStdString() const;
-	public:		virtual bool getProperty(String* name, Value& v);
-	public:		virtual bool setProperty(String* name, const Value& v);
+	public:		virtual bool getProperty(const String* name, Value& v);
+	public:		virtual bool setProperty(const String* name, const Value& v);
 	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
 
 struct StringObjectCompare {
-	bool operator() (String* a, String* b) const {
+	bool operator() (const String* a, const String* b) const {
 		return (a != b && a->isLessThan(b));
 	}
 };
 
-typedef std::map<String*, Int32, StringObjectCompare> LocalNameMap;
+typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap;
 
-class FunctionDef : public Object {
+class ScriptFunctionDef : public Object {
 	public:		typedef Object super;
-	public:		FunctionDef();
-	public:		virtual FunctionDef* asFunctionDef();
-	public:		bool lookupLocalName(String* name, Int32& index) const;
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		ScriptFunctionDef();
+	public:		virtual void gcMark(GCHeap* heap);
+	public:		bool lookupLocalName(const String* name, Int32& index) const;
 	public:		const Value* getConstantsPointer() const;
 	public:		String* source;
 	public:		std::vector<Byte> code;
@@ -196,21 +194,32 @@ class FunctionDef : public Object {
 
 class UserObject : public Object {
 	public:		typedef Object super;
-	public:		virtual bool getProperty(String* name, Value& v);
-	public:		virtual bool setProperty(String* name, const Value& v);
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		virtual void gcMark(GCHeap* heap);
+	public:		virtual bool getProperty(const String* name, Value& v);
+	public:		virtual bool setProperty(const String* name, const Value& v);
 	protected:	Table properties;
 };
 
+class VM;
 class Function : public UserObject {
 	public:		typedef UserObject super;
-	friend class Frame;
-	public:		Function(FunctionDef* definition, Object* closure);
 	public:		virtual Function* asFunction();
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
-	public:		FunctionDef* getDefinition() const;
-	public:		Object*  getClosure() const;
-	protected:	FunctionDef* const definition;
+	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+};
+
+class NativeFunction : public Function {
+	public:		typedef Function super;
+	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+};
+
+class ScriptFunction : public Function {
+	public:		typedef Function super;
+	public:		ScriptFunction(ScriptFunctionDef* definition, Object* closure);
+	public:		virtual void gcMark(GCHeap* heap);
+	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
+	public:		ScriptFunctionDef* getDefinition() const;
+	public:		Object* getClosure() const;
+	protected:	ScriptFunctionDef* const definition;
 	protected:	Object* const closure;
 };
 
@@ -218,21 +227,21 @@ class Function : public UserObject {
 class ArgumentsObject : public UserObject {
 	public:		typedef UserObject super;
 	public:		ArgumentsObject(Frame* frame);
+	public:		virtual void gcMark(GCHeap* heap);
 	public:		virtual bool getProperty(String* name, Value& v);
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	protected:	Frame* frame;
 };
 #endif
 
 class Frame : public Object {
 	public:		typedef Object super;
-	public:		Frame(Function* function);
-	public:		virtual bool getProperty(String* name, Value& v);
-	public:		virtual bool setProperty(String* name, const Value& v);
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
-	public:		FunctionDef* getFunctionDef();
+	public:		Frame(ScriptFunction* function);
+	public:		virtual void gcMark(GCHeap* heap);
+	public:		virtual bool getProperty(const String* name, Value& v);
+	public:		virtual bool setProperty(const String* name, const Value& v);
+	public:		ScriptFunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
-	protected:	FunctionDef* const functionDef;
+	protected:	ScriptFunctionDef* const functionDef;
 	protected:	Object* const closure;
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 };
@@ -240,7 +249,7 @@ class Frame : public Object {
 struct Context {
 	const Byte* instructionPointer;
 	Frame* frame;
-	Value thisValue;
+	Value thisValue; // FIX : pointer instead?
 };
 
 class VM : public GCItem {
@@ -271,7 +280,9 @@ class VM : public GCItem {
 					, GEN_FUNC_OP									// immediate: const index, stack: -> function
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		virtual void gcMark(GCHeap* heap);
+	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value());
+	public:		void returnFromNative(const Value& v = Value());
 	public:		bool run(Int32 count);
 	protected:	void push(Value*& vsp, const Value& v);
 	protected:	void pop(Value*& vsp, int count);
@@ -295,8 +306,8 @@ class OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
 	public:		struct XValue;
-	public:		Compiler(FunctionDef* function);
-	public:		virtual void garbageCollectAndMark(GCHeap* heap);
+	public:		Compiler(ScriptFunctionDef* function);
+	public:		virtual void gcMark(GCHeap* heap);
 	public:		bool isComment(const Char* p, const Char* e);
 	public:		void eatComment(const Char*& p, const Char* e);
 	public:		void eatWhite(const Char*& p, const Char* e);
@@ -312,14 +323,14 @@ class Compiler : public GCItem {
 	public:		void parseStatement(const Char*& p, const Char* e);
 	public:		void parseStatementList(const Char*& p, const Char* e);
 	public:		void finish();
-	protected:	bool eatToken(const Char*& p, const Char* e, const Char* t);
-	protected:	void expectToken(const Char*& p, const Char* e, const Char* t);
+	protected:	bool eatToken(const Char*& p, const Char* e, const char* t); // FIX : not all of these
+	protected:	void expectToken(const Char*& p, const Char* e, const char* t);
 	protected:	void eatToken(const Char*& p, const Char* e);
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(const Char*& p, const Char* e);
-	protected:	FunctionDef* function;
+	protected:	ScriptFunctionDef* function;
 	protected:	std::map<Value, Int32> definedConstants;
 };
 
