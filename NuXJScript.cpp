@@ -13,18 +13,18 @@ static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 
 // FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
 
-static StringIt parseHex(StringIt p, const StringIt& e, UInt32& i) {
+static StringIt parseHex(StringIt p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
 	return p;
 }
 
-static StringIt parseUnsignedInt(StringIt p, const StringIt& e, UInt32& i) {
+static StringIt parseUnsignedInt(StringIt p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && *p >= '0' && *p <= '9'; ++p) i = i * 10 + (*p - '0');
 	return p;
 }
 
-static StringIt parseInt(StringIt p, const StringIt& e, Int32& i) {
+static StringIt parseInt(StringIt p, const Char* e, Int32& i) {
 	bool negative = (e - p >= 2 && ((*p == '+' || *p == '-') && p[1] >= '0' && p[1] <= '9') ? (*p++ == '-') : false);
 	UInt32 ui;
 	p = parseUnsignedInt(p, e, ui);
@@ -32,7 +32,7 @@ static StringIt parseInt(StringIt p, const StringIt& e, Int32& i) {
 	return p;
 }
 
-static StringIt parseDouble(StringIt p, const StringIt& e, double& v) {
+static StringIt parseDouble(StringIt p, const Char* e, double& v) {
 	assert(p <= e);
 	double d = 0;
 	StringIt q = p;
@@ -127,7 +127,7 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 
 const int ESCAPE_CODE_COUNT = 10;
 
-static size_t unescapedMaxLength(StringIt p, const StringIt& e) {
+static size_t unescapedMaxLength(StringIt p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	Char endChar = *p;
 	size_t l = 0;
@@ -138,7 +138,7 @@ static size_t unescapedMaxLength(StringIt p, const StringIt& e) {
 	return l;
 }
 	
-static Char* unescape(Char* buffer, StringIt& p, const StringIt& e) {	
+static Char* unescape(Char* buffer, const Char*& p, const Char* e) {	
 	assert(p <= e && (*p == '"' || *p == '\''));
 	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
 	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
@@ -163,38 +163,38 @@ static Char* unescape(Char* buffer, StringIt& p, const StringIt& e) {
 	return std::copy(b, p++, d);
 }
 
-/* --- StringObject --- */
+/* --- String --- */
 
-StringObject::StringObject(const Char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
-StringObject::StringObject(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
+String::String(const Char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
+String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
 
-StringObject::StringObject(const StringObject* l, const StringObject* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
+String::String(const String* l, const String* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
 	Char* e = std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
 	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
 }
 
-bool StringObject::setProperty(StringObject* name, const Value& v) { return false; }
+bool String::setProperty(String* name, const Value& v) { return false; }
 
-StringObject* StringObject::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
-	StringObject* o = heap->manage(new StringObject(b, e));
+String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
+	String* o = heap->manage(new String(b, e));
 	o->calcHash();
 	return o;
 }
 
-bool StringObject::getProperty(StringObject* name, Value& v) {
+bool String::getProperty(String* name, Value& v) {
 	UInt32 i;
 	StringIt p = name->chars.data();
 	StringIt e = p + name->chars.size();
 	StringIt q = parseUnsignedInt(p, e, i);
 	if (q == e && i < chars.size()) {
-		v = Value(gcHeap()->manage(new StringObject(chars.data() + i, chars.data() + i + 1)));
+		v = Value(gcHeap()->manage(new String(chars.data() + i, chars.data() + i + 1)));
 		return true;
 	}
 	v = Value();
 	return false;
 }
 
-Table::HashType StringObject::calcHash() const {
+Table::HashType String::calcHash() const {
 	if (hash == 0) {
 		size_t l = chars.size();
 		UInt32 x = 2166136261U;
@@ -207,7 +207,7 @@ Table::HashType StringObject::calcHash() const {
 	return hash;
 }
 
-bool StringObject::equals(const StringObject* o) const {
+bool String::equals(const String* o) const {
 	if (this == o) return true;
 	if (hash != o->hash && hash != 0 && o->hash != 0) return false;
 	size_t l = chars.size();
@@ -216,16 +216,16 @@ bool StringObject::equals(const StringObject* o) const {
 	return true;
 }
 
-bool StringObject::isLessThan(const StringObject* o) const {
+bool String::isLessThan(const String* o) const {
 	if (this == o) return false;
 	size_t l = std::min(chars.size(), o->chars.size());
 	for (int i = 0; i < l; ++i) if (chars[i] != o->chars[i]) return (chars[i] < o->chars[i]);
 	return chars.size() < o->chars.size();
 }
 
-size_t StringObject::getLength() const { return chars.size(); }
-const Char* StringObject::accessChars() const { return chars.data(); }
-std::wstring StringObject::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
+size_t String::getLength() const { return chars.size(); }
+const Char* String::accessChars() const { return chars.data(); }
+std::wstring String::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
 
 
 /* --- GCHeap --- */
@@ -284,13 +284,13 @@ const Table::Bucket* Table::getNext(const Bucket* b) const {
 	return (b == e ? 0 : b);
 }
 
-const Table::Bucket* Table::lookup(StringObject* key) {
+const Table::Bucket* Table::lookup(String* key) {
 	const Bucket* b = find(key, key->calcHash());
 	return (b->key != 0 ? b : 0);
 }
 
-void Table::assign(StringObject* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
-void Table::erase(StringObject* key) { update(key, Value(Value::DELETED_TYPE)); }
+void Table::assign(String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
+void Table::erase(String* key) { update(key, Value(Value::DELETED_TYPE)); }
 
 void Table::mark(GCHeap* heap) {
 	UInt32 rebuildLoadCount = 0;
@@ -305,7 +305,7 @@ void Table::mark(GCHeap* heap) {
 	}
 }
 
-void Table::update(StringObject* key, const Value& value) {
+void Table::update(String* key, const Value& value) {
 	HashType hash = key->calcHash();
 	Bucket* b = find(key, hash);
 	if (b->key == 0) {
@@ -322,7 +322,7 @@ void Table::update(StringObject* key, const Value& value) {
 	b->value = value;
 }
 
-Table::Bucket* Table::find(StringObject* key, HashType hash) const {
+Table::Bucket* Table::find(String* key, HashType hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
 	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->equals(key))) i = (i + 1) & mask;
@@ -350,12 +350,12 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- UserObject --- */
 
-bool UserObject::setProperty(StringObject* name, const Value& v) {
+bool UserObject::setProperty(String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
 }
 
-bool UserObject::getProperty(StringObject* name, Value& v) {
+bool UserObject::getProperty(String* name, Value& v) {
 	const Table::Bucket* b = properties.lookup(name);
 	if (b != 0) {
 		v = b->value;
@@ -370,21 +370,21 @@ void UserObject::garbageCollectAndMark(GCHeap* heap) {
 	super::garbageCollectAndMark(heap);
 }
 
-StringObject EMPTY_STRING("");
-StringObject UNDEFINED_STRING("undefined");
-StringObject NULL_STRING("null");
-StringObject FALSE_STRING("false");
-StringObject TRUE_STRING("true");
-StringObject NAN_STRING("NaN");
-StringObject INFINITY_STRING("Infinity");
-StringObject MINUS_INFINITY_STRING("-Infinity");
-StringObject ZERO_STRING("0");
+String EMPTY_STRING("");
+String UNDEFINED_STRING("undefined");
+String NULL_STRING("null");
+String FALSE_STRING("false");
+String TRUE_STRING("true");
+String NAN_STRING("NaN");
+String INFINITY_STRING("Infinity");
+String MINUS_INFINITY_STRING("-Infinity");
+String ZERO_STRING("0");
 
 Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
-Value::Value(StringObject* s) : type(STRING_TYPE), s(s) { }
+Value::Value(String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::isDeleted() const { return type == DELETED_TYPE; }
@@ -395,7 +395,7 @@ FunctionDef* Value::getFunctionDef() const {
 	return reinterpret_cast<FunctionDef*>(o);
 }
 
-StringObject* Value::getString() const {
+String* Value::getString() const {
 	assert(type == STRING_TYPE);
 	return s;
 }
@@ -431,7 +431,7 @@ double Value::toDouble() const {
 	}
 }
 
-StringObject* Value::toString(GCHeap* heap) const {
+String* Value::toString(GCHeap* heap) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
@@ -440,16 +440,16 @@ StringObject* Value::toString(GCHeap* heap) const {
 		case NUMBER_TYPE: {
 			Char buffer[32];
 			int i = static_cast<int>(d);
-			if (i == d) return heap->manage(new StringObject(intToString(buffer, i), buffer + 32));
+			if (i == d) return heap->manage(new String(intToString(buffer, i), buffer + 32));
 			if (std::isnan(d)) return &NAN_STRING;
 			double x = fabs(d);
 			if (x <= EPSILON) return &ZERO_STRING;
 			if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
 			std::pair<Char*, Char*> r = doubleToString(buffer, d);
-			return heap->manage(new StringObject(r.first, r.second));
+			return heap->manage(new String(r.first, r.second));
 		}
 		case STRING_TYPE: return s;
-case OBJECT_TYPE: return heap->manage(new StringObject("<object>"));
+case OBJECT_TYPE: return heap->manage(new String("<object>"));
 	}
 }
 
@@ -568,9 +568,11 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 
 Value Value::add(GCHeap* heap, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
-		if (y.s->getLength() == 0) return *this;
-		if (s->getLength() == 0) return y;
-		return Value(heap->manage(new StringObject(s, y.s)));
+		String* ls = toString(heap);
+		String* rs = y.toString(heap);
+		if (rs->getLength() == 0) return *this;
+		if (ls->getLength() == 0) return y;
+		return Value(heap->manage(new String(ls, rs)));
 	}
 	return Value(toDouble() + y.toDouble());
 }
@@ -588,7 +590,7 @@ void Value::mark(GCHeap* heap) const {
 FunctionDef::FunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
 FunctionDef* FunctionDef::asFunctionDef() { return this; }
 
-bool FunctionDef::lookupLocalName(StringObject* name, Int32& index) const {
+bool FunctionDef::lookupLocalName(String* name, Int32& index) const {
 	LocalNameMap::const_iterator it = locals.find(name);
 	if (it == locals.end()) return false;
 	index = it->second;
@@ -627,7 +629,7 @@ void Function::garbageCollectAndMark(GCHeap* heap) {
 
 ArgumentsObject(Frame* frame) : frame(frame) { }
 
-bool ArgumentsObject::getProperty(StringObject* name, Value& v) {
+bool ArgumentsObject::getProperty(String* name, Value& v) {
 	if (name->s == "length") return 
 }
 
@@ -648,7 +650,7 @@ Value* Frame::getLocalsPointer() { return &locals[0]; }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a closure above maybe?
 
-bool Frame::getProperty(StringObject* name, Value& v) {
+bool Frame::getProperty(String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -659,7 +661,7 @@ bool Frame::getProperty(StringObject* name, Value& v) {
 	}
 }
 
-bool Frame::setProperty(StringObject* name, const Value& v) {
+bool Frame::setProperty(String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -977,11 +979,11 @@ void Compiler::garbageCollectAndMark(GCHeap* heap) {
 	super::garbageCollectAndMark(heap);
 }
 
-bool Compiler::isComment(const StringIt& p, const StringIt& e) {
+bool Compiler::isComment(const Char* p, const Char* e) {
 	return (p != e && p + 1 != e && *p == '/' && (p[1] == '/' || p[1] == '*'));
 }
 
-void Compiler::eatComment(StringIt& p, const StringIt& e) {
+void Compiler::eatComment(const Char*& p, const Char* e) {
 	assert(isComment(p, e));
 	if (p[1] == '/') {
 		static const Char END_CHARS[] = { '\r', '\n' };
@@ -994,7 +996,7 @@ void Compiler::eatComment(StringIt& p, const StringIt& e) {
 	}
 }
 
-void Compiler::eatWhite(StringIt& p, const StringIt& e) {
+void Compiler::eatWhite(const Char*& p, const Char* e) {
 	while (p != e) {
 		switch (*p) {
 			case ' ': case '\t': ++p; break;
@@ -1035,7 +1037,7 @@ void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
 	}
 }
 
-double Compiler::parseNumber(StringIt& p, const StringIt& e) {
+double Compiler::parseNumber(const Char*& p, const Char* e) {
 	double v;
 	StringIt q = parseDouble(p, e, v);
 	if (q == p) throw std::runtime_error("Invalid number");
@@ -1047,7 +1049,7 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
-bool Compiler::eatToken(StringIt& p, const StringIt& e, const Char* t) {
+bool Compiler::eatToken(const Char*& p, const Char* e, const Char* t) {
 	assert(*t != 0);
 	StringIt q = p;
 	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
@@ -1058,7 +1060,7 @@ bool Compiler::eatToken(StringIt& p, const StringIt& e, const Char* t) {
 	return false;
 }
 
-void Compiler::eatToken(StringIt& p, const StringIt& e) {
+void Compiler::eatToken(const Char*& p, const Char* e) {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
@@ -1084,7 +1086,7 @@ void Compiler::makeAssignment(XValue& xv) {
 	xv = XValue(XValue::PUSHED);
 }
 
-Compiler::XValue Compiler::parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op) {
+Compiler::XValue Compiler::parseOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
 	XValue rv;
 	parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
 	if (op.closeToken != 0) {
@@ -1094,12 +1096,12 @@ Compiler::XValue Compiler::parseOperand(StringIt& p, const StringIt& e, const Op
 	return rv;
 }
 
-void Compiler::parseRValueOperand(StringIt& p, const StringIt& e, const OperatorInfo& op) {
+void Compiler::parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
 	XValue xv(parseOperand(p, e, op));
 	makeRValue(xv);
 }
 
-bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence
+bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
 	StringIt b = p;
 	int i = 0;
@@ -1155,7 +1157,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			StringIt b = p;
 			parseIdentifier(p, e);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(VM::CONST_OP, Value(StringObject::newHashedString(gcHeap(), b, p)));
+			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(gcHeap(), b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -1238,7 +1240,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 	return true;
 }
 
-void Compiler::parseIdentifier(StringIt& p, const StringIt& e) {
+void Compiler::parseIdentifier(const Char*& p, const Char* e) {
 	if (p != e && isLeadingIdentifierChar(*p)) {
 		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
 	}
@@ -1259,11 +1261,11 @@ static int findLiteralToken(int n /* string length */, const char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::expectToken(StringIt& p, const StringIt& e, const Char* token) {
+void Compiler::expectToken(const Char*& p, const Char* e, const Char* token) {
 	if (!eatToken(p, e, token)) throw std::runtime_error(std::string("Expected '") + token + "'");
 }
 
-bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
+bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence) {
 	eatWhite(p, e);
 	if (p == e) return false;
 	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
@@ -1295,7 +1297,7 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 						StringIt b = p;
 						parseIdentifier(p, e);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->locals[StringObject::newHashedString(gcHeap(), b, p)] = func->localsCount;
+						func->locals[String::newHashedString(gcHeap(), b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
 						eatWhite(p, e);
@@ -1339,14 +1341,14 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					v = XValue(XValue::CONSTANT, Value(StringObject::newHashedString(gcHeap(), buffer, unescapeEnd)));
+					v = XValue(XValue::CONSTANT, Value(String::newHashedString(gcHeap(), buffer, unescapeEnd)));
 					break;
 				}
 				default: {
 					StringIt b = p;
 					parseIdentifier(p, e);
 					if (p == b) return false; // fix : nicer way?
-					StringObject* identifier = StringObject::newHashedString(gcHeap(), b, p);
+					String* identifier = String::newHashedString(gcHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1370,11 +1372,11 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 	return true;
 }
 
-void Compiler::parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence) {
+void Compiler::parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence) {
 	if (!parseOptionalExpression(p, e, v, precedence)) throw std::runtime_error("Expected expression");
 }
 
-void Compiler::parseStatement(StringIt& p, const StringIt& e) {
+void Compiler::parseStatement(const Char*& p, const Char* e) {
 	eatWhite(p, e);	
 	if (eatToken(p, e, "{")) {
 		parseStatementList(p, e);
@@ -1403,7 +1405,7 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 					StringIt b = p; // FIX : sub
 					parseIdentifier(p, e);
 					if (p == b) throw std::runtime_error("Expected identifier");
-					StringObject* identifier = StringObject::newHashedString(gcHeap(), b, p);
+					String* identifier = String::newHashedString(gcHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1510,7 +1512,7 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 	p = q;
 }
 
-void Compiler::parseStatementList(StringIt& p, const StringIt& e) {
+void Compiler::parseStatementList(const Char*& p, const Char* e) {
 	StringIt b;
 	do {
 		b = p;
@@ -1527,13 +1529,13 @@ disassemble(gcHeap(), function->code, function->constants);
 #include <fstream>
 
 int main(int argc, const char* argv[]) {
-	static const StringObject LF_STRING("\n");
+	static const String LF_STRING("\n");
 	GCHeap* newHeap = 0;
 	GCHeap* heap = new GCHeap();
 	Object* globals = heap->manage(new UserObject());
 	FunctionDef* functionDef = heap->manage(new FunctionDef());
 	Compiler* compiler = heap->manage(new Compiler(functionDef));
-	StringObject* source = &EMPTY_STRING;
+	String* source = &EMPTY_STRING;
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
 	if (argc >= 2) {
@@ -1544,12 +1546,12 @@ int main(int argc, const char* argv[]) {
 		try {
 			functionDef->code.clear();
 			
-			String s;
+			std::string s;
 			std::getline(*inStream, s);
 			if (!s.empty()) {
-				StringObject line(s.c_str());
-				source = heap->manage(new StringObject(source, &line));
-				source = heap->manage(new StringObject(source, &LF_STRING));
+				String line(s.c_str());
+				source = heap->manage(new String(source, &line));
+				source = heap->manage(new String(source, &LF_STRING));
 			} else {
 				StringIt p = source->accessChars();
 				StringIt e = p + source->getLength();

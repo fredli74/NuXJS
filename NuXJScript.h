@@ -5,7 +5,6 @@
 #include <string>
 
 typedef char Char;
-typedef std::string String;
 typedef const Char* StringIt;
 typedef int Int32;
 typedef unsigned int UInt32;
@@ -72,7 +71,7 @@ class GCItem {
 };
 
 class Object;
-class StringObject;
+class String;
 class FunctionDef;
 class Function;
 
@@ -91,16 +90,16 @@ class Value {
 	public:		explicit Value(bool b);
 	public:		explicit Value(Int32 i);
 	public:		explicit Value(double d);
-	public:		explicit Value(StringObject* s);
+	public:		explicit Value(String* s);
 	public:		explicit Value(Object* o);
 	
 	public:		bool isDeleted() const;
-	public:		StringObject* getString() const;
+	public:		String* getString() const;
 	public:		FunctionDef* getFunctionDef() const;
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
-	public:		StringObject* toString(GCHeap* heap) const;
+	public:		String* toString(GCHeap* heap) const;
 	public:		Object* toObject(GCHeap* heap) const;
 	public:		bool operator==(const Value& y) const;
 	public:		bool operator<(const Value& y) const;
@@ -116,7 +115,7 @@ class Value {
 	protected:	union {
 					bool b;
 					double d;
-					StringObject* s;
+					String* s;
 					Object* o;
 				};
 };
@@ -125,8 +124,8 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
 	public:		virtual FunctionDef* asFunctionDef() { return 0; }
-	public:		virtual bool getProperty(StringObject* name, Value& v) { return false; }
-	public:		virtual bool setProperty(StringObject* name, const Value& v) { return false; }
+	public:		virtual bool getProperty(String* name, Value& v) { return false; }
+	public:		virtual bool setProperty(String* name, const Value& v) { return false; }
 };
 
 class Table {
@@ -136,59 +135,59 @@ class Table {
 	public:		struct Bucket {
 					Bucket();
 					HashType hash;
-					StringObject* key;
+					String* key;
 					Value value;
 				};
 	public:		Table(UInt32 n = TABLE_BUILT_IN_N);
 	public:		const Bucket* getFirst() const;
 	public:		const Bucket* getNext(const Bucket* b) const;
-	public:		const Bucket* lookup(StringObject* key);
-	public:		void assign(StringObject* key, const Value& value);
-	public:		void erase(StringObject* key);
+	public:		const Bucket* lookup(String* key);
+	public:		void assign(String* key, const Value& value);
+	public:		void erase(String* key);
 	public:		void mark(GCHeap* heap);
-	protected:	void update(StringObject* key, const Value& value);
-	protected:	Bucket* find(StringObject* key, HashType hash) const;
+	protected:	void update(String* key, const Value& value);
+	protected:	Bucket* find(String* key, HashType hash) const;
 	protected:	UInt32 rebuild(UInt32 newN);
 	protected:	UInt32 n; ///< Size of member table is two to the power of n.
 	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
 	protected:	UInt32 loadCount; ///< Count of buckets with defined keys.
 };
 
-class StringObject : public Object {
+class String : public Object {
 	public:		typedef Object super;
-	public:		static StringObject* newHashedString(GCHeap* heap, const Char* b, const Char* e);
-	public:		StringObject();
-	public:		StringObject(const Char* sz);
-	public:		StringObject(const Char* b, const Char* e);
-	public:		StringObject(const StringObject* l, const StringObject* r);
+	public:		static String* newHashedString(GCHeap* heap, const Char* b, const Char* e);
+	public:		String();
+	public:		String(const Char* sz);
+	public:		String(const Char* b, const Char* e);
+	public:		String(const String* l, const String* r);
 	public:		Table::HashType calcHash() const;
-	public:		bool equals(const StringObject* o) const;
-	public:		bool isLessThan(const StringObject* o) const;
+	public:		bool equals(const String* o) const;
+	public:		bool isLessThan(const String* o) const;
 	public:		size_t getLength() const;
 	public:		const Char* accessChars() const;
 	public:		std::wstring toStdString() const;
-	public:		virtual bool getProperty(StringObject* name, Value& v);
-	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual bool getProperty(String* name, Value& v);
+	public:		virtual bool setProperty(String* name, const Value& v);
 	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
 
 struct StringObjectCompare {
-	bool operator() (StringObject* a, StringObject* b) const {
+	bool operator() (String* a, String* b) const {
 		return (a != b && a->isLessThan(b));
 	}
 };
 
-typedef std::map<StringObject*, Int32, StringObjectCompare> LocalNameMap;
+typedef std::map<String*, Int32, StringObjectCompare> LocalNameMap;
 
 class FunctionDef : public Object {
 	public:		typedef Object super;
 	public:		FunctionDef();
 	public:		virtual FunctionDef* asFunctionDef();
-	public:		bool lookupLocalName(StringObject* name, Int32& index) const;
+	public:		bool lookupLocalName(String* name, Int32& index) const;
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	public:		const Value* getConstantsPointer() const;
-	public:		StringObject* source;
+	public:		String* source;
 	public:		std::vector<Byte> code;
 	public:		std::vector<Value> constants;
 	public:		Int32 argumentsCount;
@@ -198,8 +197,8 @@ class FunctionDef : public Object {
 
 class UserObject : public Object {
 	public:		typedef Object super;
-	public:		virtual bool getProperty(StringObject* name, Value& v);
-	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual bool getProperty(String* name, Value& v);
+	public:		virtual bool setProperty(String* name, const Value& v);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	protected:	Table properties;
 };
@@ -220,7 +219,7 @@ class Function : public UserObject {
 class ArgumentsObject : public UserObject {
 	public:		typedef UserObject super;
 	public:		ArgumentsObject(Frame* frame);
-	public:		virtual bool getProperty(StringObject* name, Value& v);
+	public:		virtual bool getProperty(String* name, Value& v);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	protected:	Frame* frame;
 };
@@ -229,8 +228,8 @@ class ArgumentsObject : public UserObject {
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(Function* function);
-	public:		virtual bool getProperty(StringObject* name, Value& v);
-	public:		virtual bool setProperty(StringObject* name, const Value& v);
+	public:		virtual bool getProperty(String* name, Value& v);
+	public:		virtual bool setProperty(String* name, const Value& v);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
 	public:		FunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
@@ -299,28 +298,28 @@ class Compiler : public GCItem {
 	public:		struct XValue;
 	public:		Compiler(FunctionDef* function);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
-	public:		bool isComment(const StringIt& p, const StringIt& e);
-	public:		void eatComment(StringIt& p, const StringIt& e);
-	public:		void eatWhite(StringIt& p, const StringIt& e);
+	public:		bool isComment(const Char* p, const Char* e);
+	public:		void eatComment(const Char*& p, const Char* e);
+	public:		void eatWhite(const Char*& p, const Char* e);
 	public:		void emit(VM::Op op);
 	public:		void emitWithInt32(VM::Op op, Int32 i);
 	public:		void emitWithConstant(VM::Op op, const Value& constant);
-	public:		double parseNumber(StringIt& p, const StringIt& e);
-	public:		XValue parseOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
-	public:		void parseRValueOperand(StringIt& p, const StringIt& e, const OperatorInfo& op);
-	public:		bool parseOperator(StringIt& p, const StringIt& e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	public:		void parseExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
-	public:		bool parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v, Precedence precedence = LOWEST_PREC);
-	public:		void parseStatement(StringIt& p, const StringIt& e);
-	public:		void parseStatementList(StringIt& p, const StringIt& e);
+	public:		double parseNumber(const Char*& p, const Char* e);
+	public:		XValue parseOperand(const Char*& p, const Char* e, const OperatorInfo& op);
+	public:		void parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op);
+	public:		bool parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
+	public:		void parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence = LOWEST_PREC);
+	public:		bool parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence = LOWEST_PREC);
+	public:		void parseStatement(const Char*& p, const Char* e);
+	public:		void parseStatementList(const Char*& p, const Char* e);
 	public:		void finish();
-	protected:	bool eatToken(StringIt& p, const StringIt& e, const Char* t);
-	protected:	void expectToken(StringIt& p, const StringIt& e, const Char* t);
-	protected:	void eatToken(StringIt& p, const StringIt& e);
+	protected:	bool eatToken(const Char*& p, const Char* e, const Char* t);
+	protected:	void expectToken(const Char*& p, const Char* e, const Char* t);
+	protected:	void eatToken(const Char*& p, const Char* e);
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier(StringIt& p, const StringIt& e);
+	protected:	void parseIdentifier(const Char*& p, const Char* e);
 	protected:	FunctionDef* function;
 	protected:	std::map<Value, Int32> definedConstants;
 };

@@ -312,7 +312,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>NuXJScript.h</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -320,17 +320,17 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>NuXJScript.h</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7CD47AE16DA8B0C00101EF2</string>
+										<string>F7CD47D416DA8C8500101EF2</string>
 										<key>history</key>
 										<array>
 											<string>F7CD468416DA6FC500101EF2</string>
 											<string>F7CD474F16DA87C100101EF2</string>
-											<string>F7CD475116DA87C100101EF2</string>
-											<string>F7CD479316DA89C500101EF2</string>
+											<string>F7CD47D216DA8C8500101EF2</string>
+											<string>F7CD47D316DA8C8500101EF2</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -628,7 +628,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
