@@ -14,6 +14,7 @@ typedef unsigned char Byte;
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 BUILT_IN_LOCALS_COUNT = 8;
 const size_t STRING_BUILT_IN_LENGTH = 16;
+const double EPSILON = 1.0e-300;
 
 // FIX : name
 template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
@@ -99,7 +100,6 @@ class Value {
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
-	public:		String toString() const;
 	public:		StringObject* toString(GCHeap* heap) const;
 	public:		Object* toObject(GCHeap* heap) const;
 	public:		bool operator==(const Value& y) const;
@@ -156,9 +156,9 @@ class Table {
 
 class StringObject : public Object {
 	public:		typedef Object super;
-	public:		static StringObject* newString(GCHeap* heap, const String& s);
-	public:		static StringObject* newHashedString(GCHeap* heap, const String& s);
-	public:		StringObject(const String& s);
+	public:		static StringObject* newHashedString(GCHeap* heap, const Char* b, const Char* e);
+	public:		StringObject(const Char* sz);
+	public:		StringObject(const Char* b, const Char* e);
 	public:		StringObject(const StringObject* l, const StringObject* r);
 	public:		Table::HashType calcHash() const;
 	public:		bool equals(const StringObject* o) const;

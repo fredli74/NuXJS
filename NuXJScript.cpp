@@ -58,38 +58,28 @@ static StringIt parseDouble(StringIt p, const StringIt& e, double& v) {
 	return q;
 }
 
-// Based on code from PikaScript
-static String intToString(int i, int radix = 10, int minLength = 1) {
-	assert(2 <= radix && radix <= 16);
-	assert(0 <= minLength && minLength <= sizeof (int) * 8);
-	Char buffer[sizeof (int) * 8 + 1], * p = buffer + sizeof (int) * 8 + 1, * e = p - minLength;
-	for (int x = i; p > e || x != 0; x /= radix) {
-		assert(p >= buffer + 2);
-		*--p = "fedcba9876543210123456789abcdef"[15 + x % radix];														// Mirrored hex string to handle negative x.
-	}
+// Returns pointer to beginning of string
+// End of string is always buffer + 32 (*not* zero-terminated by this routine)
+static Char* intToString(Char buffer[32], Int32 i) {
+	Char* p = buffer + 32;
+	*--p = "9876543210123456789"[9 + i % 10];																			// Mirrored string to handle negative x.
+	Int32 x = i;
+	while ((x /= 10) != 0) *--p = "9876543210123456789"[9 + x % 10];													// Mirrored string to handle negative x.
 	if (i < 0) *--p = '-';
-	return String(p, buffer + sizeof (i) * 8 + 1 - p);
+	assert(p >= buffer);
+	return p;
 }
 
 // Based on code from PikaScript
-static String doubleToString(double d, int precision = 15) {
+// Returns pair of pointers to beginning and end of string
+static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int precision = 15) {
 	assert(1 <= precision && precision <= 24);
 
-	const double EPSILON = 1.0e-300;
 	const double SMALL = 1.0e-6;
 	const double LARGE = 1.0e+21;
 
-	int i = static_cast<int>(d);
-	if (i == d) return intToString(i);
-
-	if (std::isnan(d)) return "NaN";
-	
 	double x = fabs(d);
-	if (x <= EPSILON) return "0";
-	else if (std::numeric_limits<double>::has_infinity && x == std::numeric_limits<double>::infinity())
-		return d < 0 ? "-Infinity" : "+Infinity";
 
-	Char buffer[32];
 	Char* bp = buffer + 2;
 	Char* dp = bp;
 	Char* pp = dp + 1;
@@ -100,18 +90,22 @@ static String doubleToString(double d, int precision = 15) {
 
 	if (pp >= ep || y <= SMALL || y >= LARGE) {																			// Exponential treatment of very small or large values.
 		double e = floor(log10(y) + 1.0e-10);
-		String exps(e >= 0 ? "e+" : "e");
-		exps += intToString(static_cast<int>(e));
 		int maxp = 15;																									// Limit precision because of rounding errors in log10 etc
 		for (double f = fabs(e); f >= 8; f /= 10) --maxp;
-		return (doubleToString(d * pow(0.1, e), std::min(maxp, precision)) += exps);
+		std::pair<Char*, Char*> r = doubleToString(buffer, d * pow(0.1, e), std::min(maxp, precision));
+		*r.second++ = 'e';
+		if (e >= 0) *r.second++ = '+';
+		bp = intToString(buffer, static_cast<Int32>(e));
+		assert(bp >= r.second);
+		r.second = std::copy(bp, buffer + 32, r.second);
+		return r;
 	}
 	for (; x < 1.0 && dp < buffer + 32; ++ep, x *= 10.0) {																// For values < 1, spit out leading 0's and increase precision.
 		*dp++ = '0';
 		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
 	}
 	for (; dp < ep; ) {																									// Exhaust all remaining digits of mantissa into buffer.
-		unsigned int ix = static_cast<unsigned int>(x);
+		UInt32 ix = static_cast<UInt32>(x);
 		*dp++ = ix + '0';
 		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
 		x = (x - ix) * 10.0;
@@ -126,7 +120,7 @@ static String doubleToString(double d, int precision = 15) {
 	if (ep > pp) while (ep[-1] == '0') --ep;
 	if (ep - 1 == pp) --ep;
 	if (d < 0) *--bp = '-';	
-	return String(bp, ep - bp);
+	return std::pair<Char*, Char*>(bp, ep);
 }
 
 const int ESCAPE_CODE_COUNT = 10;
@@ -159,7 +153,8 @@ static String unescape(StringIt& p, const StringIt& e) {
 
 /* --- StringObject --- */
 
-StringObject::StringObject(const String& s) : chars(s.size()), hash(0) { std::copy(s.begin(), s.end(), chars.data()); }
+StringObject::StringObject(const Char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
+StringObject::StringObject(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
 
 StringObject::StringObject(const StringObject* l, const StringObject* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
 	std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
@@ -168,12 +163,8 @@ StringObject::StringObject(const StringObject* l, const StringObject* r) : chars
 
 bool StringObject::setProperty(StringObject* name, const Value& v) { return false; }
 
-StringObject* StringObject::newString(GCHeap* heap, const String& s) {
-	return heap->manage(new StringObject(s));
-}
-
-StringObject* StringObject::newHashedString(GCHeap* heap, const String& s) {
-	StringObject* o = newString(heap, s);
+StringObject* StringObject::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
+	StringObject* o = heap->manage(new StringObject(b, e));
 	o->calcHash();
 	return o;
 }
@@ -184,7 +175,7 @@ bool StringObject::getProperty(StringObject* name, Value& v) {
 	StringIt e = p + name->chars.size();
 	StringIt q = parseUnsignedInt(p, e, i);
 	if (q == e && i < chars.size()) {
-		v = Value(newString(gcHeap(), String(1, chars[i])));
+		v = Value(gcHeap()->manage(new StringObject(chars.data() + i, chars.data() + i + 1)));
 		return true;
 	}
 	v = Value();
@@ -371,6 +362,10 @@ StringObject UNDEFINED_STRING("undefined");
 StringObject NULL_STRING("null");
 StringObject FALSE_STRING("false");
 StringObject TRUE_STRING("true");
+StringObject NAN_STRING("NaN");
+StringObject INFINITY_STRING("Infinity");
+StringObject MINUS_INFINITY_STRING("-Infinity");
+StringObject ZERO_STRING("0");
 
 Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
@@ -422,19 +417,6 @@ double Value::toDouble() const {
 		}
 	}
 }
-			
-			// FIX : drop
-			String Value::toString() const {
-				switch (type) {
-					default: assert(0);
-					case UNDEFINED_TYPE: return "undefined";
-					case NULL_TYPE: return "null";
-					case BOOLEAN_TYPE: return b ? "true" : "false";
-					case NUMBER_TYPE: return doubleToString(d);
-					case STRING_TYPE: { const Char* p = s->accessChars(); return String(p, p + s->getLength()); }
-case OBJECT_TYPE: return "<object>";
-				}
-			}
 
 StringObject* Value::toString(GCHeap* heap) const {
 	switch (type) {
@@ -442,9 +424,19 @@ StringObject* Value::toString(GCHeap* heap) const {
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
 		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
-		case NUMBER_TYPE: return StringObject::newString(heap, doubleToString(d));
+		case NUMBER_TYPE: {
+			Char buffer[32];
+			int i = static_cast<int>(d);
+			if (i == d) return heap->manage(new StringObject(intToString(buffer, i), buffer + 32));
+			if (std::isnan(d)) return &NAN_STRING;
+			double x = fabs(d);
+			if (x <= EPSILON) return &ZERO_STRING;
+			if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
+			std::pair<Char*, Char*> r = doubleToString(buffer, d);
+			return heap->manage(new StringObject(r.first, r.second));
+		}
 		case STRING_TYPE: return s;
-case OBJECT_TYPE: return StringObject::newString(heap, "<object>");
+case OBJECT_TYPE: return heap->manage(new StringObject("<object>"));
 	}
 }
 
@@ -838,7 +830,7 @@ static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<B
 	return i;
 }
 
-static void disassemble(const std::vector<Byte>& code, const std::vector<Value>& constants) {
+static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::vector<Value>& constants) {
 	const char* OP_STRINGS[] = {
 		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
 		, "ADD", "SUB", "MUL", "DIV", "MOD"
@@ -865,7 +857,7 @@ static void disassemble(const std::vector<Byte>& code, const std::vector<Value>&
 			case VM::CALL_GLOBAL_OP:
 			case VM::CALL_METHOD_OP: std::cout << " *" << getInt32(it, e); break;
 			case VM::CONST_OP:
-			case VM::GEN_FUNC_OP: std::cout << " #" << constants[getInt32(it, e)].toString(); break;
+			case VM::GEN_FUNC_OP: std::wcout << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case VM::READ_NAMED_OP:
 			case VM::WRITE_NAMED_OP: std::wcout << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 		}
@@ -1150,7 +1142,7 @@ bool Compiler::parseOperator(StringIt& p, const StringIt& e, XValue& v, Preceden
 			StringIt b = p;
 			parseIdentifier(p, e);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(VM::CONST_OP, Value(StringObject::newHashedString(gcHeap(), String(b, p))));
+			emitWithConstant(VM::CONST_OP, Value(StringObject::newHashedString(gcHeap(), b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -1290,7 +1282,7 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 						StringIt b = p;
 						parseIdentifier(p, e);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->locals[StringObject::newHashedString(gcHeap(), String(b, p))] = func->localsCount;
+						func->locals[StringObject::newHashedString(gcHeap(), b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
 						eatWhite(p, e);
@@ -1330,14 +1322,15 @@ bool Compiler::parseOptionalExpression(StringIt& p, const StringIt& e, XValue& v
 					break;
 				}
 				case '\'': case '"': {
-					v = XValue(XValue::CONSTANT, Value(StringObject::newHashedString(gcHeap(), unescape(p, e))));
+					String s(unescape(p, e));
+					v = XValue(XValue::CONSTANT, Value(StringObject::newHashedString(gcHeap(), s.data(), s.data() + s.size())));
 					break;
 				}
 				default: {
 					StringIt b = p;
 					parseIdentifier(p, e);
 					if (p == b) return false; // fix : nicer way?
-					StringObject* identifier = StringObject::newHashedString(gcHeap(), String(b, p));
+					StringObject* identifier = StringObject::newHashedString(gcHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1394,7 +1387,7 @@ void Compiler::parseStatement(StringIt& p, const StringIt& e) {
 					StringIt b = p; // FIX : sub
 					parseIdentifier(p, e);
 					if (p == b) throw std::runtime_error("Expected identifier");
-					StringObject* identifier = StringObject::newHashedString(gcHeap(), String(b, p));
+					StringObject* identifier = StringObject::newHashedString(gcHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1512,7 +1505,7 @@ void Compiler::parseStatementList(StringIt& p, const StringIt& e) {
 void Compiler::finish() {
 	emit(VM::VOID_OP);
 	emit(VM::RETURN_OP);
-disassemble(function->code, function->constants);
+disassemble(gcHeap(), function->code, function->constants);
 }
 
 #include <fstream>
