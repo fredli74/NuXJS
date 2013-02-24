@@ -11,6 +11,41 @@ typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
 
+// FIX : name
+template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
+	public:		QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
+	public:		QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
+
+	public:		void swap(QuickArray& other)
+				{
+					if (this != &other) {
+						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
+						std::swap(n, other.n);
+						T* x = p;
+						p = ((other.p == other.a) ? a : other.p);
+						other.p = ((x == a) ? other.a : x);
+					}
+				}
+				
+	public:		QuickArray& operator=(const QuickArray& copy)
+				{
+					if (this != &copy) {
+						QuickArray<T, BUILT_IN_COUNT> na(copy.n);
+						std::copy(copy.p, copy.p + copy.n, na.p);
+						swap(na);
+					}
+					return *this;
+				}
+				
+	public:		size_t size() const { return n; }
+	public:		T* data() const { return p; }
+	public:		operator T*() const { return p; }
+	public:		~QuickArray() { if (p != a) delete [] p; }
+	protected:	size_t n;
+	protected:	T* p;
+	protected:	T a[BUILT_IN_COUNT];
+};
+
 class GCItem;
 class GCHeap {
 	public:		static GCHeap* markAndSweep(GCHeap* original);
@@ -44,6 +79,7 @@ class Value {
 					, NUMBER_TYPE = 3
 					, STRING_TYPE = 4
 					, OBJECT_TYPE = 5
+					, DELETED_TYPE = -1
 				};
 	
 	public:		explicit Value(Type type = UNDEFINED_TYPE);
@@ -53,6 +89,7 @@ class Value {
 	public:		explicit Value(StringObject* s);
 	public:		explicit Value(Object* o);
 	
+	public:		bool isDeleted() const;
 	public:		StringObject* getString() const;
 	public:		FunctionDef* getFunctionDef() const;
 	public:		bool toBool() const;
@@ -91,11 +128,14 @@ class Object : public GCItem {
 class StringObject : public Object {
 	public:		typedef Object super;
 	public:		static StringObject* newString(GCHeap* heap, const String& s);
+	public:		static StringObject* newHashedString(GCHeap* heap, const String& s);
 	public:		StringObject(const String& s);
+	public:		size_t calcHash() const;
+	public:		bool equals(const StringObject* o) const;
 	public:		virtual bool getProperty(StringObject* name, Value& v);
 	public:		virtual bool setProperty(StringObject* name, const Value& v);
-	public:		virtual ~StringObject();
 	public:		String s;
+	protected:	mutable size_t hash;
 };
 
 struct StringObjectCompare {
@@ -121,13 +161,37 @@ class FunctionDef : public Object {
 	public:		LocalNameMap locals;
 };
 
+const size_t TABLE_BUILT_IN_N = 3;
+
+class Table {
+	protected:	static size_t calcMaxLoad(size_t bucketCount);
+	protected:	static size_t suggestN(size_t count); // FIX : keep?
+	public:		struct Bucket {
+					Bucket();
+					StringObject* key;
+					Value value;
+				};
+	public:		Table(size_t n = TABLE_BUILT_IN_N);
+	public:		const Bucket* getFirst() const;
+	public:		const Bucket* getNext(const Bucket* b) const;
+	public:		const Bucket* lookup(StringObject* key);
+	public:		void assign(StringObject* key, const Value& value);
+	public:		void erase(StringObject* key);
+	public:		void mark(GCHeap* heap);
+	protected:	void update(StringObject* key, const Value& value);
+	protected:	Bucket* find(StringObject* key) const;
+	protected:	size_t rebuild(int newN);
+	protected:	size_t n; ///< Size of member table is two to the power of n.
+	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
+	protected:	size_t loadCount; ///< Count of buckets with defined keys.
+};
+
 class UserObject : public Object {
 	public:		typedef Object super;
-	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> PropertyMap;
 	public:		virtual bool getProperty(StringObject* name, Value& v);
 	public:		virtual bool setProperty(StringObject* name, const Value& v);
 	public:		virtual void garbageCollectAndMark(GCHeap* heap);
-	protected:	PropertyMap properties;
+	protected:	Table properties;
 };
 
 class Function : public UserObject {
@@ -152,6 +216,8 @@ class ArgumentsObject : public UserObject {
 };
 #endif
 
+const int BUILT_IN_LOCALS_COUNT = 8;
+
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(Function* function);
@@ -163,7 +229,7 @@ class Frame : public Object {
 	protected:	typedef std::map<StringObject*, Value, StringObjectCompare> DynamicMap;
 	protected:	FunctionDef* const functionDef;
 	protected:	Object* const closure;
-	protected:	std::vector<Value> locals;
+	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 	protected:	std::auto_ptr<DynamicMap> dynamicLocals;
 };
 
