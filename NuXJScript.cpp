@@ -5,8 +5,11 @@
 // switch
 // break, continue etc (with labels!)
 // native calls (and returns)
+//	need easier API, shouldn't crash if missing returnFromNative etc
+//	no synchronized return to native code right now
 // exceptions (and catching both virtual and native)
 // proper string comparisons (< etc)
+// comma operator
 // void operator
 // typeof, instanceof, in operators
 // new operator
@@ -24,6 +27,9 @@
 // virtual machine should include gc etc
 // also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
 // take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+// assignable globals this in vm
+// function name() { } syntax
+// literal function names, e.g. myGlobalName = function myLocalName() { ... }
 
 #include "assert.h"
 #include <cmath>
@@ -904,21 +910,21 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 	std::vector<Byte>::const_iterator it = b;
 	std::vector<Byte>::const_iterator e = code.end();
 	while (it != e) {
-		std::cout << (it - b) << ':' << OP_STRINGS[*it];
+		std::cerr << (it - b) << ':' << OP_STRINGS[*it];
 		switch (*it++) {
 			case VM::JT_OP:
 			case VM::JF_OP:
-			case VM::JMP_OP: std::cout << " @" << ((it - b) + getInt32(it, e) + 4); break;
+			case VM::JMP_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + 4); break;
 			case VM::READ_INDEXED_OP:
-			case VM::WRITE_INDEXED_OP: std::cout << " $" << getInt32(it, e); break;
+			case VM::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
 			case VM::CALL_GLOBAL_OP:
-			case VM::CALL_METHOD_OP: std::cout << " *" << getInt32(it, e); break;
+			case VM::CALL_METHOD_OP: std::cerr << " *" << getInt32(it, e); break;
 			case VM::CONST_OP:
-			case VM::GEN_FUNC_OP: std::wcout << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
+			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case VM::READ_NAMED_OP:
-			case VM::WRITE_NAMED_OP: std::wcout << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			case VM::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 		}
-		std::cout << std::endl;
+		std::cerr << std::endl;
 	}
 }
 
@@ -1067,6 +1073,22 @@ void Compiler::emitWithInt32(VM::Op op, Int32 i) {
 	*reinterpret_cast<Int32*>(&code[code.size() - 4]) = i;
 }
 
+Int32 Compiler::emitForwardBranch(VM::Op op) {
+	std::vector<Byte>& code = function->code;
+	code.push_back(op);
+	Int32 point = code.size();
+	code.resize(code.size() + 4);
+	return point;
+}
+
+void Compiler::completeForwardBranch(Int32 point) {
+	std::vector<Byte>& code = function->code;
+	*reinterpret_cast<Int32*>(&code[point]) = code.size() - point - 4;
+}
+
+Int32 Compiler::markBackwardBranch() { return function->code.size(); }
+void Compiler::emitBackwardBranch(VM::Op op, Int32 point) { emitWithInt32(op, point - (function->code.size() + 5)); }
+
 void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
@@ -1167,29 +1189,24 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		}
 		
 		case LOGICAL_AND_OR: {
-			std::vector<Byte>& code = function->code;
 			makeRValue(v);
 			emit(VM::REPUSH_OP);
-			emitWithInt32(op.vmOp, 0);
-			int offset = code.size() - 4;
+			Int32 point = emitForwardBranch(op.vmOp);
 			emit(VM::POP_OP);
 			parseRValueOperand(p, e, op);
-			*reinterpret_cast<Int32*>(&code[offset]) = code.size() - offset - 4;
+			completeForwardBranch(point);
 			break;
 		}
 		
 		case CONDITIONAL: {
-			std::vector<Byte>& code = function->code;
 			makeRValue(v);
-			emitWithInt32(VM::JF_OP, 0);	// FIX : sub
-			int offsetA = code.size() - 4;
+			Int32 pointA = emitForwardBranch(VM::JF_OP);
 			parseRValueOperand(p, e, op);
-			emitWithInt32(VM::JMP_OP, 0);
-			int offsetB = code.size() - 4;
-			*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+			Int32 pointB = emitForwardBranch(VM::JMP_OP);
+			completeForwardBranch(pointA);
 			parseExpression(p, e, v, op.prec);
 			makeRValue(v);
-			*reinterpret_cast<Int32*>(&code[offsetB]) = code.size() - offsetB - 4;
+			completeForwardBranch(pointB);
 			break;			
 		}
 		
@@ -1476,51 +1493,45 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 			}
 			
 			case IF_STATEMENT: {
-				std::vector<Byte>& code = function->code;
 				expectToken(p, e, "(");
 				XValue v; // FIX : sub
 				parseExpression(p, e, v); // FIX : SUB
 				makeRValue(v);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
-				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
-				int offsetA = code.size() - 4;
+				Int32 pointA = emitForwardBranch(VM::JF_OP);
 				parseStatement(p, e);
 				const Char* q = p;
 				eatWhite(q, e);
 				if (eatToken(q, e, "else")) {
 					p = q;
-					emitWithInt32(VM::JMP_OP, 0);
-					int offsetB = code.size() - 4;
-					*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+					Int32 pointB = emitForwardBranch(VM::JMP_OP);
+					completeForwardBranch(pointA);
 					parseStatement(p, e);
-					*reinterpret_cast<Int32*>(&code[offsetB]) = code.size() - offsetB - 4;
+					completeForwardBranch(pointB);
 				} else {
-					*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+					completeForwardBranch(pointA);
 				}				
 				break;
 			}
 
 			case WHILE_STATEMENT: {
-				std::vector<Byte>& code = function->code;
-				int offsetB = code.size();
+				Int32 pointA = markBackwardBranch();
 				expectToken(p, e, "(");
 				XValue v; // FIX : sub
 				parseExpression(p, e, v); // FIX : SUB
 				makeRValue(v);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
-				emitWithInt32(VM::JF_OP, 0);	// FIX : sub
-				int offsetA = code.size() - 4;
+				Int32 pointB = emitForwardBranch(VM::JF_OP);
 				parseStatement(p, e);
-				emitWithInt32(VM::JMP_OP, offsetB - (code.size() + 1) - 4);
-				*reinterpret_cast<Int32*>(&code[offsetA]) = code.size() - offsetA - 4;
+				emitBackwardBranch(VM::JMP_OP, pointA);
+				completeForwardBranch(pointB);
 				break;
 			}
 
 			case DO_WHILE_STATEMENT: {
-				std::vector<Byte>& code = function->code;
-				int offset = code.size();
+				Int32 point = markBackwardBranch();
 				parseStatement(p, e);
 				eatWhite(p, e);
 				expectToken(p, e, "while");
@@ -1531,7 +1542,7 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 				makeRValue(v);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
-				emitWithInt32(VM::JT_OP, offset - (code.size() + 1) - 4);
+				emitBackwardBranch(VM::JT_OP, point);
 				break;
 			}
 			
@@ -1562,9 +1573,16 @@ void Compiler::parseStatementList(const Char*& p, const Char* e) {
 	} while (p != e && b != p);
 }
 
+void Compiler::compile(const String* source) {
+	const Char* p = source->accessChars();
+	const Char* e = p + source->getLength();
+	parseStatementList(p, e);
+}
+
 void Compiler::finish() {
 	emit(VM::VOID_OP);
 	emit(VM::RETURN_OP);
+	// FIX : shrink code vector (copy to quickarray instead?)
 disassemble(gcHeap(), function->code, function->constants);
 }
 
@@ -1606,21 +1624,12 @@ int main(int argc, const char* argv[]) {
 				source = heap->manage(new String(source, &line));
 				source = heap->manage(new String(source, &LF_STRING));
 			} else {
-				const Char* p = source->accessChars();
-				const Char* e = p + source->getLength();
-		/*
-				Compiler::XValue v;
-				compiler->parseExpression(p, e, v);
-				compiler->eatWhite(p, e);
-				if (p != e) throw std::runtime_error("Syntax error");
-				compiler->makeRValue(v);
-		*/
-				compiler->parseStatementList(p, e);
+				compiler->compile(source);
 				compiler->finish();
 				
-				std::cout << "Code: " << functionDef->code.size() << std::endl;
-				std::cout << "Constants: " << functionDef->constants.size() << std::endl;
-				std::cout << "Locals: " << functionDef->localsCount << std::endl;
+				std::cerr << "Code: " << functionDef->code.size() << std::endl;
+				std::cerr << "Constants: " << functionDef->constants.size() << std::endl;
+				std::cerr << "Locals: " << functionDef->localsCount << std::endl;
 				
 				Value vstack[1024];
 				Context cstack[1024];
@@ -1645,26 +1654,26 @@ int main(int argc, const char* argv[]) {
 					delete newHeap;
 					newHeap = 0;
 
-					std::cout << "Kept: " << heap->size() << std::endl;
-					std::cout << "Swept: " << sweptCount << std::endl;
+					std::cerr << "Kept: " << heap->size() << std::endl;
+					std::cerr << "Swept: " << sweptCount << std::endl;
 					
 					if (done) {
-						std::cout << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
-						std::wcout << L"=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+						std::cerr << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
+						std::wcerr << L"=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
-						std::cout << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;
+						std::cerr << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;
 					}
 				} while (!done);
 				source = &EMPTY_STRING;
 			}
 		}
 		catch (const std::exception& x) {
-			std::cout << "Exception: " << x.what() << std::endl;
+			std::cerr << "Exception: " << x.what() << std::endl;
 			source = &EMPTY_STRING;
 		}
 		catch (...) {
-			std::cout << "Unknown exception" << std::endl;
+			std::cerr << "Unknown exception" << std::endl;
 			source = &EMPTY_STRING;
 		}
 	}
