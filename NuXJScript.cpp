@@ -217,6 +217,55 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 /* --- String --- */
 
 String::String(const char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
+
+const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
+struct QuickConstants {
+	QuickConstants() {
+		try {
+			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
+			for (int i = 32; i < 127; ++i) {
+				char buf[2] = { i, 0 };
+				ascii[i - 32] = Value(new String(buf));
+			}
+			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
+				Char buffer[32];
+				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32);
+				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]->calcHash();
+			}
+		}
+		catch (...) {
+			cleanup();
+			throw;
+		}
+	}
+	void cleanup() {
+		for (int i = 32; i < 127; ++i) {
+			delete ascii[i - 32].getString();
+			ascii[i - 32] = Value();
+		}
+		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
+			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = 0;
+		}
+	}
+	~QuickConstants() { cleanup(); }
+	Value ascii[127 - 32];
+	String* integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
+};
+
+QuickConstants QUICK_CONSTANTS;
+
+String EMPTY_STRING("");
+String UNDEFINED_STRING("undefined");
+String NULL_STRING("null");
+String FALSE_STRING("false");
+String TRUE_STRING("true");
+String NAN_STRING("NaN");
+String INFINITY_STRING("Infinity");
+String MINUS_INFINITY_STRING("-Infinity");
+String ZERO_STRING("0");
+String LENGTH_STRING("length");
+
 String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
 
 String::String(const String* l, const String* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
@@ -231,12 +280,18 @@ String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
 }
 
 bool String::getProperty(const String* name, Value& v) {
+	if (name->isEqualTo(&LENGTH_STRING)) {
+		v = Value(static_cast<Int32>(chars.size()));
+		return true;
+	}
 	UInt32 i;
 	const Char* p = name->chars.data();
 	const Char* e = p + name->chars.size();
 	const Char* q = parseUnsignedInt(p, e, i);
 	if (q == e && i < chars.size()) {
-		v = Value(gcHeap()->manage(new String(chars.data() + i, chars.data() + i + 1)));
+		Char c = chars[i];
+		if (32 <= c && c < 127) v = QUICK_CONSTANTS.ascii[c - 32];
+		else v = Value(gcHeap()->manage(new String(chars.data() + i, chars.data() + i + 1)));
 		return true;
 	}
 	v = Value();
@@ -258,7 +313,7 @@ Table::HashType String::calcHash() const {
 	return hash;
 }
 
-bool String::equals(const String* o) const {
+bool String::isEqualTo(const String* o) const {
 	if (this == o) return true;
 	if (hash != o->hash && hash != 0 && o->hash != 0) return false;
 	size_t l = chars.size();
@@ -375,7 +430,7 @@ void Table::update(const String* key, const Value& value) {
 Table::Bucket* Table::find(const String* key, HashType hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->equals(key))) i = (i + 1) & mask;
+	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(key))) i = (i + 1) & mask;
 	return &buckets[i];
 }
 
@@ -425,16 +480,6 @@ void UserObject::gcMark(GCHeap* heap) {
 	super::gcMark(heap);
 }
 
-String EMPTY_STRING("");
-String UNDEFINED_STRING("undefined");
-String NULL_STRING("null");
-String FALSE_STRING("false");
-String TRUE_STRING("true");
-String NAN_STRING("NaN");
-String INFINITY_STRING("Infinity");
-String MINUS_INFINITY_STRING("-Infinity");
-String ZERO_STRING("0");
-
 Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
@@ -469,7 +514,7 @@ Int32 Value::toInt() const { return static_cast<Int32>(toDouble()); } // FIX : s
 
 double Value::toDouble() const {
 	switch (type) {
-		default: assert(0);
+		default: assert(0); // FIX : object type
 		case UNDEFINED_TYPE: return NaN();
 		case NULL_TYPE: return 0.0;
 		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
@@ -494,7 +539,11 @@ String* Value::toString(GCHeap* heap) const {
 		case NUMBER_TYPE: {
 			Char buffer[32];
 			int i = static_cast<int>(d);
-			if (i == d) return heap->manage(new String(intToString(buffer, i), buffer + 32));
+			if (i == d) {
+				if (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
+					return QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
+				else return heap->manage(new String(intToString(buffer, i), buffer + 32));
+			}
 			if (std::isnan(d)) return &NAN_STRING;
 			double x = fabs(d);
 			if (x <= EPSILON) return &ZERO_STRING;
@@ -528,7 +577,7 @@ bool Value::operator==(const Value& y) const {
 		case DELETED_TYPE:
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
-		case STRING_TYPE: return s->equals(y.s);
+		case STRING_TYPE: return s->isEqualTo(y.s);
 		case OBJECT_TYPE: return o == y.o;
 	}
 }
@@ -561,7 +610,7 @@ bool Value::compareStrictly(const Value& y) const {
 		//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
 			return thisNumber == otherNumber;
 		}
-		case STRING_TYPE: return s->equals(y.s);
+		case STRING_TYPE: return s->isEqualTo(y.s);
 		case OBJECT_TYPE: return o == y.o;
 	}
 }
@@ -621,8 +670,8 @@ Value Value::add(GCHeap* heap, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
 		String* ls = toString(heap);
 		String* rs = y.toString(heap);
-		if (rs->getLength() == 0) return *this;
-		if (ls->getLength() == 0) return y;
+		if (rs->getLength() == 0) return Value(ls);
+		if (ls->getLength() == 0) return Value(rs);
 		return Value(heap->manage(new String(ls, rs)));
 	}
 	return Value(toDouble() + y.toDouble());
@@ -674,9 +723,9 @@ void Function::construct(VM* vm, Int32 argc, const Value* argv) {
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
+ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* scope) : definition(definition), scope(scope) { }
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
-Object* ScriptFunction::getClosure() const { return closure; }
+Object* ScriptFunction::getScope() const { return scope; }
 
 void ScriptFunction::call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
 	vm->enterCall(this, argc, argv, thisValue);
@@ -684,7 +733,7 @@ void ScriptFunction::call(VM* vm, Int32 argc, const Value* argv, const Value& th
 
 void ScriptFunction::gcMark(GCHeap* heap) {
 	heap->mark(definition);
-	heap->mark(closure);
+	heap->mark(scope);
 	super::gcMark(heap);
 }
 
@@ -705,14 +754,14 @@ void ArgumentsObject::gcMark(GCHeap* heap) {
 
 /* --- Frame --- */
 
-Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), closure(function->getClosure())
+Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), scope(function->getScope())
 		, locals(std::max(functionDef->localsCount, 1)) {
 }
 
 ScriptFunctionDef* Frame::getFunctionDef() { return functionDef; }
 Value* Frame::getLocalsPointer() { return &locals[0]; }
 
-// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a closure above maybe?
+// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a scope above maybe?
 
 bool Frame::getProperty(const String* name, Value& v) {
 	Int32 index;
@@ -721,7 +770,7 @@ bool Frame::getProperty(const String* name, Value& v) {
 		v = locals[index];
 		return true;
 	} else {
-		return closure->getProperty(name, v); // FIX: can we do a looping non-recursive solution? faster
+		return scope->getProperty(name, v); // FIX: can we do a looping non-recursive solution? faster
 	}
 }
 
@@ -732,19 +781,19 @@ bool Frame::setProperty(const String* name, const Value& v) {
 		locals[index] = v;
 		return true;
 	} else {
-		return closure->setProperty(name, v);
+		return scope->setProperty(name, v);
 	}
 }
 
 bool Frame::deleteProperty(const String* name) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) return false;
-	else return closure->deleteProperty(name);
+	else return scope->deleteProperty(name);
 }
 
 void Frame::gcMark(GCHeap* heap) {
 	heap->mark(functionDef);
-	heap->mark(closure);
+	heap->mark(scope);
 	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
 	super::gcMark(heap);
@@ -1736,6 +1785,42 @@ disassemble(gcHeap(), function->code, function->constants);
 						vm->push(Value());
 					}
 	};
+
+Environment::Environment() : currentHeap(0), stringPrototype(0) {
+	try {
+		currentHeap = new GCHeap();
+		stringPrototype = new UserObject();
+	}
+	catch (...) {
+		cleanup();
+		throw;
+	}
+}
+
+size_t Environment::gc() {
+	size_t sweptCount = 0;
+	GCHeap* newHeap = 0;
+	try {
+		newHeap = new GCHeap();
+		sweptCount = currentHeap->sweep();
+		std::swap(currentHeap, newHeap);
+		delete newHeap;
+	}
+	catch (...) {
+		delete newHeap;
+		throw;
+	}
+	return sweptCount;
+}
+
+void Environment::cleanup() {
+	delete currentHeap;
+	currentHeap = 0;
+	delete stringPrototype;
+	stringPrototype = 0;
+}
+
+Environment::~Environment() { cleanup(); }
 
 int main(int argc, const char* argv[]) {
 	static const String LF_STRING("\n");

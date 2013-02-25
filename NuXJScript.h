@@ -119,6 +119,18 @@ class Value {
 				};
 };
 
+class UserObject;
+class Environment {
+	friend class String;
+	public:		Environment();
+	public:		GCHeap* heap() const { return currentHeap; }
+	public:		size_t gc();
+	public:		virtual ~Environment();
+	protected:	GCHeap* currentHeap;
+	protected:	UserObject* stringPrototype;
+	protected:	void cleanup();
+};
+
 class Function;
 class Object : public GCItem {
 	public:		typedef GCItem super;
@@ -161,7 +173,7 @@ class String : public Object {
 	public:		String(const Char* b, const Char* e);
 	public:		String(const String* l, const String* r);
 	public:		Table::HashType calcHash() const;
-	public:		bool equals(const String* o) const;
+	public:		bool isEqualTo(const String* o) const;
 	public:		bool isLessThan(const String* o) const;
 	public:		size_t getLength() const;
 	public:		const Char* accessChars() const;
@@ -216,13 +228,13 @@ class NativeFunction : public Function {
 
 class ScriptFunction : public Function {
 	public:		typedef Function super;
-	public:		ScriptFunction(ScriptFunctionDef* definition, Object* closure);
+	public:		ScriptFunction(ScriptFunctionDef* definition, Object* scope);
 	public:		virtual void gcMark(GCHeap* heap);
 	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
 	public:		ScriptFunctionDef* getDefinition() const;
-	public:		Object* getClosure() const;
+	public:		Object* getScope() const;
 	protected:	ScriptFunctionDef* const definition;
-	protected:	Object* const closure;
+	protected:	Object* const scope;
 };
 
 #if 0
@@ -245,7 +257,7 @@ class Frame : public Object {
 	public:		ScriptFunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
 	protected:	ScriptFunctionDef* const functionDef;
-	protected:	Object* const closure;
+	protected:	Object* const scope;
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 };
 
