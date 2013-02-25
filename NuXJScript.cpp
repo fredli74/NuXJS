@@ -4,12 +4,13 @@
 // switch
 // break, continue etc (with labels!)
 // native calls (and returns)
-//	need easier API, shouldn't crash if missing returnFromNative etc
+//	need easier API, shouldn't crash if missing push etc
 //	no synchronized return to native code right now
 //	arguments are reversed on native calls, and will be gc'd as stack has already popped 
 // exceptions (and catching both virtual and native)
 // typeof, instanceof, in operators
 // new operator
+//  done, but need to implement prototype
 // prototype support
 // eval support
 // arguments container
@@ -442,6 +443,7 @@ Value::Value(String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::isDeleted() const { return type == DELETED_TYPE; }
+bool Value::isObject() const { return type == OBJECT_TYPE; }
 
 ScriptFunctionDef* Value::getFunctionDef() const {
 	assert(type == OBJECT_TYPE);
@@ -663,6 +665,13 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 
 Function* Function::asFunction() { return this; }
 
+void Function::construct(VM* vm, Int32 argc, const Value* argv) {
+	Object* newObject = gcHeap()->manage(new UserObject());
+	Value thisValue(newObject);
+	vm->push(thisValue);
+	call(vm, argc, argv, thisValue);
+}
+
 /* --- ScriptFunction --- */
 
 ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* closure) : definition(definition), closure(closure) { }
@@ -712,7 +721,7 @@ bool Frame::getProperty(const String* name, Value& v) {
 		v = locals[index];
 		return true;
 	} else {
-		return closure->getProperty(name, v);
+		return closure->getProperty(name, v); // FIX: can we do a looping non-recursive solution? faster
 	}
 }
 
@@ -775,7 +784,7 @@ void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Va
 	for (Int32 i = 0; i < n; ++i) lp[i] = argv[n - 1 - i];
 }
 
-void VM::returnFromNative(const Value& v) { push(vstackPointer, v); }
+void VM::push(const Value& v) { push(vstackPointer, v); }
 
 bool VM::run(Int32 count) {
 	Value* vsp = vstackPointer;
@@ -856,7 +865,7 @@ bool VM::run(Int32 count) {
 				lp = frame->getLocalsPointer();
 				break;
 			}
-			case CALL_METHOD_OP: { // FIX : share...
+			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = readInt32(ip);
 				Object* thisObject = vsp[n + 1].toObject(h);
 				if (thisObject == 0) error();
@@ -892,6 +901,23 @@ bool VM::run(Int32 count) {
 				lp = frame->getLocalsPointer();
 				break;
 			}
+			case NEW_OP: {
+				Int32 n = readInt32(ip);
+				Object* o = vsp[n].toObject(h);
+				if (o == 0) error();
+				Function* f = o->asFunction();
+				if (f == 0) error();
+				cstackPointer->instructionPointer = ip;
+				vstackPointer = vsp + n + 1;
+				f->construct(this, n, vsp);
+				vsp = vstackPointer;
+				ip = cstackPointer->instructionPointer;
+				frame = cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				break;
+			}
+			case NEW_RESULT_OP: vsp[1] = (vsp[0].isObject() ? vsp[0] : vsp[1]); pop(vsp, 1); break;
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value()); break;
 			case GEN_FUNC_OP: {
@@ -930,14 +956,15 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JT", "JF"
-		, "CALL_GLOBAL", "CALL_METHOD", "RETURN", "THIS", "VOID", "FRAME", "DELETE"
+		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
+		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
 	std::vector<Byte>::const_iterator it = b;
 	std::vector<Byte>::const_iterator e = code.end();
 	while (it != e) {
-		std::cerr << (it - b) << ':' << OP_STRINGS[*it];
+		std::cerr << "\t" << (it - b) << ':' << OP_STRINGS[*it];
 		switch (*it++) {
 			case VM::JT_OP:
 			case VM::JF_OP:
@@ -945,7 +972,8 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 			case VM::READ_INDEXED_OP:
 			case VM::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
 			case VM::CALL_GLOBAL_OP:
-			case VM::CALL_METHOD_OP: std::cerr << " *" << getInt32(it, e); break;
+			case VM::CALL_METHOD_OP:
+			case VM::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
 			case VM::CONST_OP:
 			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case VM::READ_NAMED_OP:
@@ -960,7 +988,7 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 // FIX : sort
 enum OperatorType {
 	GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
-	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR
+	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
@@ -984,7 +1012,8 @@ const OperatorInfo PRE_OPS[] = {
 	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::BIT_NOT_OP },
 	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::NOT_OP },
 	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, VM::VOID_OP },
-	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, VM::VOID_OP }
+	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, VM::VOID_OP },
+	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, VM::VOID_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
@@ -1211,9 +1240,28 @@ void Compiler::parseRValueOperand(const Char*& p, const Char* e, const OperatorI
 	makeRValue(xv);
 }
 
+void Compiler::parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::Op op) {
+	eatWhite(p, e);
+	Int32 count = 0;
+	while (p != e && *p != ')') {
+		if (count != 0) {
+			expectToken(p, e, ",");
+			eatWhite(p, e);
+		}
+		parseExpression(p, e, v, COMMA_PREC);
+		makeRValue(v);
+		eatWhite(p, e);
+		++count;
+	}
+	expectToken(p, e, ")");
+	emitWithInt32(op, count);
+	v = XValue(XValue::PUSHED);
+}
+
 bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
+	// FIX : use a quick hash solution
 	int i = 0;
 	while (i < opCount && !eatToken(p, e, opList[i].token)) ++i;
 	if (i >= opCount) return false;
@@ -1272,21 +1320,21 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			VM::Op op = VM::CALL_GLOBAL_OP;
 			if (v.t == XValue::PROPERTY) op = VM::CALL_METHOD_OP;
 			else makeRValue(v);
+			parseFunctionCall(p, e, v, op);
+			break;
+		}
+		
+		case NEW_OPERATOR: {
+			parseRValueOperand(p, e, op);
 			eatWhite(p, e);
-			Int32 count = 0;
-			while (p != e && *p != ')') {
-				if (count != 0) {
-					expectToken(p, e, ",");
-					eatWhite(p, e);
-				}
-				parseExpression(p, e, v, COMMA_PREC);
-				makeRValue(v);
+			if (!eatToken(p, e, "(")) {
+				emitWithInt32(VM::NEW_OP, 0);
+				v = XValue(XValue::PUSHED);
+			} else {
 				eatWhite(p, e);
-				++count;
+				parseFunctionCall(p, e, v, VM::NEW_OP);
 			}
-			expectToken(p, e, ")");
-			emitWithInt32(op, count);
-			v = XValue(XValue::PUSHED);
+			emit(VM::NEW_RESULT_OP);
 			break;
 		}
 		
@@ -1705,7 +1753,7 @@ disassemble(gcHeap(), function->code, function->constants);
 		public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
 						String* s = (argc >= 1 ? argv[0].toString(gcHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						vm->returnFromNative();
+						vm->push(Value());
 					}
 	};
 
@@ -1739,9 +1787,9 @@ int main(int argc, const char* argv[]) {
 				compiler->compile(source);
 				compiler->finish();
 				
-				std::cerr << "Code: " << functionDef->code.size() << std::endl;
-				std::cerr << "Constants: " << functionDef->constants.size() << std::endl;
-				std::cerr << "Locals: " << functionDef->localsCount << std::endl;
+				std::cerr << "\tCode: " << functionDef->code.size() << std::endl;
+				std::cerr << "\tConstants: " << functionDef->constants.size() << std::endl;
+				std::cerr << "\tLocals: " << functionDef->localsCount << std::endl;
 				
 				Value vstack[1024];
 				Context cstack[1024];
@@ -1766,16 +1814,16 @@ int main(int argc, const char* argv[]) {
 					delete newHeap;
 					newHeap = 0;
 
-					std::cerr << "Kept: " << heap->size() << std::endl;
-					std::cerr << "Swept: " << sweptCount << std::endl;
+					std::cerr << "\tKept: " << heap->size() << std::endl;
+					std::cerr << "\tSwept: " << sweptCount << std::endl;
 					
 					if (done) {
-						std::cerr << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
+						std::cerr << "\tOn stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
 						assert((1024 - (vm->vstackPointer - vstack)) == 1);
-						std::wcerr << L"=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+						std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
-						std::cerr << "time: " << (static_cast<double>(end - start) / divisor) << std::endl;
+						std::cerr << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
 					}
 				} while (!done);
 				source = &EMPTY_STRING;

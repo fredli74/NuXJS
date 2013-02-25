@@ -92,6 +92,7 @@ class Value {
 	public:		explicit Value(Object* o);
 	
 	public:		bool isDeleted() const;
+	public:		bool isObject() const;
 	public:		String* getString() const;
 	public:		ScriptFunctionDef* getFunctionDef() const;
 	public:		bool toBool() const;
@@ -206,11 +207,11 @@ class Function : public UserObject {
 	public:		typedef UserObject super;
 	public:		virtual Function* asFunction();
 	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+	public:		virtual void construct(VM* vm, Int32 argc, const Value* argv);
 };
 
 class NativeFunction : public Function {
 	public:		typedef Function super;
-	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
 };
 
 class ScriptFunction : public Function {
@@ -277,6 +278,8 @@ class VM : public GCItem {
 					, JT_OP, JF_OP									// immediate: offset, stack: boolean ->
 					, CALL_GLOBAL_OP								// immediate: n, stack: n * args, function -> return value
 					, CALL_METHOD_OP								// immediate: n, stack: n * args, name, object -> return value
+					, NEW_OP										// immediate: n, stack: n * args, constructor object -> return value, new object
+					, NEW_RESULT_OP									// stack: return value, new object -> new this value
 					, RETURN_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: name, object -> boolean
@@ -285,7 +288,7 @@ class VM : public GCItem {
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap* heap);
 	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value());
-	public:		void returnFromNative(const Value& v = Value());
+	public:		void push(const Value& v);
 	public:		bool run(Int32 count);
 	protected:	void push(Value*& vsp, const Value& v);
 	protected:	void pop(Value*& vsp, int count);
@@ -300,7 +303,7 @@ public:	Value* vstackPointer;
 };
 
 enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
+	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
 	, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC
 	, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
@@ -326,6 +329,7 @@ class Compiler : public GCItem {
 	protected:	double parseNumber(const Char*& p, const Char* e);
 	protected:	XValue parseOperand(const Char*& p, const Char* e, const OperatorInfo& op);
 	protected:	void parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op);
+	protected:	void parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::Op op);
 	protected:	bool parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	protected:	void parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
 	protected:	bool parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
