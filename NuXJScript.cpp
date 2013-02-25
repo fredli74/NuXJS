@@ -1177,9 +1177,10 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
-bool Compiler::eatToken(const Char*& p, const Char* e, const char* t) {
+bool Compiler::eatToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite) {
 	assert(*t != 0);
 	const Char* q = p;
+	if (eatLeadingWhite) eatWhite(q, e);
 	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
 	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (q == e || !isLeadingIdentifierChar(*q)))) {
 		p = q;
@@ -1228,10 +1229,7 @@ void Compiler::throwAway(XValue& xv) {
 Compiler::XValue Compiler::parseOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
 	XValue rv;
 	parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
-	if (op.closeToken != 0) {
-		eatWhite(p, e);
-		expectToken(p, e, op.closeToken);
-	}
+	if (op.closeToken != 0) expectToken(p, e, op.closeToken, true);
 	return rv;
 }
 
@@ -1245,7 +1243,7 @@ void Compiler::parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::O
 	Int32 count = 0;
 	while (p != e && *p != ')') {
 		if (count != 0) {
-			expectToken(p, e, ",");
+			expectToken(p, e, ",", false);
 			eatWhite(p, e);
 		}
 		parseExpression(p, e, v, COMMA_PREC);
@@ -1253,7 +1251,7 @@ void Compiler::parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::O
 		eatWhite(p, e);
 		++count;
 	}
-	expectToken(p, e, ")");
+	expectToken(p, e, ")", false);
 	emitWithInt32(op, count);
 	v = XValue(XValue::PUSHED);
 }
@@ -1263,7 +1261,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
-	while (i < opCount && !eatToken(p, e, opList[i].token)) ++i;
+	while (i < opCount && !eatToken(p, e, opList[i].token, false)) ++i;
 	if (i >= opCount) return false;
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
@@ -1326,8 +1324,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		
 		case NEW_OPERATOR: {
 			parseRValueOperand(p, e, op);
-			eatWhite(p, e);
-			if (!eatToken(p, e, "(")) {
+			if (!eatToken(p, e, "(", true)) {
 				emitWithInt32(VM::NEW_OP, 0);
 				v = XValue(XValue::PUSHED);
 			} else {
@@ -1438,8 +1435,8 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::expectToken(const Char*& p, const Char* e, const char* token) {
-	if (!eatToken(p, e, token)) throw std::runtime_error(std::string("Expected '") + token + "'");
+void Compiler::expectToken(const Char*& p, const Char* e, const char* token, bool eatLeadingWhite) {
+	if (!eatToken(p, e, token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
 }
 
 bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence) {
@@ -1462,13 +1459,12 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 				}
 				case FUNCTION_LITERAL: {
 					ScriptFunctionDef* func = gcHeap()->manage(new ScriptFunctionDef());
-					eatWhite(p, e);
 					// FIX : the optional function identifier
-					expectToken(p, e, "(");
+					expectToken(p, e, "(", true);
 					eatWhite(p, e);
 					while (p != e && *p != ')') {
 						if (func->argumentsCount != 0) {
-							expectToken(p, e, ",");
+							expectToken(p, e, ",", false);
 							eatWhite(p, e);
 						}
 						const Char* b = p;
@@ -1479,15 +1475,14 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 						func->argumentsCount++;
 						eatWhite(p, e);
 					}
-					expectToken(p, e, ")");
-					eatWhite(p, e);
-					expectToken(p, e, "{");
+					expectToken(p, e, ")", false);
+					expectToken(p, e, "{", true);
 					{
 						Compiler* funcCompiler = gcHeap()->manage(new Compiler(func));
 						funcCompiler->parseStatementList(p, e);
 						funcCompiler->finish();
 					}
-					expectToken(p, e, "}");
+					expectToken(p, e, "}", false);
 					emitWithConstant(VM::GEN_FUNC_OP, Value(func)); 
 					v = XValue(XValue::PUSHED);
 					break;
@@ -1573,8 +1568,7 @@ void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
 			nameMap[identifier] = index;
 		}
 		const Char* q = p;
-		eatWhite(q, e);
-		if (eatToken(q, e, "=")) {
+		if (eatToken(q, e, "=", true)) {
 			p = q;
 			XValue xv;
 			parseExpression(p, e, xv, COMMA_PREC); // FIX : SUB
@@ -1582,9 +1576,8 @@ void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
 			emitWithInt32(VM::WRITE_INDEXED_OP, index);
 			emit(VM::POP_OP);
 			q = p;
-			eatWhite(q, e);
 		}
-		if (!eatToken(q, e, ",")) break;
+		if (!eatToken(q, e, ",", true)) break;
 		p = q;
 		eatWhite(p, e);
 	}
@@ -1593,16 +1586,16 @@ void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
 void Compiler::expectSemicolon(const Char*& p, const Char* e) {
 	const Char* q = p;
 	eatWhite(q, e);
-	if (q != e && *q != '}' && !eatToken(q, e, ";") && std::find(p, q, '\n') == q)
+	if (q != e && *q != '}' && !eatToken(q, e, ";", false) && std::find(p, q, '\n') == q)
 		throw std::runtime_error("Syntax error");
 	p = q;
 }
 
 void Compiler::parseStatement(const Char*& p, const Char* e) {
 	eatWhite(p, e);	
-	if (eatToken(p, e, "{")) {
+	if (eatToken(p, e, "{", false)) {
 		parseStatementList(p, e);
-		expectToken(p, e, "}");
+		expectToken(p, e, "}", false);
 		return;
 	}
 	
@@ -1623,18 +1616,14 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 			}
 			
 			case IF_STATEMENT: {
-				expectToken(p, e, "(");
+				expectToken(p, e, "(", false);
 				XValue xv; // FIX : sub
 				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				eatWhite(p, e);
-				expectToken(p, e, ")");
+				expectToken(p, e, ")", true);
 				Int32 pointA = emitForwardBranch(VM::JF_OP);
 				parseStatement(p, e);
-				const Char* q = p;
-				eatWhite(q, e);
-				if (eatToken(q, e, "else")) {
-					p = q;
+				if (eatToken(p, e, "else", true)) {
 					Int32 pointB = emitForwardBranch(VM::JMP_OP);
 					completeForwardBranch(pointA);
 					parseStatement(p, e);
@@ -1647,12 +1636,11 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
-				expectToken(p, e, "(");
+				expectToken(p, e, "(", false);
 				XValue xv; // FIX : sub
 				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				eatWhite(p, e);
-				expectToken(p, e, ")");
+				expectToken(p, e, ")", true);
 				Int32 pointB = emitForwardBranch(VM::JF_OP);
 				parseStatement(p, e);
 				emitBackwardBranch(VM::JMP_OP, pointA);
@@ -1663,32 +1651,26 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 			case DO_WHILE_STATEMENT: {
 				Int32 point = markBackwardBranch();
 				parseStatement(p, e);
-				eatWhite(p, e);
-				expectToken(p, e, "while");
-				eatWhite(p, e);
-				expectToken(p, e, "(");
+				expectToken(p, e, "while", true);
+				expectToken(p, e, "(", true);
 				XValue xv; // FIX : sub
 				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				eatWhite(p, e);
-				expectToken(p, e, ")");
+				expectToken(p, e, ")", true);
 				emitBackwardBranch(VM::JT_OP, point);
 				expectSemicolon(p, e);
 				break;
 			}
 			
 			case FOR_STATEMENT: {
-				expectToken(p, e, "(");
-				eatWhite(p, e);
-				if (eatToken(p, e, "var")) {
+				expectToken(p, e, "(", false);
+				if (eatToken(p, e, "var", true)) {
 					eatWhite(p, e);
 					parseVarDeclarations(p, e);
-					eatWhite(p, e);
 				} else {
 					parseAndPopOptionalExpression(p, e);
-					eatWhite(p, e);
 				}
-				expectToken(p, e, ";");
+				expectToken(p, e, ";", true);
 				Int32 pointA = markBackwardBranch();
 				Int32 pointB = -1;
 				XValue xv;
@@ -1696,13 +1678,11 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 					makeRValue(xv);
 					pointB = emitForwardBranch(VM::JF_OP);
 				}
-				eatWhite(p, e);
-				expectToken(p, e, ";");
+				expectToken(p, e, ";", true);
 				std::vector<Byte>& code = function->code;
 				Int32 pointC = code.size();
 				parseAndPopOptionalExpression(p, e);
-				eatWhite(p, e);
-				expectToken(p, e, ")");
+				expectToken(p, e, ")", true);
 				Int32 pointD = code.size();
 				parseStatement(p, e);
 				std::rotate(code.begin() + pointC, code.begin() + pointD, code.end());

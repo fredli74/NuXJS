@@ -337,9 +337,9 @@ class Compiler : public GCItem {
 	protected:	void parseVarDeclarations(const Char*& p, const Char* e);
 	protected:	void parseStatement(const Char*& p, const Char* e);
 	protected:	void parseStatementList(const Char*& p, const Char* e);
-	protected:	bool eatToken(const Char*& p, const Char* e, const char* t); // FIX : not all of these
+	protected:	bool eatToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite); // FIX : not all of these
 	protected:	void expectSemicolon(const Char*& p, const Char* e);
-	protected:	void expectToken(const Char*& p, const Char* e, const char* t);
+	protected:	void expectToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite);
 	protected:	void eatToken(const Char*& p, const Char* e);
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);

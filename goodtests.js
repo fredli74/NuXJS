@@ -49,3 +49,9 @@ print(function() { return delete f.z }())
 print(function() { return delete "i"[0] }())
 print(function() { var z=3; return delete z }())
 print(function() { var z=3; var g=function() {  return delete z; } ; return g; }()())
+
+f=function(a, b) { this.a=a; this.b=b; this.c="cee"; this.dump=function() { print("a: " + this.a  + ", b: " + this.b + ", c: " + this.c); } }
+x = new f
+x.dump()
+x = new f ( "aah" , "bee" )
+x.dump()
