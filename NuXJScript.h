@@ -124,6 +124,7 @@ class Object : public GCItem {
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
 	public:		virtual bool getProperty(const String* name, Value& v) { return false; }
 	public:		virtual bool setProperty(const String* name, const Value& v) { return false; }
+	public:		virtual bool deleteProperty(const String* name) { return false; }
 };
 
 class Table {
@@ -165,7 +166,6 @@ class String : public Object {
 	public:		const Char* accessChars() const;
 	public:		std::wstring toStdString() const;
 	public:		virtual bool getProperty(const String* name, Value& v);
-	public:		virtual bool setProperty(const String* name, const Value& v);
 	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
@@ -176,7 +176,7 @@ struct StringObjectCompare {
 	}
 };
 
-typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap;
+typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 
 class ScriptFunctionDef : public Object {
 	public:		typedef Object super;
@@ -197,6 +197,7 @@ class UserObject : public Object {
 	public:		virtual void gcMark(GCHeap* heap);
 	public:		virtual bool getProperty(const String* name, Value& v);
 	public:		virtual bool setProperty(const String* name, const Value& v);
+	public:		virtual bool deleteProperty(const String* name);
 	protected:	Table properties;
 };
 
@@ -239,6 +240,7 @@ class Frame : public Object {
 	public:		virtual void gcMark(GCHeap* heap);
 	public:		virtual bool getProperty(const String* name, Value& v);
 	public:		virtual bool setProperty(const String* name, const Value& v);
+	public:		virtual bool deleteProperty(const String* name);
 	public:		ScriptFunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
 	protected:	ScriptFunctionDef* const functionDef;
@@ -276,7 +278,8 @@ class VM : public GCItem {
 					, CALL_GLOBAL_OP								// immediate: n, stack: n * args, function -> return value
 					, CALL_METHOD_OP								// immediate: n, stack: n * args, name, object -> return value
 					, RETURN_OP
-					, THIS_OP, VOID_OP								// stack: -> constant value
+					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
+					, DELETE_OP										// stack: name, object -> boolean
 					, GEN_FUNC_OP									// immediate: const index, stack: -> function
 				};
 	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
@@ -324,15 +327,19 @@ class Compiler : public GCItem {
 	protected:	XValue parseOperand(const Char*& p, const Char* e, const OperatorInfo& op);
 	protected:	void parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op);
 	protected:	bool parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	protected:	void parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence = LOWEST_PREC);
-	protected:	bool parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence = LOWEST_PREC);
+	protected:	void parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
+	protected:	bool parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
+	protected:	void parseAndPopOptionalExpression(const Char*& p, const Char* e);
+	protected:	void parseVarDeclarations(const Char*& p, const Char* e);
 	protected:	void parseStatement(const Char*& p, const Char* e);
 	protected:	void parseStatementList(const Char*& p, const Char* e);
 	protected:	bool eatToken(const Char*& p, const Char* e, const char* t); // FIX : not all of these
+	protected:	void expectSemicolon(const Char*& p, const Char* e);
 	protected:	void expectToken(const Char*& p, const Char* e, const char* t);
 	protected:	void eatToken(const Char*& p, const Char* e);
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);
+	protected:	void throwAway(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(const Char*& p, const Char* e);
 	protected:	ScriptFunctionDef* function;

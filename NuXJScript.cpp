@@ -1,26 +1,27 @@
 // TODO
 //
-// for (;;)
 // for (in)
 // switch
 // break, continue etc (with labels!)
 // native calls (and returns)
 //	need easier API, shouldn't crash if missing returnFromNative etc
 //	no synchronized return to native code right now
+//	arguments are reversed on native calls, and will be gc'd as stack has already popped 
 // exceptions (and catching both virtual and native)
-// proper string comparisons (< etc)
-// comma operator
-// void operator
 // typeof, instanceof, in operators
 // new operator
-// delete operator
 // prototype support
 // eval support
 // arguments container
+// array literals
+// object literals
 // array object (length property support, optimized for numerical indexes?)
 // count (and run-time check) necessary value stack depth for functions
 // jump optimizations
-// pop void optimization (almost always occurs with a return;)
+// pop void optimization (almost always occurs with a return;)?
+// special write with pop instructions (very common)?
+// change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
+//	not too fond of the int cast in the byte array
 // don't accept lf's after ++ etc (automatic ; insertion logic)
 // divide by 0 checks? NaN checks?
 // basic library (math, string, array ops)
@@ -30,6 +31,15 @@
 // assignable globals this in vm
 // function name() { } syntax
 // literal function names, e.g. myGlobalName = function myLocalName() { ... }
+// better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+//
+// DONE
+//
+// for (;;)
+// comma operator
+// void operator
+// delete operator
+// proper string comparisons (< etc)
 
 #include "assert.h"
 #include <cmath>
@@ -213,8 +223,6 @@ String::String(const String* l, const String* r) : chars(l->chars.size() + r->ch
 	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
 }
 
-bool String::setProperty(const String* name, const Value& v) { return false; }
-
 String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
 	String* o = heap->manage(new String(b, e));
 	o->calcHash();
@@ -234,6 +242,8 @@ bool String::getProperty(const String* name, Value& v) {
 	return false;
 }
 
+// FIX : speed up by skipping when string is really long
+// FNV Hash
 Table::HashType String::calcHash() const {
 	if (hash == 0) {
 		size_t l = chars.size();
@@ -404,6 +414,11 @@ bool UserObject::getProperty(const String* name, Value& v) {
 	return false;
 }
 
+bool UserObject::deleteProperty(const String* name) {
+	properties.erase(name);
+	return true;
+}
+
 void UserObject::gcMark(GCHeap* heap) {
 	properties.mark(heap);
 	super::gcMark(heap);
@@ -559,12 +574,9 @@ bool Value::isEqualTo(const Value& y) const {
 	else {
 		if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
 		if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
-		// If Type(x) is Number and Type(y) is String,
-		// return the result of the comparison x == ToNumber(y).
-		// If Type(x) is String and Type(y) is Number,
-		// return the result of the comparison ToNumber(x) == y.
-		if (type == BOOLEAN_TYPE || y.type == BOOLEAN_TYPE)
-			return toDouble() == y.toDouble();
+		if (type == NUMBER_TYPE && y.type == STRING_TYPE) return d == y.toDouble();
+		if (type == STRING_TYPE && y.type == NUMBER_TYPE) return toDouble() == y.d;
+		if (type == BOOLEAN_TYPE || y.type == BOOLEAN_TYPE) return toDouble() == y.toDouble();
 		// If Type(x) is either String or Number and Type(y) is Object,
 		// return the result of the comparison x == ToPrimitive(y).
 		// If Type(x) is Object and Type(y) is either String or Number,
@@ -574,7 +586,7 @@ bool Value::isEqualTo(const Value& y) const {
 }
 
 bool Value::isLessThan(const Value& y) const {
-	// if (type == STRING_TYPE && y.type == STRING_TYPE)
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return s->isLessThan(y.s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
@@ -589,7 +601,7 @@ bool Value::isLessThan(const Value& y) const {
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
-	// if (type == STRING_TYPE && y.type == STRING_TYPE)
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.s->isLessThan(s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
@@ -715,6 +727,12 @@ bool Frame::setProperty(const String* name, const Value& v) {
 	}
 }
 
+bool Frame::deleteProperty(const String* name) {
+	Int32 index;
+	if (functionDef->lookupLocalName(name, index)) return false;
+	else return closure->deleteProperty(name);
+}
+
 void Frame::gcMark(GCHeap* heap) {
 	heap->mark(functionDef);
 	heap->mark(closure);
@@ -753,7 +771,8 @@ void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Va
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
 	Value* lp = frame->getLocalsPointer();
-	for (Int32 i = std::min(argc, def->argumentsCount) - 1; i >= 0; --i) lp[i] = argv[i];
+	Int32 n = std::min(argc, def->argumentsCount);
+	for (Int32 i = 0; i < n; ++i) lp[i] = argv[n - 1 - i];
 }
 
 void VM::returnFromNative(const Value& v) { push(vstackPointer, v); }
@@ -879,6 +898,14 @@ bool VM::run(Int32 count) {
 				push(vsp, Value(h->manage(new ScriptFunction(cp[readInt32(ip)].getFunctionDef(), frame))));
 				break;
 			}
+			case FRAME_OP: push(vsp, Value(frame)); break;
+			case DELETE_OP: {
+				Object* o = vsp[1].toObject(h);
+				if (o == 0) error();
+				vsp[1] = Value(o->deleteProperty(vsp[0].toString(h)));
+				pop(vsp, 1);
+				break;
+			}
 		}
 	}
 	cstackPointer->instructionPointer = ip;
@@ -903,7 +930,7 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JT", "JF"
-		, "CALL_GLOBAL", "CALL_METHOD", "RETURN", "THIS", "VOID"
+		, "CALL_GLOBAL", "CALL_METHOD", "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
@@ -930,7 +957,11 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 
 /* --- Compiler --- */
 
-enum OperatorType { GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL, FUNCTION_CALL };
+// FIX : sort
+enum OperatorType {
+	GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
+	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR
+};
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
 struct OperatorInfo {
@@ -942,6 +973,7 @@ struct OperatorInfo {
 	VM::Op vmOp;
 };
 
+// FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, VM::INVALID_OP },
 	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::ADD_OP },
@@ -950,7 +982,9 @@ const OperatorInfo PRE_OPS[] = {
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::PLUS_OP },
 	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::MINUS_OP },
 	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::BIT_NOT_OP },
-	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::NOT_OP }
+	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::NOT_OP },
+	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, VM::VOID_OP },
+	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, VM::VOID_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
@@ -992,20 +1026,21 @@ const OperatorInfo POST_OPS[] = {
 	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, VM::INVALID_OP },
 	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, VM::INVALID_OP },
 	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, VM::INVALID_OP },
-	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, VM::INVALID_OP }
+	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, VM::INVALID_OP },
+	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, VM::INVALID_OP }
 };
 
-enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, RETURN_STATEMENT };
+enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT };
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[5] = {
-		"var", "if", "while", "do", "return"
+	static const char* STRINGS[6] = {
+		"var", "if", "while", "do", "for", "return"
 	};
 	static const int QUICK_HASH_TABLE[8] = {
-		2, 0, -1, -1, -1, 4, 1, 3
+		1, 3, 4, 5, 0, 2, -1, -1
 	};
 	if (n < 2 || n > 6) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(s[1]) & 7];
+	int stringIndex = QUICK_HASH_TABLE[(s[1] + n) & 7];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
@@ -1132,6 +1167,7 @@ void Compiler::makeRValue(XValue& xv) {
 	switch (xv.t) {
 		default: assert(0);
 		case XValue::PUSHED: return;
+		case XValue::NONE: emit(VM::VOID_OP); break;
 		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, xv.v); break;
 		case XValue::INDEXED: emitWithInt32(VM::READ_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); break;
@@ -1148,6 +1184,16 @@ void Compiler::makeAssignment(XValue& xv) {
 		case XValue::PROPERTY: emit(VM::SET_PROPERTY_OP); break;
 	}
 	xv = XValue(XValue::PUSHED);
+}
+
+void Compiler::throwAway(XValue& xv) {
+	switch (xv.t) {
+		case XValue::PUSHED: emit(VM::POP_OP); break;
+		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); emit(VM::POP_OP); break;
+		case XValue::PROPERTY: emit(VM::GET_PROPERTY_OP); emit(VM::POP_OP); break;
+		default: break;
+	}
+	xv = XValue(XValue::NONE);
 }
 
 Compiler::XValue Compiler::parseOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
@@ -1176,6 +1222,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		p = b;
 		return false;
 	}
+	// FIX : sort
 	switch (op.type) {
 		case POST_UNARY: {
 			XValue lv(v);
@@ -1243,58 +1290,81 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			break;
 		}
 		
-		default: {
-			switch (op.type) {
-				case GROUP: {
-					v = parseOperand(p, e, op);
-					break;
-				}
-				
-				case UNARY: {
-					v = parseOperand(p, e, op);
-					if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
-						XValue lv(v);
-						makeRValue(lv);
-						emitWithConstant(VM::CONST_OP, Value(1.0)); 
-						emit(op.vmOp);
-						makeAssignment(v);
-					} else {
-						makeRValue(v);
-						emit(op.vmOp);
-					}
-					break;
-				}
-				
-				case BINARY: {
-					makeRValue(v);
-					parseRValueOperand(p, e, op);
-					emit(op.vmOp);
-					break;
-				}
-				
-				case ASSIGNMENT: {
-					XValue lv(v);
-					if (op.vmOp != VM::INVALID_OP) {
-						makeRValue(lv);
-						parseRValueOperand(p, e, op);
-						emit(op.vmOp);
-					} else {
-						parseRValueOperand(p, e, op);
-					}
-					makeAssignment(v);
-					break;
-				}
-				
-				case PROPERTY_BRACKETS: {
-					makeRValue(v);
-					parseRValueOperand(p, e, op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
-					v = XValue(XValue::PROPERTY);
-					break;
-				}
-				
-				default: assert(0);
-			}
+		case COMMA: {
+			throwAway(v);
+			v = parseOperand(p, e, op);
+			makeRValue(v);
+			break;
 		}
+		
+		case DELETE_OPERATOR: {
+			v = parseOperand(p, e, op);
+			switch (v.t) {
+				default: assert(0);
+				case XValue::PUSHED: emit(VM::POP_OP); /* continue */
+				case XValue::NONE:
+				case XValue::CONSTANT: v = XValue(XValue::CONSTANT, Value(true)); break;
+				case XValue::INDEXED: v = XValue(XValue::CONSTANT, Value(false)); break;
+				case XValue::NAMED: emit(VM::FRAME_OP); emitWithConstant(VM::CONST_OP, v.v);  /* continue */
+				case XValue::PROPERTY: emit(VM::DELETE_OP); v = XValue(XValue::PUSHED); break;
+			}
+			break;
+		}
+		
+		case VOID_OPERATOR: {
+			v = parseOperand(p, e, op);
+			throwAway(v);
+			break;
+		}
+		
+		case GROUP: {
+			v = parseOperand(p, e, op);
+			break;
+		}
+		
+		case UNARY: {
+			v = parseOperand(p, e, op);
+			if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
+				XValue lv(v);
+				makeRValue(lv);
+				emitWithConstant(VM::CONST_OP, Value(1.0)); 
+				emit(op.vmOp);
+				makeAssignment(v);
+			} else {
+				makeRValue(v);
+				emit(op.vmOp);
+			}
+			break;
+		}
+		
+		case BINARY: {
+			makeRValue(v);
+			parseRValueOperand(p, e, op);
+			emit(op.vmOp);
+			break;
+		}
+		
+		case ASSIGNMENT: {
+			XValue lv(v);
+			if (op.vmOp != VM::INVALID_OP) {
+				makeRValue(lv);
+				parseRValueOperand(p, e, op);
+				emit(op.vmOp);
+			} else {
+				parseRValueOperand(p, e, op);
+			}
+			makeAssignment(v);
+			break;
+		}
+		
+		case PROPERTY_BRACKETS: {
+			makeRValue(v);
+			parseRValueOperand(p, e, op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			v = XValue(XValue::PROPERTY);
+			break;
+		}
+		
+		default: assert(0);
 	}
 	return true;
 }
@@ -1435,6 +1505,51 @@ void Compiler::parseExpression(const Char*& p, const Char* e, XValue& v, Precede
 	if (!parseOptionalExpression(p, e, v, precedence)) throw std::runtime_error("Expected expression");
 }
 
+void Compiler::parseAndPopOptionalExpression(const Char*& p, const Char* e) {
+	XValue xv;
+	if (parseOptionalExpression(p, e, xv, LOWEST_PREC)) throwAway(xv);
+}
+
+void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
+	while (true) {
+		const Char* b = p; // FIX : sub
+		parseIdentifier(p, e);
+		if (p == b) throw std::runtime_error("Expected identifier");
+		String* identifier = String::newHashedString(gcHeap(), b, p);
+		Int32 index;
+		LocalNameMap& nameMap = function->locals;
+		LocalNameMap::const_iterator it = nameMap.find(identifier);
+		if (it != nameMap.end()) index = it->second;
+		else {
+			index = function->localsCount++;
+			nameMap[identifier] = index;
+		}
+		const Char* q = p;
+		eatWhite(q, e);
+		if (eatToken(q, e, "=")) {
+			p = q;
+			XValue xv;
+			parseExpression(p, e, xv, COMMA_PREC); // FIX : SUB
+			makeRValue(xv);
+			emitWithInt32(VM::WRITE_INDEXED_OP, index);
+			emit(VM::POP_OP);
+			q = p;
+			eatWhite(q, e);
+		}
+		if (!eatToken(q, e, ",")) break;
+		p = q;
+		eatWhite(p, e);
+	}
+}
+
+void Compiler::expectSemicolon(const Char*& p, const Char* e) {
+	const Char* q = p;
+	eatWhite(q, e);
+	if (q != e && *q != '}' && !eatToken(q, e, ";") && std::find(p, q, '\n') == q)
+		throw std::runtime_error("Syntax error");
+	p = q;
+}
+
 void Compiler::parseStatement(const Char*& p, const Char* e) {
 	eatWhite(p, e);	
 	if (eatToken(p, e, "{")) {
@@ -1447,56 +1562,23 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 	eatToken(q, e);
 	int i = findStatementToken(q - p, &*p);
 	if (i < 0) {
-		XValue xv;
-		if (parseOptionalExpression(p, e, xv)) {
-			switch (xv.t) {
-				case XValue::PUSHED: emit(VM::POP_OP); break;
-				case XValue::PROPERTY: emit(VM::POP_OP); emit(VM::POP_OP); break;
-				default: break;
-			}
-		}
+		parseAndPopOptionalExpression(p, e);
+		expectSemicolon(p, e);
 	} else {
 		p = q;
 		eatWhite(p, e);
 		switch (static_cast<Statement>(i)) {
 			case VAR_STATEMENT: {
-				while (true) {
-					const Char* b = p; // FIX : sub
-					parseIdentifier(p, e);
-					if (p == b) throw std::runtime_error("Expected identifier");
-					String* identifier = String::newHashedString(gcHeap(), b, p);
-					Int32 index;
-					LocalNameMap& nameMap = function->locals;
-					LocalNameMap::const_iterator it = nameMap.find(identifier);
-					if (it != nameMap.end()) index = it->second;
-					else {
-						index = function->localsCount++;
-						nameMap[identifier] = index;
-					}
-					const Char* q = p;
-					eatWhite(q, e);
-					if (eatToken(q, e, "=")) {
-						p = q;
-						XValue v;
-						parseExpression(p, e, v); // FIX : SUB
-						makeRValue(v);
-						emitWithInt32(VM::WRITE_INDEXED_OP, index);
-						emit(VM::POP_OP);
-						q = p;
-						eatWhite(q, e);
-					}
-					if (!eatToken(q, e, ",")) break;
-					p = q;
-					eatWhite(p, e);
-				}
+				parseVarDeclarations(p, e);
+				expectSemicolon(p, e);
 				break;
 			}
 			
 			case IF_STATEMENT: {
 				expectToken(p, e, "(");
-				XValue v; // FIX : sub
-				parseExpression(p, e, v); // FIX : SUB
-				makeRValue(v);
+				XValue xv; // FIX : sub
+				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				makeRValue(xv);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
 				Int32 pointA = emitForwardBranch(VM::JF_OP);
@@ -1518,9 +1600,9 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
 				expectToken(p, e, "(");
-				XValue v; // FIX : sub
-				parseExpression(p, e, v); // FIX : SUB
-				makeRValue(v);
+				XValue xv; // FIX : sub
+				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				makeRValue(xv);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
 				Int32 pointB = emitForwardBranch(VM::JF_OP);
@@ -1537,32 +1619,62 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 				expectToken(p, e, "while");
 				eatWhite(p, e);
 				expectToken(p, e, "(");
-				XValue v; // FIX : sub
-				parseExpression(p, e, v); // FIX : SUB
-				makeRValue(v);
+				XValue xv; // FIX : sub
+				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				makeRValue(xv);
 				eatWhite(p, e);
 				expectToken(p, e, ")");
 				emitBackwardBranch(VM::JT_OP, point);
+				expectSemicolon(p, e);
+				break;
+			}
+			
+			case FOR_STATEMENT: {
+				expectToken(p, e, "(");
+				eatWhite(p, e);
+				if (eatToken(p, e, "var")) {
+					eatWhite(p, e);
+					parseVarDeclarations(p, e);
+					eatWhite(p, e);
+				} else {
+					parseAndPopOptionalExpression(p, e);
+					eatWhite(p, e);
+				}
+				expectToken(p, e, ";");
+				Int32 pointA = markBackwardBranch();
+				Int32 pointB = -1;
+				XValue xv;
+				if (parseOptionalExpression(p, e, xv, LOWEST_PREC)) {
+					makeRValue(xv);
+					pointB = emitForwardBranch(VM::JF_OP);
+				}
+				eatWhite(p, e);
+				expectToken(p, e, ";");
+				std::vector<Byte>& code = function->code;
+				Int32 pointC = code.size();
+				parseAndPopOptionalExpression(p, e);
+				eatWhite(p, e);
+				expectToken(p, e, ")");
+				Int32 pointD = code.size();
+				parseStatement(p, e);
+				std::rotate(code.begin() + pointC, code.begin() + pointD, code.end());
+				emitBackwardBranch(VM::JMP_OP, pointA);
+				if (pointB >= 0) completeForwardBranch(pointB);
 				break;
 			}
 			
 			case RETURN_STATEMENT: {
-				XValue v;
-				if (parseOptionalExpression(p, e, v)) makeRValue(v);
-				else emit(VM::VOID_OP);
+				XValue xv;
+				parseOptionalExpression(p, e, xv, LOWEST_PREC);
+				makeRValue(xv);
 				emit(VM::RETURN_OP);
+				expectSemicolon(p, e);
 				break;
 			}
 			
 			default: assert(0);
 		}
 	}
-	
-	q = p;
-	eatWhite(q, e);
-	if (q != e && *q != '}' && !eatToken(q, e, ";") && std::find(p, q, '\n') == q)
-		throw std::runtime_error("Syntax error");
-	p = q;
 }
 
 void Compiler::parseStatementList(const Char*& p, const Char* e) {
@@ -1659,6 +1771,7 @@ int main(int argc, const char* argv[]) {
 					
 					if (done) {
 						std::cerr << "On stack: " << (1024 - (vm->vstackPointer - vstack)) << std::endl;
+						assert((1024 - (vm->vstackPointer - vstack)) == 1);
 						std::wcerr << L"=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
