@@ -25,6 +25,7 @@
 //	not too fond of the int cast in the byte array
 // don't accept lf's after ++ etc (automatic ; insertion logic)
 // divide by 0 checks? NaN checks?
+//	is currently not compatible with -ffast_math, which is bad I guess
 // basic library (math, string, array ops)
 // virtual machine should include gc etc
 // also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
@@ -422,6 +423,7 @@ void Table::mark(GCHeap* heap) {
 	}
 	if (rebuildLoadCount != loadCount) {
 		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
+		(void)check;
 		assert(check == rebuildLoadCount);
 	}
 }
@@ -540,7 +542,6 @@ double Value::toDouble() const {
 			const Char* p = s->accessChars();
 			const Char* q = parseDouble(p, p + s->getLength(), v);
 			if (q == p) return NaN();
-			p = q;
 			return v;
 		}
 	}
@@ -831,7 +832,8 @@ void VM::gcMark(GCHeap* heap) {
 
 void VM::push(Value*& vsp, const Value& v) { assert(vsp > vstackStart); *--vsp = v; }
 void VM::pop(Value*& vsp, int count) { assert(vsp + count <= vstackEnd); vsp += count; }
-Int32 VM::readInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
+Int32 VM::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
+Int32 VM::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
 
 void VM::error() {
 	throw std::runtime_error("error"); // FIX
@@ -860,20 +862,21 @@ bool VM::run(Int32 count) {
 	GCHeap* h = gcHeap();
 	while (--count >= 0) {
 		switch (*ip++) {
+			default: assert(0);
 			case POP_OP: pop(vsp, 1); break;
 			case REPUSH_OP: push(vsp, vsp[0]); break;
-			case CONST_OP: push(vsp, cp[readInt32(ip)]); break;
-			case READ_INDEXED_OP: push(vsp, lp[readInt32(ip)]); break;
-			case WRITE_INDEXED_OP: lp[readInt32(ip)] = vsp[0]; break;
+			case CONST_OP: push(vsp, cp[nextInt32(ip)]); break;
+			case READ_INDEXED_OP: push(vsp, lp[nextInt32(ip)]); break;
+			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v;
-				bool success = frame->getProperty(cp[readInt32(ip)].getString(), v);
+				bool success = frame->getProperty(cp[nextInt32(ip)].getString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = frame->setProperty(cp[readInt32(ip)].getString(), vsp[0]);
+				bool success = frame->setProperty(cp[nextInt32(ip)].getString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
@@ -915,9 +918,9 @@ bool VM::run(Int32 count) {
 			case LEQ_OP: vsp[1] = Value(vsp[1].isLessThanOrEqualTo(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 			case GT_OP: vsp[1] = Value(vsp[0].isLessThan(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
 			case GEQ_OP: vsp[1] = Value(vsp[0].isLessThanOrEqualTo(vsp[1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case JMP_OP: ip += readInt32(ip); break;
-			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
-			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) : 4); pop(vsp, 1); break;
+			case JMP_OP: ip += readInt32(ip) + 4; break;
+			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
+			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
 			case RETURN_OP: {
 				if (++cstackPointer == cstackEnd) {
 					cstackPointer->instructionPointer = ip;
@@ -931,7 +934,7 @@ bool VM::run(Int32 count) {
 				break;
 			}
 			case CALL_METHOD_OP: { // FIX : share more with the others...
-				Int32 n = readInt32(ip);
+				Int32 n = nextInt32(ip);
 				Object* thisObject = vsp[n + 1].toObject(h);
 				if (thisObject == 0) error();
 				Value v;
@@ -951,7 +954,7 @@ bool VM::run(Int32 count) {
 				break;
 			}
 			case CALL_GLOBAL_OP: {
-				Int32 n = readInt32(ip);
+				Int32 n = nextInt32(ip);
 				Object* o = vsp[n].toObject(h);
 				if (o == 0) error();
 				Function* f = o->asFunction();
@@ -967,7 +970,7 @@ bool VM::run(Int32 count) {
 				break;
 			}
 			case NEW_OP: {
-				Int32 n = readInt32(ip);
+				Int32 n = nextInt32(ip);
 				Object* o = vsp[n].toObject(h);
 				if (o == 0) error();
 				Function* f = o->asFunction();
@@ -986,7 +989,7 @@ bool VM::run(Int32 count) {
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value()); break;
 			case GEN_FUNC_OP: {
-				push(vsp, Value(h->manage(new ScriptFunction(cp[readInt32(ip)].getFunctionDef(), frame))));
+				push(vsp, Value(h->manage(new ScriptFunction(cp[nextInt32(ip)].getFunctionDef(), frame))));
 				break;
 			}
 			case FRAME_OP: push(vsp, Value(frame)); break;
@@ -1013,7 +1016,8 @@ static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<B
 
 static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::vector<Value>& constants) {
 	const char* OP_STRINGS[] = {
-		"POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
+		"!!! INVALID !!!"
+		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
 		, "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1029,8 +1033,11 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 	std::vector<Byte>::const_iterator it = b;
 	std::vector<Byte>::const_iterator e = code.end();
 	while (it != e) {
-		std::cerr << "\t" << (it - b) << ':' << OP_STRINGS[*it];
-		switch (*it++) {
+		VM::Op opcode = static_cast<VM::Op>(*it);
+		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = VM::INVALID_OP;
+		std::cerr << "\t" << (it - b) << ':' << OP_STRINGS[opcode];
+		++it;
+		switch (opcode) {
 			case VM::JT_OP:
 			case VM::JF_OP:
 			case VM::JMP_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + 4); break;
@@ -1043,6 +1050,7 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case VM::READ_NAMED_OP:
 			case VM::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			default: break;
 		}
 		std::cerr << std::endl;
 	}

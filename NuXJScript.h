@@ -274,7 +274,7 @@ struct Context {
 class VM : public GCItem {
 	public:		typedef GCItem super;
 	public:		enum Op {
-					INVALID_OP = -1
+					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
 					, CONST_OP										// immediate: const index, stack: -> constant
@@ -308,7 +308,8 @@ class VM : public GCItem {
 	public:		bool run(Int32 count);
 	protected:	void push(Value*& vsp, const Value& v);
 	protected:	void pop(Value*& vsp, int count);
-	protected:	Int32 readInt32(const Byte*& ip);
+	protected:	Int32 readInt32(const Byte* ip);
+	protected:	Int32 nextInt32(const Byte*& ip);
 	protected:	void error();
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
