@@ -313,7 +313,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>perftest3.js</string>
+								<string>NuXJScript.cpp</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -321,11 +321,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>perftest3.js</string>
+										<string>NuXJScript.cpp</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F735EA8A16DCBC0600C76D0D</string>
+										<string>F7D4516216DCC3660039338A</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -333,9 +333,9 @@
 											<string>F7E2D1C116DCB6F100271B91</string>
 											<string>F7E2D1C516DCB6F100271B91</string>
 											<string>F757658F16DCBB9300CB34F6</string>
-											<string>F757659116DCBB9300CB34F6</string>
 											<string>F757659216DCBB9300CB34F6</string>
-											<string>F757659816DCBBF700CB34F6</string>
+											<string>F7D4515416DCC3500039338A</string>
+											<string>F7D4515516DCC3500039338A</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -347,14 +347,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 0}, {1228, 517}}</string>
+								<string>{{0, 0}, {1228, 510}}</string>
 								<key>RubberWindowFrame</key>
 								<string>4 56 1436 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
 							<key>Proportion</key>
-							<string>517pt</string>
+							<string>510pt</string>
 						</dict>
 						<dict>
 							<key>ContentConfiguration</key>
@@ -367,14 +367,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 522}, {1228, 259}}</string>
+								<string>{{0, 515}, {1228, 266}}</string>
 								<key>RubberWindowFrame</key>
 								<string>4 56 1436 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>XCDetailModule</string>
 							<key>Proportion</key>
-							<string>259pt</string>
+							<string>266pt</string>
 						</dict>
 					</array>
 					<key>Proportion</key>
@@ -393,9 +393,9 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>F735EA8116DCBC0600C76D0D</string>
+				<string>F7D4515716DCC3500039338A</string>
 				<string>1CE0B1FE06471DED0097A5F4</string>
-				<string>F735EA8216DCBC0600C76D0D</string>
+				<string>F7D4515816DCC3500039338A</string>
 				<string>1CE0B20306471E060097A5F4</string>
 				<string>1CE0B20506471E060097A5F4</string>
 			</array>
@@ -559,7 +559,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CD0528F0623707200166675</string>
 								<key>PBXProjectModuleLabel</key>
-								<string></string>
+								<string>NuXJScript.cpp</string>
 								<key>StatusBarVisibility</key>
 								<true/>
 							</dict>
@@ -576,6 +576,8 @@
 							<string>183pt</string>
 						</dict>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -615,7 +617,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>F74E7E0316D1A3E7003A6AB6</string>
-				<string>F735EA8316DCBC0600C76D0D</string>
+				<string>F7D4515916DCC3500039338A</string>
 				<string>1CD0528F0623707200166675</string>
 				<string>XCMainBuildResultsModuleGUID</string>
 			</array>
@@ -737,13 +739,13 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1CD10A99069EF8BA00B06720</string>
-				<string>F735EA8416DCBC0600C76D0D</string>
+				<string>F7D4515A16DCC3500039338A</string>
 				<string>1C162984064C10D400B95A72</string>
-				<string>F735EA8516DCBC0600C76D0D</string>
-				<string>F735EA8616DCBC0600C76D0D</string>
-				<string>F735EA8716DCBC0600C76D0D</string>
-				<string>F735EA8816DCBC0600C76D0D</string>
-				<string>F735EA8916DCBC0600C76D0D</string>
+				<string>F7D4515B16DCC3500039338A</string>
+				<string>F7D4515C16DCC3500039338A</string>
+				<string>F7D4515D16DCC3500039338A</string>
+				<string>F7D4515E16DCC3500039338A</string>
+				<string>F7D4515F16DCC3500039338A</string>
 			</array>
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.debugV3</string>
