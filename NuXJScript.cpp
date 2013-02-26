@@ -7,6 +7,7 @@
 //	need easier API, shouldn't crash if missing push etc
 //	no synchronized return to native code right now
 //	arguments are reversed on native calls, and will be gc'd as stack has already popped 
+//		arguments no longer reversed since we push forwards now, but will still be gc'd
 // exceptions (and catching both virtual and native)
 // typeof, instanceof, in operators
 // new operator
@@ -29,6 +30,7 @@
 // basic library (math, string, array ops)
 // virtual machine should include gc etc
 // also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
+//	thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
 // take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 // assignable globals this in vm
 // function name() { } syntax
