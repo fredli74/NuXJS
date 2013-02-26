@@ -48,6 +48,7 @@
 
 #include "assert.h"
 #include <cmath>
+#include <ctime>
 #include <algorithm>
 #include <exception>
 #include <stdexcept>
@@ -65,6 +66,7 @@ static int strncmp(const Char* a, const char* b, size_t n) {
 }
 
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
+static bool isNaN(double d) { return d != d; }
 
 // FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
 
@@ -563,7 +565,7 @@ String* Value::toString(GCHeap* heap) const {
 					return QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
 				else return heap->manage(new String(intToString(buffer, i), buffer + 32));
 			}
-			if (std::isnan(d)) return &NAN_STRING;
+			if (isNaN(d)) return &NAN_STRING;
 			double x = fabs(d);
 			if (x <= EPSILON) return &ZERO_STRING;
 			if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;

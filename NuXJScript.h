@@ -326,7 +326,7 @@ enum Precedence {
 	, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
-class OperatorInfo;
+struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
 	public:		struct XValue;
