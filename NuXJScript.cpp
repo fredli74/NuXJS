@@ -832,6 +832,7 @@ void VM::gcMark(GCHeap* heap) {
 void VM::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void VM::push(const Value& v) { push(vstackPointer, v); }
 void VM::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
+void VM::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 Int32 VM::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
 Int32 VM::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
 
@@ -891,29 +892,29 @@ bool VM::run(Int32 count) {
 				pop(vsp, 2);
 				break;
 			}
-			case ADD_OP: vsp[-1] = vsp[-1].add(h, vsp[0]); pop(vsp, 1); break;
-			case SUB_OP: vsp[-1] = Value(vsp[-1].toDouble() - vsp[0].toDouble()); pop(vsp, 1); break;
-			case MUL_OP: vsp[-1] = Value(vsp[-1].toDouble() * vsp[0].toDouble()); pop(vsp, 1); break;
-			case DIV_OP: vsp[-1] = Value(vsp[-1].toDouble() / vsp[0].toDouble()); pop(vsp, 1); break;
-			case MOD_OP: vsp[-1] = Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble())); pop(vsp, 1); break;
-			case OR_OP: vsp[-1] = Value(vsp[-1].toInt() | vsp[0].toInt()); pop(vsp, 1); break;
-			case XOR_OP: vsp[-1] = Value(vsp[-1].toInt() ^ vsp[0].toInt()); pop(vsp, 1); break;
-			case AND_OP: vsp[-1] = Value(vsp[-1].toInt() & vsp[0].toInt()); pop(vsp, 1); break;
-			case SHL_OP: vsp[-1] = Value(vsp[-1].toInt() << vsp[0].toInt()); pop(vsp, 1); break;
-			case SHR_OP: vsp[-1] = Value(vsp[-1].toInt() >> vsp[0].toInt()); pop(vsp, 1); break;
-			case UNSIGNED_SHR_OP: vsp[-1] = Value((Int32)((UInt32)(vsp[-1].toInt()) >> vsp[0].toInt())); pop(vsp, 1); break;
+			case ADD_OP: poppush(vsp, vsp[-1].add(h, vsp[0])); break;
+			case SUB_OP: poppush(vsp, Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
+			case MUL_OP: poppush(vsp, Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
+			case DIV_OP: poppush(vsp, Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
+			case MOD_OP: poppush(vsp, Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case OR_OP: poppush(vsp, Value(vsp[-1].toInt() | vsp[0].toInt())); break;
+			case XOR_OP: poppush(vsp, Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
+			case AND_OP: poppush(vsp, Value(vsp[-1].toInt() & vsp[0].toInt())); break;
+			case SHL_OP: poppush(vsp, Value(vsp[-1].toInt() << vsp[0].toInt())); break;
+			case SHR_OP: poppush(vsp, Value(vsp[-1].toInt() >> vsp[0].toInt())); break;
+			case UNSIGNED_SHR_OP: poppush(vsp, Value((Int32)((UInt32)(vsp[-1].toInt()) >> vsp[0].toInt()))); break;
 			case PLUS_OP: vsp[0] = Value(vsp[0].toDouble()); break;
 			case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
 			case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP: vsp[0] = Value(!vsp[0].toBool()); break;
-			case STRICT_EQ_OP: vsp[-1] = Value(vsp[-1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
-			case STRICT_NEQ_OP: vsp[-1] = Value(!vsp[-1].isStrictlyEqualTo(vsp[0])); pop(vsp, 1); break;
-			case EQ_OP: vsp[-1] = Value(vsp[-1].isEqualTo(vsp[0])); pop(vsp, 1); break;
-			case NEQ_OP: vsp[-1] = Value(!vsp[-1].isEqualTo(vsp[0])); pop(vsp, 1); break;
-			case LT_OP: vsp[-1] = Value(vsp[-1].isLessThan(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case LEQ_OP: vsp[-1] = Value(vsp[-1].isLessThanOrEqualTo(vsp[0])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GT_OP: vsp[-1] = Value(vsp[0].isLessThan(vsp[-1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GEQ_OP: vsp[-1] = Value(vsp[0].isLessThanOrEqualTo(vsp[-1])); pop(vsp, 1); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case STRICT_EQ_OP: poppush(vsp, Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case STRICT_NEQ_OP: poppush(vsp, Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case EQ_OP: poppush(vsp, Value(vsp[-1].isEqualTo(vsp[0]))); break;
+			case NEQ_OP: poppush(vsp, Value(!vsp[-1].isEqualTo(vsp[0]))); break;
+			case LT_OP: poppush(vsp, Value(vsp[-1].isLessThan(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case LEQ_OP: poppush(vsp, Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GT_OP: poppush(vsp, Value(vsp[0].isLessThan(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GEQ_OP: poppush(vsp, Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
 			case JMP_OP: ip += readInt32(ip) + 4; break;
 			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
 			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
@@ -983,7 +984,7 @@ bool VM::run(Int32 count) {
 				lp = frame->getLocalsPointer();
 				break;
 			}
-			case NEW_RESULT_OP: vsp[-1] = (vsp[0].isObject() ? vsp[0] : vsp[-1]); pop(vsp, 1); break;
+			case NEW_RESULT_OP: poppush(vsp, (vsp[0].isObject() ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value()); break;
 			case GEN_FUNC_OP: {
@@ -994,8 +995,7 @@ bool VM::run(Int32 count) {
 			case DELETE_OP: {
 				Object* o = vsp[-1].toObject(h);
 				if (o == 0) error();
-				vsp[-1] = Value(o->deleteProperty(vsp[0].toString(h)));
-				pop(vsp, 1);
+				poppush(vsp, Value(o->deleteProperty(vsp[0].toString(h))));
 				break;
 			}
 		}

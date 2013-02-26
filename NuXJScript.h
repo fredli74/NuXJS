@@ -308,6 +308,7 @@ class VM : public GCItem {
 	public:		bool run(Int32 count);
 	protected:	void push(Value*& vsp, const Value& v);
 	protected:	void pop(Value*& vsp, int count);
+	protected:	void poppush(Value*& vsp, const Value& v);
 	protected:	Int32 readInt32(const Byte* ip);
 	protected:	Int32 nextInt32(const Byte*& ip);
 	protected:	void error();
