@@ -33,6 +33,7 @@
 // function name() { } syntax
 // literal function names, e.g. myGlobalName = function myLocalName() { ... }
 // better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+// global scope compiler (don't accept return etc)
 //
 // DONE
 //
@@ -335,33 +336,48 @@ std::wstring String::toStdString() const { return std::wstring(chars.data(), cha
 
 /* --- GCHeap --- */
 
+GCHeap::GCHeap() : count(0), items(new GCItem()) { }
+
 size_t GCHeap::sweep() {
-	size_t count = 0;
-	for (std::vector<const GCItem*>::reverse_iterator it = objects.rbegin(), e = objects.rend(); it != e; ++it) {
-		if (*it != 0 && (*it)->_gcHeap == this) {
-			delete *it;
-			*it = 0;
-			count++;
-		}
+	size_t n = 0;
+	for (const GCItem* i = items->_gcNext->_gcNext; i != items->_gcNext; i = i->_gcNext) {
+		assert(i->_gcPrev->_gcHeap == this);
+		delete i->_gcPrev;
+		++n;
 	}
-	objects.clear();
-	return count;
+
+	items->_gcPrev = items->_gcNext = items;
+	assert(n == count);
+	count = 0;
+	return n;
 }
 
-size_t GCHeap::size() const { return objects.size(); }
+size_t GCHeap::size() const { return count; }
 
-void GCHeap::add(const GCItem* object) {
-	assert(object->_gcHeap == 0);
-	objects.push_back(object);
-	object->_gcHeap = this;
+void GCHeap::claim(const GCItem* item) {
+	if (item->_gcHeap != 0) {
+		item->_gcHeap->count--;
+		item->_gcPrev->_gcNext = item->_gcNext;
+		item->_gcNext->_gcPrev = item->_gcPrev;
+	}
+	item->_gcPrev = items;
+	item->_gcNext = items->_gcNext;
+	items->_gcNext->_gcPrev = item;
+	items->_gcNext = item;
+	item->_gcHeap = this;
+	++count;
 }
 
-void GCHeap::mark(const GCItem* object) {
-	if (object != 0 && object->_gcHeap != this && object->_gcHeap != 0) {
-		objects.push_back(object);
-		object->_gcHeap = this;
-		const_cast<GCItem*>(object)->gcMark(this);
+void GCHeap::mark(const GCItem* item) {
+	if (item != 0 && item->_gcHeap != this && item->_gcHeap != 0) {
+		claim(item);
+		const_cast<GCItem*>(item)->gcMark(this);
 	}
+}
+
+GCHeap::~GCHeap() {
+	sweep();
+	delete items;
 }
 
 /* --- Table --- */

@@ -49,24 +49,28 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 	protected:	T a[BUILT_IN_COUNT];
 };
 
-class GCItem;
-class GCHeap {
-	public:		static GCHeap* markAndSweep(GCHeap* original);
-	public:		template<class T> T* manage(T* object) { add(object); return object; }
-	public:		void mark(const GCItem* object);
-	public:		size_t sweep();
-	public:		size_t size() const;
-	protected:	void add(const GCItem* object);
-	protected:	std::vector<const GCItem*> objects;
-};
-
+class GCHeap;
 class GCItem {
 	friend class GCHeap;
-	public:		GCItem() : _gcHeap(0) { }
+	public:		GCItem() : _gcHeap(0), _gcPrev(this), _gcNext(this) { }
 	public:		GCHeap* gcHeap() const { return _gcHeap; }
 	public:		virtual void gcMark(GCHeap* heap) { }
 	public:		virtual ~GCItem() { }
 	protected:	mutable GCHeap* _gcHeap;
+	protected:	mutable const GCItem* _gcPrev;
+	protected:	mutable const GCItem* _gcNext;
+};
+
+class GCHeap : public GCItem {
+	public:		GCHeap();
+	public:		template<class T> T* manage(T* item) { claim(item); return item; }
+	public:		void mark(const GCItem* item);
+	public:		size_t sweep();
+	public:		size_t size() const;
+	public:		virtual ~GCHeap();
+	protected:	void claim(const GCItem* item);
+	protected:	size_t count;
+	protected:	GCItem* items;
 };
 
 class Object;
