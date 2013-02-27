@@ -325,7 +325,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7D4557B16DE166B0039338A</string>
+										<string>F7E6DA4D16DE23F1007AB92B</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -335,8 +335,8 @@
 											<string>F7D451C116DCCC790039338A</string>
 											<string>F7D451C216DCCC790039338A</string>
 											<string>F7D451C416DCCC790039338A</string>
-											<string>F7D4557616DE163D0039338A</string>
-											<string>F7D4557716DE163D0039338A</string>
+											<string>F7E6DA4116DE23CF007AB92B</string>
+											<string>F7E6DA4216DE23CF007AB92B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -394,9 +394,9 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>F7D4546616DD919A0039338A</string>
+				<string>F7E6DA0B16DE222E007AB92B</string>
 				<string>1CE0B1FE06471DED0097A5F4</string>
-				<string>F7D4546716DD919A0039338A</string>
+				<string>F7E6DA0C16DE222E007AB92B</string>
 				<string>1CE0B20306471E060097A5F4</string>
 				<string>1CE0B20506471E060097A5F4</string>
 			</array>
@@ -534,13 +534,12 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7D454FF16DD99D40039338A</string>
-		<string>F7D4550016DD99D40039338A</string>
-		<string>1C530D57069F1CE1000CFCEE</string>
+		<string>F7E6DA4A16DE23DD007AB92B</string>
+		<string>F7E6DA4B16DE23DD007AB92B</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
-		<string>1C78EAAD065D492600B07095</string>
 	</array>
 	<key>WindowString</key>
 	<string>4 56 1436 822 0 0 1440 878 </string>
@@ -559,6 +558,8 @@
 					<key>Dock</key>
 					<array>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -581,8 +582,6 @@
 							<string>419pt</string>
 						</dict>
 						<dict>
-							<key>BecomeActive</key>
-							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -622,7 +621,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>F74E7E0316D1A3E7003A6AB6</string>
-				<string>F7D4546816DD919A0039338A</string>
+				<string>F7E6DA0D16DE222E007AB92B</string>
 				<string>1CD0528F0623707200166675</string>
 				<string>XCMainBuildResultsModuleGUID</string>
 			</array>
@@ -744,13 +743,13 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1CD10A99069EF8BA00B06720</string>
-				<string>F7D4549816DD940A0039338A</string>
+				<string>F7E6DA1316DE228A007AB92B</string>
 				<string>1C162984064C10D400B95A72</string>
-				<string>F7D4549916DD940A0039338A</string>
-				<string>F7D4549A16DD940A0039338A</string>
-				<string>F7D4549B16DD940A0039338A</string>
-				<string>F7D4549C16DD940A0039338A</string>
-				<string>F7D4549D16DD940A0039338A</string>
+				<string>F7E6DA1416DE228A007AB92B</string>
+				<string>F7E6DA1516DE228A007AB92B</string>
+				<string>F7E6DA1616DE228A007AB92B</string>
+				<string>F7E6DA1716DE228A007AB92B</string>
+				<string>F7E6DA1816DE228A007AB92B</string>
 			</array>
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.debugV3</string>
@@ -906,7 +905,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C78EAAD065D492600B07095</string>
-				<string>F7D454F416DD99A20039338A</string>
+				<string>F7E6DA4916DE23DD007AB92B</string>
 				<string>1C78EAAC065D492600B07095</string>
 			</array>
 			<key>ToolbarConfiguration</key>
@@ -916,7 +915,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>
