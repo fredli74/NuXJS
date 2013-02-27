@@ -57,9 +57,9 @@ class GCItem {
 	public:		GCItem();
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual ~GCItem();
-	protected:	mutable GCList* _gcList;
-	protected:	mutable const GCItem* _gcPrev;
-	protected:	mutable const GCItem* _gcNext;
+	protected:	GCList* _gcList;
+	protected:	GCItem* _gcPrev;
+	protected:	GCItem* _gcNext;
 };
 
 class GCList : public GCItem {
@@ -122,15 +122,15 @@ class Value {
 
 class UserObject;
 class GCHeap {
-	public:		template<class T> T* manage(T* item) { currentHeap->claim(item); return item; }
-	public:		template<class T> T* protect(T* item) { protectedItems.claim(item); return item; }
+	public:		template<class T> T* manage(T* item) { currentList->claim(item); return item; }
+	public:		template<class T> T* protect(T* item) { rootList.claim(item); return item; }
 	public:		GCHeap();
-	public:		GCList* heap() const { return currentHeap.get(); }
 	public:		void mark(const GCItem* item);
 	public:		size_t gc();
-public:	std::auto_ptr<GCList> currentHeap;
-public:	std::auto_ptr<GCList> newHeap;
-public:	GCList protectedItems;
+public:	GCList* currentList;
+	protected:	GCList* newList;
+	protected:	GCList managedLists[2];
+	protected:	GCList rootList;
 };
 
 class Environment;
@@ -229,8 +229,8 @@ class VM;
 class Function : public UserObject {
 	public:		typedef UserObject super;
 	public:		virtual Function* asFunction();
-	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
-	public:		virtual void construct(VM* vm, Int32 argc, const Value* argv);
+	public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+	public:		virtual void construct(GCHeap& heap, VM* vm, Int32 argc, const Value* argv);
 };
 
 class NativeFunction : public Function {
@@ -241,7 +241,7 @@ class ScriptFunction : public Function {
 	public:		typedef Function super;
 	public:		ScriptFunction(ScriptFunctionDef* definition, Object* scope);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
+	public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
 	public:		ScriptFunctionDef* getDefinition() const;
 	public:		Object* getScope() const;
 	protected:	ScriptFunctionDef* const definition;
@@ -319,7 +319,7 @@ class VM : public GCItem {
 	protected:	Int32 readInt32(const Byte* ip);
 	protected:	Int32 nextInt32(const Byte*& ip);
 	protected:	void error();
-public:	Environment& env;
+	protected:	Environment& env;
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
 	protected:	Value* const vstackStart;
@@ -340,11 +340,11 @@ class Compiler : public GCItem {
 	public:		struct XValue;
 	public:		Compiler(Environment& env, ScriptFunctionDef* function);
 	public:		virtual void gcMark(GCHeap& heap);
+	public:		const Char* compile(const Char* b, const Char* e);
 	public:		void compile(const String* source);
 	public:		void finish();
-	protected:	bool isComment(const Char* p, const Char* e);
-	protected:	void eatComment(const Char*& p, const Char* e);
-	protected:	void eatWhite(const Char*& p, const Char* e);
+	protected:	void eatComment();
+	protected:	void eatWhite();
 	protected:	void emit(VM::Op op);
 	protected:	void emitWithInt32(VM::Op op, Int32 i);
 	protected:	void emitWithConstant(VM::Op op, const Value& constant);
@@ -352,29 +352,30 @@ class Compiler : public GCItem {
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
 	protected:	void emitBackwardBranch(VM::Op op, Int32 point);
-	protected:	double parseNumber(const Char*& p, const Char* e);
-	protected:	XValue parseOperand(const Char*& p, const Char* e, const OperatorInfo& op);
-	protected:	void parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op);
-	protected:	void parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::Op op);
-	protected:	bool parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	protected:	void parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
-	protected:	bool parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence);
-	protected:	void parseAndPopOptionalExpression(const Char*& p, const Char* e);
-	protected:	void parseVarDeclarations(const Char*& p, const Char* e);
-	protected:	void parseStatement(const Char*& p, const Char* e);
-	protected:	void parseStatementList(const Char*& p, const Char* e);
-	protected:	bool eatToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite); // FIX : not all of these
-	protected:	void expectSemicolon(const Char*& p, const Char* e);
-	protected:	void expectToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite);
-	protected:	void eatToken(const Char*& p, const Char* e);
+	protected:	XValue parseOperand(const OperatorInfo& op);
+	protected:	void parseRValueOperand(const OperatorInfo& op);
+	protected:	void parseFunctionCall(XValue& v, VM::Op op);
+	protected:	bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
+	protected:	void parseExpression(XValue& v, Precedence precedence);
+	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
+	protected:	void parseAndPopOptionalExpression();
+	protected:	void parseVarDeclarations();
+	protected:	void parseStatement();
+	protected:	void parseStatementList();
+	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these
+	protected:	void expectSemicolon();
+	protected:	void expectToken(const char* t, bool eatLeadingWhite);
+	protected:	void eatToken();
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);
 	protected:	void throwAway(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier(const Char*& p, const Char* e);
+	protected:	void parseIdentifier();
 	protected:	Environment& env;
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
+	protected:	const Char* p;
+	protected:	const Char* e;
 };
 
 #endif

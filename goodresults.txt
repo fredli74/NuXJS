@@ -23,5 +23,6 @@ true
 false
 false
 false
+true
 a: undefined, b: undefined, c: cee
 a: aah, b: bee, c: cee

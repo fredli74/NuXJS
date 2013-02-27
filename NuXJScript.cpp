@@ -1,52 +1,67 @@
-// TODO
+// --- TODO ---
 //
-// for (in)
-// switch
-// break, continue etc (with labels!)
-// native calls (and returns)
-//	need easier API, shouldn't crash if missing push etc
-//	no synchronized return to native code right now
-//	arguments are reversed on native calls, and will be gc'd as stack has already popped 
-//		arguments no longer reversed since we push forwards now, but will still be gc'd
-// exceptions (and catching both virtual and native)
-// typeof, instanceof, in operators
-// new operator
-//  done, but need to implement prototype
-// prototype support
-// eval support
-// arguments container
-// array literals
-// object literals
-// array object (length property support, optimized for numerical indexes?)
-// count (and run-time check) necessary value stack depth for functions
-// jump optimizations
-// pop void optimization (almost always occurs with a return;)?
-// special write with pop instructions (very common)?
-// change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
-//	not too fond of the int cast in the byte array
-// don't accept lf's after ++ etc (automatic ; insertion logic)
-// divide by 0 checks? NaN checks?
-//	is currently not compatible with -ffast_math, which is bad I guess
-//	also isnan is not standard C++ :(, on Windows it is called _isnan
-//	do a special Value variation that tracks NAN and Infinities?
-// basic library (math, string, array ops)
-// virtual machine should include gc etc
-// also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
-//	thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
-// take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
-// assignable globals this in vm
-// function name() { } syntax
-// literal function names, e.g. myGlobalName = function myLocalName() { ... }
-// better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
-// global scope compiler (don't accept return etc)
+//	Run-time
 //
-// DONE
+//		virtual machine should include gc etc
+//		eval support
+//		count (and run-time check) necessary value stack depth for functions
+//		special write with pop instructions (very common)?
+//		divide by 0 checks? NaN checks?
+//			is currently not compatible with -ffast_math, which is bad I guess
+//			also isnan is not standard C++ :(, on Windows it is called _isnan
+//			do a special Value variation that tracks NAN and Infinities?
+//		native calls (and returns)
+//			need easier API, shouldn't crash if missing push etc
+//			no synchronized return to native code right now
+//			arguments are reversed on native calls, and will be gc'd as stack has already popped 
+//				arguments no longer reversed since we push forwards now, but will still be gc'd
+//		prototype support
+//		arguments container
+//		array object (length property support, optimized for numerical indexes?)
+//		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
+//			not too fond of the int cast in the byte array
+//		basic library (math, string, array ops)
+//		take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+//		assignable globals this in vm
 //
-// for (;;)
-// comma operator
-// void operator
-// delete operator
-// proper string comparisons (< etc)
+//	Compiler
+//
+//		don't accept lf's after ++ etc (automatic ; insertion logic)
+//		for (in)
+//		switch
+//		break, continue etc (with labels!)
+//		global scope compiler (don't accept return etc)
+//		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+//		function name() { } syntax
+//		literal function names, e.g. myGlobalName = function myLocalName() { ... }
+//		exceptions (and catching both virtual and native)
+//		typeof operator
+//		instanceof operator
+//		in operator
+//		new operator
+//			done, but need to implement prototype
+//		array literals
+//		object literals
+//		jump optimizations
+//		pop void optimization (almost always occurs with a return;)?
+//
+//	GC
+//
+//		take a shot at generational gc
+//		no need for recursive marking, just add to one end of the list and continue looping to the end of list
+//		fast allocation pools
+//		automatic gc pace
+//		count actual memory allocated as in old NuXScript?
+//
+// --- DONE ---
+//
+//		for (;;)
+//		comma operator
+//		void operator
+//		delete operator
+//		proper string comparisons (< etc)
+//		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
+//			thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
 
 #include "assert.h"
 #include <cmath>
@@ -220,6 +235,10 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	}
 	if (p >= e || *p != endChar) throw std::runtime_error("Unterminated string");
 	return std::copy(b, p++, d);
+}
+
+static bool isComment(const Char* p, const Char* e) {
+	return (p != e && p + 1 != e && *p == '/' && (p[1] == '/' || p[1] == '*'));
 }
 
 /* --- String --- */
@@ -719,11 +738,11 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 
 Function* Function::asFunction() { return this; }
 
-void Function::construct(VM* vm, Int32 argc, const Value* argv) {
-	Object* newObject = vm->env.heap().manage(new UserObject());
+void Function::construct(GCHeap& heap, VM* vm, Int32 argc, const Value* argv) {
+	Object* newObject = heap.manage(new UserObject());
 	Value thisValue(newObject);
 	vm->push(thisValue);
-	call(vm, argc, argv, thisValue);
+	call(heap, vm, argc, argv, thisValue);
 }
 
 /* --- ScriptFunction --- */
@@ -732,7 +751,7 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* scope) : d
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getScope() const { return scope; }
 
-void ScriptFunction::call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
+void ScriptFunction::call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
 	vm->enterCall(this, argc, argv, thisValue);
 }
 
@@ -932,7 +951,7 @@ bool VM::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 2;
-				f->call(this, n, vsp - n + 1, Value(thisObject));
+				f->call(heap, this, n, vsp - n + 1, Value(thisObject));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -948,7 +967,7 @@ bool VM::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->call(this, n, vsp - n + 1, Value());
+				f->call(heap, this, n, vsp - n + 1, Value());
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -964,7 +983,7 @@ bool VM::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->construct(this, n, vsp - n + 1);
+				f->construct(heap, this, n, vsp - n + 1);
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1144,17 +1163,13 @@ Compiler::Compiler(Environment& env, ScriptFunctionDef* function) : env(env), fu
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
-	for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
+	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) {
 		it->first.mark(heap);
 	}
 	super::gcMark(heap);
 }
 
-bool Compiler::isComment(const Char* p, const Char* e) {
-	return (p != e && p + 1 != e && *p == '/' && (p[1] == '/' || p[1] == '*'));
-}
-
-void Compiler::eatComment(const Char*& p, const Char* e) {
+void Compiler::eatComment() {
 	assert(isComment(p, e));
 	if (p[1] == '/') {
 		static const Char END_CHARS[] = { '\r', '\n' };
@@ -1167,7 +1182,7 @@ void Compiler::eatComment(const Char*& p, const Char* e) {
 	}
 }
 
-void Compiler::eatWhite(const Char*& p, const Char* e) {
+void Compiler::eatWhite() {
 	while (p != e) {
 		switch (*p) {
 			case ' ': case '\t': ++p; break;
@@ -1177,7 +1192,7 @@ void Compiler::eatWhite(const Char*& p, const Char* e) {
 				if (e - p >= 2 && p[0] == '.' && p[1] == '.') p += 2;
 				break;
 			}
-			case '/': if (isComment(p, e)) { eatComment(p, e); break; }
+			case '/': if (isComment(p, e)) { eatComment(); break; }
 			/* else continue */
 			default: return;
 		}
@@ -1224,31 +1239,24 @@ void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
 	}
 }
 
-double Compiler::parseNumber(const Char*& p, const Char* e) {
-	double v;
-	const Char* q = parseDouble(p, e, v);
-	if (q == p) throw std::runtime_error("Invalid number");
-	p = q;
-	return v;
-}
-
 bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
-bool Compiler::eatToken(const Char*& p, const Char* e, const char* t, bool eatLeadingWhite) {
+bool Compiler::eatToken(const char* t, bool eatLeadingWhite) {
 	assert(*t != 0);
-	const Char* q = p;
-	if (eatLeadingWhite) eatWhite(q, e);
-	while (*t != 0 && q != e && *q == *t) { ++q; ++t; }
-	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (q == e || !isLeadingIdentifierChar(*q)))) {
-		p = q;
+	const Char* b = p;
+	if (eatLeadingWhite) eatWhite();
+	while (*t != 0 && p != e && *p == *t) { ++p; ++t; }
+	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (p == e || !isLeadingIdentifierChar(*p)))) {
 		return true;
+	} else {
+		p = b;
+		return false;
 	}
-	return false;
 }
 
-void Compiler::eatToken(const Char*& p, const Char* e) {
+void Compiler::eatToken() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
@@ -1285,42 +1293,42 @@ void Compiler::throwAway(XValue& xv) {
 	xv = XValue(XValue::NONE);
 }
 
-Compiler::XValue Compiler::parseOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
+Compiler::XValue Compiler::parseOperand(const OperatorInfo& op) {
 	XValue rv;
-	parseExpression(p, e, rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
-	if (op.closeToken != 0) expectToken(p, e, op.closeToken, true);
+	parseExpression(rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
+	if (op.closeToken != 0) expectToken(op.closeToken, true);
 	return rv;
 }
 
-void Compiler::parseRValueOperand(const Char*& p, const Char* e, const OperatorInfo& op) {
-	XValue xv(parseOperand(p, e, op));
+void Compiler::parseRValueOperand(const OperatorInfo& op) {
+	XValue xv(parseOperand(op));
 	makeRValue(xv);
 }
 
-void Compiler::parseFunctionCall(const Char*& p, const Char* e, XValue& v, VM::Op op) {
-	eatWhite(p, e);
+void Compiler::parseFunctionCall(XValue& v, VM::Op op) {
+	eatWhite();
 	Int32 count = 0;
 	while (p != e && *p != ')') {
 		if (count != 0) {
-			expectToken(p, e, ",", false);
-			eatWhite(p, e);
+			expectToken(",", false);
+			eatWhite();
 		}
-		parseExpression(p, e, v, COMMA_PREC);
+		parseExpression(v, COMMA_PREC);
 		makeRValue(v);
-		eatWhite(p, e);
+		eatWhite();
 		++count;
 	}
-	expectToken(p, e, ")", false);
+	expectToken(")", false);
 	emitWithInt32(op, count);
 	v = XValue(XValue::PUSHED);
 }
 
-bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedence precedence
+bool Compiler::parseOperator(XValue& v, Precedence precedence
 		, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
-	while (i < opCount && !eatToken(p, e, opList[i].token, false)) ++i;
+	while (i < opCount && !eatToken(opList[i].token, false)) ++i;
 	if (i >= opCount) return false;
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
@@ -1345,7 +1353,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			emit(VM::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(VM::POP_OP);
-			parseRValueOperand(p, e, op);
+			parseRValueOperand(op);
 			completeForwardBranch(point);
 			break;
 		}
@@ -1353,10 +1361,10 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		case CONDITIONAL: {
 			makeRValue(v);
 			Int32 pointA = emitForwardBranch(VM::JF_OP);
-			parseRValueOperand(p, e, op);
+			parseRValueOperand(op);
 			Int32 pointB = emitForwardBranch(VM::JMP_OP);
 			completeForwardBranch(pointA);
-			parseExpression(p, e, v, op.prec);
+			parseExpression(v, op.prec);
 			makeRValue(v);
 			completeForwardBranch(pointB);
 			break;			
@@ -1364,9 +1372,9 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		
 		case PROPERTY_DOT: {
 			makeRValue(v);
-			eatWhite(p, e);
+			eatWhite();
 			const Char* b = p;
-			parseIdentifier(p, e);
+			parseIdentifier();
 			if (p == b) throw std::runtime_error("Expected identifier");
 			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(env.heap(), b, p)));
 			v = XValue(XValue::PROPERTY);
@@ -1377,18 +1385,18 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			VM::Op op = VM::CALL_GLOBAL_OP;
 			if (v.t == XValue::PROPERTY) op = VM::CALL_METHOD_OP;
 			else makeRValue(v);
-			parseFunctionCall(p, e, v, op);
+			parseFunctionCall(v, op);
 			break;
 		}
 		
 		case NEW_OPERATOR: {
-			parseRValueOperand(p, e, op);
-			if (!eatToken(p, e, "(", true)) {
+			parseRValueOperand(op);
+			if (!eatToken("(", true)) {
 				emitWithInt32(VM::NEW_OP, 0);
 				v = XValue(XValue::PUSHED);
 			} else {
-				eatWhite(p, e);
-				parseFunctionCall(p, e, v, VM::NEW_OP);
+				eatWhite();
+				parseFunctionCall(v, VM::NEW_OP);
 			}
 			emit(VM::NEW_RESULT_OP);
 			break;
@@ -1396,13 +1404,13 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		
 		case COMMA: {
 			throwAway(v);
-			v = parseOperand(p, e, op);
+			v = parseOperand(op);
 			makeRValue(v);
 			break;
 		}
 		
 		case DELETE_OPERATOR: {
-			v = parseOperand(p, e, op);
+			v = parseOperand(op);
 			switch (v.t) {
 				default: assert(0);
 				case XValue::PUSHED: emit(VM::POP_OP); /* continue */
@@ -1416,18 +1424,18 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		}
 		
 		case VOID_OPERATOR: {
-			v = parseOperand(p, e, op);
+			v = parseOperand(op);
 			throwAway(v);
 			break;
 		}
 		
 		case GROUP: {
-			v = parseOperand(p, e, op);
+			v = parseOperand(op);
 			break;
 		}
 		
 		case UNARY: {
-			v = parseOperand(p, e, op);
+			v = parseOperand(op);
 			if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
 				XValue lv(v);
 				makeRValue(lv);
@@ -1443,7 +1451,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		
 		case BINARY: {
 			makeRValue(v);
-			parseRValueOperand(p, e, op);
+			parseRValueOperand(op);
 			emit(op.vmOp);
 			break;
 		}
@@ -1452,10 +1460,10 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			XValue lv(v);
 			if (op.vmOp != VM::INVALID_OP) {
 				makeRValue(lv);
-				parseRValueOperand(p, e, op);
+				parseRValueOperand(op);
 				emit(op.vmOp);
 			} else {
-				parseRValueOperand(p, e, op);
+				parseRValueOperand(op);
 			}
 			makeAssignment(v);
 			break;
@@ -1463,7 +1471,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 		
 		case PROPERTY_BRACKETS: {
 			makeRValue(v);
-			parseRValueOperand(p, e, op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			parseRValueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -1473,7 +1481,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 	return true;
 }
 
-void Compiler::parseIdentifier(const Char*& p, const Char* e) {
+void Compiler::parseIdentifier() {
 	if (p != e && isLeadingIdentifierChar(*p)) {
 		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
 	}
@@ -1494,19 +1502,18 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::expectToken(const Char*& p, const Char* e, const char* token, bool eatLeadingWhite) {
-	if (!eatToken(p, e, token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
+void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
+	if (!eatToken(token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
 }
 
-bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence) {
-	eatWhite(p, e);
+bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
+	eatWhite();
 	if (p == e) return false;
-	if (!parseOperator(p, e, v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
-		const Char* q = p;
-		eatToken(q, e);
-		int i = findLiteralToken(q - p, &*p);
+	if (!parseOperator(v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
+		const Char* b = p;
+		eatToken();
+		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
-			p = q;
 			switch (static_cast<Literal>(i)) {
 				case NULL_LITERAL: v = XValue(XValue::CONSTANT, Value(Value::NULL_TYPE)); break;
 				case FALSE_LITERAL: v = XValue(XValue::CONSTANT, Value(false)); break;
@@ -1519,29 +1526,30 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 				case FUNCTION_LITERAL: {
 					ScriptFunctionDef* func = env.heap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
-					expectToken(p, e, "(", true);
-					eatWhite(p, e);
+					expectToken("(", true);
+					eatWhite();
 					while (p != e && *p != ')') {
 						if (func->argumentsCount != 0) {
-							expectToken(p, e, ",", false);
-							eatWhite(p, e);
+							expectToken(",", false);
+							eatWhite();
 						}
 						const Char* b = p;
-						parseIdentifier(p, e);
+						parseIdentifier();
 						if (p == b) throw std::runtime_error("Expected identifier");
 						func->locals[String::newHashedString(env.heap(), b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
-						eatWhite(p, e);
+						eatWhite();
 					}
-					expectToken(p, e, ")", false);
-					expectToken(p, e, "{", true);
+					expectToken(")", false);
+					expectToken("{", true);
 					{
-						Compiler* funcCompiler = env.heap().manage(new Compiler(env, func));
-						funcCompiler->parseStatementList(p, e);
-						funcCompiler->finish();
+						Compiler funcCompiler(env, func);
+						env.heap().protect(&funcCompiler);
+						p = funcCompiler.compile(p, e);
+						funcCompiler.finish();
 					}
-					expectToken(p, e, "}", false);
+					expectToken("}", false);
 					emitWithConstant(VM::GEN_FUNC_OP, Value(func)); 
 					v = XValue(XValue::PUSHED);
 					break;
@@ -1549,21 +1557,25 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 				default: assert(0);
 			}
 		} else {
+			p = b;
 			assert(p != e);
 			switch (*p) {
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
 						UInt32 i;
-						const Char* q = parseHex(p + 2, e, i);
-						if (q == p) throw std::runtime_error("Invalid number");
-						p = q;
+						const Char* b = p;
+						p = parseHex(b + 2, e, i);
+						if (p == b) throw std::runtime_error("Invalid number");
 						v = XValue(XValue::CONSTANT, Value((Int32)(i)));
 						break;
 					}
 					/* else continue */
 				}
 				case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
-					double d = parseNumber(p, e);
+					double d;
+					const Char* b = p;
+					p = parseDouble(p, e, d);
+					if (p == b) throw std::runtime_error("Invalid number");
 					v = XValue(XValue::CONSTANT, Value(d));
 					break;
 				}
@@ -1577,7 +1589,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 				}
 				default: {
 					const Char* b = p;
-					parseIdentifier(p, e);
+					parseIdentifier();
 					if (p == b) return false; // fix : nicer way?
 					String* identifier = String::newHashedString(env.heap(), b, p);
 					Int32 index;
@@ -1594,28 +1606,29 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 			}
 		}
     }
-	const Char* q = p;
-    eatWhite(q, e);
-    while (parseOperator(q, e, v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
-		p = q;
-		eatWhite(q, e);
+	const Char* b = p;
+    eatWhite();
+    while (parseOperator(v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
+		b = p;
+		eatWhite();
 	}
+	p = b;
 	return true;
 }
 
-void Compiler::parseExpression(const Char*& p, const Char* e, XValue& v, Precedence precedence) {
-	if (!parseOptionalExpression(p, e, v, precedence)) throw std::runtime_error("Expected expression");
+void Compiler::parseExpression(XValue& v, Precedence precedence) {
+	if (!parseOptionalExpression(v, precedence)) throw std::runtime_error("Expected expression");
 }
 
-void Compiler::parseAndPopOptionalExpression(const Char*& p, const Char* e) {
+void Compiler::parseAndPopOptionalExpression() {
 	XValue xv;
-	if (parseOptionalExpression(p, e, xv, LOWEST_PREC)) throwAway(xv);
+	if (parseOptionalExpression(xv, LOWEST_PREC)) throwAway(xv);
 }
 
-void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
+void Compiler::parseVarDeclarations() {
 	while (true) {
 		const Char* b = p; // FIX : sub
-		parseIdentifier(p, e);
+		parseIdentifier();
 		if (p == b) throw std::runtime_error("Expected identifier");
 		String* identifier = String::newHashedString(env.heap(), b, p);
 		Int32 index;
@@ -1626,66 +1639,63 @@ void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
 			index = function->localsCount++;
 			nameMap[identifier] = index;
 		}
-		const Char* q = p;
-		if (eatToken(q, e, "=", true)) {
-			p = q;
+		if (eatToken("=", true)) {
 			XValue xv;
-			parseExpression(p, e, xv, COMMA_PREC); // FIX : SUB
+			parseExpression(xv, COMMA_PREC); // FIX : SUB
 			makeRValue(xv);
 			emitWithInt32(VM::WRITE_INDEXED_OP, index);
 			emit(VM::POP_OP);
-			q = p;
 		}
-		if (!eatToken(q, e, ",", true)) break;
-		p = q;
-		eatWhite(p, e);
+		if (!eatToken(",", true)) break;
+		eatWhite();
 	}
 }
 
-void Compiler::expectSemicolon(const Char*& p, const Char* e) {
-	const Char* q = p;
-	eatWhite(q, e);
-	if (q != e && *q != '}' && !eatToken(q, e, ";", false) && std::find(p, q, '\n') == q)
+void Compiler::expectSemicolon() {
+	const Char* b = p;
+	eatWhite();
+	if (p != e && *p != '}' && !eatToken(";", false) && std::find(b, p, '\n') == p) {
+		p = b;
 		throw std::runtime_error("Syntax error");
-	p = q;
+	}
 }
 
-void Compiler::parseStatement(const Char*& p, const Char* e) {
-	eatWhite(p, e);	
-	if (eatToken(p, e, "{", false)) {
-		parseStatementList(p, e);
-		expectToken(p, e, "}", false);
+void Compiler::parseStatement() {
+	eatWhite();	
+	if (eatToken("{", false)) {
+		parseStatementList();
+		expectToken("}", false);
 		return;
 	}
 	
-	const Char* q = p;
-	eatToken(q, e);
-	int i = findStatementToken(q - p, &*p);
+	const Char* b = p;
+	eatToken();
+	int i = findStatementToken(p - b, &*b);
 	if (i < 0) {
-		parseAndPopOptionalExpression(p, e);
-		expectSemicolon(p, e);
+		p = b;
+		parseAndPopOptionalExpression();
+		expectSemicolon();
 	} else {
-		p = q;
-		eatWhite(p, e);
+		eatWhite();
 		switch (static_cast<Statement>(i)) {
 			case VAR_STATEMENT: {
-				parseVarDeclarations(p, e);
-				expectSemicolon(p, e);
+				parseVarDeclarations();
+				expectSemicolon();
 				break;
 			}
 			
 			case IF_STATEMENT: {
-				expectToken(p, e, "(", false);
+				expectToken("(", false);
 				XValue xv; // FIX : sub
-				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				expectToken(p, e, ")", true);
+				expectToken(")", true);
 				Int32 pointA = emitForwardBranch(VM::JF_OP);
-				parseStatement(p, e);
-				if (eatToken(p, e, "else", true)) {
+				parseStatement();
+				if (eatToken("else", true)) {
 					Int32 pointB = emitForwardBranch(VM::JMP_OP);
 					completeForwardBranch(pointA);
-					parseStatement(p, e);
+					parseStatement();
 					completeForwardBranch(pointB);
 				} else {
 					completeForwardBranch(pointA);
@@ -1695,13 +1705,13 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
-				expectToken(p, e, "(", false);
+				expectToken("(", false);
 				XValue xv; // FIX : sub
-				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				expectToken(p, e, ")", true);
+				expectToken(")", true);
 				Int32 pointB = emitForwardBranch(VM::JF_OP);
-				parseStatement(p, e);
+				parseStatement();
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				completeForwardBranch(pointB);
 				break;
@@ -1709,41 +1719,41 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 
 			case DO_WHILE_STATEMENT: {
 				Int32 point = markBackwardBranch();
-				parseStatement(p, e);
-				expectToken(p, e, "while", true);
-				expectToken(p, e, "(", true);
+				parseStatement();
+				expectToken("while", true);
+				expectToken("(", true);
 				XValue xv; // FIX : sub
-				parseExpression(p, e, xv, LOWEST_PREC); // FIX : SUB
+				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
-				expectToken(p, e, ")", true);
+				expectToken(")", true);
 				emitBackwardBranch(VM::JT_OP, point);
-				expectSemicolon(p, e);
+				expectSemicolon();
 				break;
 			}
 			
 			case FOR_STATEMENT: {
-				expectToken(p, e, "(", false);
-				if (eatToken(p, e, "var", true)) {
-					eatWhite(p, e);
-					parseVarDeclarations(p, e);
+				expectToken("(", false);
+				if (eatToken("var", true)) {
+					eatWhite();
+					parseVarDeclarations();
 				} else {
-					parseAndPopOptionalExpression(p, e);
+					parseAndPopOptionalExpression();
 				}
-				expectToken(p, e, ";", true);
+				expectToken(";", true);
 				Int32 pointA = markBackwardBranch();
 				Int32 pointB = -1;
 				XValue xv;
-				if (parseOptionalExpression(p, e, xv, LOWEST_PREC)) {
+				if (parseOptionalExpression(xv, LOWEST_PREC)) {
 					makeRValue(xv);
 					pointB = emitForwardBranch(VM::JF_OP);
 				}
-				expectToken(p, e, ";", true);
+				expectToken(";", true);
 				std::vector<Byte>& code = function->code;
 				Int32 pointC = code.size();
-				parseAndPopOptionalExpression(p, e);
-				expectToken(p, e, ")", true);
+				parseAndPopOptionalExpression();
+				expectToken(")", true);
 				Int32 pointD = code.size();
-				parseStatement(p, e);
+				parseStatement();
 				std::rotate(code.begin() + pointC, code.begin() + pointD, code.end());
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
@@ -1752,10 +1762,10 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 			
 			case RETURN_STATEMENT: {
 				XValue xv;
-				parseOptionalExpression(p, e, xv, LOWEST_PREC);
+				parseOptionalExpression(xv, LOWEST_PREC);
 				makeRValue(xv);
 				emit(VM::RETURN_OP);
-				expectSemicolon(p, e);
+				expectSemicolon();
 				break;
 			}
 			
@@ -1764,19 +1774,16 @@ void Compiler::parseStatement(const Char*& p, const Char* e) {
 	}
 }
 
-void Compiler::parseStatementList(const Char*& p, const Char* e) {
+void Compiler::parseStatementList() {
 	const Char* b;
 	do {
 		b = p;
-		parseStatement(p, e);
+		parseStatement();
 	} while (p != e && b != p);
 }
 
-void Compiler::compile(const String* source) {
-	const Char* p = source->accessChars();
-	const Char* e = p + source->getLength();
-	parseStatementList(p, e);
-}
+const Char* Compiler::compile(const Char* b, const Char* e) { p = b; this->e = e; parseStatementList(); return p; }
+void Compiler::compile(const String* source) { const Char* b = source->accessChars(); compile(b, b + source->getLength()); }
 
 void Compiler::finish() {
 	emit(VM::VOID_OP);
@@ -1785,34 +1792,33 @@ void Compiler::finish() {
 disassemble(env.heap(), function->code, function->constants);
 }
 
-GCHeap::GCHeap() : currentHeap(new GCList()) { }
+GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
 size_t GCHeap::gc() {
 	size_t sweptCount = 0;
-	newHeap.reset(new GCList());
 
-	for (const GCItem* item = protectedItems._gcNext; item != &protectedItems; item = item->_gcNext)
+	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext)
 		const_cast<GCItem*>(item)->gcMark(*this);
 	
 	{
 		size_t n = 0;
-		for (const GCItem* i = currentHeap->_gcNext->_gcNext; i != currentHeap->_gcNext; i = i->_gcNext) {
-			assert(i->_gcPrev->_gcList == currentHeap.get());
+		for (const GCItem* i = currentList->_gcNext->_gcNext; i != currentList->_gcNext; i = i->_gcNext) {
+			assert(i->_gcPrev->_gcList == currentList);
 			delete i->_gcPrev;
 			++n;
 		}
 
-		currentHeap->_gcPrev = currentHeap->_gcNext = currentHeap.get();
+		currentList->_gcPrev = currentList->_gcNext = currentList;
 		sweptCount = n;
 	}
 
-	currentHeap = newHeap;
+	std::swap(currentList, newList);
 	return sweptCount;
 }
 
 void GCHeap::mark(const GCItem* item) {
-	if (item != 0 && item->_gcList == currentHeap.get()) {
-		newHeap->claim(const_cast<GCItem*>(item));
+	if (item != 0 && item->_gcList == currentList) {
+		newList->claim(const_cast<GCItem*>(item));
 		const_cast<GCItem*>(item)->gcMark(*this);
 	}
 }
@@ -1822,8 +1828,8 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
-		public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
-						String* s = (argc >= 1 ? argv[0].toString(vm->env.heap()) : &EMPTY_STRING);
+		public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
+						String* s = (argc >= 1 ? argv[0].toString(heap) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						vm->push(Value());
 					}
@@ -1837,7 +1843,8 @@ int main(int argc, const char* argv[]) {
 	UserObject globals;
 	heap.protect(&globals);
 	static String PRINT_STRING("print");
-	globals.setProperty(env, &PRINT_STRING, Value(heap.manage(new PrintFunction()))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
+	PrintFunction printFunction;
+	globals.setProperty(env, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
 	ScriptFunctionDef functionDef;
 	heap.protect(&functionDef);
 	Compiler compiler(env, &functionDef);
@@ -1874,14 +1881,14 @@ int main(int argc, const char* argv[]) {
 				vm.enterCall(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
 				bool done = false;
 				
-				clock_t start = ::clock();
+				clock_t start = ::clock();	
 				do {
 					done = vm.run(10000000);
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
 
-					std::cerr << "\tKept: " << heap.currentHeap->size() << std::endl;
+					std::cerr << "\tKept: " << heap.currentList->size() << std::endl;
 					std::cerr << "\tSwept: " << sweptCount << std::endl;
 					
 					if (done) {
@@ -1897,11 +1904,11 @@ int main(int argc, const char* argv[]) {
 			}
 		}
 		catch (const std::exception& x) {
-			std::cerr << "Exception: " << x.what() << std::endl;
+			std::cout << "Exception: " << x.what() << std::endl;
 			source = &EMPTY_STRING;
 		}
 		catch (...) {
-			std::cerr << "Unknown exception" << std::endl;
+			std::cout << "Unknown exception" << std::endl;
 			source = &EMPTY_STRING;
 		}
 	}
