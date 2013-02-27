@@ -27,6 +27,8 @@
 // don't accept lf's after ++ etc (automatic ; insertion logic)
 // divide by 0 checks? NaN checks?
 //	is currently not compatible with -ffast_math, which is bad I guess
+//	also isnan is not standard C++ :(, on Windows it is called _isnan
+//	do a special Value variation that tracks NAN and Infinities?
 // basic library (math, string, array ops)
 // virtual machine should include gc etc
 // also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
@@ -279,13 +281,13 @@ String::String(const String* l, const String* r) : chars(l->chars.size() + r->ch
 	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
 }
 
-String* String::newHashedString(GCHeap* heap, const Char* b, const Char* e) {
-	String* o = heap->manage(new String(b, e));
+String* String::newHashedString(Environment* env, const Char* b, const Char* e) {
+	String* o = env->manage(new String(b, e));
 	o->calcHash();
 	return o;
 }
 
-bool String::getProperty(const String* name, Value& v) {
+bool String::getProperty(Environment* env, const String* name, Value& v) {
 	if (name->isEqualTo(&LENGTH_STRING)) {
 		v = Value(static_cast<Int32>(chars.size()));
 		return true;
@@ -297,7 +299,7 @@ bool String::getProperty(const String* name, Value& v) {
 	if (q == e && i < chars.size()) {
 		Char c = chars[i];
 		if (32 <= c && c < 127) v = QUICK_CONSTANTS.ascii[c - 32];
-		else v = Value(gcHeap()->manage(new String(chars.data() + i, chars.data() + i + 1)));
+		else v = Value(env->manage(new String(chars.data() + i, chars.data() + i + 1)));
 		return true;
 	}
 	v = Value();
@@ -373,13 +375,6 @@ void GCHeap::claim(const GCItem* item) {
 	++count;
 }
 
-void GCHeap::mark(const GCItem* item) {
-	if (item != 0 && item->_gcHeap != this && item->_gcHeap != 0) {
-		claim(item);
-		const_cast<GCItem*>(item)->gcMark(this);
-	}
-}
-
 GCHeap::~GCHeap() {
 	sweep();
 	delete items;
@@ -418,11 +413,11 @@ const Table::Bucket* Table::lookup(const String* key) {
 void Table::assign(const String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
 void Table::erase(const String* key) { update(key, Value(Value::DELETED_TYPE)); }
 
-void Table::mark(GCHeap* heap) {
+void Table::mark(Environment* env) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		heap->mark(buckets[i].key);
-		buckets[i].value.mark(heap);
+		env->mark(buckets[i].key);
+		buckets[i].value.mark(env);
 		if (!buckets[i].value.isDeleted()) rebuildLoadCount++;
 	}
 	if (rebuildLoadCount != loadCount) {
@@ -477,12 +472,12 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- UserObject --- */
 
-bool UserObject::setProperty(const String* name, const Value& v) {
+bool UserObject::setProperty(Environment* env, const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
 }
 
-bool UserObject::getProperty(const String* name, Value& v) {
+bool UserObject::getProperty(Environment* env, const String* name, Value& v) {
 	const Table::Bucket* b = properties.lookup(name);
 	if (b != 0) {
 		v = b->value;
@@ -492,14 +487,14 @@ bool UserObject::getProperty(const String* name, Value& v) {
 	return false;
 }
 
-bool UserObject::deleteProperty(const String* name) {
+bool UserObject::deleteProperty(Environment* env, const String* name) {
 	properties.erase(name);
 	return true;
 }
 
-void UserObject::gcMark(GCHeap* heap) {
-	properties.mark(heap);
-	super::gcMark(heap);
+void UserObject::gcMark(Environment* env) {
+	properties.mark(env);
+	super::gcMark(env);
 }
 
 Value::Value(Type type) : type(type) { }
@@ -551,7 +546,7 @@ double Value::toDouble() const {
 	}
 }
 
-String* Value::toString(GCHeap* heap) const {
+String* Value::toString(Environment* env) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
@@ -563,21 +558,21 @@ String* Value::toString(GCHeap* heap) const {
 			if (i == d) {
 				if (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
 					return QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
-				else return heap->manage(new String(intToString(buffer, i), buffer + 32));
+				else return env->manage(new String(intToString(buffer, i), buffer + 32));
 			}
 			if (isNaN(d)) return &NAN_STRING;
 			double x = fabs(d);
 			if (x <= EPSILON) return &ZERO_STRING;
 			if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
 			std::pair<Char*, Char*> r = doubleToString(buffer, d);
-			return heap->manage(new String(r.first, r.second));
+			return env->manage(new String(r.first, r.second));
 		}
 		case STRING_TYPE: return s;
-case OBJECT_TYPE: return heap->manage(new String("<object>"));
+case OBJECT_TYPE: return env->manage(new String("<object>"));
 	}
 }
 
-Object* Value::toObject(GCHeap* heap) const {
+Object* Value::toObject(Environment* env) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
@@ -687,21 +682,21 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 //	If nx is −∞, return true.
 }
 
-Value Value::add(GCHeap* heap, const Value& y) const {
+Value Value::add(Environment* env, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
-		String* ls = toString(heap);
-		String* rs = y.toString(heap);
+		String* ls = toString(env);
+		String* rs = y.toString(env);
 		if (rs->getLength() == 0) return Value(ls);
 		if (ls->getLength() == 0) return Value(rs);
-		return Value(heap->manage(new String(ls, rs)));
+		return Value(env->manage(new String(ls, rs)));
 	}
 	return Value(toDouble() + y.toDouble());
 }
 				
-void Value::mark(GCHeap* heap) const {
+void Value::mark(Environment* env) const {
 	switch (type) {
-		case STRING_TYPE: heap->mark(s); break;
-		case OBJECT_TYPE: heap->mark(o); break;
+		case STRING_TYPE: env->mark(s); break;
+		case OBJECT_TYPE: env->mark(o); break;
 		default: break;
 	}
 }
@@ -717,16 +712,16 @@ bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const 
 	return true;
 }
 
-void ScriptFunctionDef::gcMark(GCHeap* heap) {
-	heap->mark(source);
+void ScriptFunctionDef::gcMark(Environment* env) {
+	env->mark(source);
 	// FIX : subs
 	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
-		it->mark(heap);
+		it->mark(env);
 	}
 	for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
-		heap->mark(it->first);
+		env->mark(it->first);
 	}
-	super::gcMark(heap);
+	super::gcMark(env);
 }
 
 const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
@@ -736,7 +731,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 Function* Function::asFunction() { return this; }
 
 void Function::construct(VM* vm, Int32 argc, const Value* argv) {
-	Object* newObject = gcHeap()->manage(new UserObject());
+	Object* newObject = vm->env->manage(new UserObject());
 	Value thisValue(newObject);
 	vm->push(thisValue);
 	call(vm, argc, argv, thisValue);
@@ -752,10 +747,10 @@ void ScriptFunction::call(VM* vm, Int32 argc, const Value* argv, const Value& th
 	vm->enterCall(this, argc, argv, thisValue);
 }
 
-void ScriptFunction::gcMark(GCHeap* heap) {
-	heap->mark(definition);
-	heap->mark(scope);
-	super::gcMark(heap);
+void ScriptFunction::gcMark(Environment* env) {
+	env->mark(definition);
+	env->mark(scope);
+	super::gcMark(env);
 }
 
 #if 0
@@ -763,13 +758,13 @@ void ScriptFunction::gcMark(GCHeap* heap) {
 
 ArgumentsObject(Frame* frame) : frame(frame) { }
 
-bool ArgumentsObject::getProperty(const String* name, Value& v) {
+bool ArgumentsObject::setProperty(Environment* env, const String* name, Value& v) {
 	if (name->s == "length") return 
 }
 
-void ArgumentsObject::gcMark(GCHeap* heap) {
-	heap->mark(frame);
-	super::gcMark(heap);
+void ArgumentsObject::gcMark(Environment* env) {
+	env->mark(frame);
+	super::gcMark(env);
 }
 #endif
 
@@ -784,53 +779,53 @@ Value* Frame::getLocalsPointer() { return &locals[0]; }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a scope above maybe?
 
-bool Frame::getProperty(const String* name, Value& v) {
+bool Frame::getProperty(Environment* env, const String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
 		v = locals[index];
 		return true;
 	} else {
-		return scope->getProperty(name, v); // FIX: can we do a looping non-recursive solution? faster
+		return scope->getProperty(env, name, v); // FIX: can we do a looping non-recursive solution? faster
 	}
 }
 
-bool Frame::setProperty(const String* name, const Value& v) {
+bool Frame::setProperty(Environment* env, const String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
 		locals[index] = v;
 		return true;
 	} else {
-		return scope->setProperty(name, v);
+		return scope->setProperty(env, name, v);
 	}
 }
 
-bool Frame::deleteProperty(const String* name) {
+bool Frame::deleteProperty(Environment* env, const String* name) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) return false;
-	else return scope->deleteProperty(name);
+	else return scope->deleteProperty(env, name);
 }
 
-void Frame::gcMark(GCHeap* heap) {
-	heap->mark(functionDef);
-	heap->mark(scope);
+void Frame::gcMark(Environment* env) {
+	env->mark(functionDef);
+	env->mark(scope);
 	// FIX : subs
-	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
-	super::gcMark(heap);
+	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(env);
+	super::gcMark(env);
 }
 
 /* --- VM --- */
 
-VM::VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
-		: cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
+VM::VM(Environment* env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
+		: env(env), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1) {
 }
 
-void VM::gcMark(GCHeap* heap) {
-	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->mark(heap);
-	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap->mark(csp->frame);
-	super::gcMark(heap);
+void VM::gcMark(Environment* env) {
+	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->mark(env);
+	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) env->mark(csp->frame);
+	super::gcMark(env);
 }
 
 void VM::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
@@ -846,7 +841,7 @@ void VM::error() {
 
 void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	Frame* frame = gcHeap()->manage(new Frame(func));
+	Frame* frame = env->manage(new Frame(func));
 	++cstackPointer;
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
@@ -860,7 +855,6 @@ bool VM::run(Int32 count) {
 	Frame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
-	GCHeap* h = gcHeap();
 	while (--count >= 0) {
 		switch (*ip++) {
 			default: assert(0);
@@ -871,32 +865,32 @@ bool VM::run(Int32 count) {
 			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v;
-				bool success = frame->getProperty(cp[nextInt32(ip)].getString(), v);
+				bool success = frame->getProperty(env, cp[nextInt32(ip)].getString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = frame->setProperty(cp[nextInt32(ip)].getString(), vsp[0]);
+				bool success = frame->setProperty(env, cp[nextInt32(ip)].getString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
 			case GET_PROPERTY_OP: {
-				Object* o = vsp[-1].toObject(h);
+				Object* o = vsp[-1].toObject(env);
 				if (o == 0) error();
-				o->getProperty(vsp[0].toString(h), vsp[-1]);
+				o->getProperty(env, vsp[0].toString(env), vsp[-1]);
 				pop(vsp, 1);
 				break;
 			}
 			case SET_PROPERTY_OP: {
-				Object* o = vsp[-2].toObject(h);
+				Object* o = vsp[-2].toObject(env);
 				if (o == 0) error();
-				o->setProperty(vsp[-1].toString(h), vsp[0]);
+				o->setProperty(env, vsp[-1].toString(env), vsp[0]);
 				vsp[-2] = vsp[0];
 				pop(vsp, 2);
 				break;
 			}
-			case ADD_OP: poppush(vsp, vsp[-1].add(h, vsp[0])); break;
+			case ADD_OP: poppush(vsp, vsp[-1].add(env, vsp[0])); break;
 			case SUB_OP: poppush(vsp, Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
 			case MUL_OP: poppush(vsp, Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
 			case DIV_OP: poppush(vsp, Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
@@ -938,11 +932,11 @@ bool VM::run(Int32 count) {
 			}
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = nextInt32(ip);
-				Object* thisObject = vsp[-n - 1].toObject(h);
+				Object* thisObject = vsp[-n - 1].toObject(env);
 				if (thisObject == 0) error();
 				Value v;
-				thisObject->getProperty(vsp[-n].toString(h), v);
-				Object* o = v.toObject(h);
+				thisObject->getProperty(env, vsp[-n].toString(env), v);
+				Object* o = v.toObject(env);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
@@ -958,7 +952,7 @@ bool VM::run(Int32 count) {
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = nextInt32(ip);
-				Object* o = vsp[-n].toObject(h);
+				Object* o = vsp[-n].toObject(env);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
@@ -974,7 +968,7 @@ bool VM::run(Int32 count) {
 			}
 			case NEW_OP: {
 				Int32 n = nextInt32(ip);
-				Object* o = vsp[-n].toObject(h);
+				Object* o = vsp[-n].toObject(env);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
@@ -992,14 +986,14 @@ bool VM::run(Int32 count) {
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value()); break;
 			case GEN_FUNC_OP: {
-				push(vsp, Value(h->manage(new ScriptFunction(cp[nextInt32(ip)].getFunctionDef(), frame))));
+				push(vsp, Value(env->manage(new ScriptFunction(cp[nextInt32(ip)].getFunctionDef(), frame))));
 				break;
 			}
 			case FRAME_OP: push(vsp, Value(frame)); break;
 			case DELETE_OP: {
-				Object* o = vsp[-1].toObject(h);
+				Object* o = vsp[-1].toObject(env);
 				if (o == 0) error();
-				poppush(vsp, Value(o->deleteProperty(vsp[0].toString(h))));
+				poppush(vsp, Value(o->deleteProperty(env, vsp[0].toString(env))));
 				break;
 			}
 		}
@@ -1016,7 +1010,7 @@ static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<B
 	return i;
 }
 
-static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::vector<Value>& constants) {
+static void disassemble(Environment* env, const std::vector<Byte>& code, const std::vector<Value>& constants) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
@@ -1049,7 +1043,7 @@ static void disassemble(GCHeap* heap, const std::vector<Byte>& code, const std::
 			case VM::CALL_METHOD_OP:
 			case VM::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
 			case VM::CONST_OP:
-			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
+			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(env)->toStdString(); break;
 			case VM::READ_NAMED_OP:
 			case VM::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 			default: break;
@@ -1156,14 +1150,14 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(ScriptFunctionDef* function) : function(function) { }
+Compiler::Compiler(Environment* env, ScriptFunctionDef* function) : env(env), function(function) { }
 
-void Compiler::gcMark(GCHeap* heap) {
-	heap->mark(function);
+void Compiler::gcMark(Environment* env) {
+	env->mark(function);
 	for (std::map<Value, Int32>::iterator it = definedConstants.begin(), e = definedConstants.end(); it != e; ++it) {
-		it->first.mark(heap);
+		it->first.mark(env);
 	}
-	super::gcMark(heap);
+	super::gcMark(env);
 }
 
 bool Compiler::isComment(const Char* p, const Char* e) {
@@ -1384,7 +1378,7 @@ bool Compiler::parseOperator(const Char*& p, const Char* e, XValue& v, Precedenc
 			const Char* b = p;
 			parseIdentifier(p, e);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(gcHeap(), b, p)));
+			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(env, b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -1533,7 +1527,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 					break;
 				}
 				case FUNCTION_LITERAL: {
-					ScriptFunctionDef* func = gcHeap()->manage(new ScriptFunctionDef());
+					ScriptFunctionDef* func = env->manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
 					expectToken(p, e, "(", true);
 					eatWhite(p, e);
@@ -1545,7 +1539,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 						const Char* b = p;
 						parseIdentifier(p, e);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->locals[String::newHashedString(gcHeap(), b, p)] = func->localsCount;
+						func->locals[String::newHashedString(env, b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
 						eatWhite(p, e);
@@ -1553,7 +1547,7 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 					expectToken(p, e, ")", false);
 					expectToken(p, e, "{", true);
 					{
-						Compiler* funcCompiler = gcHeap()->manage(new Compiler(func));
+						Compiler* funcCompiler = env->manage(new Compiler(env, func));
 						funcCompiler->parseStatementList(p, e);
 						funcCompiler->finish();
 					}
@@ -1588,14 +1582,14 @@ bool Compiler::parseOptionalExpression(const Char*& p, const Char* e, XValue& v,
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					v = XValue(XValue::CONSTANT, Value(String::newHashedString(gcHeap(), buffer, unescapeEnd)));
+					v = XValue(XValue::CONSTANT, Value(String::newHashedString(env, buffer, unescapeEnd)));
 					break;
 				}
 				default: {
 					const Char* b = p;
 					parseIdentifier(p, e);
 					if (p == b) return false; // fix : nicer way?
-					String* identifier = String::newHashedString(gcHeap(), b, p);
+					String* identifier = String::newHashedString(env, b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1633,7 +1627,7 @@ void Compiler::parseVarDeclarations(const Char*& p, const Char* e) {
 		const Char* b = p; // FIX : sub
 		parseIdentifier(p, e);
 		if (p == b) throw std::runtime_error("Expected identifier");
-		String* identifier = String::newHashedString(gcHeap(), b, p);
+		String* identifier = String::newHashedString(env, b, p);
 		Int32 index;
 		LocalNameMap& nameMap = function->locals;
 		LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1798,51 +1792,37 @@ void Compiler::finish() {
 	emit(VM::VOID_OP);
 	emit(VM::RETURN_OP);
 	// FIX : shrink code vector (copy to quickarray instead?)
-disassemble(gcHeap(), function->code, function->constants);
+disassemble(env, function->code, function->constants);
 }
 
-Environment::Environment() : currentHeap(0), stringPrototype(0) {
-	try {
-		currentHeap = new GCHeap();
-		stringPrototype = new UserObject();
-	}
-	catch (...) {
-		cleanup();
-		throw;
-	}
-}
+Environment::Environment() : currentHeap(new GCHeap()), stringPrototype(new UserObject()) { }
 
 size_t Environment::gc() {
 	size_t sweptCount = 0;
-	GCHeap* newHeap = 0;
-	try {
-		newHeap = new GCHeap();
-		sweptCount = currentHeap->sweep();
-		std::swap(currentHeap, newHeap);
-		delete newHeap;
-	}
-	catch (...) {
-		delete newHeap;
-		throw;
-	}
+	newHeap.reset(new GCHeap());
+
+	for (const GCItem* item = protectedItems.items->_gcNext; item != protectedItems.items; item = item->_gcNext)
+		const_cast<GCItem*>(item)->gcMark(this);
+	
+	sweptCount = currentHeap->sweep();
+	currentHeap = newHeap;
 	return sweptCount;
 }
 
-void Environment::cleanup() {
-	delete currentHeap;
-	currentHeap = 0;
-	delete stringPrototype;
-	stringPrototype = 0;
+void Environment::mark(const GCItem* item) {
+	if (item != 0 && item->_gcHeap == currentHeap.get()) {
+		newHeap->claim(item);
+		const_cast<GCItem*>(item)->gcMark(this);
+	}
 }
 
-Environment::~Environment() { cleanup(); }
 
 #include <fstream>
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
 		public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
-						String* s = (argc >= 1 ? argv[0].toString(gcHeap()) : &EMPTY_STRING);
+						String* s = (argc >= 1 ? argv[0].toString(vm->env) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						vm->push(Value());
 					}
@@ -1851,13 +1831,12 @@ Environment::~Environment() { cleanup(); }
 
 int main(int argc, const char* argv[]) {
 	static const String LF_STRING("\n");
-	GCHeap* newHeap = 0;
-	GCHeap* heap = new GCHeap();
-	Object* globals = heap->manage(new UserObject());
+	Environment env;
+	Object* globals = env.protect(new UserObject());
 	static String PRINT_STRING("print");
-	globals->setProperty(&PRINT_STRING, Value(heap->manage(new PrintFunction()))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
-	ScriptFunctionDef* functionDef = heap->manage(new ScriptFunctionDef());
-	Compiler* compiler = heap->manage(new Compiler(functionDef));
+	globals->setProperty(&env, &PRINT_STRING, Value(env.manage(new PrintFunction()))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
+	ScriptFunctionDef* functionDef = env.protect(new ScriptFunctionDef());
+	Compiler* compiler = env.protect(new Compiler(&env, functionDef));
 	String* source = &EMPTY_STRING;
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
@@ -1873,8 +1852,8 @@ int main(int argc, const char* argv[]) {
 			std::getline(*inStream, s);
 			if (!s.empty()) {
 				String line(s.c_str());
-				source = heap->manage(new String(source, &line));
-				source = heap->manage(new String(source, &LF_STRING));
+				source = env.manage(new String(source, &line));
+				source = env.manage(new String(source, &LF_STRING));
 			} else {
 				compiler->compile(source);
 				compiler->finish();
@@ -1885,8 +1864,8 @@ int main(int argc, const char* argv[]) {
 				
 				Value vstack[1024];
 				Context cstack[1024];
-				VM* vm = heap->manage(new VM(cstack, cstack + 1024, vstack, vstack + 1024));
-				vm->enterCall(heap->manage(new ScriptFunction(functionDef, globals)), 0, 0, Value(globals));
+				VM* vm = env.protect(new VM(&env, cstack, cstack + 1024, vstack, vstack + 1024));
+				vm->enterCall(env.manage(new ScriptFunction(functionDef, globals)), 0, 0, Value(globals));
 				bool done = false;
 				
 				clock_t start = ::clock();
@@ -1894,31 +1873,22 @@ int main(int argc, const char* argv[]) {
 					done = vm->run(10000000);
 					Value v = vstack[0];
 					
-					newHeap = new GCHeap();
-					newHeap->mark(compiler);
-					newHeap->mark(vm);
-					newHeap->mark(globals);
-					newHeap->mark(functionDef);
-					newHeap->mark(source);
-					v.mark(newHeap);
-					int sweptCount = heap->sweep();
-					std::swap(heap, newHeap);
-					delete newHeap;
-					newHeap = 0;
+					size_t sweptCount = env.gc();
 
-					std::cerr << "\tKept: " << heap->size() << std::endl;
+					std::cerr << "\tKept: " << env.currentHeap->size() << std::endl;
 					std::cerr << "\tSwept: " << sweptCount << std::endl;
 					
 					if (done) {
 						std::cerr << "\tOn stack: " << (vm->vstackPointer - vstack + 1) << std::endl;
 						assert(vm->vstackPointer - vstack + 1 == 1);
-						std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+						std::wcerr << L"\t=" << (v.toString(&env))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
 						std::cerr << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
 					}
 				} while (!done);
 				source = &EMPTY_STRING;
+				env.manage(vm);
 			}
 		}
 		catch (const std::exception& x) {

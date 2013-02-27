@@ -50,11 +50,12 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 };
 
 class GCHeap;
+class Environment;
 class GCItem {
 	friend class GCHeap;
+	friend class Environment;
 	public:		GCItem() : _gcHeap(0), _gcPrev(this), _gcNext(this) { }
-	public:		GCHeap* gcHeap() const { return _gcHeap; }
-	public:		virtual void gcMark(GCHeap* heap) { }
+	public:		virtual void gcMark(Environment* env) { }
 	public:		virtual ~GCItem() { }
 	protected:	mutable GCHeap* _gcHeap;
 	protected:	mutable const GCItem* _gcPrev;
@@ -62,13 +63,12 @@ class GCItem {
 };
 
 class GCHeap : public GCItem {
+friend class Environment;
 	public:		GCHeap();
-	public:		template<class T> T* manage(T* item) { claim(item); return item; }
-	public:		void mark(const GCItem* item);
 	public:		size_t sweep();
 	public:		size_t size() const;
 	public:		virtual ~GCHeap();
-	protected:	void claim(const GCItem* item);
+public:	void claim(const GCItem* item);
 	protected:	size_t count;
 	protected:	GCItem* items;
 };
@@ -102,16 +102,16 @@ class Value {
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
-	public:		String* toString(GCHeap* heap) const;
-	public:		Object* toObject(GCHeap* heap) const;
+	public:		String* toString(Environment* env) const;
+	public:		Object* toObject(Environment* env) const;
 	public:		bool operator==(const Value& y) const;
 	public:		bool operator<(const Value& y) const;
 	public:		bool isStrictlyEqualTo(const Value& y) const;
 	public:		bool isEqualTo(const Value& y) const;
 	public:		bool isLessThan(const Value& y) const;
 	public:		bool isLessThanOrEqualTo(const Value& y) const;
-	public:		Value add(GCHeap* heap, const Value& y) const;
-	public:		void mark(GCHeap* heap) const;
+	public:		Value add(Environment* env, const Value& y) const;
+	public:		void mark(Environment* env) const;
 
 	protected:	bool compareStrictly(const Value& y) const;
 	protected:	Type type;	
@@ -126,22 +126,25 @@ class Value {
 class UserObject;
 class Environment {
 	friend class String;
+	public:		template<class T> T* manage(T* item) { currentHeap->claim(item); return item; }
+	public:		template<class T> T* protect(T* item) { protectedItems.claim(item); return item; }
 	public:		Environment();
-	public:		GCHeap* heap() const { return currentHeap; }
+	public:		GCHeap* heap() const { return currentHeap.get(); }
+	public:		void mark(const GCItem* item);
 	public:		size_t gc();
-	public:		virtual ~Environment();
-	protected:	GCHeap* currentHeap;
-	protected:	UserObject* stringPrototype;
-	protected:	void cleanup();
+public:	std::auto_ptr<GCHeap> currentHeap;
+public:	std::auto_ptr<GCHeap> newHeap;
+public:	GCHeap protectedItems;
+	protected:	std::auto_ptr<UserObject> stringPrototype;
 };
 
 class Function;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
-	public:		virtual bool getProperty(const String* name, Value& v) { return false; }
-	public:		virtual bool setProperty(const String* name, const Value& v) { return false; }
-	public:		virtual bool deleteProperty(const String* name) { return false; }
+	public:		virtual bool getProperty(Environment* env, const String* name, Value& v) { return false; }
+	public:		virtual bool setProperty(Environment* env, const String* name, const Value& v) { return false; }
+	public:		virtual bool deleteProperty(Environment* env, const String* name) { return false; }
 };
 
 class Table {
@@ -160,7 +163,7 @@ class Table {
 	public:		const Bucket* lookup(const String* key);
 	public:		void assign(const String* key, const Value& value);
 	public:		void erase(const String* key);
-	public:		void mark(GCHeap* heap);
+	public:		void mark(Environment* env);
 	protected:	void update(const String* key, const Value& value);
 	protected:	Bucket* find(const String* key, HashType hash) const;
 	protected:	UInt32 rebuild(UInt32 newN);
@@ -171,7 +174,7 @@ class Table {
 
 class String : public Object {
 	public:		typedef Object super;
-	public:		static String* newHashedString(GCHeap* heap, const Char* b, const Char* e);
+	public:		static String* newHashedString(Environment* env, const Char* b, const Char* e);
 	public:		String();
 	public:		String(const char* sz);
 	public:		String(const Char* b, const Char* e);
@@ -182,7 +185,7 @@ class String : public Object {
 	public:		size_t getLength() const;
 	public:		const Char* accessChars() const;
 	public:		std::wstring toStdString() const;
-	public:		virtual bool getProperty(const String* name, Value& v);
+	public:		virtual bool getProperty(Environment* env, const String* name, Value& v);
 	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
@@ -198,7 +201,7 @@ typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX
 class ScriptFunctionDef : public Object {
 	public:		typedef Object super;
 	public:		ScriptFunctionDef();
-	public:		virtual void gcMark(GCHeap* heap);
+	public:		virtual void gcMark(Environment* env);
 	public:		bool lookupLocalName(const String* name, Int32& index) const;
 	public:		const Value* getConstantsPointer() const;
 	public:		String* source;
@@ -211,10 +214,10 @@ class ScriptFunctionDef : public Object {
 
 class UserObject : public Object {
 	public:		typedef Object super;
-	public:		virtual void gcMark(GCHeap* heap);
-	public:		virtual bool getProperty(const String* name, Value& v);
-	public:		virtual bool setProperty(const String* name, const Value& v);
-	public:		virtual bool deleteProperty(const String* name);
+	public:		virtual void gcMark(Environment* env);
+	public:		virtual bool getProperty(Environment* env, const String* name, Value& v);
+	public:		virtual bool setProperty(Environment* env, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Environment* env, const String* name);
 	protected:	Table properties;
 };
 
@@ -233,7 +236,7 @@ class NativeFunction : public Function {
 class ScriptFunction : public Function {
 	public:		typedef Function super;
 	public:		ScriptFunction(ScriptFunctionDef* definition, Object* scope);
-	public:		virtual void gcMark(GCHeap* heap);
+	public:		virtual void gcMark(Environment* env);
 	public:		virtual void call(VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
 	public:		ScriptFunctionDef* getDefinition() const;
 	public:		Object* getScope() const;
@@ -245,8 +248,8 @@ class ScriptFunction : public Function {
 class ArgumentsObject : public UserObject {
 	public:		typedef UserObject super;
 	public:		ArgumentsObject(Frame* frame);
-	public:		virtual void gcMark(GCHeap* heap);
-	public:		virtual bool getProperty(String* name, Value& v);
+	public:		virtual void gcMark(Environment* env);
+	public:		virtual bool getProperty(Environment* env, String* name, Value& v);
 	protected:	Frame* frame;
 };
 #endif
@@ -254,10 +257,10 @@ class ArgumentsObject : public UserObject {
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(ScriptFunction* function);
-	public:		virtual void gcMark(GCHeap* heap);
-	public:		virtual bool getProperty(const String* name, Value& v);
-	public:		virtual bool setProperty(const String* name, const Value& v);
-	public:		virtual bool deleteProperty(const String* name);
+	public:		virtual void gcMark(Environment* env);
+	public:		virtual bool getProperty(Environment* env, const String* name, Value& v);
+	public:		virtual bool setProperty(Environment* env, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Environment* env, const String* name);
 	public:		ScriptFunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
 	protected:	ScriptFunctionDef* const functionDef;
@@ -301,8 +304,8 @@ class VM : public GCItem {
 					, DELETE_OP										// stack: name, object -> boolean
 					, GEN_FUNC_OP									// immediate: const index, stack: -> function
 				};
-	public:		VM(Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
-	public:		virtual void gcMark(GCHeap* heap);
+	public:		VM(Environment* env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
+	public:		virtual void gcMark(Environment* env);
 	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value());
 	public:		void push(const Value& v);
 	public:		bool run(Int32 count);
@@ -312,6 +315,7 @@ class VM : public GCItem {
 	protected:	Int32 readInt32(const Byte* ip);
 	protected:	Int32 nextInt32(const Byte*& ip);
 	protected:	void error();
+public:	Environment* env;
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
 	protected:	Value* const vstackStart;
@@ -330,8 +334,8 @@ struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
 	public:		struct XValue;
-	public:		Compiler(ScriptFunctionDef* function);
-	public:		virtual void gcMark(GCHeap* heap);
+	public:		Compiler(Environment* env, ScriptFunctionDef* function);
+	public:		virtual void gcMark(Environment* env);
 	public:		void compile(const String* source);
 	public:		void finish();
 	protected:	bool isComment(const Char* p, const Char* e);
@@ -364,7 +368,8 @@ class Compiler : public GCItem {
 	protected:	void throwAway(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(const Char*& p, const Char* e);
-	protected:	ScriptFunctionDef* function;
+	protected:	Environment* const env;
+	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
 };
 
