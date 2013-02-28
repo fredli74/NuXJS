@@ -2,7 +2,6 @@
 //
 //	Run-time
 //
-//		virtual machine should include gc etc
 //		eval support
 //		count (and run-time check) necessary value stack depth for functions
 //		special write with pop instructions (very common)?
@@ -18,10 +17,11 @@
 //		prototype support
 //		arguments container
 //		array object (length property support, optimized for numerical indexes?)
+//			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+//			only downside to that would be read and write named, which assumes the constant is a string pointer
 //		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 //			not too fond of the int cast in the byte array
 //		basic library (math, string, array ops)
-//		take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //		assignable globals this in vm
 //
 //	Compiler
@@ -43,7 +43,6 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
-//		check that identifier is never one of the reserved words
 //
 //	GC
 //
@@ -63,6 +62,8 @@
 //		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
 //			thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
 //		break, continue etc (with labels!)
+//		virtual machine should include gc etc
+//		check that identifier is never one of the reserved words
 
 #include "assert.h"
 #include <cmath>
@@ -632,8 +633,6 @@ bool Value::compareStrictly(const Value& y) const {
 		case NUMBER_TYPE: {
 			double thisNumber = toDouble();
 			double otherNumber = y.toDouble();
-		// FIX : necessary to avoid optimizing away?
-		//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
 			return thisNumber == otherNumber;
 		}
 		case STRING_TYPE: return s->isEqualTo(*y.s);
@@ -666,7 +665,6 @@ bool Value::isLessThan(const Value& y) const {
 	if (type == STRING_TYPE && y.type == STRING_TYPE) return s->isLessThan(*y.s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
-	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
 	return thisNumber < otherNumber;
 //	FIX : need to check?
 //	If nx is +0 and ny is −0, return false.
@@ -681,7 +679,6 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.s->isLessThan(*s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
-	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
 	return thisNumber <= otherNumber;
 //	FIX : need to check?
 //	If nx is +0 and ny is −0, return false.
@@ -1383,7 +1380,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			makeRValue(v);
 			eatWhite();
 			const Char* b = p;
-			parseIdentifier();
+			parseIdentifier(true);
 			if (p == b) throw std::runtime_error("Expected identifier");
 			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(env.heap(), b, p)));
 			v = XValue(XValue::PROPERTY);
@@ -1490,9 +1487,44 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 	return true;
 }
 
-void Compiler::parseIdentifier() {
+/* Built with QuickHashMaker.pika */
+static int findReservedKeyword(int n /* string length */, const Char* s) {
+	static const char* STRINGS[36] = {
+		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
+		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
+		"return", "switch", "this", "throw", "try", "typeof", "var", "void", "while", 
+		"with", "class", "const", "enum", "export", "extends", "import", "super", 
+		"null", "false", "true"
+	};
+	static const int QUICK_HASH_TABLE[256] = {
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 33, -1, -1, -1, -1, -1, -1, 2, 1, -1, -1, -1, 
+		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1, -1, -1, 35, 20, -1, -1, 
+		-1, -1, -1, 34, -1, -1, -1, -1, -1, -1, -1, 32, -1, -1, -1, -1, 
+		4, 5, 6, -1, -1, -1, -1, -1, -1, -1, 17, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, 9, -1, 26, -1, -1, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 8, -1, -1, -1, 3, -1, -1, 27, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 28, 15, 7, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, 10, -1, -1, -1, -1, 31, -1, -1, -1, 14, -1, 
+		-1, -1, 16, -1, -1, 22, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, 18, -1, -1, -1, 
+		-1, 30, 29, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
+	};
+	if (n < 2 || n > 10) return -1;
+	int stringIndex = QUICK_HASH_TABLE[((s[1] + s[0] << 3) - n) & 255];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+
+void Compiler::parseIdentifier(bool acceptReservedKeywords) {
 	if (p != e && isLeadingIdentifierChar(*p)) {
+		const Char* b = p;
 		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
+		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
+			throw std::runtime_error("Illegal use of reserved keyword");
 	}
 }
 
@@ -1539,7 +1571,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 							eatWhite();
 						}
 						const Char* b = p;
-						parseIdentifier();
+						parseIdentifier(false);
 						if (p == b) throw std::runtime_error("Expected identifier");
 						func->locals[String::newHashedString(env.heap(), b, p)] = func->localsCount;
 						func->localsCount++;
@@ -1594,7 +1626,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 				}
 				default: {
 					const Char* b = p;
-					parseIdentifier();
+					parseIdentifier(false);
 					if (p == b) return false; // fix : nicer way?
 					String* identifier = String::newHashedString(env.heap(), b, p);
 					Int32 index;
@@ -1633,7 +1665,7 @@ void Compiler::parseAndPopOptionalExpression() {
 void Compiler::parseVarDeclarations() {
 	while (true) {
 		const Char* b = p; // FIX : sub
-		parseIdentifier();
+		parseIdentifier(false);
 		if (p == b) throw std::runtime_error("Expected identifier");
 		String* identifier = String::newHashedString(env.heap(), b, p);
 		Int32 index;
@@ -1705,9 +1737,9 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 	int i = findStatementToken(p - b, &*b);
 	if (i < 0) {
 		p = b;
-		parseIdentifier();
+		parseIdentifier(true);
 		const Char* q = p;
-		if (p != b && eatToken(":", true)) {
+		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier = String(b, q);
 			for (std::vector<Label>::const_reverse_iterator it = labels.rbegin(); it != labels.rend(); ++it) {
 				if (!it->name.empty() && it->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
@@ -1726,7 +1758,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 			case BREAK_STATEMENT: { // FIX : share with CONTINUE_STATEMENT
 				const Char* b = p;
 				std::vector<Label>::reverse_iterator it = labels.rbegin();
-				parseIdentifier();
+				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
 					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;
@@ -1743,7 +1775,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 			case CONTINUE_STATEMENT: {
 				const Char* b = p;
 				std::vector<Label>::reverse_iterator it = labels.rbegin();
-				parseIdentifier();
+				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
 					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;

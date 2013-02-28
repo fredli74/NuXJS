@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7ED841816DF6D38008D6B29</string>
+						<string>F7ED845316DF80EB008D6B29</string>
 						<key>history</key>
 						<array>
 							<string>F7E6DD6B16DEF399007AB92B</string>
@@ -366,7 +366,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7ED841716DF6D38008D6B29</string>
+										<string>F7ED845216DF80EB008D6B29</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -376,8 +376,10 @@
 											<string>F7D451C116DCCC790039338A</string>
 											<string>F7D451C216DCCC790039338A</string>
 											<string>F7D451C416DCCC790039338A</string>
-											<string>F7ED841516DF6D38008D6B29</string>
-											<string>F7ED841616DF6D38008D6B29</string>
+											<string>F7ED842216DF6F1D008D6B29</string>
+											<string>F7ED842E16DF71D6008D6B29</string>
+											<string>F7ED845016DF80EB008D6B29</string>
+											<string>F7ED845116DF80EB008D6B29</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -575,16 +577,14 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7ED841916DF6D38008D6B29</string>
-		<string>F7ED841A16DF6D38008D6B29</string>
-		<string>F7ED841B16DF6D38008D6B29</string>
+		<string>F7ED844C16DF7408008D6B29</string>
 		<string>1C530D57069F1CE1000CFCEE</string>
 		<string>F7ED832016DF5B5C008D6B29</string>
 		<string>F7ED832116DF5B5C008D6B29</string>
 		<string>1C78EAAD065D492600B07095</string>
-		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F7E6DA7A16DE27D6007AB92B</string>
+		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -680,7 +680,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -928,7 +928,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {1111, 590}}</string>
 								<key>RubberWindowFrame</key>
-								<string>329 227 1111 631 0 0 1440 878 </string>
+								<string>488 163 1111 631 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXDebugCLIModule</string>
@@ -957,7 +957,7 @@
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.consoleV3</string>
 			<key>WindowString</key>
-			<string>329 227 1111 631 0 0 1440 878 </string>
+			<string>488 163 1111 631 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>

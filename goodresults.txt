@@ -7,6 +7,15 @@ a:first, b:2, c:true
 1232766
 undefined
 undefined
+NaN
+false
+false
+false
+false
+false
+false
+true
+true
 ok
 ok
 ok

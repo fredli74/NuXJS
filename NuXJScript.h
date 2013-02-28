@@ -375,7 +375,7 @@ class Compiler : public GCItem {
 	protected:	void makeAssignment(XValue& v);
 	protected:	void throwAway(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier();
+	protected:	void parseIdentifier(bool acceptReservedKeywords);
 	protected:	Environment& env; // FIX : necessary?
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;

@@ -24,6 +24,18 @@ print(f[999])
 print(f[1000])
 print(f[-1])
 
+print(f.a+0) // NaN
+garlicNan=f.a+0
+cheeseNan=f.b+0
+print(garlicNan<cheeseNan) // NaN comparisons are always false
+print(garlicNan<=cheeseNan) // NaN comparisons are always false
+print(garlicNan==cheeseNan) // NaN comparisons are always false
+print(garlicNan===cheeseNan) // NaN comparisons are always false
+print(garlicNan>=cheeseNan) // NaN comparisons are always false
+print(garlicNan>cheeseNan) // NaN comparisons are always false
+print(garlicNan!=cheeseNan) // but this is true
+print(garlicNan!==cheeseNan) // but this is true
+
 if (false && false || true && true) print("ok"); else print("oops");
 if (!(false && true || true && false)) print("ok"); else print("oops")
 if (!(true && false || false && true)) print("ok"); else print("oops");
