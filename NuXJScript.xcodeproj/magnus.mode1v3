@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E6DD6416DEF2FC007AB92B</string>
+						<string>F7E6DD6B16DEF399007AB92B</string>
 						<key>history</key>
 						<array>
 							<string>F7E6DAAB16DE62BE007AB92B</string>
@@ -354,7 +354,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>goodtests.js</string>
+								<string>NuXJScript.cpp</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -362,11 +362,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>goodtests.js</string>
+										<string>NuXJScript.cpp</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7E6DD6316DEF2FC007AB92B</string>
+										<string>F7E6DD6A16DEF399007AB92B</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -378,8 +378,7 @@
 											<string>F7D451C416DCCC790039338A</string>
 											<string>F7E6DD2116DEEC33007AB92B</string>
 											<string>F7E6DD5516DEF259007AB92B</string>
-											<string>F7E6DD5B16DEF2D8007AB92B</string>
-											<string>F7E6DD5416DEF259007AB92B</string>
+											<string>F7E6DD6916DEF399007AB92B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -577,7 +576,7 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7E6DD5E16DEF2D8007AB92B</string>
+		<string>F7E6DD6C16DEF399007AB92B</string>
 		<string>F7E6DBD416DEC895007AB92B</string>
 		<string>F7E6DBD516DEC895007AB92B</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>

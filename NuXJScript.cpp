@@ -29,7 +29,6 @@
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		for (in)
 //		switch
-//		break, continue etc (with labels!)
 //		global scope compiler (don't accept return etc)
 //		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
 //		function name() { } syntax
@@ -63,6 +62,7 @@
 //		proper string comparisons (< etc)
 //		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
 //			thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
+//		break, continue etc (with labels!)
 
 #include "assert.h"
 #include <cmath>
@@ -217,7 +217,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
 	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
-	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Invalid string literal");
+	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Illegal string literal");
 	Char endChar = *p;
 	const Char* b = ++p;
 	Char* d = buffer;
@@ -229,7 +229,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
 			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
 			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
-			if (p == b) throw std::runtime_error("Invalid escape character");
+			if (p == b) throw std::runtime_error("Illegal escape character");
 			b = p;
 			*d++ = Char(l);
 		} else ++p;
@@ -1280,7 +1280,7 @@ void Compiler::makeRValue(XValue& xv) {
 
 void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
-		default: throw std::runtime_error("Invalid lvalue");
+		default: throw std::runtime_error("Illegal lvalue");
 		case XValue::INDEXED: emitWithInt32(VM::WRITE_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(VM::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(VM::SET_PROPERTY_OP); break;
@@ -1732,7 +1732,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 					if (it == labels.rend()) throw std::runtime_error("Undefined label");
 				} else {
 					while (it != labels.rend() && it->name != 0) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Invalid break");
+					if (it == labels.rend()) throw std::runtime_error("Illegal break");
 				}
 				it->breaks.push_back(emitForwardBranch(VM::JMP_OP));
 				expectSemicolon();
@@ -1747,10 +1747,10 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 					String* identifier = String::newHashedString(env.heap(), b, p);
 					while (it != labels.rend() && (it->name == 0 || !it->name->isEqualTo(identifier))) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Undefined label");
-					if (!it->isIteratorLabel) throw std::runtime_error("Label is not valid for continue");
+					if (!it->isIteratorLabel) throw std::runtime_error("Illegal label for continue");
 				} else {
 					while (it != labels.rend() && (it->name != 0 || !it->isIteratorLabel)) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Invalid continue");
+					if (it == labels.rend()) throw std::runtime_error("Illegal continue");
 				}
 				if (it->backwards < 0) it->continues.push_back(emitForwardBranch(VM::JMP_OP));
 				else emitBackwardBranch(VM::JMP_OP, it->backwards);
