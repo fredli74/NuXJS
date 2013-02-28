@@ -44,6 +44,7 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
+//		check that identifier is never one of the reserved words
 //
 //	GC
 //
@@ -1137,17 +1138,21 @@ const OperatorInfo POST_OPS[] = {
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, VM::INVALID_OP }
 };
 
-enum Statement { VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT };
+enum Statement {
+	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
+	, CONTINUE_STATEMENT, BREAK_STATEMENT
+};
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[6] = {
-		"var", "if", "while", "do", "for", "return"
+	static const char* STRINGS[8] = {
+		"var", "if", "while", "do", "for", "return", "continue", "break"
 	};
-	static const int QUICK_HASH_TABLE[8] = {
-		1, 3, 4, 5, 0, 2, -1, -1
+	static const int QUICK_HASH_TABLE[32] = {
+		-1, -1, 7, 6, 3, -1, 4, -1, -1, 1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, 5, -1, -1, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1
 	};
-	if (n < 2 || n > 6) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(s[1] + n) & 7];
+	if (n < 2 || n > 8) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(s[0]) & 31];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
@@ -1293,6 +1298,10 @@ void Compiler::throwAway(XValue& xv) {
 	xv = XValue(XValue::NONE);
 }
 
+void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
+	if (!eatToken(token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
+}
+
 Compiler::XValue Compiler::parseOperand(const OperatorInfo& op) {
 	XValue rv;
 	parseExpression(rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
@@ -1323,8 +1332,7 @@ void Compiler::parseFunctionCall(XValue& v, VM::Op op) {
 	v = XValue(XValue::PUSHED);
 }
 
-bool Compiler::parseOperator(XValue& v, Precedence precedence
-		, int opCount, const OperatorInfo* opList) {
+bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
@@ -1502,10 +1510,6 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
-	if (!eatToken(token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
-}
-
 bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
@@ -1660,8 +1664,35 @@ void Compiler::expectSemicolon() {
 	}
 }
 
-void Compiler::parseStatement() {
+int Compiler::pushIteratorLabel(int statementLabelsIndex, int backwardsPoint) {
+	labels.push_back(Label(0));
+	Int32 i = (statementLabelsIndex < 0 ? labels.size() - 1 : statementLabelsIndex);
+	assert(i < labels.size());
+	for (std::vector<Label>::iterator it = labels.begin() + i; it != labels.end(); ++it) {
+		it->isIteratorLabel = true;
+		it->backwards = backwardsPoint;
+	}
+	return i;
+}
+
+void Compiler::completeForwardContinues(int pushedLabelIndex) {
+	for (std::vector<Label>::iterator it = labels.begin() + pushedLabelIndex; it != labels.end(); ++it) {
+		const Label& label = *it;
+		for (std::vector<Int32>::const_iterator it2 = label.continues.begin(); it2 != label.continues.end(); ++it2)
+			completeForwardBranch(*it2);
+	}
+}
+
+void Compiler::completeForwardBreaksAndPopLabel() {
+	const Label& label = labels.back();
+	for (std::vector<Int32>::const_iterator it = label.breaks.begin(); it != label.breaks.end(); ++it)
+		completeForwardBranch(*it);
+	labels.pop_back();
+}
+
+void Compiler::parseStatement(int statementLabelsIndex) {
 	eatWhite();	
+		
 	if (eatToken("{", false)) {
 		parseStatementList();
 		expectToken("}", false);
@@ -1673,11 +1704,60 @@ void Compiler::parseStatement() {
 	int i = findStatementToken(p - b, &*b);
 	if (i < 0) {
 		p = b;
-		parseAndPopOptionalExpression();
-		expectSemicolon();
+		parseIdentifier();
+		const Char* q = p;
+		if (p != b && eatToken(":", true)) {
+			String* identifier = String::newHashedString(env.heap(), b, q);
+			for (std::vector<Label>::const_reverse_iterator it = labels.rbegin(); it != labels.rend(); ++it) {
+				if (it->name != 0 && it->name->isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
+			}
+			labels.push_back(Label(identifier));
+			parseStatement(statementLabelsIndex >= 0 ? statementLabelsIndex : labels.size() - 1);
+			completeForwardBreaksAndPopLabel();
+		} else {
+			p = b;
+			parseAndPopOptionalExpression();
+			expectSemicolon();
+		}
 	} else {
 		eatWhite();
 		switch (static_cast<Statement>(i)) {
+			case BREAK_STATEMENT: { // FIX : share with CONTINUE_STATEMENT
+				const Char* b = p;
+				std::vector<Label>::reverse_iterator it = labels.rbegin();
+				parseIdentifier();
+				if (b != p) {
+					String* identifier = String::newHashedString(env.heap(), b, p);
+					while (it != labels.rend() && (it->name == 0 || !it->name->isEqualTo(identifier))) ++it;
+					if (it == labels.rend()) throw std::runtime_error("Undefined label");
+				} else {
+					while (it != labels.rend() && it->name != 0) ++it;
+					if (it == labels.rend()) throw std::runtime_error("Invalid break");
+				}
+				it->breaks.push_back(emitForwardBranch(VM::JMP_OP));
+				expectSemicolon();
+				break;
+			}
+			
+			case CONTINUE_STATEMENT: {
+				const Char* b = p;
+				std::vector<Label>::reverse_iterator it = labels.rbegin();
+				parseIdentifier();
+				if (b != p) {
+					String* identifier = String::newHashedString(env.heap(), b, p);
+					while (it != labels.rend() && (it->name == 0 || !it->name->isEqualTo(identifier))) ++it;
+					if (it == labels.rend()) throw std::runtime_error("Undefined label");
+					if (!it->isIteratorLabel) throw std::runtime_error("Label is not valid for continue");
+				} else {
+					while (it != labels.rend() && (it->name != 0 || !it->isIteratorLabel)) ++it;
+					if (it == labels.rend()) throw std::runtime_error("Invalid continue");
+				}
+				if (it->backwards < 0) it->continues.push_back(emitForwardBranch(VM::JMP_OP));
+				else emitBackwardBranch(VM::JMP_OP, it->backwards);
+				expectSemicolon();
+				break;
+			}
+			
 			case VAR_STATEMENT: {
 				parseVarDeclarations();
 				expectSemicolon();
@@ -1705,6 +1785,7 @@ void Compiler::parseStatement() {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
+				pushIteratorLabel(statementLabelsIndex, pointA);
 				expectToken("(", false);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
@@ -1714,20 +1795,26 @@ void Compiler::parseStatement() {
 				parseStatement();
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				completeForwardBranch(pointB);
+				assert(labels.back().name == 0);
+				completeForwardBreaksAndPopLabel();
 				break;
 			}
 
 			case DO_WHILE_STATEMENT: {
 				Int32 point = markBackwardBranch();
+				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
 				parseStatement();
 				expectToken("while", true);
 				expectToken("(", true);
+				completeForwardContinues(pushedLabelIndex);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
 				emitBackwardBranch(VM::JT_OP, point);
 				expectSemicolon();
+				assert(labels.back().name == 0);
+				completeForwardBreaksAndPopLabel();
 				break;
 			}
 			
@@ -1749,14 +1836,19 @@ void Compiler::parseStatement() {
 				}
 				expectToken(";", true);
 				std::vector<Byte>& code = function->code;
-				Int32 pointC = code.size();
+				Int32 incPoint = code.size();
 				parseAndPopOptionalExpression();
 				expectToken(")", true);
-				Int32 pointD = code.size();
+				std::vector<Byte> incCode(code.begin() + incPoint, code.end());
+				code.resize(incPoint);
+				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
 				parseStatement();
-				std::rotate(code.begin() + pointC, code.begin() + pointD, code.end());
+				completeForwardContinues(pushedLabelIndex);
+				code.insert(code.end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
+				assert(labels.back().name == 0);
+				completeForwardBreaksAndPopLabel();
 				break;
 			}
 			
@@ -1782,7 +1874,7 @@ void Compiler::parseStatementList() {
 	} while (p != e && b != p);
 }
 
-const Char* Compiler::compile(const Char* b, const Char* e) { p = b; this->e = e; parseStatementList(); return p; }
+const Char* Compiler::compile(const Char* b, const Char* e) { labels.clear(); p = b; this->e = e; parseStatementList(); return p; }
 void Compiler::compile(const String* source) { const Char* b = source->accessChars(); compile(b, b + source->getLength()); }
 
 void Compiler::finish() {

@@ -44,6 +44,10 @@ s = "";
 for (var x = 3, y = 5 ; x < 100 && y < 15 ; ++y) { s += y + "," };
 print(s)
 
+s = "";
+for (var x = 1 ; x < 100 ; x += (x < 50 ? 10 : 20)) { if (x > 20) s += x + "," };
+print(s)
+
 x=9;(function() { var y=3,x=5 })(); print(x)
 
 delete z;
@@ -60,12 +64,28 @@ x.dump()
 x = new f ( "aah" , "bee" )
 x.dump()
 
-/*
-function f() { z: print("hej"); z: for (var i = 0; i < 10; ++i) { b: while (true) r: for (var j = 0; j < 10; ++j) { if (j >= 5) break b; print(j) }; print("pok") } }
-{ a: { for (var x = 1; x < 10; ++x) for (var y = 1; y < 3; ++y) { console.log(x); if (x == 5) break a }; console.log("wow") } }
- 
-{ x = 0; a: for (var i = 0; i < 10; ++i) { if (++x < 8) continue a; console.log("iter " + i) } }
-*/
+{ var i = 0; while (++i < 5) { print("before " + i); if (i > 2) continue; print("after " + i) } }
+{ var i = 0; while (++i < 5) { print("before " + i); if (i > 2) break; print("after " + i) } }
+{ var i = 0; a : while (++i < 5) { print("before " + i); if (i > 2) continue a; print("after " + i) } }
+{ var i = 0; a : while (++i < 5) { print("before " + i); if (i > 2) break a; print("after " + i) } }
+{ var i = 0; a : b:while (++i < 5) { print("before " + i); if (i > 2) continue a; print("after " + i) } }
+{ var i = 0; a : b:while (++i < 5) { print("before " + i); if (i > 2) continue b; print("after " + i) } }
+{ var i = 0; a : { b:while (++i < 5) { print("before " + i); if (i > 2) break a; print("after " + i) } } }
+{ var i = 0; a : { b:while (++i < 5) { print("before " + i); if (i > 2) break b; print("after " + i) } } }
+{ x = 0; var i = 0; a: while (i < 5) { ++i; j=0; b:while(j++ < 3) { print("iter " + i + "," + j); if (++x < 3) continue b; } } }
+{ x = 0; var i = 0; a: while (i < 5) { ++i; j=0; b:while(j++ < 3) { print("iter " + i + "," + j); if (++x < 3) continue a; } } }
+{ x = 0; var i = 0; a: while (i < 5) { ++i; j=0; b:while(j++ < 3) { print("iter " + i + "," + j); if (++x > 4) break b; } } }
+{ x = 0; var i = 0; a: while (i < 5) { ++i; j=0; b:while(j++ < 3) { print("iter " + i + "," + j); if (++x > 4) break a; } } }
+{ x = 0; b: do { y = 0; a: do { print('before ' + y + ',' + x); if (y > 2) continue b; print('after ' + y + ',' + x);  } while (++y < 5); } while (++x < 5) }
+{ x = 0; b: do { y = 0; a: do { print('before ' + y + ',' + x); if (y > 2) continue a; print('after ' + y + ',' + x);  } while (++y < 5); } while (++x < 5) }
+
+f = function() { z: print("hej"); z: for (var i = 0; i < 10; ++i) { b: while (true) r: for (var j = 0; j < 10; ++j) { if (j >= 5) break b; print(j) }; print("thonk") } }
+f()
+
+{ a: { for (var x = 1; x < 10; ++x) for (var y = 1; y < 3; ++y) { print(x); if (x == 5) break a }; print("not here") } }
+
+{ x = 0; a: for (var i = 0; i < 10; ++i) { if (++x < 8) continue a; print("iter " + i) } }
+
 /*
 f=function() { try { var x = 7; print(x); throw "hej" } catch (x) { print(x); throw x } finally { print("final"); }; print("yeah") }
  

@@ -352,6 +352,9 @@ class Compiler : public GCItem {
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
 	protected:	void emitBackwardBranch(VM::Op op, Int32 point);
+	protected:	int pushIteratorLabel(int statementLabelsIndex, int backwardsPoint = -1);
+	protected:	void completeForwardContinues(int pushedLabelIndex);
+	protected:	void completeForwardBreaksAndPopLabel();
 	protected:	XValue parseOperand(const OperatorInfo& op);
 	protected:	void parseRValueOperand(const OperatorInfo& op);
 	protected:	void parseFunctionCall(XValue& v, VM::Op op);
@@ -360,7 +363,7 @@ class Compiler : public GCItem {
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
 	protected:	void parseVarDeclarations();
-	protected:	void parseStatement();
+	protected:	void parseStatement(int statementLabelsIndex = -1); // statementLabelsIndex >= 0 means this statement has labels from labels.begin() + statementLabelsIndex to labels.end()
 	protected:	void parseStatementList();
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these
 	protected:	void expectSemicolon();
@@ -371,9 +374,18 @@ class Compiler : public GCItem {
 	protected:	void throwAway(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier();
-	protected:	Environment& env;
+	protected:	Environment& env; // FIX : necessary?
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
+	protected:	struct Label {
+					Label(const String* name) : name(name) { }
+					const String* name; // = 0 : while, for, switches
+					bool isIteratorLabel;
+					Int32 backwards; // target point for backward continues, = -1 if not valid continue point (not while or for)
+					std::vector<Int32> breaks; // source points for breaks
+					std::vector<Int32> continues; // source points for continues
+				};
+	protected:	std::vector<Label> labels;
 	protected:	const Char* p;
 	protected:	const Char* e;
 };

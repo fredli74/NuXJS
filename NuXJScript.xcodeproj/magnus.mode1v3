@@ -202,46 +202,6 @@
 			<key>Content</key>
 			<dict>
 				<key>PBXProjectModuleGUID</key>
-				<string>F7E6DBDE16DEC8C3007AB92B</string>
-				<key>PBXProjectModuleLabel</key>
-				<string>goodtests.js</string>
-				<key>PBXSplitModuleInNavigatorKey</key>
-				<dict>
-					<key>Split0</key>
-					<dict>
-						<key>PBXProjectModuleGUID</key>
-						<string>F7E6DBDF16DEC8C3007AB92B</string>
-						<key>PBXProjectModuleLabel</key>
-						<string>goodtests.js</string>
-						<key>_historyCapacity</key>
-						<integer>0</integer>
-						<key>bookmark</key>
-						<string>F7E6DC7316DECEB5007AB92B</string>
-						<key>history</key>
-						<array>
-							<string>F7E6DBE016DEC8C3007AB92B</string>
-						</array>
-					</dict>
-					<key>SplitCount</key>
-					<string>1</string>
-				</dict>
-				<key>StatusBarVisibility</key>
-				<true/>
-			</dict>
-			<key>Geometry</key>
-			<dict>
-				<key>Frame</key>
-				<string>{{0, 20}, {1376, 639}}</string>
-				<key>PBXModuleWindowStatusBarHidden2</key>
-				<false/>
-				<key>RubberWindowFrame</key>
-				<string>42 172 1376 680 0 0 1440 878 </string>
-			</dict>
-		</dict>
-		<dict>
-			<key>Content</key>
-			<dict>
-				<key>PBXProjectModuleGUID</key>
 				<string>F7E6DA7A16DE27D6007AB92B</string>
 				<key>PBXProjectModuleLabel</key>
 				<string>perftest6.js</string>
@@ -256,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7E6DC7416DECEB5007AB92B</string>
+						<string>F7E6DD6416DEF2FC007AB92B</string>
 						<key>history</key>
 						<array>
 							<string>F7E6DAAB16DE62BE007AB92B</string>
@@ -376,7 +336,7 @@
 							<real>201</real>
 						</array>
 						<key>RubberWindowFrame</key>
-						<string>4 56 1436 822 0 0 1440 878 </string>
+						<string>4 54 1436 822 0 0 1440 878 </string>
 					</dict>
 					<key>Module</key>
 					<string>PBXSmartGroupTreeModule</string>
@@ -394,7 +354,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>goodtests.js</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -402,11 +362,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>goodtests.js</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7E6DC7216DECEB5007AB92B</string>
+										<string>F7E6DD6316DEF2FC007AB92B</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -416,9 +376,10 @@
 											<string>F7D451C116DCCC790039338A</string>
 											<string>F7D451C216DCCC790039338A</string>
 											<string>F7D451C416DCCC790039338A</string>
-											<string>F7E6DC1216DECA12007AB92B</string>
-											<string>F7E6DC6B16DECE95007AB92B</string>
-											<string>F7E6DC6C16DECE95007AB92B</string>
+											<string>F7E6DD2116DEEC33007AB92B</string>
+											<string>F7E6DD5516DEF259007AB92B</string>
+											<string>F7E6DD5B16DEF2D8007AB92B</string>
+											<string>F7E6DD5416DEF259007AB92B</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -432,7 +393,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {1228, 776}}</string>
 								<key>RubberWindowFrame</key>
-								<string>4 56 1436 822 0 0 1440 878 </string>
+								<string>4 54 1436 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -452,7 +413,7 @@
 								<key>Frame</key>
 								<string>{{0, 781}, {1228, 0}}</string>
 								<key>RubberWindowFrame</key>
-								<string>4 56 1436 822 0 0 1440 878 </string>
+								<string>4 54 1436 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>XCDetailModule</string>
@@ -616,17 +577,17 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
+		<string>F7E6DD5E16DEF2D8007AB92B</string>
 		<string>F7E6DBD416DEC895007AB92B</string>
 		<string>F7E6DBD516DEC895007AB92B</string>
-		<string>1CD10A99069EF8BA00B06720</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F7E6DA7A16DE27D6007AB92B</string>
-		<string>F7E6DBDE16DEC8C3007AB92B</string>
+		<string>1CD10A99069EF8BA00B06720</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
-	<string>4 56 1436 822 0 0 1440 878 </string>
+	<string>4 54 1436 822 0 0 1440 878 </string>
 	<key>WindowToolsV3</key>
 	<array>
 		<dict>
@@ -842,7 +803,7 @@
 			<key>WindowToolGUID</key>
 			<string>1CD10A99069EF8BA00B06720</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -999,7 +960,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>Identifier</key>
