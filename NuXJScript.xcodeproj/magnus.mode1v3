@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7ED82BE16DF5881008D6B29</string>
+						<string>F7ED841816DF6D38008D6B29</string>
 						<key>history</key>
 						<array>
 							<string>F7E6DD6B16DEF399007AB92B</string>
@@ -366,7 +366,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7ED82BD16DF5881008D6B29</string>
+										<string>F7ED841716DF6D38008D6B29</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -376,8 +376,8 @@
 											<string>F7D451C116DCCC790039338A</string>
 											<string>F7D451C216DCCC790039338A</string>
 											<string>F7D451C416DCCC790039338A</string>
-											<string>F7ED82A116DF5777008D6B29</string>
-											<string>F7ED82A216DF5777008D6B29</string>
+											<string>F7ED841516DF6D38008D6B29</string>
+											<string>F7ED841616DF6D38008D6B29</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -575,10 +575,17 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7E6DA7A16DE27D6007AB92B</string>
-		<string>1CD10A99069EF8BA00B06720</string>
-		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
+		<string>F7ED841916DF6D38008D6B29</string>
+		<string>F7ED841A16DF6D38008D6B29</string>
+		<string>F7ED841B16DF6D38008D6B29</string>
+		<string>1C530D57069F1CE1000CFCEE</string>
+		<string>F7ED832016DF5B5C008D6B29</string>
+		<string>F7ED832116DF5B5C008D6B29</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
+		<string>1CD10A99069EF8BA00B06720</string>
+		<string>F7E6DA7A16DE27D6007AB92B</string>
+		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
 	<string>4 56 1436 822 0 0 1440 878 </string>
@@ -673,7 +680,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -797,7 +804,7 @@
 			<key>WindowToolGUID</key>
 			<string>1CD10A99069EF8BA00B06720</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -878,8 +885,8 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C530D57069F1CE1000CFCEE</string>
-				<string>F7D454D716DD98B80039338A</string>
-				<string>F7D454D816DD98B80039338A</string>
+				<string>F7ED83D916DF693C008D6B29</string>
+				<string>F7ED83DA16DF693C008D6B29</string>
 				<string>1CDD528C0622207200134675</string>
 				<string>1CD0528E0623707200166675</string>
 			</array>
@@ -944,7 +951,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C78EAAD065D492600B07095</string>
-				<string>F7E6DB7816DE9954007AB92B</string>
+				<string>F7ED831F16DF5B5C008D6B29</string>
 				<string>1C78EAAC065D492600B07095</string>
 			</array>
 			<key>ToolbarConfiguration</key>
@@ -954,7 +961,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

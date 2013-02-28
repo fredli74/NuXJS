@@ -42,7 +42,6 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 				
 	public:		bool empty() const { return n == 0; }
 	public:		size_t size() const { return n; }
-	public:		T* data() const { return p; }		// FIX : drop?
 	public:		operator T*() const { return p; }
 	public:		T* begin() const { return p; }
 	public:		T* end() const { return p + n; }
@@ -56,7 +55,7 @@ class GCList;
 class GCHeap;
 class GCItem {
 	friend class GCList;
-	friend class GCHeap;
+	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 	public:		GCItem();
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual ~GCItem();
@@ -73,8 +72,23 @@ class GCList : public GCItem {
 	protected:	size_t count;
 };
 
-class Object;
+class GCHeap {
+	public:		template<class T> T* manage(T* item) { currentList->claim(item); return item; }
+	public:		template<class T> T* protect(T* item) { rootList.claim(item); return item; }
+	public:		GCHeap();
+	public:		size_t size() const;
+	public:		size_t gc();
+	public:		void mark(const GCItem* item);
+	protected:	GCList* currentList;
+	protected:	GCList* newList;
+	protected:	GCList managedLists[2];
+	protected:	GCList rootList;
+};
+
+class Environment;
+class Function;
 class String;
+class Object;
 class ScriptFunctionDef;
 
 class Value {
@@ -123,21 +137,6 @@ class Value {
 				};
 };
 
-class UserObject;
-class GCHeap {
-	public:		template<class T> T* manage(T* item) { currentList->claim(item); return item; }
-	public:		template<class T> T* protect(T* item) { rootList.claim(item); return item; }
-	public:		GCHeap();
-	public:		void mark(const GCItem* item);
-	public:		size_t gc();
-public:	GCList* currentList;
-	protected:	GCList* newList;
-	protected:	GCList managedLists[2];
-	protected:	GCList rootList;
-};
-
-class Environment;
-class Function;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
@@ -171,25 +170,21 @@ class Table {
 	protected:	UInt32 loadCount; ///< Count of buckets with defined keys.
 };
 
-class String : public Object {
+class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		typedef Object super;
+	public:		typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
 	public:		static String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
 	public:		String();
-	public:		String(const char* sz);
+	public:		String(const String& o);
 	public:		String(const Char* b, const Char* e);
-	public:		String(const String& c);
 	public:		String(const String& l, const String& r);
+	public:		String(const char* sz);
 	public:		Table::HashType calcHash() const;
 	public:		bool isEqualTo(const String& o) const;
 	public:		bool isLessThan(const String& o) const;
-	public:		size_t empty() const;
-	public:		size_t size() const;
 	public:		const Char* accessChars() const; // FIX : <- drop
-	public:		const Char* begin() const;
-	public:		const Char* end() const;
 	public:		std::wstring toStdString() const;
 	public:		virtual bool getProperty(Environment& env, const String* name, Value& v);
-	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
 	protected:	mutable size_t hash;
 };
 

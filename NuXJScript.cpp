@@ -244,7 +244,7 @@ static bool isComment(const Char* p, const Char* e) {
 
 /* --- String --- */
 
-String::String(const char* sz) : chars(strlen(sz)), hash(0) { std::copy(sz, sz + chars.size(), chars.data()); calcHash(); }
+String::String(const char* sz) : QArray(strlen(sz)), hash(0) { std::copy(sz, sz + size(), begin()); calcHash(); }
 
 const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
 struct QuickConstants {
@@ -294,12 +294,12 @@ String MINUS_INFINITY_STRING("-Infinity");
 String ZERO_STRING("0");
 String LENGTH_STRING("length");
 
-String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.begin()); }
-String::String(const String& c) : chars(c.chars), hash(c.hash) { }
+String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
+String::String(const String& o) : QArray(o), hash(o.hash) { }
 
-String::String(const String& l, const String& r) : chars(l.chars.size() + r.chars.size()), hash(0) {
-	Char* e = std::copy(l.chars.data(), l.chars.data() + l.chars.size(), chars.data());
-	std::copy(r.chars.data(), r.chars.data() + r.chars.size(), e);
+String::String(const String& l, const String& r) : QArray(l.size() + r.size()), hash(0) {
+	Char* e = std::copy(l.begin(), l.end(), begin());
+	std::copy(r.begin(), r.end(), e);
 }
 
 String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
@@ -310,17 +310,15 @@ String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 
 bool String::getProperty(Environment& env, const String* name, Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
-		v = Value(static_cast<Int32>(chars.size()));
+		v = Value(static_cast<Int32>(size()));
 		return true;
 	}
 	UInt32 i;
-	const Char* p = name->chars.data();
-	const Char* e = p + name->chars.size();
-	const Char* q = parseUnsignedInt(p, e, i);
-	if (q == e && i < chars.size()) {
-		Char c = chars[i];
-		if (32 <= c && c < 127) v = QUICK_CONSTANTS.ascii[c - 32];
-		else v = Value(env.heap().manage(new String(chars.data() + i, chars.data() + i + 1)));
+	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
+	if (q == name->end() && i < size()) {
+		const Char* p = begin() + i;
+		if (32 <= *p && *p < 127) v = QUICK_CONSTANTS.ascii[*p - 32];
+		else v = Value(env.heap().manage(new String(p, p + 1)));
 		return true;
 	}
 	v = Value();
@@ -331,11 +329,12 @@ bool String::getProperty(Environment& env, const String* name, Value& v) {
 // FNV Hash
 Table::HashType String::calcHash() const {
 	if (hash == 0) {
-		size_t l = chars.size();
+		size_t l = size();
 		UInt32 x = 2166136261U;
+		const Char* p = begin();
 		for (size_t i = 0; i < l; ++i) {
 			x *= 16777619;
-			x += chars[i];
+			x += p[i];
 		}
 		hash = (x == 0 ? x + 1 : x);
 	}
@@ -345,25 +344,23 @@ Table::HashType String::calcHash() const {
 bool String::isEqualTo(const String& o) const {
 	if (this == &o) return true;
 	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
-	size_t l = chars.size();
-	if (l != o.chars.size()) return false;
-	for (int i = 0; i < l; ++i) if (chars[i] != o.chars[i]) return false;
-	return true;
+	size_t l = size();
+	if (l != o.size()) return false;
+	return std::equal(begin(), end(), o.begin());
 }
 
 bool String::isLessThan(const String& o) const {
 	if (this == &o) return false;
-	size_t l = std::min(chars.size(), o.chars.size());
-	for (int i = 0; i < l; ++i) if (chars[i] != o.chars[i]) return (chars[i] < o.chars[i]);
-	return chars.size() < o.chars.size();
+	size_t l = std::min(size(), o.size());
+	const Char* a = begin();
+	const Char* b = o.begin();
+	for (int i = 0; i < l; ++i) if (a[i] != b[i]) return (a[i] < b[i]);
+	return size() < o.size();
 }
 
-size_t String::empty() const { return chars.empty(); }
-size_t String::size() const { return chars.size(); }
-const Char* String::accessChars() const { return chars.data(); }
-const Char* String::begin() const { return chars.begin(); }
-const Char* String::end() const { return chars.end(); }
-std::wstring String::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
+std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
+
+/* --- GCItem --- */
 
 GCItem::GCItem() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 void GCItem::gcMark(GCHeap& heap) { }
@@ -551,8 +548,8 @@ double Value::toDouble() const {
 		case NUMBER_TYPE: return d;
 		case STRING_TYPE: {
 			double v;
-			const Char* p = s->accessChars();
-			const Char* q = parseDouble(p, p + s->size(), v);
+			const Char* p = s->begin();
+			const Char* q = parseDouble(p, s->end(), v);
 			if (q == p) return NaN();
 			return v;
 		}
@@ -1890,6 +1887,7 @@ disassemble(env.heap(), function->code, function->constants);
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
+size_t GCHeap::size() const { return currentList->size(); }
 size_t GCHeap::gc() {
 	size_t sweptCount = 0;
 
@@ -1984,7 +1982,7 @@ int main(int argc, const char* argv[]) {
 					
 					size_t sweptCount = heap.gc();
 
-					std::cerr << "\tKept: " << heap.currentList->size() << std::endl;
+					std::cerr << "\tKept: " << heap.size() << std::endl;
 					std::cerr << "\tSwept: " << sweptCount << std::endl;
 					
 					if (done) {
