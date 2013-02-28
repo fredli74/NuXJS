@@ -294,11 +294,12 @@ String MINUS_INFINITY_STRING("-Infinity");
 String ZERO_STRING("0");
 String LENGTH_STRING("length");
 
-String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.data()); }
+String::String(const Char* b, const Char* e) : chars(e - b), hash(0) { std::copy(b, e, chars.begin()); }
+String::String(const String& c) : chars(c.chars), hash(c.hash) { }
 
-String::String(const String* l, const String* r) : chars(l->chars.size() + r->chars.size()), hash(0) {
-	Char* e = std::copy(l->chars.data(), l->chars.data() + l->chars.size(), chars.data());
-	std::copy(r->chars.data(), r->chars.data() + r->chars.size(), e);
+String::String(const String& l, const String& r) : chars(l.chars.size() + r.chars.size()), hash(0) {
+	Char* e = std::copy(l.chars.data(), l.chars.data() + l.chars.size(), chars.data());
+	std::copy(r.chars.data(), r.chars.data() + r.chars.size(), e);
 }
 
 String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
@@ -308,7 +309,7 @@ String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 }
 
 bool String::getProperty(Environment& env, const String* name, Value& v) {
-	if (name->isEqualTo(&LENGTH_STRING)) {
+	if (name->isEqualTo(LENGTH_STRING)) {
 		v = Value(static_cast<Int32>(chars.size()));
 		return true;
 	}
@@ -341,24 +342,27 @@ Table::HashType String::calcHash() const {
 	return hash;
 }
 
-bool String::isEqualTo(const String* o) const {
-	if (this == o) return true;
-	if (hash != o->hash && hash != 0 && o->hash != 0) return false;
+bool String::isEqualTo(const String& o) const {
+	if (this == &o) return true;
+	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
 	size_t l = chars.size();
-	if (l != o->chars.size()) return false;
-	for (int i = 0; i < l; ++i) if (chars[i] != o->chars[i]) return false;
+	if (l != o.chars.size()) return false;
+	for (int i = 0; i < l; ++i) if (chars[i] != o.chars[i]) return false;
 	return true;
 }
 
-bool String::isLessThan(const String* o) const {
-	if (this == o) return false;
-	size_t l = std::min(chars.size(), o->chars.size());
-	for (int i = 0; i < l; ++i) if (chars[i] != o->chars[i]) return (chars[i] < o->chars[i]);
-	return chars.size() < o->chars.size();
+bool String::isLessThan(const String& o) const {
+	if (this == &o) return false;
+	size_t l = std::min(chars.size(), o.chars.size());
+	for (int i = 0; i < l; ++i) if (chars[i] != o.chars[i]) return (chars[i] < o.chars[i]);
+	return chars.size() < o.chars.size();
 }
 
-size_t String::getLength() const { return chars.size(); }
+size_t String::empty() const { return chars.empty(); }
+size_t String::size() const { return chars.size(); }
 const Char* String::accessChars() const { return chars.data(); }
+const Char* String::begin() const { return chars.begin(); }
+const Char* String::end() const { return chars.end(); }
 std::wstring String::toStdString() const { return std::wstring(chars.data(), chars.data() + chars.size()); }
 
 GCItem::GCItem() : _gcList(0), _gcPrev(this), _gcNext(this) { }
@@ -456,7 +460,7 @@ void Table::update(const String* key, const Value& value) {
 Table::Bucket* Table::find(const String* key, HashType hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(key))) i = (i + 1) & mask;
+	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(*key))) i = (i + 1) & mask;
 	return &buckets[i];
 }
 
@@ -548,7 +552,7 @@ double Value::toDouble() const {
 		case STRING_TYPE: {
 			double v;
 			const Char* p = s->accessChars();
-			const Char* q = parseDouble(p, p + s->getLength(), v);
+			const Char* q = parseDouble(p, p + s->size(), v);
 			if (q == p) return NaN();
 			return v;
 		}
@@ -602,7 +606,7 @@ bool Value::operator==(const Value& y) const {
 		case DELETED_TYPE:
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
-		case STRING_TYPE: return s->isEqualTo(y.s);
+		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
 	}
 }
@@ -617,7 +621,7 @@ bool Value::operator<(const Value& y) const {
 		case DELETED_TYPE: return false;
 		case BOOLEAN_TYPE: return b < y.b;
 		case NUMBER_TYPE: return d < y.d;
-		case STRING_TYPE: return s->isLessThan(y.s);
+		case STRING_TYPE: return s->isLessThan(*y.s);
 		case OBJECT_TYPE: return o < y.o;
 	}
 }
@@ -635,7 +639,7 @@ bool Value::compareStrictly(const Value& y) const {
 		//	if (std::isnan(thisNumber) || std::isnan(otherNumber)) return false;
 			return thisNumber == otherNumber;
 		}
-		case STRING_TYPE: return s->isEqualTo(y.s);
+		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
 	}
 }
@@ -662,7 +666,7 @@ bool Value::isEqualTo(const Value& y) const {
 }
 
 bool Value::isLessThan(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return s->isLessThan(y.s);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return s->isLessThan(*y.s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
@@ -677,7 +681,7 @@ bool Value::isLessThan(const Value& y) const {
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.s->isLessThan(s);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.s->isLessThan(*s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	// FIX : necessary? if (std::isnan(thisNumber) || std::isnan(otherNumber)) return Value();
@@ -695,9 +699,9 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
 		String* ls = toString(heap);
 		String* rs = y.toString(heap);
-		if (rs->getLength() == 0) return Value(ls);
-		if (ls->getLength() == 0) return Value(rs);
-		return Value(heap.manage(new String(ls, rs)));
+		if (rs->empty()) return Value(ls);
+		if (ls->empty()) return Value(rs);
+		return Value(heap.manage(new String(*ls, *rs)));
 	}
 	return Value(toDouble() + y.toDouble());
 }
@@ -1665,7 +1669,7 @@ void Compiler::expectSemicolon() {
 }
 
 int Compiler::pushIteratorLabel(int statementLabelsIndex, int backwardsPoint) {
-	labels.push_back(Label(0));
+	labels.push_back(Label(EMPTY_STRING));
 	Int32 i = (statementLabelsIndex < 0 ? labels.size() - 1 : statementLabelsIndex);
 	assert(i < labels.size());
 	for (std::vector<Label>::iterator it = labels.begin() + i; it != labels.end(); ++it) {
@@ -1707,9 +1711,9 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 		parseIdentifier();
 		const Char* q = p;
 		if (p != b && eatToken(":", true)) {
-			String* identifier = String::newHashedString(env.heap(), b, q);
+			String identifier = String(b, q);
 			for (std::vector<Label>::const_reverse_iterator it = labels.rbegin(); it != labels.rend(); ++it) {
-				if (it->name != 0 && it->name->isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
+				if (!it->name.empty() && it->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
 			}
 			labels.push_back(Label(identifier));
 			parseStatement(statementLabelsIndex >= 0 ? statementLabelsIndex : labels.size() - 1);
@@ -1727,11 +1731,11 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				std::vector<Label>::reverse_iterator it = labels.rbegin();
 				parseIdentifier();
 				if (b != p) {
-					String* identifier = String::newHashedString(env.heap(), b, p);
-					while (it != labels.rend() && (it->name == 0 || !it->name->isEqualTo(identifier))) ++it;
+					String identifier(b, p);
+					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Undefined label");
 				} else {
-					while (it != labels.rend() && it->name != 0) ++it;
+					while (it != labels.rend() && !it->name.empty()) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Illegal break");
 				}
 				it->breaks.push_back(emitForwardBranch(VM::JMP_OP));
@@ -1744,12 +1748,12 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				std::vector<Label>::reverse_iterator it = labels.rbegin();
 				parseIdentifier();
 				if (b != p) {
-					String* identifier = String::newHashedString(env.heap(), b, p);
-					while (it != labels.rend() && (it->name == 0 || !it->name->isEqualTo(identifier))) ++it;
+					String identifier(b, p);
+					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Undefined label");
 					if (!it->isIteratorLabel) throw std::runtime_error("Illegal label for continue");
 				} else {
-					while (it != labels.rend() && (it->name != 0 || !it->isIteratorLabel)) ++it;
+					while (it != labels.rend() && (!it->name.empty() || !it->isIteratorLabel)) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Illegal continue");
 				}
 				if (it->backwards < 0) it->continues.push_back(emitForwardBranch(VM::JMP_OP));
@@ -1795,7 +1799,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				parseStatement();
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				completeForwardBranch(pointB);
-				assert(labels.back().name == 0);
+				assert(labels.back().name.empty());
 				completeForwardBreaksAndPopLabel();
 				break;
 			}
@@ -1813,7 +1817,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				expectToken(")", true);
 				emitBackwardBranch(VM::JT_OP, point);
 				expectSemicolon();
-				assert(labels.back().name == 0);
+				assert(labels.back().name.empty());
 				completeForwardBreaksAndPopLabel();
 				break;
 			}
@@ -1847,7 +1851,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				code.insert(code.end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
-				assert(labels.back().name == 0);
+				assert(labels.back().name.empty());
 				completeForwardBreaksAndPopLabel();
 				break;
 			}
@@ -1875,7 +1879,7 @@ void Compiler::parseStatementList() {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) { labels.clear(); p = b; this->e = e; parseStatementList(); return p; }
-void Compiler::compile(const String* source) { const Char* b = source->accessChars(); compile(b, b + source->getLength()); }
+void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 void Compiler::finish() {
 	emit(VM::VOID_OP);
@@ -1941,7 +1945,7 @@ int main(int argc, const char* argv[]) {
 	heap.protect(&functionDef);
 	Compiler compiler(env, &functionDef);
 	heap.protect(&compiler);
-	String* source = &EMPTY_STRING;
+	String source = EMPTY_STRING;
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
 	if (argc >= 2) {
@@ -1956,8 +1960,8 @@ int main(int argc, const char* argv[]) {
 			std::getline(*inStream, s);
 			if (!s.empty()) {
 				String line(s.c_str());
-				source = heap.manage(new String(source, &line));
-				source = heap.manage(new String(source, &LF_STRING));
+				source = String(source, line);
+				source = String(source, LF_STRING);
 			} else {
 				compiler.compile(source);
 				compiler.finish();
@@ -1992,16 +1996,16 @@ int main(int argc, const char* argv[]) {
 						std::cerr << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
 					}
 				} while (!done);
-				source = &EMPTY_STRING;
+				source = EMPTY_STRING;
 			}
 		}
 		catch (const std::exception& x) {
 			std::cout << "Exception: " << x.what() << std::endl;
-			source = &EMPTY_STRING;
+			source = EMPTY_STRING;
 		}
 		catch (...) {
 			std::cout << "Unknown exception" << std::endl;
-			source = &EMPTY_STRING;
+			source = EMPTY_STRING;
 		}
 	}
 	return 0;

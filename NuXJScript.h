@@ -40,9 +40,12 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 					return *this;
 				}
 				
+	public:		bool empty() const { return n == 0; }
 	public:		size_t size() const { return n; }
-	public:		T* data() const { return p; }
+	public:		T* data() const { return p; }		// FIX : drop?
 	public:		operator T*() const { return p; }
+	public:		T* begin() const { return p; }
+	public:		T* end() const { return p + n; }
 	public:		~QuickArray() { if (p != a) delete [] p; }
 	protected:	size_t n;
 	protected:	T* p;
@@ -174,12 +177,16 @@ class String : public Object {
 	public:		String();
 	public:		String(const char* sz);
 	public:		String(const Char* b, const Char* e);
-	public:		String(const String* l, const String* r);
+	public:		String(const String& c);
+	public:		String(const String& l, const String& r);
 	public:		Table::HashType calcHash() const;
-	public:		bool isEqualTo(const String* o) const;
-	public:		bool isLessThan(const String* o) const;
-	public:		size_t getLength() const;
-	public:		const Char* accessChars() const;
+	public:		bool isEqualTo(const String& o) const;
+	public:		bool isLessThan(const String& o) const;
+	public:		size_t empty() const;
+	public:		size_t size() const;
+	public:		const Char* accessChars() const; // FIX : <- drop
+	public:		const Char* begin() const;
+	public:		const Char* end() const;
 	public:		std::wstring toStdString() const;
 	public:		virtual bool getProperty(Environment& env, const String* name, Value& v);
 	protected:	QuickArray<Char, STRING_BUILT_IN_LENGTH> chars;
@@ -188,7 +195,7 @@ class String : public Object {
 
 struct StringObjectCompare {
 	bool operator() (const String* a, const String* b) const {
-		return (a != b && a->isLessThan(b));
+		return (a != b && a->isLessThan(*b));
 	}
 };
 
@@ -341,7 +348,7 @@ class Compiler : public GCItem {
 	public:		Compiler(Environment& env, ScriptFunctionDef* function);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		const Char* compile(const Char* b, const Char* e);
-	public:		void compile(const String* source);
+	public:		void compile(const String& source);
 	public:		void finish();
 	protected:	void eatComment();
 	protected:	void eatWhite();
@@ -378,8 +385,8 @@ class Compiler : public GCItem {
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
 	protected:	struct Label {
-					Label(const String* name) : name(name) { }
-					const String* name; // = 0 : while, for, switches
+					Label(const String& name) : name(name) { }
+					String name; // empty for automatic while, for, switches labels
 					bool isIteratorLabel;
 					Int32 backwards; // target point for backward continues, = -1 if not valid continue point (not while or for)
 					std::vector<Int32> breaks; // source points for breaks
