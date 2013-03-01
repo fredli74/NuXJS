@@ -19,6 +19,7 @@
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
+//			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
 //		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 //			not too fond of the int cast in the byte array
 //		basic library (math, string, array ops)
@@ -47,6 +48,7 @@
 //	GC
 //
 //		take a shot at generational gc
+//			couldn't it work if we just make sure that a reference from old -> new gen protects the item in new gen until we sweep the old gen?
 //		no need for recursive marking, just add to one end of the list and continue looping to the end of list
 //		fast allocation pools
 //		automatic gc pace
@@ -270,7 +272,7 @@ struct QuickConstants {
 	void cleanup() {
 		for (int i = 32; i < 127; ++i) {
 			delete ascii[i - 32].getString();
-			ascii[i - 32] = Value();
+			ascii[i - 32] = Value(Value::NONEXISTENT_TYPE);
 		}
 		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
 			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
@@ -322,7 +324,7 @@ bool String::getProperty(Environment& env, const String* name, Value& v) {
 		else v = Value(env.heap().manage(new String(p, p + 1)));
 		return true;
 	}
-	v = Value();
+	v = Value(Value::UNDEFINED_TYPE);
 	return false;
 }
 
@@ -393,7 +395,7 @@ void GCList::claim(GCItem* item) {
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : key(0), value(Value::DELETED_TYPE) { }
+Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT_TYPE) { }
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) {
 	return (bucketCount - (bucketCount >> 3) - 1);
@@ -422,7 +424,7 @@ const Table::Bucket* Table::lookup(const String* key) {
 }
 
 void Table::assign(const String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
-void Table::erase(const String* key) { update(key, Value(Value::DELETED_TYPE)); }
+void Table::erase(const String* key) { update(key, Value(Value::NONEXISTENT_TYPE)); }
 
 void Table::mark(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
@@ -494,7 +496,7 @@ bool UserObject::getProperty(Environment& env, const String* name, Value& v) {
 		v = b->value;
 		return true;
 	}
-	v = Value();
+	v = Value(Value::UNDEFINED_TYPE);
 	return false;
 }
 
@@ -515,7 +517,7 @@ Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
 Value::Value(String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
-bool Value::isDeleted() const { return type == DELETED_TYPE; }
+bool Value::isDeleted() const { return type == NONEXISTENT_TYPE; }
 bool Value::isObject() const { return type == OBJECT_TYPE; }
 
 ScriptFunctionDef* Value::getFunctionDef() const {
@@ -601,7 +603,7 @@ bool Value::operator==(const Value& y) const {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
-		case DELETED_TYPE:
+		case NONEXISTENT_TYPE:
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
@@ -616,7 +618,7 @@ bool Value::operator<(const Value& y) const {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
-		case DELETED_TYPE: return false;
+		case NONEXISTENT_TYPE: return false;
 		case BOOLEAN_TYPE: return b < y.b;
 		case NUMBER_TYPE: return d < y.d;
 		case STRING_TYPE: return s->isLessThan(*y.s);
@@ -853,7 +855,8 @@ void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Va
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
-	std::copy(argv, argv + std::min(argc, def->argumentsCount), frame->getLocalsPointer());
+	Value* lp = frame->getLocalsPointer();
+	std::fill(std::copy(argv, argv + std::min(argc, def->argumentsCount), lp), lp + def->argumentsCount, Value(Value::UNDEFINED_TYPE));
 }
 
 bool VM::run(Int32 count) {
@@ -872,7 +875,7 @@ bool VM::run(Int32 count) {
 			case READ_INDEXED_OP: push(vsp, lp[nextInt32(ip)]); break;
 			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
-				Value v;
+				Value v(Value::NONEXISTENT_TYPE);
 				bool success = frame->getProperty(env, cp[nextInt32(ip)].getString(), v);
 				if (!success) error();
 				push(vsp, v);
@@ -942,7 +945,7 @@ bool VM::run(Int32 count) {
 				Int32 n = nextInt32(ip);
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
-				Value v;
+				Value v(Value::NONEXISTENT_TYPE);
 				thisObject->getProperty(env, vsp[-n].toString(heap), v);
 				Object* o = v.toObject(heap);
 				if (o == 0) error();
@@ -966,7 +969,7 @@ bool VM::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->call(heap, this, n, vsp - n + 1, Value());
+				f->call(heap, this, n, vsp - n + 1, Value(Value::UNDEFINED_TYPE));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -992,7 +995,7 @@ bool VM::run(Int32 count) {
 			}
 			case NEW_RESULT_OP: poppush(vsp, (vsp[0].isObject() ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
-			case VOID_OP: push(vsp, Value()); break;
+			case VOID_OP: push(vsp, Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
 				push(vsp, Value(heap.manage(new ScriptFunction(cp[nextInt32(ip)].getFunctionDef(), frame))));
 				break;
@@ -1156,7 +1159,7 @@ static int findStatementToken(int n /* string length */, const Char* s) {
 
 struct Compiler::XValue {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
-	XValue() : t(NONE) { }
+	XValue() : t(NONE), v(Value::UNDEFINED_TYPE) { }
 	XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
 	Type t;
 	Value v;

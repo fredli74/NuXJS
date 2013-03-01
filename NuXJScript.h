@@ -93,16 +93,16 @@ class ScriptFunctionDef;
 
 class Value {
 	public:		enum Type {
-					UNDEFINED_TYPE = 0
-					, NULL_TYPE = 1
-					, BOOLEAN_TYPE = 2
-					, NUMBER_TYPE = 3
-					, STRING_TYPE = 4
-					, OBJECT_TYPE = 5
-					, DELETED_TYPE = -1
+					NONEXISTENT_TYPE		// Used in tables and to avoid throwing at end of finally blocks. Never seen by script-code.
+					, UNDEFINED_TYPE
+					, NULL_TYPE
+					, BOOLEAN_TYPE
+					, NUMBER_TYPE
+					, STRING_TYPE
+					, OBJECT_TYPE
 				};
 	
-	public:		explicit Value(Type type = UNDEFINED_TYPE);
+	public:		explicit Value(Type type = NONEXISTENT_TYPE);
 	public:		explicit Value(bool b);
 	public:		explicit Value(Int32 i);
 	public:		explicit Value(double d);
@@ -312,7 +312,7 @@ class VM : public GCItem {
 				};
 	public:		VM(Environment& env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value());
+	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
 	public:		void push(const Value& v);
 	public:		bool run(Int32 count);
 	protected:	void push(Value*& vsp, const Value& v);
