@@ -109,7 +109,7 @@ class Value {
 	public:		explicit Value(String* s);
 	public:		explicit Value(Object* o);
 	
-	public:		bool isDeleted() const;
+	public:		bool exists() const;
 	public:		bool isObject() const;
 	public:		String* getString() const;
 	public:		ScriptFunctionDef* getFunctionDef() const;
@@ -309,6 +309,9 @@ class VM : public GCItem {
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: name, object -> boolean
 					, GEN_FUNC_OP									// immediate: const index, stack: -> function
+					, ENTER_TRY										// immediate: offset to catch
+					, EXIT_TRY
+					, THROW											// stack: value (NONEXISTENT_TYPE prevents throwing, used for finally blocks)
 				};
 	public:		VM(Environment& env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);

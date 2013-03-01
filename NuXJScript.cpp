@@ -24,6 +24,8 @@
 //			not too fond of the int cast in the byte array
 //		basic library (math, string, array ops)
 //		assignable globals this in vm
+//		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
+//		quicker calls by using a frame stack for functions that do not create closures
 //
 //	Compiler
 //
@@ -44,6 +46,7 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
+//		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
 //
 //	GC
 //
@@ -414,7 +417,7 @@ const Table::Bucket* Table::getFirst() const { return getNext(&buckets[0]); }
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = &buckets[buckets.size()];
-	while (++b != e && b->value.isDeleted()) { }
+	while (++b != e && !b->value.exists()) { }
 	return (b == e ? 0 : b);
 }
 
@@ -423,7 +426,7 @@ const Table::Bucket* Table::lookup(const String* key) {
 	return (b->key != 0 ? b : 0);
 }
 
-void Table::assign(const String* key, const Value& value) { assert(!value.isDeleted()); update(key, value); }
+void Table::assign(const String* key, const Value& value) { assert(value.exists()); update(key, value); }
 void Table::erase(const String* key) { update(key, Value(Value::NONEXISTENT_TYPE)); }
 
 void Table::mark(GCHeap& heap) {
@@ -431,7 +434,7 @@ void Table::mark(GCHeap& heap) {
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		heap.mark(buckets[i].key);
 		buckets[i].value.mark(heap);
-		if (!buckets[i].value.isDeleted()) rebuildLoadCount++;
+		if (buckets[i].value.exists()) rebuildLoadCount++;
 	}
 	if (rebuildLoadCount != loadCount) {
 		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
@@ -469,7 +472,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (!buckets[i].value.isDeleted()) {
+		if (buckets[i].value.exists()) {
 			assert(buckets[i].key != 0);
 			UInt32 j = buckets[i].key->calcHash() & mask;
 			while (newBuckets[j].key != 0) j = (j + 1) & mask;
@@ -517,7 +520,7 @@ Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
 Value::Value(String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
-bool Value::isDeleted() const { return type == NONEXISTENT_TYPE; }
+bool Value::exists() const { return type != NONEXISTENT_TYPE; }
 bool Value::isObject() const { return type == OBJECT_TYPE; }
 
 ScriptFunctionDef* Value::getFunctionDef() const {
@@ -603,7 +606,7 @@ bool Value::operator==(const Value& y) const {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
-		case NONEXISTENT_TYPE:
+		case NONEXISTENT_TYPE: return true;
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
