@@ -360,7 +360,7 @@ class Compiler : public GCItem {
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
 	protected:	void emitBackwardBranch(VM::Op op, Int32 point);
-	protected:	int pushIteratorLabel(int statementLabelsIndex, int backwardsPoint = -1);
+	protected:	int pushIteratorLabel(int statementLabelsIndex);
 	protected:	void completeForwardContinues(int pushedLabelIndex);
 	protected:	void completeForwardBreaksAndPopLabel();
 	protected:	XValue parseOperand(const OperatorInfo& op);
@@ -389,7 +389,6 @@ class Compiler : public GCItem {
 					Label(const String& name) : name(name) { }
 					String name; // empty for automatic while, for, switches labels
 					bool isIteratorLabel;
-					Int32 backwards; // target point for backward continues, = -1 if not valid continue point (not while or for)
 					std::vector<Int32> breaks; // source points for breaks
 					std::vector<Int32> continues; // source points for continues
 				};

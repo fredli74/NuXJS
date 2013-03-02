@@ -47,8 +47,7 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
-//		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
-//			maybe also drop the vector and just put it all on the program stack
+//		maybe drop the label vector and just put it all on the program stack
 //
 //	GC
 //
@@ -71,6 +70,7 @@
 //		break, continue etc (with labels!)
 //		virtual machine should include gc etc
 //		check that identifier is never one of the reserved words
+//		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
 
 #include "assert.h"
 #include <cmath>
@@ -1707,14 +1707,11 @@ void Compiler::expectSemicolon() {
 	}
 }
 
-int Compiler::pushIteratorLabel(int statementLabelsIndex, int backwardsPoint) {
+int Compiler::pushIteratorLabel(int statementLabelsIndex) {
 	labels.push_back(Label(EMPTY_STRING));
 	Int32 i = (statementLabelsIndex < 0 ? labels.size() - 1 : statementLabelsIndex);
 	assert(i < labels.size());
-	for (std::vector<Label>::iterator it = labels.begin() + i; it != labels.end(); ++it) {
-		it->isIteratorLabel = true;
-		it->backwards = backwardsPoint;
-	}
+	for (std::vector<Label>::iterator it = labels.begin() + i; it != labels.end(); ++it) it->isIteratorLabel = true;
 	return i;
 }
 
@@ -1795,8 +1792,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 					while (it != labels.rend() && (!it->name.empty() || !it->isIteratorLabel)) ++it;
 					if (it == labels.rend()) throw std::runtime_error("Illegal continue");
 				}
-				if (it->backwards < 0) it->continues.push_back(emitForwardBranch(VM::JMP_OP));
-				else emitBackwardBranch(VM::JMP_OP, it->backwards);
+				it->continues.push_back(emitForwardBranch(VM::JMP_OP));
 				expectSemicolon();
 				break;
 			}
@@ -1828,7 +1824,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
-				pushIteratorLabel(statementLabelsIndex, pointA);
+				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
 				expectToken("(", false);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
@@ -1836,6 +1832,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				expectToken(")", true);
 				Int32 pointB = emitForwardBranch(VM::JF_OP);
 				parseStatement();
+				completeForwardContinues(pushedLabelIndex);
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				completeForwardBranch(pointB);
 				assert(labels.back().name.empty());

@@ -1,0 +1,350 @@
+try { try { throw "hej" } catch (x) { console.log(x) } } catch (x) { console.log(x) }
+hej
+undefined
+try { throw "hej" } catch (x) { console.log(x); try { throw "du" } catch (x) { console.log(x) }; console.log(x) }
+hej
+du
+hej
+
+f=function() { try { var x = 7; print(x); throw "hej" } catch (x) { print(x); throw x } finally { print("final"); }; print("yeah") }
+
+ 
+	PUSH_CATCH @c
+		PUSH_CATCH @a -> push catch address
+			blahblah
+		POP_CATCH -> pop catch address
+		JMP @b
+a:			catchblock
+b:		POP_CATCH @c
+c:
+ 
+ 
+ 
+	try { } catch (x) { }
+	 
+	CATCH @a
+		{ try block }
+	NO_CATCH @b
+a:		WRITE_INDEXED x
+		POP
+		{ catch block }
+b:
+ 
+ 
+ 
+	try { } finally { }
+	
+	CATCH @a
+		{ try block }
+	PUSH #false
+	NO_CATCH @b
+a:		PUSH #true
+b:		{ finally block }
+	JF @c
+		THROW
+c:
+ 
+ 
+ 
+	try { } catch (x) { } finally { }
+ 
+	CATCH @a
+	CATCH @d
+		{ try block }
+	NO_CATCH @e
+d:		WRITE_INDEXED x
+		POP
+		{ catch block }
+e:	PUSH #false
+	NO_CATCH @b
+a:		PUSH #true
+b:		{ finally block }
+	JF @c
+		THROW
+c:
+
+
+	try { } catch (x) { } finally { }
+
+	CATCH @d
+		{ try block }
+	NO_CATCH
+	JMP @e
+d:		CATCH @a
+			WRITE_INDEXED x
+			POP
+			{ catch block }
+		NO_CATCH
+e:	PUSH #false
+	JMP @b
+a:		PUSH #true
+b:		{ finally block }
+	JF @c
+		THROW
+c:
+
+
+	CATCH @d
+		{ try block }
+	POP_CATCH_JMP @e
+g:	WRITE_INDEXED x
+	POP
+	{ catch block }
+	PUSH #false
+	POP_CATCH_JMP @b
+d:	NO_CATCH @g
+a:	PUSH #true
+b:		{ finally block }
+	JF @c
+		THROW
+c:
+
+	
+	try { ... } catch (x) { ... }					=  try { ... } catch (x) { ... } finally { }
+	try { ... } finally { ... }						=  try { ... } catch (x) { throw x } finally { ... }
+	try { ... } catch (x) { ... } finally { ... }	=  try { ... } catch (x) { ... } finally { ... }
+	
+	TRY @a, @b
+		{ ... }
+@a	CATCH x
+		{ ... }
+@b	FINALLY
+		{ ... }
+	END
+
+
+
+	try { } catch (x) { } finally { }
+ 
+	PUSH_CATCH @a @d
+		{ try block }
+	POP_CATCH @e
+d:		WRITE_INDEXED x
+		POP
+		{ catch block }
+e:	PUSH #false
+	POP_CATCH @b
+a:		PUSH #true
+b:		{ finally block }
+	JF @c
+		THROW
+c:
+
+
+
+
+	try { } catch (x) { }
+ 
+	PUSH_CATCH @a @d
+		{ try block }
+	POP_CATCH @e
+d:		WRITE_INDEXED x
+		POP
+		{ catch block }
+e:	POP_CATCH @c
+a:		THROW
+c:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	try { } catch (x) { }
+ 
+	ENTER_TRY @a
+		{ try block }
+	LEAVE_TRY
+	JMP @b
+a:		(JMP 0 placeholder)
+		WRITE_INDEXED x
+		POP
+		{ catch block }
+b:	...
+
+
+
+
+	try { } finally { }
+ 
+	ENTER_TRY @a
+		{ try block }
+	LEAVE_TRY
+	CONST #<nonexistent>
+a:	{ finally block }
+	THROW
+
+
+	try { } catch (x) { } finally { }
+ 
+	{ try block }
+	JMP @a
+b:	{ catch block }
+	LEAVE_CATCH
+c:	{ finally block }
+	THROW
+
+
+
+
+	try { } catch (x) { } finally { }
+ 
+	{ try block }				catch -> b
+	JMP @b
+b:	{ catch block }
+	RETURN
+b:	CONST #<nonexistent>
+c:	{ finally block }
+	THROW
+
+
+
+
+
+
+	try {
+		// regardless of how we leave the try block (exception, break, return etc), we must always invoke finally
+	}
+	catch (x) {
+		// a scope is created where x is accessible, although all other variable declarations are still in the function scope
+		// if the catch doesn't end in throw we continue (executing finally as usual, then leaving the try-catch-finally block)
+	}
+	finally {
+		// if we get here with an exception and don't leave with break, return etc we end with re-throwing
+	}
+
+	// we treat all try statements as having both catch and finally, like this:
+	// try { ... } catch (x) { ... }	->  try { ... } catch (x) { ... } finally { }
+	// try { ... } finally { ... }		->  try { ... } catch (x) { throw x } finally { ... }
+
+	// inside a try and catch blocks we always JSR to finally before leaving the block and on breaks, returns,
+	// throws etc that leaves the block (after unregistering the exception handler of course)
+	// if we leave the finally block with breaks, returns etc we pop the call stack first
+	
+	// we need:
+	//
+	// ENTER_TRY @catch				// pushes catch address, current call stack pointer and value stack pointer to catch stack
+	// LEAVE_TRY					// discards first entry on catch stack
+	// ENTER_CATCH #identifier		// pushes current frame pointer on call stack, creates a new virtual frame with thrown value assigned to identifier
+	// LEAVE_CATCH					// pops real frame from call stack (disregards ip)
+	// JSR @offset					// calls a local function, i.e. push a copy of the current context and adjust ip
+	// DISCARD_RETURN				// just removes an entry from call stack
+	// THROW						// pops first entry from catch stack and updates current context
+
+	try { } catch (x) { } finally { }
+ 
+	ENTER_TRY @c
+	{ try block }
+	VOID			// necessary because if finally aborts it will pop
+	LEAVE_TRY
+	JSR @f
+	POP
+	JMP @a
+c:	ENTER_CATCH #x
+	{ catch block }
+	VOID
+	LEAVE_CATCH
+	JSR @f
+	POP
+	JMP @a
+f:	{ finally block }
+	RETURN
+a:	...
+
+
+	try { } catch (x) { }
+ 
+	ENTER_TRY @c
+	{ try block }
+	VOID
+	LEAVE_TRY
+	JSR @f
+	POP
+	JMP @a
+c:	ENTER_CATCH #x
+	{ catch block }
+	VOID
+	LEAVE_CATCH
+	JSR @f
+	POP
+	JMP @a
+f:	RETURN
+a:	...
+
+
+
+	try { } finally { }
+ 
+	ENTER_TRY @c
+	{ try block }
+	VOID
+	LEAVE_TRY
+	JSR @f
+	POP
+	JMP @a
+c:	JSR @f
+	THROW
+f:	{ finally block }
+	RETURN
+a:	...
+
+
+	try { } finally { break }
+ 
+	ENTER_TRY @c
+	{ try block }
+	VOID
+	LEAVE_TRY
+	JSR @f
+	POP
+	JMP @a
+c:	JSR @f
+	THROW
+f:	POP
+	DISCARD_RETURN
+	JMP <break>
+	RETURN
+a:	...
+
+
+
+	try { throw 1 } catch (x) { throw x } finally { throw 2 }
+ 
+	ENTER_TRY @c
+	LEAVE_TRY
+	CONST #1
+	JSR @f
+	THROW
+	LEAVE_TRY
+	VOID			// necessary because if finally aborts it will pop
+	JSR @f
+	POP
+	JMP @a
+c:	ENTER_CATCH #x
+	LEAVE_CATCH
+	READ_NAMED #x
+	JSR @f
+	THROW
+	LEAVE_CATCH
+	VOID
+	JSR @f
+	POP
+	JMP @a
+f:	POP
+	DISCARD_RETURN
+	CONST #2
+	THROW
+	RETURN
+a:	...
