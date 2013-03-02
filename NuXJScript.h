@@ -351,14 +351,15 @@ class Compiler : public GCItem {
 	public:		const Char* compile(const Char* b, const Char* e);
 	public:		void compile(const String& source);
 	public:		void finish();
-	protected:	struct Label {
-					Label(const String& name, Label* next) : name(name), next(next) { }
-					void makeIteratorLabels(Label* untilLabel) {
-						for (Label* l = this; l != untilLabel; l = l->next) l->isIteratorLabel = true;
+	protected:	struct Scope {
+					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE };
+					Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
+					void makeIteratorScopes(Scope* untilScope) {
+						for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
 					}
-					String name; // empty for automatic while, for, case labels
-					Label* next;
-					bool isIteratorLabel;
+					Type type;
+					String label; // empty for automatic while, for, case labels
+					Scope* next;
 					std::vector<Int32> breaks; // source points for breaks
 					std::vector<Int32> continues; // source points for continues
 				};
@@ -371,8 +372,8 @@ class Compiler : public GCItem {
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
 	protected:	void emitBackwardBranch(Processor::Opcode op, Int32 point);
-	protected:	void completeContinues(const Label* fromLabel, const Label* untilLabel);
-	protected:	void completeBreaks(const Label* label);
+	protected:	void completeContinues(const Scope* fromScope, const Scope* untilScope);
+	protected:	void completeBreaks(const Scope* scope);
 	protected:	XValue parseOperand(const OperatorInfo& op);
 	protected:	void parseRValueOperand(const OperatorInfo& op);
 	protected:	void parseFunctionCall(XValue& v, Processor::Opcode op);
@@ -381,8 +382,8 @@ class Compiler : public GCItem {
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
 	protected:	void parseVarDeclarations();
-	protected:	void parseStatement(Label* firstLabel, Label* statementEndLabel);
-	protected:	void parseStatementList(Label* firstLabel);
+	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd);
+	protected:	void parseStatementList(Scope* firstScope);
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these
 	protected:	void expectSemicolon();
 	protected:	void expectToken(const char* t, bool eatLeadingWhite);

@@ -47,7 +47,7 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
-//		maybe drop the label vector and just put it all on the program stack
+//		maybe drop the scope vector and just put it all on the program stack
 //
 //	GC
 //
@@ -1707,23 +1707,23 @@ void Compiler::expectSemicolon() {
 	}
 }
 
-void Compiler::completeContinues(const Label* fromLabel, const Label* untilLabel) {
-	for (const Label* l = fromLabel; l != untilLabel; l = l->next) {
-		for (std::vector<Int32>::const_iterator it = l->continues.begin(); it != l->continues.end(); ++it)
+void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
+	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
+		for (std::vector<Int32>::const_iterator it = s->continues.begin(); it != s->continues.end(); ++it)
 			completeForwardBranch(*it);
 	}
 }
 
-void Compiler::completeBreaks(const Label* label) {
-	for (std::vector<Int32>::const_iterator it = label->breaks.begin(); it != label->breaks.end(); ++it)
+void Compiler::completeBreaks(const Scope* scope) {
+	for (std::vector<Int32>::const_iterator it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
 		completeForwardBranch(*it);
 }
 
-void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
+void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	eatWhite();	
 		
 	if (eatToken("{", false)) {
-		parseStatementList(firstLabel);
+		parseStatementList(firstScope);
 		expectToken("}", false);
 		return;
 	}
@@ -1737,12 +1737,12 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 		const Char* q = p;
 		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier(b, q);
-			for (Label* l = firstLabel; l != 0; l = l->next) {
-				if (!l->name.empty() && l->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
+			for (Scope* s = firstScope; s != 0; s = s->next) {
+				if (!s->label.empty() && s->label.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
 			}
-			Label newLabel(identifier, firstLabel);
-			parseStatement(&newLabel, statementEndLabel);
-			completeBreaks(&newLabel);
+			Scope newLabelScope(identifier, firstScope);
+			parseStatement(&newLabelScope, scopeLabelsEnd);
+			completeBreaks(&newLabelScope);
 		} else {
 			p = b;
 			parseAndPopOptionalExpression();
@@ -1753,35 +1753,35 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 		switch (static_cast<Statement>(i)) {
 			case BREAK_STATEMENT: { // FIX : share with CONTINUE_STATEMENT
 				const Char* b = p;
-				Label* l = firstLabel;
+				Scope* s = firstScope;
 				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
-					while (l != 0 && (l->name.empty() || !l->name.isEqualTo(identifier))) l = l->next;
-					if (l == 0) throw std::runtime_error("Undefined label");
+					while (s != 0 && (s->label.empty() || !s->label.isEqualTo(identifier))) s = s->next;
+					if (s == 0) throw std::runtime_error("Undefined label");
 				} else {
-					while (l != 0 && !l->name.empty()) l = l->next;
-					if (l == 0) throw std::runtime_error("Illegal break");
+					while (s != 0 && !s->label.empty()) s = s->next;
+					if (s == 0) throw std::runtime_error("Illegal break");
 				}
-				l->breaks.push_back(emitForwardBranch(Processor::JMP_OP));
+				s->breaks.push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
 			}
 			
 			case CONTINUE_STATEMENT: {
 				const Char* b = p;
-				Label* l = firstLabel;
+				Scope* s = firstScope;
 				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
-					while (l != 0 && (l->name.empty() || !l->name.isEqualTo(identifier))) l = l->next;
-					if (l == 0) throw std::runtime_error("Undefined label");
-					if (!l->isIteratorLabel) throw std::runtime_error("Illegal label for continue");
+					while (s != 0 && (s->label.empty() || !s->label.isEqualTo(identifier))) s = s->next;
+					if (s == 0) throw std::runtime_error("Undefined label");
+					if (!s->type == Scope::ITERATOR_LABEL_TYPE) throw std::runtime_error("Illegal label for continue");
 				} else {
-					while (l != 0 && !l->name.empty()) l = l->next;
-					if (l == 0) throw std::runtime_error("Illegal continue");
+					while (s != 0 && !s->label.empty()) s = s->next;
+					if (s == 0) throw std::runtime_error("Illegal continue");
 				}
-				l->continues.push_back(emitForwardBranch(Processor::JMP_OP));
+				s->continues.push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
 			}
@@ -1799,11 +1799,11 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				makeRValue(xv);
 				expectToken(")", true);
 				Int32 pointA = emitForwardBranch(Processor::JF_OP);
-				parseStatement(firstLabel, firstLabel);
+				parseStatement(firstScope, firstScope);
 				if (eatToken("else", true)) {
 					Int32 pointB = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(pointA);
-					parseStatement(firstLabel, firstLabel);
+					parseStatement(firstScope, firstScope);
 					completeForwardBranch(pointB);
 				} else {
 					completeForwardBranch(pointA);
@@ -1813,37 +1813,37 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
-				Label emptyLabel(EMPTY_STRING, firstLabel);
-				emptyLabel.makeIteratorLabels(statementEndLabel);
+				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
 				Int32 pointB = emitForwardBranch(Processor::JF_OP);
-				parseStatement(&emptyLabel, firstLabel);
-				completeContinues(&emptyLabel, statementEndLabel);
+				parseStatement(&emptyLabelScope, firstScope);
+				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, pointA);
 				completeForwardBranch(pointB);
-				completeBreaks(&emptyLabel);
+				completeBreaks(&emptyLabelScope);
 				break;
 			}
 
 			case DO_WHILE_STATEMENT: {
 				Int32 point = markBackwardBranch();
-				Label emptyLabel(EMPTY_STRING, firstLabel);
-				emptyLabel.makeIteratorLabels(statementEndLabel);
-				parseStatement(&emptyLabel, firstLabel);
+				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
+				parseStatement(&emptyLabelScope, firstScope);
 				expectToken("while", true);
 				expectToken("(", true);
-				completeContinues(&emptyLabel, statementEndLabel);
+				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
 				emitBackwardBranch(Processor::JT_OP, point);
 				expectSemicolon();
-				completeBreaks(&emptyLabel);
+				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
@@ -1870,14 +1870,14 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				expectToken(")", true);
 				std::vector<Byte> incCode(code.begin() + incPoint, code.end());
 				code.resize(incPoint);
-				Label emptyLabel(EMPTY_STRING, firstLabel);
-				emptyLabel.makeIteratorLabels(statementEndLabel);
-				parseStatement(&emptyLabel, firstLabel);
-				completeContinues(&emptyLabel, statementEndLabel);
+				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
+				parseStatement(&emptyLabelScope, firstScope);
+				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				code.insert(code.end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(Processor::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
-				completeBreaks(&emptyLabel);
+				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
@@ -1892,7 +1892,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 			
 			case TRY_STATEMENT: {
 				expectToken("{", true);
-				parseStatement(firstLabel, firstLabel);
+				parseStatement(firstScope, firstScope);
 				expectToken("}", false);
 			}
 			
@@ -1901,11 +1901,11 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 	}
 }
 
-void Compiler::parseStatementList(Label* firstLabel) {
+void Compiler::parseStatementList(Scope* firstScope) {
 	const Char* b;
 	do {
 		b = p;
-		parseStatement(firstLabel, firstLabel);
+		parseStatement(firstScope, firstScope);
 	} while (p != e && b != p);
 }
 
