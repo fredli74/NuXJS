@@ -16,8 +16,8 @@ const double EPSILON = 1.0e-300;
 
 // FIX : name
 template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
-	public:		QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
-	public:		QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
+	public:		explicit QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
+	public:		explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
 
 	public:		void swap(QuickArray& other)
 				{
@@ -93,7 +93,7 @@ class ScriptFunctionDef;
 
 class Value {
 	public:		enum Type {
-					NONEXISTENT_TYPE		// Used in tables and to avoid throwing at end of finally blocks. Never seen by script-code.
+					NONEXISTENT_TYPE		// Used in tables for deleted entries. Never seen by script-code.
 					, UNDEFINED_TYPE
 					, NULL_TYPE
 					, BOOLEAN_TYPE
@@ -103,6 +103,7 @@ class Value {
 				};
 	
 	public:		explicit Value(Type type = NONEXISTENT_TYPE);
+	private:	explicit Value(void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 	public:		explicit Value(bool b);
 	public:		explicit Value(Int32 i);
 	public:		explicit Value(double d);
@@ -196,6 +197,7 @@ struct StringObjectCompare {
 
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 
+// This is an Object so that we can store it as a constant
 class ScriptFunctionDef : public Object {
 	public:		typedef Object super;
 	public:		ScriptFunctionDef();
@@ -239,6 +241,7 @@ class NativeFunction : public Function {
 	public:		typedef Function super;
 };
 
+// This is actually a closure, but ECMAScript calls them Function objects.
 class ScriptFunction : public Function {
 	public:		typedef Function super;
 	public:		ScriptFunction(ScriptFunctionDef* definition, Object* scope);
@@ -247,7 +250,7 @@ class ScriptFunction : public Function {
 	public:		ScriptFunctionDef* getDefinition() const;
 	public:		Object* getScope() const;
 	protected:	ScriptFunctionDef* const definition;
-	protected:	Object* const scope;
+	protected:	Object* const scope; // Usually the global object or the frame of the context that created this function.
 };
 
 #if 0
@@ -309,9 +312,9 @@ class VM : public GCItem {
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: name, object -> boolean
 					, GEN_FUNC_OP									// immediate: const index, stack: -> function
-					, ENTER_TRY										// immediate: offset to catch
-					, EXIT_TRY
-					, THROW											// stack: value (NONEXISTENT_TYPE prevents throwing, used for finally blocks)
+					, THROW_OP										// stack: value (NONEXISTENT_TYPE prevents throwing, used for finally blocks)
+					, ENTER_TRY_OP									// immediate: offset for catch
+					, LEAVE_TRY_OP
 				};
 	public:		VM(Environment& env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
@@ -376,7 +379,7 @@ class Compiler : public GCItem {
 	protected:	void eatToken();
 	protected:	void makeRValue(XValue& v);
 	protected:	void makeAssignment(XValue& v);
-	protected:	void throwAway(XValue& v);
+	protected:	void discard(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(bool acceptReservedKeywords);
 	protected:	Environment& env; // FIX : necessary?

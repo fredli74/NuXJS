@@ -26,6 +26,7 @@
 //		assignable globals this in vm
 //		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
 //		quicker calls by using a frame stack for functions that do not create closures
+//		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //
 //	Compiler
 //
@@ -47,6 +48,7 @@
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
 //		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
+//			maybe also drop the vector and just put it all on the program stack
 //
 //	GC
 //
@@ -1038,6 +1040,7 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
 		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
+		, "THROW"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
 	std::vector<Byte>::const_iterator it = b;
@@ -1142,18 +1145,19 @@ const OperatorInfo POST_OPS[] = {
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, VM::INVALID_OP }
 };
 
+// FIX : sort
 enum Statement {
 	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
-	, CONTINUE_STATEMENT, BREAK_STATEMENT
+	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT
 };
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[8] = {
-		"var", "if", "while", "do", "for", "return", "continue", "break"
+	static const char* STRINGS[9] = {
+		"var", "if", "while", "do", "for", "return", "continue", "break", "try"
 	};
 	static const int QUICK_HASH_TABLE[32] = {
 		-1, -1, 7, 6, 3, -1, 4, -1, -1, 1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, 5, -1, -1, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1
+		-1, -1, 5, -1, 8, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1
 	};
 	if (n < 2 || n > 8) return -1;
 	int stringIndex = QUICK_HASH_TABLE[(s[0]) & 31];
@@ -1292,7 +1296,7 @@ void Compiler::makeAssignment(XValue& xv) {
 	xv = XValue(XValue::PUSHED);
 }
 
-void Compiler::throwAway(XValue& xv) {
+void Compiler::discard(XValue& xv) {
 	switch (xv.t) {
 		case XValue::PUSHED: emit(VM::POP_OP); break;
 		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); emit(VM::POP_OP); break;
@@ -1415,7 +1419,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		}
 		
 		case COMMA: {
-			throwAway(v);
+			discard(v);
 			v = parseOperand(op);
 			makeRValue(v);
 			break;
@@ -1437,7 +1441,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case VOID_OPERATOR: {
 			v = parseOperand(op);
-			throwAway(v);
+			discard(v);
 			break;
 		}
 		
@@ -1665,7 +1669,7 @@ void Compiler::parseExpression(XValue& v, Precedence precedence) {
 
 void Compiler::parseAndPopOptionalExpression() {
 	XValue xv;
-	if (parseOptionalExpression(xv, LOWEST_PREC)) throwAway(xv);
+	if (parseOptionalExpression(xv, LOWEST_PREC)) discard(xv);
 }
 
 void Compiler::parseVarDeclarations() {
@@ -1746,7 +1750,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 		parseIdentifier(true);
 		const Char* q = p;
 		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
-			String identifier = String(b, q);
+			String identifier(b, q);
 			for (std::vector<Label>::const_reverse_iterator it = labels.rbegin(); it != labels.rend(); ++it) {
 				if (!it->name.empty() && it->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
 			}
@@ -1900,6 +1904,12 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				break;
 			}
 			
+			case TRY_STATEMENT: {
+				expectToken("{", true);
+				parseStatementList();
+				expectToken("}", false);
+			}
+			
 			default: assert(0);
 		}
 	}
@@ -1981,7 +1991,7 @@ int main(int argc, const char* argv[]) {
 	heap.protect(&functionDef);
 	Compiler compiler(env, &functionDef);
 	heap.protect(&compiler);
-	String source = EMPTY_STRING;
+	String source(EMPTY_STRING);
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
 	if (argc >= 2) {
