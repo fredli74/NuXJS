@@ -85,7 +85,7 @@ class GCHeap {
 	protected:	GCList rootList;
 };
 
-class Environment;
+class Engine;
 class Function;
 class String;
 class Object;
@@ -141,9 +141,9 @@ class Value {
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
-	public:		virtual bool getProperty(Environment& env, const String* name, Value& v) { return false; }
-	public:		virtual bool setProperty(Environment& env, const String* name, const Value& v) { return false; }
-	public:		virtual bool deleteProperty(Environment& env, const String* name) { return false; }
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v) { return false; }
+	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return false; }
+	public:		virtual bool deleteProperty(Engine& engine, const String* name) { return false; }
 };
 
 class Table {
@@ -185,7 +185,7 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		bool isLessThan(const String& o) const;
 	public:		const Char* accessChars() const; // FIX : <- drop
 	public:		std::wstring toStdString() const;
-	public:		virtual bool getProperty(Environment& env, const String* name, Value& v);
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	protected:	mutable size_t hash;
 };
 
@@ -215,26 +215,26 @@ class ScriptFunctionDef : public Object {
 class UserObject : public Object {
 	public:		typedef Object super;
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Environment& env, const String* name, Value& v);
-	public:		virtual bool setProperty(Environment& env, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Environment& env, const String* name);
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
+	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	protected:	Table properties;
 };
 
-class Environment {
+class Engine {
 	friend class String;
-	public:		Environment(GCHeap& heap) : gcHeap(heap) { gcHeap.protect(&stringPrototype); };
+	public:		Engine(GCHeap& heap) : gcHeap(heap) { gcHeap.protect(&stringPrototype); };
 	public:		GCHeap& heap() { return gcHeap; }
 	protected:	GCHeap& gcHeap;
 	protected:	UserObject stringPrototype;
 };
 
-class VM;
+class Processor;
 class Function : public UserObject {
 	public:		typedef UserObject super;
 	public:		virtual Function* asFunction();
-	public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) = 0;
-	public:		virtual void construct(GCHeap& heap, VM* vm, Int32 argc, const Value* argv);
+	public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+	public:		virtual void construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv);
 };
 
 class NativeFunction : public Function {
@@ -244,13 +244,13 @@ class NativeFunction : public Function {
 // This is actually a closure, but ECMAScript calls them Function objects.
 class ScriptFunction : public Function {
 	public:		typedef Function super;
-	public:		ScriptFunction(ScriptFunctionDef* definition, Object* scope);
+	public:		ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue);
+	public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
 	public:		ScriptFunctionDef* getDefinition() const;
-	public:		Object* getScope() const;
+	public:		Object* getEnvironment() const;
 	protected:	ScriptFunctionDef* const definition;
-	protected:	Object* const scope; // Usually the global object or the frame of the context that created this function.
+	protected:	Object* const environment; // Usually the global object or the frame of the context that created this function.
 };
 
 #if 0
@@ -258,7 +258,7 @@ class ArgumentsObject : public UserObject {
 	public:		typedef UserObject super;
 	public:		ArgumentsObject(Frame* frame);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Environment& env, String* name, Value& v);
+	public:		virtual bool getProperty(Engine& engine, String* name, Value& v);
 	protected:	Frame* frame;
 };
 #endif
@@ -267,13 +267,13 @@ class Frame : public Object {
 	public:		typedef Object super;
 	public:		Frame(ScriptFunction* function);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Environment& env, const String* name, Value& v);
-	public:		virtual bool setProperty(Environment& env, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Environment& env, const String* name);
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
+	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	public:		ScriptFunctionDef* getFunctionDef();
 	public:		Value* getLocalsPointer();
 	protected:	ScriptFunctionDef* const functionDef;
-	protected:	Object* const scope;
+	protected:	Object* const environment;
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 };
 
@@ -283,9 +283,9 @@ struct Context {
 	Value thisValue; // FIX : pointer instead?
 };
 
-class VM : public GCItem {
+class Processor : public GCItem {
 	public:		typedef GCItem super;
-	public:		enum Op {
+	public:		enum Opcode {
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
@@ -316,7 +316,7 @@ class VM : public GCItem {
 					, ENTER_TRY_OP									// immediate: offset for catch
 					, LEAVE_TRY_OP
 				};
-	public:		VM(Environment& env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
+	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
 	public:		void push(const Value& v);
@@ -327,7 +327,7 @@ class VM : public GCItem {
 	protected:	Int32 readInt32(const Byte* ip);
 	protected:	Int32 nextInt32(const Byte*& ip);
 	protected:	void error();
-	protected:	Environment& env;
+	protected:	Engine& engine;
 	protected:	Context* const cstackStart;
 	protected:	Context* const cstackEnd;
 	protected:	Value* const vstackStart;
@@ -346,7 +346,7 @@ struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
 	public:		struct XValue;
-	public:		Compiler(Environment& env, ScriptFunctionDef* function);
+	public:		Compiler(Engine& engine, ScriptFunctionDef* function);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		const Char* compile(const Char* b, const Char* e);
 	public:		void compile(const String& source);
@@ -364,18 +364,18 @@ class Compiler : public GCItem {
 				};
 	protected:	void eatComment();
 	protected:	void eatWhite();
-	protected:	void emit(VM::Op op);
-	protected:	void emitWithInt32(VM::Op op, Int32 i);
-	protected:	void emitWithConstant(VM::Op op, const Value& constant);
-	protected:	Int32 emitForwardBranch(VM::Op op);
+	protected:	void emit(Processor::Opcode op);
+	protected:	void emitWithInt32(Processor::Opcode op, Int32 i);
+	protected:	void emitWithConstant(Processor::Opcode op, const Value& constant);
+	protected:	Int32 emitForwardBranch(Processor::Opcode op);
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
-	protected:	void emitBackwardBranch(VM::Op op, Int32 point);
+	protected:	void emitBackwardBranch(Processor::Opcode op, Int32 point);
 	protected:	void completeContinues(const Label* fromLabel, const Label* untilLabel);
 	protected:	void completeBreaks(const Label* label);
 	protected:	XValue parseOperand(const OperatorInfo& op);
 	protected:	void parseRValueOperand(const OperatorInfo& op);
-	protected:	void parseFunctionCall(XValue& v, VM::Op op);
+	protected:	void parseFunctionCall(XValue& v, Processor::Opcode op);
 	protected:	bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	protected:	void parseExpression(XValue& v, Precedence precedence);
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
@@ -392,7 +392,7 @@ class Compiler : public GCItem {
 	protected:	void discard(XValue& v);
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(bool acceptReservedKeywords);
-	protected:	Environment& env; // FIX : necessary?
+	protected:	Engine& engine; // FIX : necessary?
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
 	protected:	const Char* p;

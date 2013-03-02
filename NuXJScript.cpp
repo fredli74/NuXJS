@@ -23,7 +23,7 @@
 //		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 //			not too fond of the int cast in the byte array
 //		basic library (math, string, array ops)
-//		assignable globals this in vm
+//		assignable globals this in processor
 //		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
 //		quicker calls by using a frame stack for functions that do not create closures
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
@@ -33,7 +33,7 @@
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		for (in)
 //		switch
-//		global scope compiler (don't accept return etc)
+//		global environment compiler (don't accept return etc)
 //		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
 //		function name() { } syntax
 //		literal function names, e.g. myGlobalName = function myLocalName() { ... }
@@ -66,7 +66,7 @@
 //		delete operator
 //		proper string comparisons (< etc)
 //		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
-//			thinking of dropping mark etc from gcheap and have in environment instead, we could then have a gcheap list for protected items (probe these before general mark phase)
+//			thinking of dropping mark etc from gcheap and have in engine instead, we could then have a gcheap list for protected items (probe these before general mark phase)
 //		break, continue etc (with labels!)
 //		virtual machine should include gc etc
 //		check that identifier is never one of the reserved words
@@ -316,7 +316,7 @@ String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	return o;
 }
 
-bool String::getProperty(Environment& env, const String* name, Value& v) {
+bool String::getProperty(Engine& engine, const String* name, Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		v = Value(static_cast<Int32>(size()));
 		return true;
@@ -326,7 +326,7 @@ bool String::getProperty(Environment& env, const String* name, Value& v) {
 	if (q == name->end() && i < size()) {
 		const Char* p = begin() + i;
 		if (32 <= *p && *p < 127) v = QUICK_CONSTANTS.ascii[*p - 32];
-		else v = Value(env.heap().manage(new String(p, p + 1)));
+		else v = Value(engine.heap().manage(new String(p, p + 1)));
 		return true;
 	}
 	v = Value(Value::UNDEFINED_TYPE);
@@ -490,12 +490,12 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- UserObject --- */
 
-bool UserObject::setProperty(Environment& env, const String* name, const Value& v) {
+bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
 }
 
-bool UserObject::getProperty(Environment& env, const String* name, Value& v) {
+bool UserObject::getProperty(Engine& engine, const String* name, Value& v) {
 	const Table::Bucket* b = properties.lookup(name);
 	if (b != 0) {
 		v = b->value;
@@ -505,7 +505,7 @@ bool UserObject::getProperty(Environment& env, const String* name, Value& v) {
 	return false;
 }
 
-bool UserObject::deleteProperty(Environment& env, const String* name) {
+bool UserObject::deleteProperty(Engine& engine, const String* name) {
 	properties.erase(name);
 	return true;
 }
@@ -744,26 +744,26 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 
 Function* Function::asFunction() { return this; }
 
-void Function::construct(GCHeap& heap, VM* vm, Int32 argc, const Value* argv) {
+void Function::construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv) {
 	Object* newObject = heap.manage(new UserObject());
 	Value thisValue(newObject);
-	vm->push(thisValue);
-	call(heap, vm, argc, argv, thisValue);
+	processor->push(thisValue);
+	call(heap, processor, argc, argv, thisValue);
 }
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* scope) : definition(definition), scope(scope) { }
+ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environment) : definition(definition), environment(environment) { }
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
-Object* ScriptFunction::getScope() const { return scope; }
+Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
-	vm->enterCall(this, argc, argv, thisValue);
+void ScriptFunction::call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
+	processor->enterCall(this, argc, argv, thisValue);
 }
 
 void ScriptFunction::gcMark(GCHeap& heap) {
 	heap.mark(definition);
-	heap.mark(scope);
+	heap.mark(environment);
 	super::gcMark(heap);
 }
 
@@ -772,7 +772,7 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 
 ArgumentsObject(Frame* frame) : frame(frame) { }
 
-bool ArgumentsObject::setProperty(Environment& env, const String* name, Value& v) {
+bool ArgumentsObject::setProperty(Engine& engine, const String* name, Value& v) {
 	if (name->s == "length") return 
 }
 
@@ -784,78 +784,78 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 
 /* --- Frame --- */
 
-Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), scope(function->getScope())
+Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), environment(function->getEnvironment())
 		, locals(std::max(functionDef->localsCount, 1)) {
 }
 
 ScriptFunctionDef* Frame::getFunctionDef() { return functionDef; }
 Value* Frame::getLocalsPointer() { return &locals[0]; }
 
-// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a scope above maybe?
+// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
-bool Frame::getProperty(Environment& env, const String* name, Value& v) {
+bool Frame::getProperty(Engine& engine, const String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
 		v = locals[index];
 		return true;
 	} else {
-		return scope->getProperty(env, name, v); // FIX: can we do a looping non-recursive solution? faster
+		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster
 	}
 }
 
-bool Frame::setProperty(Environment& env, const String* name, const Value& v) {
+bool Frame::setProperty(Engine& engine, const String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
 		locals[index] = v;
 		return true;
 	} else {
-		return scope->setProperty(env, name, v);
+		return environment->setProperty(engine, name, v);
 	}
 }
 
-bool Frame::deleteProperty(Environment& env, const String* name) {
+bool Frame::deleteProperty(Engine& engine, const String* name) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) return false;
-	else return scope->deleteProperty(env, name);
+	else return environment->deleteProperty(engine, name);
 }
 
 void Frame::gcMark(GCHeap& heap) {
 	heap.mark(functionDef);
-	heap.mark(scope);
+	heap.mark(environment);
 	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
 	super::gcMark(heap);
 }
 
-/* --- VM --- */
+/* --- Processor --- */
 
-VM::VM(Environment& env, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
-		: env(env), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
+Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
+		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1) {
 }
 
-void VM::gcMark(GCHeap& heap) {
+void Processor::gcMark(GCHeap& heap) {
 	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->mark(heap);
 	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap.mark(csp->frame);
 	super::gcMark(heap);
 }
 
-void VM::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
-void VM::push(const Value& v) { push(vstackPointer, v); }
-void VM::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
-void VM::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
-Int32 VM::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
-Int32 VM::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
+void Processor::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
+void Processor::push(const Value& v) { push(vstackPointer, v); }
+void Processor::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
+void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
+Int32 Processor::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
+Int32 Processor::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
 
-void VM::error() {
+void Processor::error() {
 	throw std::runtime_error("error"); // FIX
 }
 
-void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
+void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	Frame* frame = env.heap().manage(new Frame(func));
+	Frame* frame = engine.heap().manage(new Frame(func));
 	++cstackPointer;
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
@@ -864,13 +864,13 @@ void VM::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Va
 	std::fill(std::copy(argv, argv + std::min(argc, def->argumentsCount), lp), lp + def->argumentsCount, Value(Value::UNDEFINED_TYPE));
 }
 
-bool VM::run(Int32 count) {
+bool Processor::run(Int32 count) {
 	Value* vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
 	Frame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
-	GCHeap& heap = env.heap();
+	GCHeap& heap = engine.heap();
 	while (--count >= 0) {
 		switch (*ip++) {
 			default: assert(0);
@@ -881,27 +881,27 @@ bool VM::run(Int32 count) {
 			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v(Value::NONEXISTENT_TYPE);
-				bool success = frame->getProperty(env, cp[nextInt32(ip)].getString(), v);
+				bool success = frame->getProperty(engine, cp[nextInt32(ip)].getString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = frame->setProperty(env, cp[nextInt32(ip)].getString(), vsp[0]);
+				bool success = frame->setProperty(engine, cp[nextInt32(ip)].getString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
 			case GET_PROPERTY_OP: {
 				Object* o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				o->getProperty(env, vsp[0].toString(heap), vsp[-1]);
+				o->getProperty(engine, vsp[0].toString(heap), vsp[-1]);
 				pop(vsp, 1);
 				break;
 			}
 			case SET_PROPERTY_OP: {
 				Object* o = vsp[-2].toObject(heap);
 				if (o == 0) error();
-				o->setProperty(env, vsp[-1].toString(heap), vsp[0]);
+				o->setProperty(engine, vsp[-1].toString(heap), vsp[0]);
 				vsp[-2] = vsp[0];
 				pop(vsp, 2);
 				break;
@@ -951,7 +951,7 @@ bool VM::run(Int32 count) {
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT_TYPE);
-				thisObject->getProperty(env, vsp[-n].toString(heap), v);
+				thisObject->getProperty(engine, vsp[-n].toString(heap), v);
 				Object* o = v.toObject(heap);
 				if (o == 0) error();
 				Function* f = o->asFunction();
@@ -1009,7 +1009,7 @@ bool VM::run(Int32 count) {
 			case DELETE_OP: {
 				Object* o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				poppush(vsp, Value(o->deleteProperty(env, vsp[0].toString(heap))));
+				poppush(vsp, Value(o->deleteProperty(engine, vsp[0].toString(heap))));
 				break;
 			}
 		}
@@ -1046,23 +1046,23 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 	std::vector<Byte>::const_iterator it = b;
 	std::vector<Byte>::const_iterator e = code.end();
 	while (it != e) {
-		VM::Op opcode = static_cast<VM::Op>(*it);
-		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = VM::INVALID_OP;
+		Processor::Opcode opcode = static_cast<Processor::Opcode>(*it);
+		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
 		std::cerr << "\t" << (it - b) << ':' << OP_STRINGS[opcode];
 		++it;
 		switch (opcode) {
-			case VM::JT_OP:
-			case VM::JF_OP:
-			case VM::JMP_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + 4); break;
-			case VM::READ_INDEXED_OP:
-			case VM::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
-			case VM::CALL_GLOBAL_OP:
-			case VM::CALL_METHOD_OP:
-			case VM::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
-			case VM::CONST_OP:
-			case VM::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
-			case VM::READ_NAMED_OP:
-			case VM::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			case Processor::JT_OP:
+			case Processor::JF_OP:
+			case Processor::JMP_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + 4); break;
+			case Processor::READ_INDEXED_OP:
+			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
+			case Processor::CALL_GLOBAL_OP:
+			case Processor::CALL_METHOD_OP:
+			case Processor::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
+			case Processor::CONST_OP:
+			case Processor::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
+			case Processor::READ_NAMED_OP:
+			case Processor::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -1084,65 +1084,65 @@ struct OperatorInfo {
 	Precedence prec;
 	Associativity assoc;
 	OperatorType type;
-	VM::Op vmOp;
+	Processor::Opcode vmOp;
 };
 
 // FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
-	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, VM::INVALID_OP },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::ADD_OP },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::SUB_OP },
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::PLUS_OP },
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::PLUS_OP },
-	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::MINUS_OP },
-	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::BIT_NOT_OP },
-	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, VM::NOT_OP },
-	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, VM::VOID_OP },
-	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, VM::VOID_OP },
-	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, VM::VOID_OP }
+	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::ADD_OP },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::SUB_OP },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
+	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP },
+	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::BIT_NOT_OP },
+	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP },
+	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP },
+	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP },
+	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
-	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICT_EQ_OP },
-	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::EQ_OP },
-	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::INVALID_OP },
-	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::UNSIGNED_SHR_OP },
-	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHR_OP },
-	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SHL_OP },
-	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::ADD_OP },
-	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::SUB_OP },
-	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::MUL_OP },
-	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::DIV_OP },
-	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::MOD_OP },
-	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::AND_OP },
-	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::XOR_OP },
-	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, VM::OR_OP },
-	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::UNSIGNED_SHR_OP },
-	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHR_OP },
-	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, VM::SHL_OP },
-	{ "++", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::ADD_OP },
-	{ "--", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, VM::SUB_OP },
-	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, VM::JF_OP },
-	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, VM::JT_OP },
-	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::ADD_OP },
-	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, VM::SUB_OP },
-	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MUL_OP },
-	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::DIV_OP },
-	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, VM::MOD_OP },
-	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, VM::AND_OP },
-	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, VM::XOR_OP },
-	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, VM::OR_OP },
-	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::STRICT_NEQ_OP },
-	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, VM::NEQ_OP },
-	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LEQ_OP }, 
-	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::LT_OP }, 
-	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GEQ_OP }, 
-	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, VM::GT_OP },
-	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, VM::INVALID_OP },
-	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, VM::INVALID_OP },
-	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, VM::INVALID_OP },
-	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, VM::INVALID_OP },
-	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, VM::INVALID_OP }
+	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::STRICT_EQ_OP },
+	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::EQ_OP },
+	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP },
+	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::UNSIGNED_SHR_OP },
+	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP },
+	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHL_OP },
+	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::ADD_OP },
+	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SUB_OP },
+	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MUL_OP },
+	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::DIV_OP },
+	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MOD_OP },
+	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::AND_OP },
+	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::XOR_OP },
+	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::OR_OP },
+	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::UNSIGNED_SHR_OP },
+	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP },
+	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP },
+	{ "++", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, Processor::ADD_OP },
+	{ "--", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, Processor::SUB_OP },
+	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
+	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
+	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP },
+	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP },
+	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP },
+	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP },
+	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP },
+	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP },
+	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP },
+	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP },
+	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::STRICT_NEQ_OP },
+	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::NEQ_OP },
+	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP }, 
+	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP }, 
+	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP }, 
+	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP },
+	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP },
+	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP },
+	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
+	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
+	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP }
 };
 
 // FIX : sort
@@ -1172,7 +1172,7 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(Environment& env, ScriptFunctionDef* function) : env(env), function(function) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
@@ -1212,19 +1212,19 @@ void Compiler::eatWhite() {
 	}
 }
 
-void Compiler::emit(VM::Op op) {
+void Compiler::emit(Processor::Opcode op) {
 	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 }
 
-void Compiler::emitWithInt32(VM::Op op, Int32 i) {
+void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
 	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 	code.resize(code.size() + 4);
 	*reinterpret_cast<Int32*>(&code[code.size() - 4]) = i;
 }
 
-Int32 Compiler::emitForwardBranch(VM::Op op) {
+Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 	Int32 point = code.size();
@@ -1238,9 +1238,9 @@ void Compiler::completeForwardBranch(Int32 point) {
 }
 
 Int32 Compiler::markBackwardBranch() { return function->code.size(); }
-void Compiler::emitBackwardBranch(VM::Op op, Int32 point) { emitWithInt32(op, point - (function->code.size() + 5)); }
+void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) { emitWithInt32(op, point - (function->code.size() + 5)); }
 
-void Compiler::emitWithConstant(VM::Op op, const Value& constant) {
+void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
 		std::vector<Value>& constants = function->constants;
@@ -1277,11 +1277,11 @@ void Compiler::makeRValue(XValue& xv) {
 	switch (xv.t) {
 		default: assert(0);
 		case XValue::PUSHED: return;
-		case XValue::NONE: emit(VM::VOID_OP); break;
-		case XValue::CONSTANT: emitWithConstant(VM::CONST_OP, xv.v); break;
-		case XValue::INDEXED: emitWithInt32(VM::READ_INDEXED_OP, xv.v.toInt()); break;
-		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); break;
-		case XValue::PROPERTY: emit(VM::GET_PROPERTY_OP); break;
+		case XValue::NONE: emit(Processor::VOID_OP); break;
+		case XValue::CONSTANT: emitWithConstant(Processor::CONST_OP, xv.v); break;
+		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.toInt()); break;
+		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); break;
+		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 	}
 	xv = XValue(XValue::PUSHED);
 }
@@ -1289,18 +1289,18 @@ void Compiler::makeRValue(XValue& xv) {
 void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
 		default: throw std::runtime_error("Illegal lvalue");
-		case XValue::INDEXED: emitWithInt32(VM::WRITE_INDEXED_OP, xv.v.toInt()); break;
-		case XValue::NAMED: emitWithConstant(VM::WRITE_NAMED_OP, xv.v); break;
-		case XValue::PROPERTY: emit(VM::SET_PROPERTY_OP); break;
+		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.toInt()); break;
+		case XValue::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xv.v); break;
+		case XValue::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
 	xv = XValue(XValue::PUSHED);
 }
 
 void Compiler::discard(XValue& xv) {
 	switch (xv.t) {
-		case XValue::PUSHED: emit(VM::POP_OP); break;
-		case XValue::NAMED: emitWithConstant(VM::READ_NAMED_OP, xv.v); emit(VM::POP_OP); break;
-		case XValue::PROPERTY: emit(VM::GET_PROPERTY_OP); emit(VM::POP_OP); break;
+		case XValue::PUSHED: emit(Processor::POP_OP); break;
+		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); emit(Processor::POP_OP); break;
+		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
 		default: break;
 	}
 	xv = XValue(XValue::NONE);
@@ -1322,7 +1322,7 @@ void Compiler::parseRValueOperand(const OperatorInfo& op) {
 	makeRValue(xv);
 }
 
-void Compiler::parseFunctionCall(XValue& v, VM::Op op) {
+void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 	eatWhite();
 	Int32 count = 0;
 	while (p != e && *p != ')') {
@@ -1356,19 +1356,19 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		case POST_UNARY: {
 			XValue lv(v);
 			makeRValue(lv);
-			emit(VM::REPUSH_OP);
-			emitWithConstant(VM::CONST_OP, Value(1.0)); 
+			emit(Processor::REPUSH_OP);
+			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
 			makeAssignment(v);
-			emit(VM::POP_OP);
+			emit(Processor::POP_OP);
 			break;
 		}
 		
 		case LOGICAL_AND_OR: {
 			makeRValue(v);
-			emit(VM::REPUSH_OP);
+			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
-			emit(VM::POP_OP);
+			emit(Processor::POP_OP);
 			parseRValueOperand(op);
 			completeForwardBranch(point);
 			break;
@@ -1376,9 +1376,9 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case CONDITIONAL: {
 			makeRValue(v);
-			Int32 pointA = emitForwardBranch(VM::JF_OP);
+			Int32 pointA = emitForwardBranch(Processor::JF_OP);
 			parseRValueOperand(op);
-			Int32 pointB = emitForwardBranch(VM::JMP_OP);
+			Int32 pointB = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(pointA);
 			parseExpression(v, op.prec);
 			makeRValue(v);
@@ -1392,14 +1392,14 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			const Char* b = p;
 			parseIdentifier(true);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(VM::CONST_OP, Value(String::newHashedString(env.heap(), b, p)));
+			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.heap(), b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
 		
 		case FUNCTION_CALL: {
-			VM::Op op = VM::CALL_GLOBAL_OP;
-			if (v.t == XValue::PROPERTY) op = VM::CALL_METHOD_OP;
+			Processor::Opcode op = Processor::CALL_GLOBAL_OP;
+			if (v.t == XValue::PROPERTY) op = Processor::CALL_METHOD_OP;
 			else makeRValue(v);
 			parseFunctionCall(v, op);
 			break;
@@ -1408,13 +1408,13 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		case NEW_OPERATOR: {
 			parseRValueOperand(op);
 			if (!eatToken("(", true)) {
-				emitWithInt32(VM::NEW_OP, 0);
+				emitWithInt32(Processor::NEW_OP, 0);
 				v = XValue(XValue::PUSHED);
 			} else {
 				eatWhite();
-				parseFunctionCall(v, VM::NEW_OP);
+				parseFunctionCall(v, Processor::NEW_OP);
 			}
-			emit(VM::NEW_RESULT_OP);
+			emit(Processor::NEW_RESULT_OP);
 			break;
 		}
 		
@@ -1429,12 +1429,12 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			v = parseOperand(op);
 			switch (v.t) {
 				default: assert(0);
-				case XValue::PUSHED: emit(VM::POP_OP); /* continue */
+				case XValue::PUSHED: emit(Processor::POP_OP); /* continue */
 				case XValue::NONE:
 				case XValue::CONSTANT: v = XValue(XValue::CONSTANT, Value(true)); break;
 				case XValue::INDEXED: v = XValue(XValue::CONSTANT, Value(false)); break;
-				case XValue::NAMED: emit(VM::FRAME_OP); emitWithConstant(VM::CONST_OP, v.v);  /* continue */
-				case XValue::PROPERTY: emit(VM::DELETE_OP); v = XValue(XValue::PUSHED); break;
+				case XValue::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, v.v);  /* continue */
+				case XValue::PROPERTY: emit(Processor::DELETE_OP); v = XValue(XValue::PUSHED); break;
 			}
 			break;
 		}
@@ -1452,10 +1452,10 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case UNARY: {
 			v = parseOperand(op);
-			if (op.vmOp == VM::ADD_OP || op.vmOp == VM::SUB_OP) {
+			if (op.vmOp == Processor::ADD_OP || op.vmOp == Processor::SUB_OP) {
 				XValue lv(v);
 				makeRValue(lv);
-				emitWithConstant(VM::CONST_OP, Value(1.0)); 
+				emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 				emit(op.vmOp);
 				makeAssignment(v);
 			} else {
@@ -1474,7 +1474,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case ASSIGNMENT: {
 			XValue lv(v);
-			if (op.vmOp != VM::INVALID_OP) {
+			if (op.vmOp != Processor::INVALID_OP) {
 				makeRValue(lv);
 				parseRValueOperand(op);
 				emit(op.vmOp);
@@ -1566,12 +1566,12 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 				case FALSE_LITERAL: v = XValue(XValue::CONSTANT, Value(false)); break;
 				case TRUE_LITERAL: v = XValue(XValue::CONSTANT, Value(true)); break;
 				case THIS_LITERAL: {
-					emit(VM::THIS_OP);
+					emit(Processor::THIS_OP);
 					v = XValue(XValue::PUSHED); break;
 					break;
 				}
 				case FUNCTION_LITERAL: {
-					ScriptFunctionDef* func = env.heap().manage(new ScriptFunctionDef());
+					ScriptFunctionDef* func = engine.heap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
 					expectToken("(", true);
 					eatWhite();
@@ -1583,7 +1583,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						const Char* b = p;
 						parseIdentifier(false);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->locals[String::newHashedString(env.heap(), b, p)] = func->localsCount;
+						func->locals[String::newHashedString(engine.heap(), b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
 						eatWhite();
@@ -1591,13 +1591,13 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					expectToken(")", false);
 					expectToken("{", true);
 					{
-						Compiler funcCompiler(env, func);
-						env.heap().protect(&funcCompiler);
+						Compiler funcCompiler(engine, func);
+						engine.heap().protect(&funcCompiler);
 						p = funcCompiler.compile(p, e);
 						funcCompiler.finish();
 					}
 					expectToken("}", false);
-					emitWithConstant(VM::GEN_FUNC_OP, Value(func)); 
+					emitWithConstant(Processor::GEN_FUNC_OP, Value(func)); 
 					v = XValue(XValue::PUSHED);
 					break;
 				}
@@ -1631,14 +1631,14 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					v = XValue(XValue::CONSTANT, Value(String::newHashedString(env.heap(), buffer, unescapeEnd)));
+					v = XValue(XValue::CONSTANT, Value(String::newHashedString(engine.heap(), buffer, unescapeEnd)));
 					break;
 				}
 				default: {
 					const Char* b = p;
 					parseIdentifier(false);
 					if (p == b) return false; // fix : nicer way?
-					String* identifier = String::newHashedString(env.heap(), b, p);
+					String* identifier = String::newHashedString(engine.heap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->locals;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1677,7 +1677,7 @@ void Compiler::parseVarDeclarations() {
 		const Char* b = p; // FIX : sub
 		parseIdentifier(false);
 		if (p == b) throw std::runtime_error("Expected identifier");
-		String* identifier = String::newHashedString(env.heap(), b, p);
+		String* identifier = String::newHashedString(engine.heap(), b, p);
 		Int32 index;
 		LocalNameMap& nameMap = function->locals;
 		LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1690,8 +1690,8 @@ void Compiler::parseVarDeclarations() {
 			XValue xv;
 			parseExpression(xv, COMMA_PREC); // FIX : SUB
 			makeRValue(xv);
-			emitWithInt32(VM::WRITE_INDEXED_OP, index);
-			emit(VM::POP_OP);
+			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+			emit(Processor::POP_OP);
 		}
 		if (!eatToken(",", true)) break;
 		eatWhite();
@@ -1763,7 +1763,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 					while (l != 0 && !l->name.empty()) l = l->next;
 					if (l == 0) throw std::runtime_error("Illegal break");
 				}
-				l->breaks.push_back(emitForwardBranch(VM::JMP_OP));
+				l->breaks.push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
 			}
@@ -1781,7 +1781,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 					while (l != 0 && !l->name.empty()) l = l->next;
 					if (l == 0) throw std::runtime_error("Illegal continue");
 				}
-				l->continues.push_back(emitForwardBranch(VM::JMP_OP));
+				l->continues.push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
 			}
@@ -1798,10 +1798,10 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				Int32 pointA = emitForwardBranch(VM::JF_OP);
+				Int32 pointA = emitForwardBranch(Processor::JF_OP);
 				parseStatement(firstLabel, firstLabel);
 				if (eatToken("else", true)) {
-					Int32 pointB = emitForwardBranch(VM::JMP_OP);
+					Int32 pointB = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(pointA);
 					parseStatement(firstLabel, firstLabel);
 					completeForwardBranch(pointB);
@@ -1820,10 +1820,10 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				Int32 pointB = emitForwardBranch(VM::JF_OP);
+				Int32 pointB = emitForwardBranch(Processor::JF_OP);
 				parseStatement(&emptyLabel, firstLabel);
 				completeContinues(&emptyLabel, statementEndLabel);
-				emitBackwardBranch(VM::JMP_OP, pointA);
+				emitBackwardBranch(Processor::JMP_OP, pointA);
 				completeForwardBranch(pointB);
 				completeBreaks(&emptyLabel);
 				break;
@@ -1841,7 +1841,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				emitBackwardBranch(VM::JT_OP, point);
+				emitBackwardBranch(Processor::JT_OP, point);
 				expectSemicolon();
 				completeBreaks(&emptyLabel);
 				break;
@@ -1861,7 +1861,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				XValue xv;
 				if (parseOptionalExpression(xv, LOWEST_PREC)) {
 					makeRValue(xv);
-					pointB = emitForwardBranch(VM::JF_OP);
+					pointB = emitForwardBranch(Processor::JF_OP);
 				}
 				expectToken(";", true);
 				std::vector<Byte>& code = function->code;
@@ -1875,7 +1875,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				parseStatement(&emptyLabel, firstLabel);
 				completeContinues(&emptyLabel, statementEndLabel);
 				code.insert(code.end(), incCode.begin(), incCode.end());
-				emitBackwardBranch(VM::JMP_OP, pointA);
+				emitBackwardBranch(Processor::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
 				completeBreaks(&emptyLabel);
 				break;
@@ -1885,7 +1885,7 @@ void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 				XValue xv;
 				parseOptionalExpression(xv, LOWEST_PREC);
 				makeRValue(xv);
-				emit(VM::RETURN_OP);
+				emit(Processor::RETURN_OP);
 				expectSemicolon();
 				break;
 			}
@@ -1913,10 +1913,10 @@ const Char* Compiler::compile(const Char* b, const Char* e) { p = b; this->e = e
 void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 void Compiler::finish() {
-	emit(VM::VOID_OP);
-	emit(VM::RETURN_OP);
+	emit(Processor::VOID_OP);
+	emit(Processor::RETURN_OP);
 	// FIX : shrink code vector (copy to quickarray instead?)
-disassemble(env.heap(), function->code, function->constants);
+disassemble(engine.heap(), function->code, function->constants);
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -1956,10 +1956,10 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
-		public:		virtual void call(GCHeap& heap, VM* vm, Int32 argc, const Value* argv, const Value& thisValue) {
+		public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
 						String* s = (argc >= 1 ? argv[0].toString(heap) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						vm->push(Value());
+						processor->push(Value());
 					}
 	};
 
@@ -1967,15 +1967,15 @@ void GCHeap::mark(const GCItem* item) {
 int main(int argc, const char* argv[]) {
 	static const String LF_STRING("\n");
 	GCHeap heap;
-	Environment env(heap);
+	Engine engine(heap);
 	UserObject globals;
 	heap.protect(&globals);
 	static String PRINT_STRING("print");
 	PrintFunction printFunction;
-	globals.setProperty(env, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
+	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
 	ScriptFunctionDef functionDef;
 	heap.protect(&functionDef);
-	Compiler compiler(env, &functionDef);
+	Compiler compiler(engine, &functionDef);
 	heap.protect(&compiler);
 	String source(EMPTY_STRING);
 	std::auto_ptr<std::ifstream> inputFileStream;
@@ -2004,14 +2004,14 @@ int main(int argc, const char* argv[]) {
 				
 				Value vstack[1024];
 				Context cstack[1024];
-				VM vm(env, cstack, cstack + 1024, vstack, vstack + 1024);
-				heap.protect(&vm);
-				vm.enterCall(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
+				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
+				heap.protect(&processor);
+				processor.enterCall(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
 				bool done = false;
 				
 				clock_t start = ::clock();	
 				do {
-					done = vm.run(10000000);
+					done = processor.run(10000000);
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
@@ -2020,8 +2020,8 @@ int main(int argc, const char* argv[]) {
 					std::cerr << "\tSwept: " << sweptCount << std::endl;
 					
 					if (done) {
-						std::cerr << "\tOn stack: " << (vm.vstackPointer - vstack + 1) << std::endl;
-						assert(vm.vstackPointer - vstack + 1 == 1);
+						std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;
+						assert(processor.vstackPointer - vstack + 1 == 1);
 						std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						clock_t end = ::clock();
 						const double divisor = (CLOCKS_PER_SEC / 1000.0);
