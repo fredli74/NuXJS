@@ -1707,34 +1707,23 @@ void Compiler::expectSemicolon() {
 	}
 }
 
-int Compiler::pushIteratorLabel(int statementLabelsIndex) {
-	labels.push_back(Label(EMPTY_STRING));
-	Int32 i = (statementLabelsIndex < 0 ? labels.size() - 1 : statementLabelsIndex);
-	assert(i < labels.size());
-	for (std::vector<Label>::iterator it = labels.begin() + i; it != labels.end(); ++it) it->isIteratorLabel = true;
-	return i;
-}
-
-void Compiler::completeForwardContinues(int pushedLabelIndex) {
-	for (std::vector<Label>::iterator it = labels.begin() + pushedLabelIndex; it != labels.end(); ++it) {
-		const Label& label = *it;
-		for (std::vector<Int32>::const_iterator it2 = label.continues.begin(); it2 != label.continues.end(); ++it2)
-			completeForwardBranch(*it2);
+void Compiler::completeContinues(const Label* fromLabel, const Label* untilLabel) {
+	for (const Label* l = fromLabel; l != untilLabel; l = l->next) {
+		for (std::vector<Int32>::const_iterator it = l->continues.begin(); it != l->continues.end(); ++it)
+			completeForwardBranch(*it);
 	}
 }
 
-void Compiler::completeForwardBreaksAndPopLabel() {
-	const Label& label = labels.back();
-	for (std::vector<Int32>::const_iterator it = label.breaks.begin(); it != label.breaks.end(); ++it)
+void Compiler::completeBreaks(const Label* label) {
+	for (std::vector<Int32>::const_iterator it = label->breaks.begin(); it != label->breaks.end(); ++it)
 		completeForwardBranch(*it);
-	labels.pop_back();
 }
 
-void Compiler::parseStatement(int statementLabelsIndex) {
+void Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel) {
 	eatWhite();	
 		
 	if (eatToken("{", false)) {
-		parseStatementList();
+		parseStatementList(firstLabel);
 		expectToken("}", false);
 		return;
 	}
@@ -1748,12 +1737,12 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 		const Char* q = p;
 		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier(b, q);
-			for (std::vector<Label>::const_reverse_iterator it = labels.rbegin(); it != labels.rend(); ++it) {
-				if (!it->name.empty() && it->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
+			for (Label* l = firstLabel; l != 0; l = l->next) {
+				if (!l->name.empty() && l->name.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
 			}
-			labels.push_back(Label(identifier));
-			parseStatement(statementLabelsIndex >= 0 ? statementLabelsIndex : labels.size() - 1);
-			completeForwardBreaksAndPopLabel();
+			Label newLabel(identifier, firstLabel);
+			parseStatement(&newLabel, statementEndLabel);
+			completeBreaks(&newLabel);
 		} else {
 			p = b;
 			parseAndPopOptionalExpression();
@@ -1764,35 +1753,35 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 		switch (static_cast<Statement>(i)) {
 			case BREAK_STATEMENT: { // FIX : share with CONTINUE_STATEMENT
 				const Char* b = p;
-				std::vector<Label>::reverse_iterator it = labels.rbegin();
+				Label* l = firstLabel;
 				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
-					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Undefined label");
+					while (l != 0 && (l->name.empty() || !l->name.isEqualTo(identifier))) l = l->next;
+					if (l == 0) throw std::runtime_error("Undefined label");
 				} else {
-					while (it != labels.rend() && !it->name.empty()) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Illegal break");
+					while (l != 0 && !l->name.empty()) l = l->next;
+					if (l == 0) throw std::runtime_error("Illegal break");
 				}
-				it->breaks.push_back(emitForwardBranch(VM::JMP_OP));
+				l->breaks.push_back(emitForwardBranch(VM::JMP_OP));
 				expectSemicolon();
 				break;
 			}
 			
 			case CONTINUE_STATEMENT: {
 				const Char* b = p;
-				std::vector<Label>::reverse_iterator it = labels.rbegin();
+				Label* l = firstLabel;
 				parseIdentifier(false);
 				if (b != p) {
 					String identifier(b, p);
-					while (it != labels.rend() && (it->name.empty() || !it->name.isEqualTo(identifier))) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Undefined label");
-					if (!it->isIteratorLabel) throw std::runtime_error("Illegal label for continue");
+					while (l != 0 && (l->name.empty() || !l->name.isEqualTo(identifier))) l = l->next;
+					if (l == 0) throw std::runtime_error("Undefined label");
+					if (!l->isIteratorLabel) throw std::runtime_error("Illegal label for continue");
 				} else {
-					while (it != labels.rend() && (!it->name.empty() || !it->isIteratorLabel)) ++it;
-					if (it == labels.rend()) throw std::runtime_error("Illegal continue");
+					while (l != 0 && !l->name.empty()) l = l->next;
+					if (l == 0) throw std::runtime_error("Illegal continue");
 				}
-				it->continues.push_back(emitForwardBranch(VM::JMP_OP));
+				l->continues.push_back(emitForwardBranch(VM::JMP_OP));
 				expectSemicolon();
 				break;
 			}
@@ -1810,11 +1799,11 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				makeRValue(xv);
 				expectToken(")", true);
 				Int32 pointA = emitForwardBranch(VM::JF_OP);
-				parseStatement();
+				parseStatement(firstLabel, firstLabel);
 				if (eatToken("else", true)) {
 					Int32 pointB = emitForwardBranch(VM::JMP_OP);
 					completeForwardBranch(pointA);
-					parseStatement();
+					parseStatement(firstLabel, firstLabel);
 					completeForwardBranch(pointB);
 				} else {
 					completeForwardBranch(pointA);
@@ -1824,37 +1813,37 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 
 			case WHILE_STATEMENT: {
 				Int32 pointA = markBackwardBranch();
-				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
+				Label emptyLabel(EMPTY_STRING, firstLabel);
+				emptyLabel.makeIteratorLabels(statementEndLabel);
 				expectToken("(", false);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
 				Int32 pointB = emitForwardBranch(VM::JF_OP);
-				parseStatement();
-				completeForwardContinues(pushedLabelIndex);
+				parseStatement(&emptyLabel, firstLabel);
+				completeContinues(&emptyLabel, statementEndLabel);
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				completeForwardBranch(pointB);
-				assert(labels.back().name.empty());
-				completeForwardBreaksAndPopLabel();
+				completeBreaks(&emptyLabel);
 				break;
 			}
 
 			case DO_WHILE_STATEMENT: {
 				Int32 point = markBackwardBranch();
-				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
-				parseStatement();
+				Label emptyLabel(EMPTY_STRING, firstLabel);
+				emptyLabel.makeIteratorLabels(statementEndLabel);
+				parseStatement(&emptyLabel, firstLabel);
 				expectToken("while", true);
 				expectToken("(", true);
-				completeForwardContinues(pushedLabelIndex);
+				completeContinues(&emptyLabel, statementEndLabel);
 				XValue xv; // FIX : sub
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
 				emitBackwardBranch(VM::JT_OP, point);
 				expectSemicolon();
-				assert(labels.back().name.empty());
-				completeForwardBreaksAndPopLabel();
+				completeBreaks(&emptyLabel);
 				break;
 			}
 			
@@ -1881,14 +1870,14 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 				expectToken(")", true);
 				std::vector<Byte> incCode(code.begin() + incPoint, code.end());
 				code.resize(incPoint);
-				int pushedLabelIndex = pushIteratorLabel(statementLabelsIndex);
-				parseStatement();
-				completeForwardContinues(pushedLabelIndex);
+				Label emptyLabel(EMPTY_STRING, firstLabel);
+				emptyLabel.makeIteratorLabels(statementEndLabel);
+				parseStatement(&emptyLabel, firstLabel);
+				completeContinues(&emptyLabel, statementEndLabel);
 				code.insert(code.end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(VM::JMP_OP, pointA);
 				if (pointB >= 0) completeForwardBranch(pointB);
-				assert(labels.back().name.empty());
-				completeForwardBreaksAndPopLabel();
+				completeBreaks(&emptyLabel);
 				break;
 			}
 			
@@ -1903,7 +1892,7 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 			
 			case TRY_STATEMENT: {
 				expectToken("{", true);
-				parseStatementList();
+				parseStatement(firstLabel, firstLabel);
 				expectToken("}", false);
 			}
 			
@@ -1912,15 +1901,15 @@ void Compiler::parseStatement(int statementLabelsIndex) {
 	}
 }
 
-void Compiler::parseStatementList() {
+void Compiler::parseStatementList(Label* firstLabel) {
 	const Char* b;
 	do {
 		b = p;
-		parseStatement();
+		parseStatement(firstLabel, firstLabel);
 	} while (p != e && b != p);
 }
 
-const Char* Compiler::compile(const Char* b, const Char* e) { labels.clear(); p = b; this->e = e; parseStatementList(); return p; }
+const Char* Compiler::compile(const Char* b, const Char* e) { p = b; this->e = e; parseStatementList(0); return p; }
 void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 void Compiler::finish() {

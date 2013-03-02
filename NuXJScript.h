@@ -351,6 +351,17 @@ class Compiler : public GCItem {
 	public:		const Char* compile(const Char* b, const Char* e);
 	public:		void compile(const String& source);
 	public:		void finish();
+	protected:	struct Label {
+					Label(const String& name, Label* next) : name(name), next(next) { }
+					void makeIteratorLabels(Label* untilLabel) {
+						for (Label* l = this; l != untilLabel; l = l->next) l->isIteratorLabel = true;
+					}
+					String name; // empty for automatic while, for, case labels
+					Label* next;
+					bool isIteratorLabel;
+					std::vector<Int32> breaks; // source points for breaks
+					std::vector<Int32> continues; // source points for continues
+				};
 	protected:	void eatComment();
 	protected:	void eatWhite();
 	protected:	void emit(VM::Op op);
@@ -360,9 +371,8 @@ class Compiler : public GCItem {
 	protected:	void completeForwardBranch(Int32 point);
 	protected:	Int32 markBackwardBranch();
 	protected:	void emitBackwardBranch(VM::Op op, Int32 point);
-	protected:	int pushIteratorLabel(int statementLabelsIndex);
-	protected:	void completeForwardContinues(int pushedLabelIndex);
-	protected:	void completeForwardBreaksAndPopLabel();
+	protected:	void completeContinues(const Label* fromLabel, const Label* untilLabel);
+	protected:	void completeBreaks(const Label* label);
 	protected:	XValue parseOperand(const OperatorInfo& op);
 	protected:	void parseRValueOperand(const OperatorInfo& op);
 	protected:	void parseFunctionCall(XValue& v, VM::Op op);
@@ -371,8 +381,8 @@ class Compiler : public GCItem {
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
 	protected:	void parseVarDeclarations();
-	protected:	void parseStatement(int statementLabelsIndex = -1); // statementLabelsIndex >= 0 means this statement has labels from labels.begin() + statementLabelsIndex to labels.end()
-	protected:	void parseStatementList();
+	protected:	void parseStatement(Label* firstLabel, Label* statementEndLabel);
+	protected:	void parseStatementList(Label* firstLabel);
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these
 	protected:	void expectSemicolon();
 	protected:	void expectToken(const char* t, bool eatLeadingWhite);
@@ -385,14 +395,6 @@ class Compiler : public GCItem {
 	protected:	Environment& env; // FIX : necessary?
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;
-	protected:	struct Label {
-					Label(const String& name) : name(name) { }
-					String name; // empty for automatic while, for, switches labels
-					bool isIteratorLabel;
-					std::vector<Int32> breaks; // source points for breaks
-					std::vector<Int32> continues; // source points for continues
-				};
-	protected:	std::vector<Label> labels;
 	protected:	const Char* p;
 	protected:	const Char* e;
 };
