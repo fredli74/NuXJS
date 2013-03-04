@@ -9,22 +9,22 @@
 			8DD76F620486A84900D96B5E /* NuXJScript */,
 		);
 		breakpoints = (
-			F775B17616DC21FA00264BC0 /* NuXJScript.cpp:334 */,
-			F775B17F16DC225900264BC0 /* NuXJScript.cpp:335 */,
-			F775B18A16DC22DB00264BC0 /* NuXJScript.cpp:403 */,
-			F775B19F16DC25E300264BC0 /* NuXJScript.cpp:265 */,
-			F775B1A516DC261900264BC0 /* NuXJScript.cpp:583 */,
-			F775B1C016DC286A00264BC0 /* NuXJScript.cpp:326 */,
-			F7D4517416DCC5CF0039338A /* NuXJScript.cpp:2200 */,
-			F7D4517816DCC6010039338A /* NuXJScript.cpp:2198 */,
-			F7D4555E16DE14970039338A /* NuXJScript.cpp:2113 */,
+			F775B17616DC21FA00264BC0 /* NuXJScript.cpp:338 */,
+			F775B17F16DC225900264BC0 /* NuXJScript.cpp:339 */,
+			F775B18A16DC22DB00264BC0 /* NuXJScript.cpp:407 */,
+			F775B19F16DC25E300264BC0 /* NuXJScript.cpp:269 */,
+			F775B1A516DC261900264BC0 /* NuXJScript.cpp:587 */,
+			F775B1C016DC286A00264BC0 /* NuXJScript.cpp:330 */,
+			F7D4517416DCC5CF0039338A /* NuXJScript.cpp:2204 */,
+			F7D4517816DCC6010039338A /* NuXJScript.cpp:2202 */,
+			F7D4555E16DE14970039338A /* NuXJScript.cpp:2117 */,
 			F7D4556716DE15440039338A /* NuXJScript.h:1 */,
-			F7E6DCA116DEDEB8007AB92B /* NuXJScript.cpp:1885 */,
+			F7E6DCA116DEDEB8007AB92B /* NuXJScript.cpp:1889 */,
 			F7ED83C016DF68C3008D6B29 /* NuXJScript.h:434 */,
-			F727340716E24B9E00AC7191 /* NuXJScript.cpp:1865 */,
-			F73794C016E49C730089F97C /* NuXJScript.cpp:1101 */,
-			F737960416E4B71D0089F97C /* NuXJScript.cpp:1049 */,
-			F737960A16E4B7A50089F97C /* NuXJScript.cpp:848 */,
+			F727340716E24B9E00AC7191 /* NuXJScript.cpp:1869 */,
+			F73794C016E49C730089F97C /* NuXJScript.cpp:1105 */,
+			F737960416E4B71D0089F97C /* NuXJScript.cpp:1053 */,
+			F737960A16E4B7A50089F97C /* NuXJScript.cpp:852 */,
 		);
 		codeSenseManager = F74E7E0616D1A3E7003A6AB6 /* Code sense */;
 		executables = (
@@ -355,6 +355,24 @@
 			F737964A16E4B98A0089F97C /* PBXTextBookmark */ = F737964A16E4B98A0089F97C /* PBXTextBookmark */;
 			F737964B16E4B98A0089F97C /* PBXTextBookmark */ = F737964B16E4B98A0089F97C /* PBXTextBookmark */;
 			F737964C16E4B98A0089F97C /* PBXTextBookmark */ = F737964C16E4B98A0089F97C /* PBXTextBookmark */;
+			F737964F16E4B9E50089F97C /* PBXTextBookmark */ = F737964F16E4B9E50089F97C /* PBXTextBookmark */;
+			F737965016E4B9E50089F97C /* PBXTextBookmark */ = F737965016E4B9E50089F97C /* PBXTextBookmark */;
+			F737965116E4B9E70089F97C /* PBXTextBookmark */ = F737965116E4B9E70089F97C /* PBXTextBookmark */;
+			F737965216E4B9E70089F97C /* PBXTextBookmark */ = F737965216E4B9E70089F97C /* PBXTextBookmark */;
+			F737965816E4BA3D0089F97C /* PBXTextBookmark */ = F737965816E4BA3D0089F97C /* PBXTextBookmark */;
+			F737965916E4BA3D0089F97C /* PBXTextBookmark */ = F737965916E4BA3D0089F97C /* PBXTextBookmark */;
+			F737965A16E4BA3D0089F97C /* PBXTextBookmark */ = F737965A16E4BA3D0089F97C /* PBXTextBookmark */;
+			F737965B16E4BA3D0089F97C /* PBXTextBookmark */ = F737965B16E4BA3D0089F97C /* PBXTextBookmark */;
+			F737966216E4BB5F0089F97C /* PBXTextBookmark */ = F737966216E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966316E4BB5F0089F97C /* PBXTextBookmark */ = F737966316E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966416E4BB5F0089F97C /* PBXTextBookmark */ = F737966416E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966516E4BB5F0089F97C /* PBXTextBookmark */ = F737966516E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966616E4BB5F0089F97C /* PBXTextBookmark */ = F737966616E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966716E4BB5F0089F97C /* PBXTextBookmark */ = F737966716E4BB5F0089F97C /* PBXTextBookmark */;
+			F737966B16E4BBAD0089F97C /* PBXTextBookmark */ = F737966B16E4BBAD0089F97C /* PBXTextBookmark */;
+			F737966C16E4BBAD0089F97C /* PBXTextBookmark */ = F737966C16E4BBAD0089F97C /* PBXTextBookmark */;
+			F737966D16E4BBAD0089F97C /* PBXTextBookmark */ = F737966D16E4BBAD0089F97C /* PBXTextBookmark */;
+			F737966E16E4BBAD0089F97C /* PBXTextBookmark */ = F737966E16E4BBAD0089F97C /* PBXTextBookmark */;
 			F747D3B616E1884D004C779E = F747D3B616E1884D004C779E /* PBXTextBookmark */;
 			F747D3D416E1AAAB004C779E = F747D3D416E1AAAB004C779E /* PBXTextBookmark */;
 			F763E3DF16E4291500BC9D6D = F763E3DF16E4291500BC9D6D /* PBXTextBookmark */;
@@ -383,7 +401,7 @@
 			F74E7E1316D1A409003A6AB6 /* NuXJScript */,
 		);
 	};
-	F727340716E24B9E00AC7191 /* NuXJScript.cpp:1865 */ = {
+	F727340716E24B9E00AC7191 /* NuXJScript.cpp:1869 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -395,7 +413,7 @@
 		functionName = "Compiler::parseStatement(Label* firstLabel, Label* statementEndLabel)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 1865;
+		lineNumber = 1869;
 		location = NuXJScript;
 		modificationTime = 384088110.623347;
 		originalNumberOfMultipleMatches = 1;
@@ -406,7 +424,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1722";
 		rLen = 10;
-		rLoc = 64864;
+		rLoc = 65303;
 		rType = 0;
 		vrLen = 1712;
 		vrLoc = 58895;
@@ -489,7 +507,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 929;
 		vrLoc = 27438;
@@ -499,7 +517,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 929;
 		vrLoc = 27438;
@@ -530,7 +548,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		fallbackIsa = XCBuildMessageTextBookmark;
 		rLen = 1;
-		rLoc = 891;
+		rLoc = 895;
 		rType = 1;
 	};
 	F737949B16E499AF0089F97C /* PBXTextBookmark */ = {
@@ -538,7 +556,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1051";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1806;
 		vrLoc = 35806;
@@ -578,7 +596,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 929;
 		vrLoc = 27438;
@@ -598,7 +616,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1059";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1640;
 		vrLoc = 36483;
@@ -608,7 +626,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1205";
 		rLen = 0;
-		rLoc = 46742;
+		rLoc = 47181;
 		rType = 0;
 		vrLen = 2687;
 		vrLoc = 42754;
@@ -648,7 +666,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1200";
 		rLen = 0;
-		rLoc = 46599;
+		rLoc = 47038;
 		rType = 0;
 		vrLen = 2741;
 		vrLoc = 42754;
@@ -688,7 +706,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 929;
 		vrLoc = 27438;
@@ -698,7 +716,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1791";
 		rLen = 0;
-		rLoc = 64917;
+		rLoc = 65356;
 		rType = 0;
 		vrLen = 1625;
 		vrLoc = 61757;
@@ -738,7 +756,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2004";
 		rLen = 0;
-		rLoc = 73779;
+		rLoc = 74250;
 		rType = 0;
 		vrLen = 1815;
 		vrLoc = 68567;
@@ -778,7 +796,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 929;
 		vrLoc = 27438;
@@ -788,12 +806,12 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 714;
 		vrLoc = 27290;
 	};
-	F73794C016E49C730089F97C /* NuXJScript.cpp:1101 */ = {
+	F73794C016E49C730089F97C /* NuXJScript.cpp:1105 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -805,7 +823,7 @@
 		functionName = "Processor::run(Int32 count)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 1101;
+		lineNumber = 1105;
 		location = NuXJScript;
 		modificationTime = 384088110.623549;
 		originalNumberOfMultipleMatches = 1;
@@ -816,7 +834,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1606;
 		vrLoc = 36538;
@@ -826,7 +844,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1060";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1575;
 		vrLoc = 36599;
@@ -866,7 +884,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1060";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1633;
 		vrLoc = 36699;
@@ -936,7 +954,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1060";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1633;
 		vrLoc = 36699;
@@ -986,7 +1004,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 842";
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 		vrLen = 713;
 		vrLoc = 27290;
@@ -996,7 +1014,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1060";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1633;
 		vrLoc = 36699;
@@ -1046,7 +1064,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2159";
 		rLen = 0;
-		rLoc = 78292;
+		rLoc = 78763;
 		rType = 0;
 		vrLen = 1737;
 		vrLoc = 72650;
@@ -1116,7 +1134,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 877";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 824;
 		vrLoc = 27235;
@@ -1125,7 +1143,7 @@
 		isa = PBXTextBookmark;
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		rLen = 0;
-		rLoc = 26781;
+		rLoc = 27220;
 		rType = 0;
 	};
 	F73794F816E4A1880089F97C /* PBXTextBookmark */ = {
@@ -1133,7 +1151,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 877";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 734;
 		vrLoc = 27235;
@@ -1163,7 +1181,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 794";
 		rLen = 0;
-		rLoc = 27262;
+		rLoc = 27701;
 		rType = 0;
 		vrLen = 1657;
 		vrLoc = 26290;
@@ -1173,7 +1191,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 794";
 		rLen = 0;
-		rLoc = 27262;
+		rLoc = 27701;
 		rType = 0;
 		vrLen = 1663;
 		vrLoc = 26290;
@@ -1183,7 +1201,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 792";
 		rLen = 0;
-		rLoc = 27149;
+		rLoc = 27588;
 		rType = 0;
 		vrLen = 1646;
 		vrLoc = 25903;
@@ -1223,7 +1241,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 800";
 		rLen = 0;
-		rLoc = 27505;
+		rLoc = 27944;
 		rType = 0;
 		vrLen = 1725;
 		vrLoc = 26233;
@@ -1233,7 +1251,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 827";
 		rLen = 11;
-		rLoc = 28312;
+		rLoc = 28751;
 		rType = 0;
 		vrLen = 2045;
 		vrLoc = 26535;
@@ -1254,7 +1272,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		fallbackIsa = XCBuildMessageTextBookmark;
 		rLen = 1;
-		rLoc = 852;
+		rLoc = 856;
 		rType = 1;
 	};
 	F737952D16E4A5D50089F97C /* PBXTextBookmark */ = {
@@ -1262,7 +1280,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 794";
 		rLen = 0;
-		rLoc = 27262;
+		rLoc = 27701;
 		rType = 0;
 		vrLen = 1663;
 		vrLoc = 26290;
@@ -1282,7 +1300,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 853";
 		rLen = 0;
-		rLoc = 29176;
+		rLoc = 29615;
 		rType = 0;
 		vrLen = 1961;
 		vrLoc = 27637;
@@ -1292,7 +1310,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 827";
 		rLen = 11;
-		rLoc = 28312;
+		rLoc = 28751;
 		rType = 0;
 		vrLen = 1899;
 		vrLoc = 26535;
@@ -1332,7 +1350,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1079";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1504;
 		vrLoc = 37962;
@@ -1342,7 +1360,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1084";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1730;
 		vrLoc = 38269;
@@ -1362,7 +1380,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1081";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1846;
 		vrLoc = 37936;
@@ -1372,7 +1390,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1081";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1846;
 		vrLoc = 37928;
@@ -1382,7 +1400,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1078";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2396;
 		vrLoc = 28076;
@@ -1422,7 +1440,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1084";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1733;
 		vrLoc = 38269;
@@ -1462,7 +1480,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1081";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1849;
 		vrLoc = 37928;
@@ -1492,7 +1510,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1084";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1733;
 		vrLoc = 38269;
@@ -1512,7 +1530,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1081";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1849;
 		vrLoc = 37928;
@@ -1542,7 +1560,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1062";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2253;
 		vrLoc = 38269;
@@ -1552,7 +1570,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1062";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2243;
 		vrLoc = 37928;
@@ -1582,7 +1600,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1735;
 		vrLoc = 38277;
@@ -1592,7 +1610,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1851;
 		vrLoc = 37936;
@@ -1622,7 +1640,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1817;
 		vrLoc = 38293;
@@ -1632,7 +1650,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1849;
 		vrLoc = 37928;
@@ -1662,7 +1680,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1865;
 		vrLoc = 38330;
@@ -1672,7 +1690,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1896;
 		vrLoc = 37966;
@@ -1702,7 +1720,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1865;
 		vrLoc = 38330;
@@ -1712,7 +1730,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1896;
 		vrLoc = 37966;
@@ -1742,7 +1760,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1867;
 		vrLoc = 38338;
@@ -1752,7 +1770,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1898;
 		vrLoc = 37974;
@@ -1782,7 +1800,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1805;
 		vrLoc = 38335;
@@ -1792,7 +1810,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1104";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1849;
 		vrLoc = 37928;
@@ -1822,7 +1840,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1867;
 		vrLoc = 38340;
@@ -1832,7 +1850,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1888;
 		vrLoc = 37941;
@@ -1872,7 +1890,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 839";
 		rLen = 0;
-		rLoc = 28743;
+		rLoc = 29182;
 		rType = 0;
 		vrLen = 1018;
 		vrLoc = 28070;
@@ -1882,7 +1900,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 838";
 		rLen = 7;
-		rLoc = 28696;
+		rLoc = 29135;
 		rType = 0;
 		vrLen = 1074;
 		vrLoc = 28070;
@@ -1892,7 +1910,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 901";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 884;
 		vrLoc = 26962;
@@ -1902,7 +1920,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 838";
 		rLen = 7;
-		rLoc = 28696;
+		rLoc = 29135;
 		rType = 0;
 		vrLen = 1074;
 		vrLoc = 28070;
@@ -1912,7 +1930,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 901";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 884;
 		vrLoc = 26962;
@@ -1922,7 +1940,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 838";
 		rLen = 7;
-		rLoc = 28696;
+		rLoc = 29135;
 		rType = 0;
 		vrLen = 1074;
 		vrLoc = 28070;
@@ -1932,7 +1950,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 901";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 884;
 		vrLoc = 26962;
@@ -1943,7 +1961,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		fallbackIsa = XCBuildMessageTextBookmark;
 		rLen = 1;
-		rLoc = 2066;
+		rLoc = 2070;
 		rType = 1;
 	};
 	F73795C616E4B08B0089F97C /* PBXTextBookmark */ = {
@@ -1951,7 +1969,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1099";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2231;
 		vrLoc = 39808;
@@ -1971,7 +1989,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2022";
 		rLen = 0;
-		rLoc = 71218;
+		rLoc = 71657;
 		rType = 0;
 		vrLen = 1932;
 		vrLoc = 70347;
@@ -2031,7 +2049,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1100";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2158;
 		vrLoc = 40100;
@@ -2051,7 +2069,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1757";
 		rLen = 0;
-		rLoc = 62861;
+		rLoc = 63300;
 		rType = 0;
 		vrLen = 1701;
 		vrLoc = 61833;
@@ -2061,7 +2079,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2027";
 		rLen = 0;
-		rLoc = 71714;
+		rLoc = 72153;
 		rType = 0;
 		vrLen = 2309;
 		vrLoc = 70996;
@@ -2101,7 +2119,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1100";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2040;
 		vrLoc = 40261;
@@ -2141,7 +2159,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2024";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 2323;
 		vrLoc = 71053;
@@ -2181,7 +2199,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1100";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2040;
 		vrLoc = 40261;
@@ -2201,7 +2219,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2024";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 2323;
 		vrLoc = 71053;
@@ -2241,7 +2259,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1100";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 2040;
 		vrLoc = 40261;
@@ -2261,7 +2279,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2024";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 2323;
 		vrLoc = 71053;
@@ -2296,7 +2314,7 @@
 		vrLen = 145;
 		vrLoc = 0;
 	};
-	F737960416E4B71D0089F97C /* NuXJScript.cpp:1049 */ = {
+	F737960416E4B71D0089F97C /* NuXJScript.cpp:1053 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -2308,13 +2326,13 @@
 		functionName = "Processor::run(Int32 count)";
 		hitCount = 2;
 		ignoreCount = 0;
-		lineNumber = 1049;
+		lineNumber = 1053;
 		location = NuXJScript;
 		modificationTime = 384088134.588904;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F737960A16E4B7A50089F97C /* NuXJScript.cpp:848 */ = {
+	F737960A16E4B7A50089F97C /* NuXJScript.cpp:852 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -2326,7 +2344,7 @@
 		functionName = "CatchFrame::getProperty(Engine& engine, const String* name, Value& v)";
 		hitCount = 1;
 		ignoreCount = 0;
-		lineNumber = 848;
+		lineNumber = 852;
 		location = NuXJScript;
 		modificationTime = 384088131.516805;
 		originalNumberOfMultipleMatches = 1;
@@ -2338,7 +2356,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		fallbackIsa = XCBuildMessageTextBookmark;
 		rLen = 1;
-		rLoc = 2057;
+		rLoc = 2061;
 		rType = 1;
 	};
 	F737960F16E4B8250089F97C /* PBXTextBookmark */ = {
@@ -2346,7 +2364,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2058";
 		rLen = 0;
-		rLoc = 73080;
+		rLoc = 73551;
 		rType = 0;
 		vrLen = 1306;
 		vrLoc = 71269;
@@ -2356,7 +2374,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 903";
 		rLen = 0;
-		rLoc = 31512;
+		rLoc = 31951;
 		rType = 0;
 		vrLen = 850;
 		vrLoc = 26928;
@@ -2366,7 +2384,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1047";
 		rLen = 8;
-		rLoc = 38019;
+		rLoc = 38458;
 		rType = 0;
 		vrLen = 1774;
 		vrLoc = 36916;
@@ -2376,7 +2394,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1802;
 		vrLoc = 37185;
@@ -2386,7 +2404,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 1985;
 		vrLoc = 66100;
@@ -2416,7 +2434,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1882;
 		vrLoc = 37185;
@@ -2436,8 +2454,9 @@
 		sourceTree = "<absolute>";
 		uiCtxt = {
 			sepNavIntBoundsRect = "{{0, 0}, {1426, 2002}}";
-			sepNavSelRange = "{6392, 0}";
-			sepNavVisRange = "{4628, 3351}";
+			sepNavSelRange = "{7177, 0}";
+			sepNavVisRange = "{4624, 3355}";
+			sepNavWindowFrame = "{{403, 0}, {953, 878}}";
 		};
 	};
 	F737962216E4B8570089F97C /* PBXTextBookmark */ = {
@@ -2455,7 +2474,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 2062;
 		vrLoc = 66100;
@@ -2485,7 +2504,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1935;
 		vrLoc = 37312;
@@ -2514,9 +2533,10 @@
 		path = /Users/magnus/Desktop/AdvancedJS.txt;
 		sourceTree = "<absolute>";
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1090, 1248}}";
+			sepNavIntBoundsRect = "{{0, 0}, {1090, 1235}}";
 			sepNavSelRange = "{417, 0}";
-			sepNavVisRange = "{0, 1367}";
+			sepNavVisRange = "{68, 1301}";
+			sepNavWindowFrame = "{{19, 0}, {953, 878}}";
 		};
 	};
 	F737963616E4B92D0089F97C /* PBXTextBookmark */ = {
@@ -2534,7 +2554,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 1774;
 		vrLoc = 66435;
@@ -2564,7 +2584,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1935;
 		vrLoc = 37312;
@@ -2594,7 +2614,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 1774;
 		vrLoc = 66435;
@@ -2624,7 +2644,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1935;
 		vrLoc = 37312;
@@ -2654,7 +2674,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 1774;
 		vrLoc = 66435;
@@ -2684,7 +2704,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1053";
 		rLen = 0;
-		rLoc = 38215;
+		rLoc = 38654;
 		rType = 0;
 		vrLen = 1935;
 		vrLoc = 37312;
@@ -2714,7 +2734,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 2025";
 		rLen = 0;
-		rLoc = 71583;
+		rLoc = 72022;
 		rType = 0;
 		vrLen = 1774;
 		vrLoc = 66435;
@@ -2730,6 +2750,186 @@
 		vrLoc = 10170;
 	};
 	F737964C16E4B98A0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7289EBB16E360FA0064796B /* perftest6.js */;
+		name = "perftest6.js: 9";
+		rLen = 0;
+		rLoc = 145;
+		rType = 0;
+		vrLen = 145;
+		vrLoc = 0;
+	};
+	F737964F16E4B9E50089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2058";
+		rLen = 0;
+		rLoc = 73551;
+		rType = 0;
+		vrLen = 1364;
+		vrLoc = 71404;
+	};
+	F737965016E4B9E50089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 903";
+		rLen = 0;
+		rLoc = 31951;
+		rType = 0;
+		vrLen = 921;
+		vrLoc = 26822;
+	};
+	F737965116E4B9E70089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2058";
+		rLen = 0;
+		rLoc = 73551;
+		rType = 0;
+		vrLen = 1364;
+		vrLoc = 71404;
+	};
+	F737965216E4B9E70089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 903";
+		rLen = 0;
+		rLoc = 31951;
+		rType = 0;
+		vrLen = 921;
+		vrLoc = 26822;
+	};
+	F737965816E4BA3D0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 1878";
+		rLen = 0;
+		rLoc = 67027;
+		rType = 0;
+		vrLen = 1991;
+		vrLoc = 65202;
+	};
+	F737965916E4BA3D0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2025";
+		rLen = 0;
+		rLoc = 72022;
+		rType = 0;
+		vrLen = 1800;
+		vrLoc = 66421;
+	};
+	F737965A16E4BA3D0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 289";
+		rLen = 0;
+		rLoc = 10397;
+		rType = 0;
+		vrLen = 3218;
+		vrLoc = 10235;
+	};
+	F737965B16E4BA3D0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7289EBB16E360FA0064796B /* perftest6.js */;
+		name = "perftest6.js: 9";
+		rLen = 0;
+		rLoc = 145;
+		rType = 0;
+		vrLen = 145;
+		vrLoc = 0;
+	};
+	F737966216E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 46";
+		rLen = 0;
+		rLoc = 1460;
+		rType = 0;
+		vrLen = 1648;
+		vrLoc = 0;
+	};
+	F737966316E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2042";
+		rLen = 0;
+		rLoc = 72946;
+		rType = 0;
+		vrLen = 2251;
+		vrLoc = 71340;
+	};
+	F737966416E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 1";
+		rLen = 0;
+		rLoc = 0;
+		rType = 0;
+		vrLen = 3195;
+		vrLoc = 1447;
+	};
+	F737966516E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2028";
+		rLen = 0;
+		rLoc = 72022;
+		rType = 0;
+		vrLen = 1884;
+		vrLoc = 66623;
+	};
+	F737966616E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 289";
+		rLen = 0;
+		rLoc = 10397;
+		rType = 0;
+		vrLen = 3277;
+		vrLoc = 10300;
+	};
+	F737966716E4BB5F0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7289EBB16E360FA0064796B /* perftest6.js */;
+		name = "perftest6.js: 9";
+		rLen = 0;
+		rLoc = 145;
+		rType = 0;
+		vrLen = 145;
+		vrLoc = 0;
+	};
+	F737966B16E4BBAD0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 26";
+		rLen = 0;
+		rLoc = 1468;
+		rType = 0;
+		vrLen = 3168;
+		vrLoc = 0;
+	};
+	F737966C16E4BBAD0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2029";
+		rLen = 0;
+		rLoc = 72022;
+		rType = 0;
+		vrLen = 1884;
+		vrLoc = 66679;
+	};
+	F737966D16E4BBAD0089F97C /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 289";
+		rLen = 0;
+		rLoc = 10397;
+		rType = 0;
+		vrLen = 3277;
+		vrLoc = 10300;
+	};
+	F737966E16E4BBAD0089F97C /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
 		fRef = F7289EBB16E360FA0064796B /* perftest6.js */;
 		name = "perftest6.js: 9";
@@ -2787,9 +2987,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {906, 29224}}";
-			sepNavSelRange = "{71583, 0}";
-			sepNavVisRange = "{66435, 1774}";
+			sepNavIntBoundsRect = "{{0, 0}, {906, 29393}}";
+			sepNavSelRange = "{72022, 0}";
+			sepNavVisRange = "{66679, 1884}";
 			sepNavWindowFrame = "{{487, -0}, {953, 878}}";
 		};
 	};
@@ -2927,7 +3127,7 @@
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
 		name = "NuXJScript.cpp: 1042";
 		rLen = 0;
-		rLoc = 39795;
+		rLoc = 40234;
 		rType = 0;
 		vrLen = 1679;
 		vrLoc = 35287;
@@ -3004,7 +3204,7 @@
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/perftest6.js;
 		sourceTree = "<absolute>";
 	};
-	F775B17616DC21FA00264BC0 /* NuXJScript.cpp:334 */ = {
+	F775B17616DC21FA00264BC0 /* NuXJScript.cpp:338 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3016,13 +3216,13 @@
 		functionName = "String::getProperty(const String* name, Value& v)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 334;
+		lineNumber = 338;
 		location = NuXJScript;
 		modificationTime = 384088110.620555;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F775B17F16DC225900264BC0 /* NuXJScript.cpp:335 */ = {
+	F775B17F16DC225900264BC0 /* NuXJScript.cpp:339 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3034,13 +3234,13 @@
 		functionName = "String::getProperty(const String* name, Value& v)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 335;
+		lineNumber = 339;
 		location = NuXJScript;
 		modificationTime = 384088110.62091;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F775B18A16DC22DB00264BC0 /* NuXJScript.cpp:403 */ = {
+	F775B18A16DC22DB00264BC0 /* NuXJScript.cpp:407 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3052,13 +3252,13 @@
 		functionName = "GCHeap::add(const GCItem* object)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 403;
+		lineNumber = 407;
 		location = NuXJScript;
 		modificationTime = 384088110.621141;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F775B19F16DC25E300264BC0 /* NuXJScript.cpp:265 */ = {
+	F775B19F16DC25E300264BC0 /* NuXJScript.cpp:269 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3070,13 +3270,13 @@
 		functionName = "QuickConstants()";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 265;
+		lineNumber = 269;
 		location = NuXJScript;
 		modificationTime = 384088110.621342;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F775B1A516DC261900264BC0 /* NuXJScript.cpp:583 */ = {
+	F775B1A516DC261900264BC0 /* NuXJScript.cpp:587 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3088,13 +3288,13 @@
 		functionName = "Value::toString(GCHeap* heap)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 583;
+		lineNumber = 587;
 		location = NuXJScript;
 		modificationTime = 384088110.62152;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F775B1C016DC286A00264BC0 /* NuXJScript.cpp:326 */ = {
+	F775B1C016DC286A00264BC0 /* NuXJScript.cpp:330 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3106,7 +3306,7 @@
 		functionName = "String::getProperty(const String* name, Value& v)";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 326;
+		lineNumber = 330;
 		location = NuXJScript;
 		modificationTime = 384088110.621715;
 		originalNumberOfMultipleMatches = 1;
@@ -3114,13 +3314,13 @@
 	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1034, 5564}}";
+			sepNavIntBoundsRect = "{{0, 0}, {1034, 5525}}";
 			sepNavSelRange = "{10397, 0}";
-			sepNavVisRange = "{10170, 3114}";
+			sepNavVisRange = "{10300, 3277}";
 			sepNavWindowFrame = "{{487, 0}, {953, 878}}";
 		};
 	};
-	F7D4517416DCC5CF0039338A /* NuXJScript.cpp:2200 */ = {
+	F7D4517416DCC5CF0039338A /* NuXJScript.cpp:2204 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3132,13 +3332,13 @@
 		functionName = "main(int argc, const char* argv[])";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 2200;
+		lineNumber = 2204;
 		location = NuXJScript;
 		modificationTime = 384088110.621939;
 		originalNumberOfMultipleMatches = 1;
 		state = 2;
 	};
-	F7D4517816DCC6010039338A /* NuXJScript.cpp:2198 */ = {
+	F7D4517816DCC6010039338A /* NuXJScript.cpp:2202 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3150,7 +3350,7 @@
 		functionName = "main(int argc, const char* argv[])";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 2198;
+		lineNumber = 2202;
 		location = NuXJScript;
 		modificationTime = 384088110.622249;
 		originalNumberOfMultipleMatches = 1;
@@ -3193,7 +3393,7 @@
 		vrLen = 97;
 		vrLoc = 0;
 	};
-	F7D4555E16DE14970039338A /* NuXJScript.cpp:2113 */ = {
+	F7D4555E16DE14970039338A /* NuXJScript.cpp:2117 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3205,7 +3405,7 @@
 		functionName = "Environment::gc()";
 		hitCount = 0;
 		ignoreCount = 0;
-		lineNumber = 2113;
+		lineNumber = 2117;
 		location = NuXJScript;
 		modificationTime = 384088110.622463;
 		originalNumberOfMultipleMatches = 1;
@@ -3286,7 +3486,7 @@
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/goodtests.js;
 		sourceTree = "<absolute>";
 	};
-	F7E6DCA116DEDEB8007AB92B /* NuXJScript.cpp:1885 */ = {
+	F7E6DCA116DEDEB8007AB92B /* NuXJScript.cpp:1889 */ = {
 		isa = PBXFileBreakpoint;
 		actions = (
 		);
@@ -3298,7 +3498,7 @@
 		functionName = "Compiler::parseStatement(int statementLabels)";
 		hitCount = 2;
 		ignoreCount = 0;
-		lineNumber = 1885;
+		lineNumber = 1889;
 		location = NuXJScript;
 		modificationTime = 384088118.382129;
 		originalNumberOfMultipleMatches = 1;

@@ -42,6 +42,7 @@
 //		function name() { } syntax
 //		literal function names, e.g. myGlobalName = function myLocalName() { ... }
 //		exceptions (and catching both virtual and native)
+//			only thing left is integration with C++ exceptions
 //		typeof operator
 //		instanceof operator
 //		in operator
@@ -51,9 +52,11 @@
 //		object literals
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
-//		maybe drop the scope vector and just put it all on the program stack
 //		eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
 //		share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
+//		try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
+//			we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
+//			if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 //
 //	GC
 //
@@ -77,6 +80,7 @@
 //		virtual machine should include gc etc
 //		check that identifier is never one of the reserved words
 //		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
+//		maybe drop the scope vector and just put it all on the program stack
 
 #include "assert.h"
 #include <cmath>
@@ -2035,7 +2039,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					expectToken("{", true); // FIX : sub
 					parseStatementList(&catchScope);
 					expectToken("}", false);
-					emit(Processor::POP_FRAME_OP); // FIX : move POP_FRAME to first in FINALLY block
+					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
 					catchScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 					for (std::vector<Int32>::const_iterator it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
