@@ -266,11 +266,8 @@ class ArgumentsObject : public UserObject {
 
 class Frame : public Object {
 	public:		typedef Object super;
-	public:		Frame(const ScriptFunctionDef* functionDef) : functionDef(functionDef) { }
-	public:		const ScriptFunctionDef* getFunctionDef() const { return functionDef; }
-	public:		Value* getLocalsPointer() const { return localsPointerWeak; }
-	protected:	const ScriptFunctionDef* const functionDef;
-	protected:	Value* localsPointerWeak;
+	public:		virtual const ScriptFunctionDef* getFunctionDef() const = 0;
+	public:		virtual Value* getLocalsPointer() const = 0;
 };
 
 class FunctionFrame : public Frame {
@@ -280,6 +277,9 @@ class FunctionFrame : public Frame {
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
+	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
+	public:		virtual Value* getLocalsPointer() const { return locals.begin(); }
+	protected:	const ScriptFunctionDef* const functionDef;
 	protected:	Object* const environment;
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 };
@@ -291,6 +291,8 @@ class CatchFrame : public Frame {
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
+	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return parentFrame->getFunctionDef(); }
+	public:		virtual Value* getLocalsPointer() const { return parentFrame->getLocalsPointer(); }
 	protected:	Frame* parentFrame;
 	protected:	const String* exceptionName;
 	protected:	Value exceptionValue;
@@ -299,7 +301,7 @@ class CatchFrame : public Frame {
 struct Context { // FIX : make Processor local
 	const Byte* instructionPointer;
 Value* vstackPointer;  // doesn't change during function execution, i.e. entry value stack pointer, FIX : keep, only in debug?
-	Frame* frame; // doesn't change during function execution
+	FunctionFrame* frame; // doesn't change during function execution
 	Value thisValue; // FIX : pointer instead? // doesn't change during function execution
 };
 
