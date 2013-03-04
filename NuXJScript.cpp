@@ -302,6 +302,7 @@ String MINUS_INFINITY_STRING("-Infinity");
 String ZERO_STRING("0");
 String LENGTH_STRING("length");
 
+String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
 String::String(const String& o) : QArray(o), hash(o.hash) { }
 
@@ -720,8 +721,8 @@ void Value::mark(GCHeap& heap) const {
 ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
 
 bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const {
-	LocalNameMap::const_iterator it = locals.find(name);
-	if (it == locals.end()) return false;
+	LocalNameMap::const_iterator it = localNames.find(name);
+	if (it == localNames.end()) return false;
 	index = it->second;
 	return true;
 }
@@ -732,7 +733,7 @@ void ScriptFunctionDef::gcMark(GCHeap& heap) {
 	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
 		it->mark(heap);
 	}
-	for (LocalNameMap::iterator it = locals.begin(), e = locals.end(); it != e; ++it) {
+	for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it) {
 		heap.mark(it->first);
 	}
 	super::gcMark(heap);
@@ -831,6 +832,8 @@ void Frame::gcMark(GCHeap& heap) {
 
 /* --- Processor --- */
 
+const int OPERAND_SIZE = (sizeof (Int32) / sizeof (Byte));
+
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1) {
@@ -847,7 +850,7 @@ void Processor::push(const Value& v) { push(vstackPointer, v); }
 void Processor::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
 void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 Int32 Processor::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
-Int32 Processor::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += 4; return v; }
+Int32 Processor::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 
 void Processor::error() {
 	throw std::runtime_error("error"); // FIX
@@ -860,6 +863,7 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
+	cstackPointer->vstackPointer = vstackPointer;
 	Value* lp = frame->getLocalsPointer();
 	std::fill(std::copy(argv, argv + std::min(argc, def->argumentsCount), lp), lp + def->argumentsCount, Value(Value::UNDEFINED_TYPE));
 }
@@ -929,9 +933,19 @@ bool Processor::run(Int32 count) {
 			case LEQ_OP: poppush(vsp, Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
 			case GT_OP: poppush(vsp, Value(vsp[0].isLessThan(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
 			case GEQ_OP: poppush(vsp, Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case JMP_OP: ip += readInt32(ip) + 4; break;
-			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
-			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) + 4 : 4); pop(vsp, 1); break;
+			case JMP_OP: ip += readInt32(ip) + OPERAND_SIZE; break;
+			case JSR_OP: {
+				Int32 offset = nextInt32(ip);
+				cstackPointer->instructionPointer = ip;
+				++cstackPointer;
+				cstackPointer->frame = frame;
+				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
+				cstackPointer->vstackPointer = vstackPointer;
+				ip += offset;
+				break;
+			}
+			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
+			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
 			case RETURN_OP: {
 				if (cstackPointer == cstackStart) {
 					// FIX : yeah, we can't you know :) we need a new way to return properly to native caller
@@ -939,6 +953,7 @@ bool Processor::run(Int32 count) {
 					vstackPointer = vsp;
 					return true;
 				}
+				assert(frame == (cstackPointer - 1)->frame || vsp == cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
 				--cstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1012,6 +1027,20 @@ bool Processor::run(Int32 count) {
 				poppush(vsp, Value(o->deleteProperty(engine, vsp[0].toString(heap))));
 				break;
 			}
+			case POP_FRAME_OP: {
+				assert(cstackPointer != cstackStart);
+				--cstackPointer;
+				frame = cstackPointer->frame;
+				assert(cp == frame->getFunctionDef()->getConstantsPointer());
+				assert(lp == frame->getLocalsPointer());
+				break;
+			}
+			case TRY_OP: {
+				nextInt32(ip);
+			}
+			case TRIED_OP: {
+				
+			}
 		}
 	}
 	cstackPointer->instructionPointer = ip;
@@ -1020,9 +1049,9 @@ bool Processor::run(Int32 count) {
 }
 
 static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
-	assert(e - it >= 4);
+	assert(e - it >= OPERAND_SIZE);
 	Int32 i = *reinterpret_cast<const Int32*>(&*it);
-	it += 4;
+	it += OPERAND_SIZE;
 	return i;
 }
 
@@ -1036,11 +1065,11 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 		, "PLUS", "MINUS"
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
-		, "JMP", "JT", "JF"
+		, "JMP", "JSR", "JT", "JF"
 		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
 		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
-		, "THROW"
+		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
 	};
 	std::vector<Byte>::const_iterator b = code.begin();
 	std::vector<Byte>::const_iterator it = b;
@@ -1053,7 +1082,9 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 		switch (opcode) {
 			case Processor::JT_OP:
 			case Processor::JF_OP:
-			case Processor::JMP_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + 4); break;
+			case Processor::JMP_OP:
+			case Processor::JSR_OP:
+			case Processor::TRY_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + OPERAND_SIZE); break;
 			case Processor::READ_INDEXED_OP:
 			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
 			case Processor::CALL_GLOBAL_OP:
@@ -1220,21 +1251,21 @@ void Compiler::emit(Processor::Opcode op) {
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
 	std::vector<Byte>& code = function->code;
 	code.push_back(op);
-	code.resize(code.size() + 4);
-	*reinterpret_cast<Int32*>(&code[code.size() - 4]) = i;
+	code.resize(code.size() + OPERAND_SIZE);
+	*reinterpret_cast<Int32*>(&code[code.size() - OPERAND_SIZE]) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 	std::vector<Byte>& code = function->code;
 	code.push_back(op);
 	Int32 point = code.size();
-	code.resize(code.size() + 4);
+	code.resize(code.size() + OPERAND_SIZE);
 	return point;
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
 	std::vector<Byte>& code = function->code;
-	*reinterpret_cast<Int32*>(&code[point]) = code.size() - point - 4;
+	*reinterpret_cast<Int32*>(&code[point]) = code.size() - point - OPERAND_SIZE;
 }
 
 Int32 Compiler::markBackwardBranch() { return function->code.size(); }
@@ -1273,6 +1304,23 @@ void Compiler::eatToken() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
+void Compiler::safeKeep(XValue& xv) {
+	switch (xv.t) {
+		case XValue::PUSHED:
+		case XValue::INDEXED:
+		case XValue::NAMED:
+		case XValue::PROPERTY: {
+			makeRValue(xv);
+			Int32 tempLocalIndex = function->localsCount++;
+			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
+			emit(Processor::POP_OP);
+			xv = XValue(XValue::INDEXED, Value(tempLocalIndex));
+			break;
+		}
+		default: break;
+	}
+}
+
 void Compiler::makeRValue(XValue& xv) {
 	switch (xv.t) {
 		default: assert(0);
@@ -1288,7 +1336,7 @@ void Compiler::makeRValue(XValue& xv) {
 
 void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
-		default: throw std::runtime_error("Illegal lvalue");
+		default: throw std::runtime_error("Illegal l-value"); // FIX : ECMA like the word "reference"
 		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
@@ -1376,13 +1424,13 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case CONDITIONAL: {
 			makeRValue(v);
-			Int32 pointA = emitForwardBranch(Processor::JF_OP);
+			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 			parseRValueOperand(op);
-			Int32 pointB = emitForwardBranch(Processor::JMP_OP);
-			completeForwardBranch(pointA);
+			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+			completeForwardBranch(falsePoint);
 			parseExpression(v, op.prec);
 			makeRValue(v);
-			completeForwardBranch(pointB);
+			completeForwardBranch(endPoint);
 			break;			
 		}
 		
@@ -1583,7 +1631,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						const Char* b = p;
 						parseIdentifier(false);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->locals[String::newHashedString(engine.heap(), b, p)] = func->localsCount;
+						func->localNames[String::newHashedString(engine.heap(), b, p)] = func->localsCount;
 						func->localsCount++;
 						func->argumentsCount++;
 						eatWhite();
@@ -1640,7 +1688,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					if (p == b) return false; // fix : nicer way?
 					String* identifier = String::newHashedString(engine.heap(), b, p);
 					Int32 index;
-					LocalNameMap& nameMap = function->locals;
+					LocalNameMap& nameMap = function->localNames;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
 					if (it != nameMap.end()) {
 						index = it->second;
@@ -1679,7 +1727,7 @@ void Compiler::parseVarDeclarations() {
 		if (p == b) throw std::runtime_error("Expected identifier");
 		String* identifier = String::newHashedString(engine.heap(), b, p);
 		Int32 index;
-		LocalNameMap& nameMap = function->locals;
+		LocalNameMap& nameMap = function->localNames;
 		LocalNameMap::const_iterator it = nameMap.find(identifier);
 		if (it != nameMap.end()) index = it->second;
 		else {
@@ -1730,8 +1778,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	
 	const Char* b = p;
 	eatToken();
-	int i = findStatementToken(p - b, &*b);
-	if (i < 0) {
+	int statementTokenIndex = findStatementToken(p - b, &*b);
+	if (statementTokenIndex < 0) {
 		p = b;
 		parseIdentifier(true);
 		const Char* q = p;
@@ -1750,42 +1798,34 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 		}
 	} else {
 		eatWhite();
-		switch (static_cast<Statement>(i)) {
-			case BREAK_STATEMENT: { // FIX : share with CONTINUE_STATEMENT
-				const Char* b = p;
-				Scope* s = firstScope;
-				parseIdentifier(false);
-				if (b != p) {
-					String identifier(b, p);
-					while (s != 0 && (s->label.empty() || !s->label.isEqualTo(identifier))) s = s->next;
-					if (s == 0) throw std::runtime_error("Undefined label");
-				} else {
-					while (s != 0 && !s->label.empty()) s = s->next;
-					if (s == 0) throw std::runtime_error("Illegal break");
-				}
-				s->breaks.push_back(emitForwardBranch(Processor::JMP_OP));
-				expectSemicolon();
-				break;
-			}
-			
+		switch (static_cast<Statement>(statementTokenIndex)) {
+			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
+				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				const Char* b = p;
 				Scope* s = firstScope;
 				parseIdentifier(false);
-				if (b != p) {
-					String identifier(b, p);
-					while (s != 0 && (s->label.empty() || !s->label.isEqualTo(identifier))) s = s->next;
-					if (s == 0) throw std::runtime_error("Undefined label");
-					if (!s->type == Scope::ITERATOR_LABEL_TYPE) throw std::runtime_error("Illegal label for continue");
-				} else {
-					while (s != 0 && !s->label.empty()) s = s->next;
-					if (s == 0) throw std::runtime_error("Illegal continue");
+				String identifier(b, p);
+				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE || (isBreak && s->type == Scope::LABEL_TYPE))
+						&& s->label.isEqualTo(identifier))) {
+					switch (s->type) {
+						case Scope::TRY_TYPE: s->finallys.push_back(emitForwardBranch(Processor::JSR_OP)); break;
+						case Scope::FINALLY_TYPE: emit(Processor::POP_FRAME_OP); break;
+						default: break;
+					}
+					s = s->next;
 				}
-				s->continues.push_back(emitForwardBranch(Processor::JMP_OP));
+				if (s == 0) {
+					throw std::runtime_error(!identifier.empty() ? "Undefined label"
+							: (isBreak ? "Illegal break" : "Illegal continue"));
+				}
+				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
+					throw std::runtime_error("Illegal label for continue");
+				(isBreak ? s->breaks : s->continues).push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
 			}
-			
+						
 			case VAR_STATEMENT: {
 				parseVarDeclarations();
 				expectSemicolon();
@@ -1798,21 +1838,21 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				Int32 pointA = emitForwardBranch(Processor::JF_OP);
+				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(firstScope, firstScope);
 				if (eatToken("else", true)) {
-					Int32 pointB = emitForwardBranch(Processor::JMP_OP);
-					completeForwardBranch(pointA);
+					Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+					completeForwardBranch(falsePoint);
 					parseStatement(firstScope, firstScope);
-					completeForwardBranch(pointB);
+					completeForwardBranch(endPoint);
 				} else {
-					completeForwardBranch(pointA);
+					completeForwardBranch(falsePoint);
 				}				
 				break;
 			}
 
 			case WHILE_STATEMENT: {
-				Int32 pointA = markBackwardBranch();
+				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
@@ -1820,20 +1860,20 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				Int32 pointB = emitForwardBranch(Processor::JF_OP);
-				parseStatement(&emptyLabelScope, firstScope);
+				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
+				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
-				emitBackwardBranch(Processor::JMP_OP, pointA);
-				completeForwardBranch(pointB);
+				emitBackwardBranch(Processor::JMP_OP, loopPoint);
+				completeForwardBranch(falsePoint);
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
 
 			case DO_WHILE_STATEMENT: {
-				Int32 point = markBackwardBranch();
+				Int32 loppPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-				parseStatement(&emptyLabelScope, firstScope);
+				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				expectToken("while", true);
 				expectToken("(", true);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -1841,7 +1881,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				emitBackwardBranch(Processor::JT_OP, point);
+				emitBackwardBranch(Processor::JT_OP, loppPoint);
 				expectSemicolon();
 				completeBreaks(&emptyLabelScope);
 				break;
@@ -1856,15 +1896,15 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					parseAndPopOptionalExpression();
 				}
 				expectToken(";", true);
-				Int32 pointA = markBackwardBranch();
-				Int32 pointB = -1;
+				Int32 loopPoint = markBackwardBranch();
+				Int32 falsePoint = -1;
 				XValue xv;
 				if (parseOptionalExpression(xv, LOWEST_PREC)) {
 					makeRValue(xv);
-					pointB = emitForwardBranch(Processor::JF_OP);
+					falsePoint = emitForwardBranch(Processor::JF_OP);
 				}
 				expectToken(";", true);
-				std::vector<Byte>& code = function->code;
+				std::vector<Byte>& code = function->code;	// FIX : make it possible to set output code array (sub-instance of Compiler?)
 				Int32 incPoint = code.size();
 				parseAndPopOptionalExpression();
 				expectToken(")", true);
@@ -1872,28 +1912,69 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				code.resize(incPoint);
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-				parseStatement(&emptyLabelScope, firstScope);
+				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				code.insert(code.end(), incCode.begin(), incCode.end());
-				emitBackwardBranch(Processor::JMP_OP, pointA);
-				if (pointB >= 0) completeForwardBranch(pointB);
+				emitBackwardBranch(Processor::JMP_OP, loopPoint);
+				if (falsePoint >= 0) completeForwardBranch(falsePoint);
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
 			case RETURN_STATEMENT: {
-				XValue xv;
-				parseOptionalExpression(xv, LOWEST_PREC);
-				makeRValue(xv);
+				XValue returnXValue;
+				parseOptionalExpression(returnXValue, LOWEST_PREC);
+				Scope* s = firstScope;
+				bool safeKept = false;
+				while (s != 0) { // FIX : sub
+					switch (s->type) {
+						case Scope::TRY_TYPE: {
+							if (!safeKept) {
+								safeKeep(returnXValue);
+								safeKept = true;
+							}
+							s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+							break;
+						}
+						case Scope::FINALLY_TYPE: emit(Processor::POP_FRAME_OP); break;
+						default: break;
+					}
+					s = s->next;
+				}
+				makeRValue(returnXValue);
 				emit(Processor::RETURN_OP);
 				expectSemicolon();
 				break;
 			}
 			
 			case TRY_STATEMENT: {
-				expectToken("{", true);
-				parseStatement(firstScope, firstScope);
+				Scope tryScope(Scope::TRY_TYPE, firstScope);
+				expectToken("{", true); // FIX : sub for block
+				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
+				parseStatementList(&tryScope);
 				expectToken("}", false);
+				Int32 finallyPoint = emitForwardBranch(Processor::JSR_OP);
+				Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+				if (eatToken("finally", true)) {
+					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
+					expectToken("{", true);
+					completeForwardBranch(finallyPoint);
+					for (std::vector<Int32>::const_iterator it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
+						completeForwardBranch(*it);
+					emit(Processor::TRIED_OP);
+					Int32 rethrowPoint = markBackwardBranch();
+					parseStatementList(&finallyScope);
+					expectToken("}", false);
+					emit(Processor::RETURN_OP);
+					completeForwardBranch(catchPoint);
+					XValue thrownXValue(XValue::PUSHED);
+					safeKeep(thrownXValue);
+					emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
+					makeRValue(thrownXValue);
+					emit(Processor::THROW_OP);
+				}
+				completeForwardBranch(endPoint);
+				break;
 			}
 			
 			default: assert(0);

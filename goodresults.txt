@@ -267,3 +267,30 @@ thonk
 iter 7
 iter 8
 iter 9
+a0
+b0
+bf
+a1
+af
+a0
+b0
+bf
+af
+0.,1.,2.,3.,4.,5.,...
+a
+a
+c
+a
+hej
+du
+a
+c
+r
+a
+r
+undefined
+3
+2
+1
+2
+2

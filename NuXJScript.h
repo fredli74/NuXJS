@@ -204,12 +204,13 @@ class ScriptFunctionDef : public Object {
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		bool lookupLocalName(const String* name, Int32& index) const;
 	public:		const Value* getConstantsPointer() const;
+// FIX : protectize
 	public:		String* source;
 	public:		std::vector<Byte> code;
 	public:		std::vector<Value> constants;
 	public:		Int32 argumentsCount;
 	public:		Int32 localsCount; // including arguments
-	public:		LocalNameMap locals;
+	public:		LocalNameMap localNames;
 };
 
 class UserObject : public Object {
@@ -277,8 +278,9 @@ class Frame : public Object {
 	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
 };
 
-struct Context {
+struct Context { // FIX : make Processor local
 	const Byte* instructionPointer;
+Value* vstackPointer;  // function entry value stack pointer, FIX : keep, only in debug?
 	Frame* frame;
 	Value thisValue; // FIX : pointer instead?
 };
@@ -289,32 +291,34 @@ class Processor : public GCItem {
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
-					, CONST_OP										// immediate: const index, stack: -> constant
-					, READ_INDEXED_OP								// immediate: local index, stack: -> value
-					, WRITE_INDEXED_OP								// immediate: local index, stack: value -> value
-					, READ_NAMED_OP									// immediate: const index (name), stack: -> value
-					, WRITE_NAMED_OP								// immediate: const index (name), stack: value > value
+					, CONST_OP										// operand: const index, stack: -> constant
+					, READ_INDEXED_OP								// operand: local index, stack: -> value
+					, WRITE_INDEXED_OP								// operand: local index, stack: value -> value
+					, READ_NAMED_OP									// operand: const index (name), stack: -> value
+					, WRITE_NAMED_OP								// operand: const index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: name, object -> value
 					, SET_PROPERTY_OP								// stack: name, object -> value
-					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: right value, left value -> result value
-					, OR_OP, XOR_OP, AND_OP							// stack: right value, left value -> result value
-					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP				// stack: right value, left value -> result value
+					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
+					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
+					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP				// stack: left value, right value -> result value
 					, PLUS_OP, MINUS_OP, BIT_NOT_OP, NOT_OP			// stack: value -> value
 					, STRICT_EQ_OP, STRICT_NEQ_OP, EQ_OP, NEQ_OP	// stack: value -> boolean
 					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
-					, JMP_OP										// immediate: offset
-					, JT_OP, JF_OP									// immediate: offset, stack: boolean ->
-					, CALL_GLOBAL_OP								// immediate: n, stack: n * args, function -> return value
-					, CALL_METHOD_OP								// immediate: n, stack: n * args, name, object -> return value
-					, NEW_OP										// immediate: n, stack: n * args, constructor object -> return value, new object
-					, NEW_RESULT_OP									// stack: return value, new object -> new this value
+					, JMP_OP, JSR_OP								// operand: offset
+					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
+					, CALL_GLOBAL_OP								// operand: n, stack: function, n * args -> return value
+					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args,  -> return value
+					, NEW_OP										// operand: n, stack: constructor object, n * args -> return value, new object
+					, NEW_RESULT_OP									// stack: new object, return value -> new this value
 					, RETURN_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
-					, DELETE_OP										// stack: name, object -> boolean
-					, GEN_FUNC_OP									// immediate: const index, stack: -> function
-					, THROW_OP										// stack: value (NONEXISTENT_TYPE prevents throwing, used for finally blocks)
-					, ENTER_TRY_OP									// immediate: offset for catch
-					, LEAVE_TRY_OP
+					, DELETE_OP										// stack: object, name -> boolean
+					, GEN_FUNC_OP									// operand: const index, stack: -> function
+					, THROW_OP										// stack: value ->
+					, TRY_OP										// operand: offset for catch
+					, TRIED_OP
+					, CATCH_FRAME_OP								// operand: const index for exception variable name
+					, POP_FRAME_OP
 				};
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
@@ -345,14 +349,15 @@ enum Precedence {
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
-	public:		struct XValue;
+	public:		struct XValue; // FIX : rename to ExpressionResult
 	public:		Compiler(Engine& engine, ScriptFunctionDef* function);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		const Char* compile(const Char* b, const Char* e);
 	public:		void compile(const String& source);
 	public:		void finish();
-	protected:	struct Scope {
-					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE };
+	protected:	struct Scope { // FIX : .cpp local
+					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, FINALLY_TYPE };
+					Scope(Type type, Scope* next) : type(type), next(next) { }
 					Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
 					void makeIteratorScopes(Scope* untilScope) {
 						for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
@@ -360,8 +365,10 @@ class Compiler : public GCItem {
 					Type type;
 					String label; // empty for automatic while, for, case labels
 					Scope* next;
-					std::vector<Int32> breaks; // source points for breaks
-					std::vector<Int32> continues; // source points for continues
+				// FIX : feels like a waste with three different vectors here, could we have double Scope entries for continuable and breakable scope types?
+					std::vector<Int32> breaks; // source points for break jmp's
+					std::vector<Int32> continues; // source points for continue jmp's
+					std::vector<Int32> finallys; // source points for finally jsr's
 				};
 	protected:	void eatComment();
 	protected:	void eatWhite();
@@ -384,13 +391,14 @@ class Compiler : public GCItem {
 	protected:	void parseVarDeclarations();
 	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd);
 	protected:	void parseStatementList(Scope* firstScope);
-	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these
+	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 	protected:	void expectSemicolon();
 	protected:	void expectToken(const char* t, bool eatLeadingWhite);
 	protected:	void eatToken();
-	protected:	void makeRValue(XValue& v);
-	protected:	void makeAssignment(XValue& v);
-	protected:	void discard(XValue& v);
+	protected:	void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+	protected:	void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.
+	protected:	void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
+	protected:	void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
 	protected:	bool isLeadingIdentifierChar(Char c);
 	protected:	void parseIdentifier(bool acceptReservedKeywords);
 	protected:	Engine& engine; // FIX : necessary?

@@ -235,27 +235,24 @@ c:	{ finally block }
 	
 	// we need:
 	//
-	// ENTER_TRY @catch				// pushes catch address, current call stack pointer and value stack pointer to catch stack
+	// ENTER_TRY @catch	#identifier	// pushes catch address, identifier (as constant, can be void for no catch) for catch variable, current call stack pointer and value stack pointer to catch stack
 	// LEAVE_TRY					// discards first entry on catch stack
-	// ENTER_CATCH #identifier		// pushes current frame pointer on call stack, creates a new virtual frame with thrown value assigned to identifier
-	// LEAVE_CATCH					// pops real frame from call stack (disregards ip)
+	// POP_FRAME					// pops frame pointer from call stack (disregards ip)
 	// JSR @offset					// calls a local function, i.e. push a copy of the current context and adjust ip
-	// DISCARD_RETURN				// just removes an entry from call stack
-	// THROW						// pops first entry from catch stack and updates current context
+	// THROW						// pops first entry from catch stack and pushes current frame pointer on call stack, creates a new virtual frame with thrown value assigned to identifier (if string type)
 
 	try { } catch (x) { } finally { }
  
-	ENTER_TRY @c
+	ENTER_TRY @c #x
 	{ try block }
 	VOID			// necessary because if finally aborts it will pop
 	LEAVE_TRY
 	JSR @f
 	POP
 	JMP @a
-c:	ENTER_CATCH #x
-	{ catch block }
+c:	{ catch block }
 	VOID
-	LEAVE_CATCH
+	POP_FRAME
 	JSR @f
 	POP
 	JMP @a
@@ -266,17 +263,16 @@ a:	...
 
 	try { } catch (x) { }
  
-	ENTER_TRY @c
+	ENTER_TRY @c #x
 	{ try block }
 	VOID
 	LEAVE_TRY
 	JSR @f
 	POP
 	JMP @a
-c:	ENTER_CATCH #x
-	{ catch block }
+c:	{ catch block }
 	VOID
-	LEAVE_CATCH
+	POP_FRAME
 	JSR @f
 	POP
 	JMP @a
@@ -303,7 +299,7 @@ a:	...
 
 	try { } finally { break }
  
-	ENTER_TRY @c
+	ENTER_TRY @c #<void>
 	{ try block }
 	VOID
 	LEAVE_TRY
@@ -313,38 +309,229 @@ a:	...
 c:	JSR @f
 	THROW
 f:	POP
-	DISCARD_RETURN
+	POP_FRAME
 	JMP <break>
 	RETURN
 a:	...
 
 
 
-	try { throw 1 } catch (x) { throw x } finally { throw 2 }
+	try { throw 1 } catch (x) { throw x } finally { return 2 }
  
-	ENTER_TRY @c
-	LEAVE_TRY
+	ENTER_TRY @c #x
 	CONST #1
+	LEAVE_TRY
 	JSR @f
 	THROW
-	LEAVE_TRY
 	VOID			// necessary because if finally aborts it will pop
+	LEAVE_TRY
 	JSR @f
 	POP
 	JMP @a
-c:	ENTER_CATCH #x
-	LEAVE_CATCH
+c:	POP_FRAME
 	READ_NAMED #x
 	JSR @f
 	THROW
-	LEAVE_CATCH
+	POP_FRAME
 	VOID
 	JSR @f
 	POP
 	JMP @a
 f:	POP
-	DISCARD_RETURN
+	POP_FRAME		// drop local return from finally
 	CONST #2
-	THROW
+	RETURN
 	RETURN
 a:	...
+
+
+
+	finalizers:
+	
+		try { }	
+			
+			LEAVE_TRY
+			JSR @finally
+			
+		catch (x) { }
+		
+			POP_FRAME	// drop temp frame
+			JSR @finally
+			
+		finally { }
+		
+			POP_FRAME	// drop local return
+			POP			// pop pushed
+
+	abruptors:
+	
+		continue	// do all finalizers up until label, then jump
+		break		// do all finalizers up until label, then jump
+		throw		// do current finalizer only, then throw
+		return
+		
+OOPS, DIDN'T COVER THE CASE WHERE SOMETHING IS THROWN FROM A CALL WITHIN CATCH
+
+
+			ENTER_TRY @catch
+			LEAVE_TRY
+@catch		LEAVE_CATCH
+@finally	RETURN
+
+-------------------------------------------------------------------
+
+	// TRY @catch					// pushes catch address, identifier (as constant, can be void for no catch) for catch variable, current call stack pointer and value stack pointer to catch stack
+	// TRIED						// discards first entry on catch stack
+	// CATCH_FRAME #identifier
+	// POP_FRAME					// pops frame pointer from call stack (disregards ip)
+	// JSR @offset					// calls a local function, i.e. push a copy of the current context and adjust ip
+	// THROW						// pops first entry from catch stack and pushes current frame pointer on call stack, creates a new virtual frame with thrown value assigned to identifier (if string type)
+
+	try { } catch (x) { } finally { }
+
+	TRY @c
+	<try block>
+	on exit:
+		<exit expression>
+		JSR @f
+		<exit instruction>
+c:	TRY @d
+	CATCH_FRAME #x
+	<catch block>
+	on exit:
+		<exit expression>
+		POP_FRAME
+		JSR @f
+		<exit instruction>
+d:	JSR @g
+	THROW
+f:	TRIED
+g:	<finally block>
+	on exit:
+		POP
+		<exit expression>
+		POP_FRAME
+		<exit instruction>
+	RETURN
+
+
+	try { } catch (x) { }
+
+	TRY @c
+	<try block>
+	on exit:
+		<exit expression>
+		TRIED
+		<exit instruction>
+c:	CATCH_FRAME #x
+	<catch block>
+	on exit:
+		<exit expression>
+		POP_FRAME
+		<exit instruction>
+
+
+
+	try { } finally { }
+
+	TRY @d
+	<try block>
+	on exit:
+		<exit expression>
+		JSR @f
+		<exit instruction>
+d:	JSR @g
+	THROW
+f:	TRIED
+g:	<finally block>
+	on exit:
+		<exit expression>
+		POP_2ND
+		POP_FRAME
+		<exit instruction>
+	RETURN
+
+
+	finalizers:
+	
+		try { }	
+			
+			TRIED
+			JSR @finally
+			
+		catch (x) { }
+		
+			POP_FRAME	// drop temp frame
+			TRIED
+			JSR @finally
+			
+		finally { }
+		
+			POP_2ND			// pop pushed
+			POP_FRAME	// drop local return
+
+		continue	// do all finalizers up until label, then pop and jump
+		break		// do all finalizers up until label, then pop and jump
+		return		// do all finalizers
+
+
+
+
+
+------------------ table solution -------------------
+
+
+	try { } catch (x) { } finally { }
+
+0			<try block>
+1			on exit:
+2				<exit expression>
+3				JSR @f
+4				<exit instruction>
+5		c:	CATCH_FRAME #x
+6			<catch block>
+7			on exit:
+8				<exit expression>
+9				POP_FRAME
+10				JSR @f
+11				<exit instruction>
+12		d:	JSR @f
+13			THROW
+14		f:	<finally block>
+15			on exit:
+16				<exit expression>
+17				POP_2ND
+18				POP_FRAME
+19				<exit instruction>
+20			RETURN
+
+Table:
+	0..5	@c
+	5..12	@d
+	
+	
+		blahblah; try { blahblah; try { bluhbluh } finally { blohbloh } blahblah; } catch (x) { blahblah }; blehbleh
+		
+0		blahblah
+1		blahblah // try
+2		bluhbluh
+3		JSR @f
+4		JMP @a
+5	f:	blohbloh
+6		RETURN
+7	a:	blahblah
+8		JMP @b
+9	c:	ENTER_CATCH #x
+10		blahblah
+11		LEAVE_CATCH
+12	b:	blehbleh
+
+Table.
+	1..9 @c
+	
+	
+Disadvantage with table solution: catch blocks can never ever require a different "vsp level" than on function entry,
+and we need to store vsp pointer in each frame
+
+Advantage is speed, less code, automatically 100% tight to "asynchronous throws" (i.e. throwing at any instruction)
+
