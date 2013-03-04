@@ -789,8 +789,10 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 
 /* --- FunctionFrame --- */
 
-FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(function->getEnvironment())
-		, functionDef(function->getDefinition()), locals(std::max(functionDef->localsCount, 1)) { }
+FunctionFrame::FunctionFrame(const ScriptFunction* function) : super(function->getDefinition())
+		, environment(function->getEnvironment()), locals(std::max(functionDef->localsCount, 1)) {
+	localsPointerWeak = locals.begin();
+}
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
@@ -833,7 +835,10 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 /* --- CatchFrame --- */
 
 CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
-		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
+		: super(parentFrame->getFunctionDef()), parentFrame(parentFrame), exceptionName(exceptionName)
+		, exceptionValue(exceptionValue) {
+	localsPointerWeak = parentFrame->getLocalsPointer();
+}
 
 void CatchFrame::gcMark(GCHeap& heap) {
 	heap.mark(parentFrame); // this will mark functionDef and locals (eventually)
@@ -898,7 +903,7 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 bool Processor::run(Int32 count) {
 	Value* vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
-	FunctionFrame* frame = cstackPointer->frame;
+	Frame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
 	GCHeap& heap = engine.heap();
@@ -1073,7 +1078,7 @@ bool Processor::run(Int32 count) {
 			}
 			case CATCH_FRAME_OP: {
 				++cstackPointer;
-			//	frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
+				frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
 				pop(vsp, 1);
 				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
 				cstackPointer->vstackPointer = vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
