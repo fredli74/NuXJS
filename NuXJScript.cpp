@@ -27,6 +27,10 @@
 //		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
 //		quicker calls by using a frame stack for functions that do not create closures
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
+//		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
+//			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
+//			TRY_OP, TRIED_OP and CATCH_FRAME_OP would go away then...
+//		if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
 //
 //	Compiler
 //
@@ -771,7 +775,7 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 #if 0
 /* --- ArgumentsObject --- */
 
-ArgumentsObject(Frame* frame) : frame(frame) { }
+ArgumentsObject(FunctionFrame* frame) : frame(frame) { }
 
 bool ArgumentsObject::setProperty(Engine& engine, const String* name, Value& v) {
 	if (name->s == "length") return 
@@ -783,18 +787,14 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 }
 #endif
 
-/* --- Frame --- */
+/* --- FunctionFrame --- */
 
-Frame::Frame(ScriptFunction* function) : functionDef(function->getDefinition()), environment(function->getEnvironment())
-		, locals(std::max(functionDef->localsCount, 1)) {
-}
-
-ScriptFunctionDef* Frame::getFunctionDef() { return functionDef; }
-Value* Frame::getLocalsPointer() { return &locals[0]; }
+FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(function->getEnvironment())
+		, functionDef(function->getDefinition()), locals(std::max(functionDef->localsCount, 1)) { }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
-bool Frame::getProperty(Engine& engine, const String* name, Value& v) {
+bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -805,7 +805,7 @@ bool Frame::getProperty(Engine& engine, const String* name, Value& v) {
 	}
 }
 
-bool Frame::setProperty(Engine& engine, const String* name, const Value& v) {
+bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(0 <= index && index < locals.size());
@@ -816,18 +816,45 @@ bool Frame::setProperty(Engine& engine, const String* name, const Value& v) {
 	}
 }
 
-bool Frame::deleteProperty(Engine& engine, const String* name) {
+bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) return false;
 	else return environment->deleteProperty(engine, name);
 }
 
-void Frame::gcMark(GCHeap& heap) {
+void FunctionFrame::gcMark(GCHeap& heap) {
 	heap.mark(functionDef);
 	heap.mark(environment);
 	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
 	super::gcMark(heap);
+}
+
+/* --- CatchFrame --- */
+
+CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
+		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
+
+void CatchFrame::gcMark(GCHeap& heap) {
+	heap.mark(parentFrame); // this will mark functionDef and locals (eventually)
+	heap.mark(exceptionName);
+	exceptionValue.mark(heap);
+	super::gcMark(heap);
+}
+
+bool CatchFrame::getProperty(Engine& engine, const String* name, Value& v) {
+	if (name == exceptionName) { v = exceptionValue; return true; }
+	else return parentFrame->getProperty(engine, name, v);
+}
+
+bool CatchFrame::setProperty(Engine& engine, const String* name, const Value& v) {
+	if (name == exceptionName) { exceptionValue = v; return true; }
+	else return parentFrame->setProperty(engine, name, v);
+}
+
+bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
+	if (name == exceptionName) return false;
+	else return parentFrame->deleteProperty(engine, name);
 }
 
 /* --- Processor --- */
@@ -858,12 +885,12 @@ void Processor::error() {
 
 void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	Frame* frame = engine.heap().manage(new Frame(func));
+	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func));
 	++cstackPointer;
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
-	cstackPointer->vstackPointer = vstackPointer;
+	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 	Value* lp = frame->getLocalsPointer();
 	std::fill(std::copy(argv, argv + std::min(argc, def->argumentsCount), lp), lp + def->argumentsCount, Value(Value::UNDEFINED_TYPE));
 }
@@ -871,7 +898,7 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 bool Processor::run(Int32 count) {
 	Value* vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
-	Frame* frame = cstackPointer->frame;
+	FunctionFrame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
 	GCHeap& heap = engine.heap();
@@ -940,7 +967,7 @@ bool Processor::run(Int32 count) {
 				++cstackPointer;
 				cstackPointer->frame = frame;
 				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
-				cstackPointer->vstackPointer = vstackPointer;
+				cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 				ip += offset;
 				break;
 			}
@@ -1036,10 +1063,38 @@ bool Processor::run(Int32 count) {
 				break;
 			}
 			case TRY_OP: {
-				nextInt32(ip);
+				ip += OPERAND_SIZE;
+				catchers.push_back(Catcher(cstackPointer, vsp, ip + readInt32(ip - OPERAND_SIZE)));
+				break;
 			}
 			case TRIED_OP: {
-				
+				catchers.pop_back();
+				break;
+			}
+			case CATCH_FRAME_OP: {
+				++cstackPointer;
+			//	frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
+				pop(vsp, 1);
+				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
+				cstackPointer->vstackPointer = vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+				break;
+			}
+			case THROW_OP: {
+				const Value& exception = vsp[0];
+				if (catchers.empty()) {
+					std::wcout << "Unhandled exception: " << (exception.toString(heap))->toStdString().c_str() << std::endl;
+					error();
+				}
+				const Catcher& catcher = catchers.back();
+				cstackPointer = catcher.cstackPointer;
+				vsp = catcher.vstackPointer;
+				push(vsp, exception);
+				ip = catcher.instructionPointer;
+				frame = cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				catchers.pop_back();
+				break;
 			}
 		}
 	}
@@ -1179,19 +1234,20 @@ const OperatorInfo POST_OPS[] = {
 // FIX : sort
 enum Statement {
 	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
-	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT
+	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT, THROW_STATEMENT, SWITCH_STATEMENT
 };
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[9] = {
-		"var", "if", "while", "do", "for", "return", "continue", "break", "try"
+	static const char* STRINGS[11] = {
+		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
+		"throw", "switch"
 	};
 	static const int QUICK_HASH_TABLE[32] = {
-		-1, -1, 7, 6, 3, -1, 4, -1, -1, 1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, 5, -1, 8, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1
+		-1, -1, -1, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
+		-1, 9, -1, 10, 5, -1, -1, -1, -1, 1, -1, -1, -1, 4, 3, -1
 	};
 	if (n < 2 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(s[0]) & 31];
+	int stringIndex = QUICK_HASH_TABLE[(n - s[0]) & 31];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
@@ -1974,6 +2030,15 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					emit(Processor::THROW_OP);
 				}
 				completeForwardBranch(endPoint);
+				break;
+			}
+			
+			case THROW_STATEMENT: {
+				XValue xv; // FIX : sub
+				parseExpression(xv, LOWEST_PREC); // FIX : SUB
+				makeRValue(xv);
+				emit(Processor::THROW_OP);
+				expectSemicolon();
 				break;
 			}
 			

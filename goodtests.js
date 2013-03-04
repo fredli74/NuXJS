@@ -1,3 +1,6 @@
+// function print(x) { console.log(x) }
+// function time(f) { var start = Date.now(); f(); console.log("elapsed: " + (Date.now() - start)); }
+
   var i = 0 /* comment */ ;   // more comment
  j = 1234.5 /* multi
  line
@@ -113,3 +116,9 @@ print(function() { var x = 0; try { return ++x; } finally { x++; print(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
 // try { (function() { try { throw "x" } finally { try { throw "y" } catch (x) { print(x) } } })() } catch (x) { print(x) }
+
+thrower=function(a) { throw ("exception: " + a) }
+print((function() { b: try { thrower("throw me") } finally { print("fake catcher") ; break b }; return("ok then...") })());
+print((function() { try { try { thrower("throw me") } finally { print("fake catcher") ; thrower("throwed again"); }; } finally { return("ok then...") } })());
+
+// (function() { var y = null; var x = 3; try { throw 7 } catch (x) { print(x); try { throw 9 } catch (x) { print(x); }; x=5; print(delete x); y = function() { print(x) } }; y(); print(x) })()
