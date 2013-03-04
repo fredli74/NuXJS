@@ -117,8 +117,38 @@ print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }()
 print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
 // try { (function() { try { throw "x" } finally { try { throw "y" } catch (x) { print(x) } } })() } catch (x) { print(x) }
 
-thrower=function(a) { throw ("exception: " + a) }
+thrower=function(a) { print("throwing: " + a); throw ("thrown: " + a); print("not here"); }
 print((function() { b: try { thrower("throw me") } finally { print("fake catcher") ; break b }; return("ok then...") })());
 print((function() { try { try { thrower("throw me") } finally { print("fake catcher") ; thrower("throwed again"); }; } finally { return("ok then...") } })());
 
-// (function() { var y = null; var x = 3; try { throw 7 } catch (x) { print(x); try { throw 9 } catch (x) { print(x); }; x=5; print(delete x); y = function() { print(x) } }; y(); print(x) })()
+(function() { var y = null; var x = 3; try { throw 7 } catch (x) { print(x); try { thrower(9) } catch (x) { print(x); }; x=5; print(x); print(delete x); y = function() { print(x) } }; y(); print(x) })()
+
+((function() { try { x: { try { throw "oops" } finally { print("finally") } } } catch (x) { print("caught: " + x) } })())
+// finally
+// caught: oops
+
+((function() { try { x: { try { break x; thrower("oops") } finally { print("finally") } } } catch (x) { print("caught: " + x) } })())
+// finally
+
+((function() { try { x: { try { throw "oops" } finally { print("finally"); break x } }; print("broken") } catch (x) { print("caught: " + x) } })())
+// finally
+// broken
+
+((function() { try { x: while (true) { try { break x; thrower("oops") } finally { print("finally") }; print("nope") } } catch (x) { print("caught: " + x) } })())
+// finally
+
+print((function() { try { return "hej" } finally { print("finally") } })())
+// finally
+// "hej"
+
+((function() { b: try { return "hej" } finally { print("finally"); break b }; print("didn't return") })())
+// finally
+// didn't return
+
+print((function() { var x = 1; b: try { return ++x } finally { print("finally " + x) } })())
+// finally 2
+// 2
+
+print((function() { var x = 1; b: try { return x++ } finally { print("finally " + x) } })())
+// finally 2
+// 1

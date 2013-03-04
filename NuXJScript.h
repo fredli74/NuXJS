@@ -301,7 +301,7 @@ class CatchFrame : public Frame {
 struct Context { // FIX : make Processor local
 	const Byte* instructionPointer;
 Value* vstackPointer;  // doesn't change during function execution, i.e. entry value stack pointer, FIX : keep, only in debug?
-	FunctionFrame* frame; // doesn't change during function execution
+	Frame* frame; // doesn't change during function execution
 	Value thisValue; // FIX : pointer instead? // doesn't change during function execution
 };
 
@@ -383,7 +383,7 @@ class Compiler : public GCItem {
 	public:		void compile(const String& source);
 	public:		void finish();
 	protected:	struct Scope { // FIX : .cpp local
-					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, FINALLY_TYPE };
+					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
 					Scope(Type type, Scope* next) : type(type), next(next) { }
 					Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
 					void makeIteratorScopes(Scope* untilScope) {
@@ -427,7 +427,7 @@ class Compiler : public GCItem {
 	protected:	void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
 	protected:	void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
 	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier(bool acceptReservedKeywords);
+	protected:	void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
 	protected:	Engine& engine; // FIX : necessary?
 	protected:	ScriptFunctionDef* const function;
 	protected:	std::map<Value, Int32> definedConstants;

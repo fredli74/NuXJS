@@ -294,7 +294,31 @@ undefined
 1
 2
 2
+throwing: throw me
 fake catcher
 ok then...
+throwing: throw me
 fake catcher
+throwing: throwed again
 ok then...
+7
+throwing: 9
+thrown: 9
+5
+false
+5
+3
+finally
+caught: oops
+finally
+finally
+broken
+finally
+finally
+hej
+finally
+didn't return
+finally 2
+2
+finally 2
+1

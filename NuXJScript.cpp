@@ -52,6 +52,8 @@
 //		jump optimizations
 //		pop void optimization (almost always occurs with a return;)?
 //		maybe drop the scope vector and just put it all on the program stack
+//		eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
+//		share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
 //
 //	GC
 //
@@ -843,17 +845,17 @@ void CatchFrame::gcMark(GCHeap& heap) {
 }
 
 bool CatchFrame::getProperty(Engine& engine, const String* name, Value& v) {
-	if (name == exceptionName) { v = exceptionValue; return true; }
+	if (name->isEqualTo(*exceptionName)) { v = exceptionValue; return true; }
 	else return parentFrame->getProperty(engine, name, v);
 }
 
 bool CatchFrame::setProperty(Engine& engine, const String* name, const Value& v) {
-	if (name == exceptionName) { exceptionValue = v; return true; }
+	if (name->isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
 	else return parentFrame->setProperty(engine, name, v);
 }
 
 bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
-	if (name == exceptionName) return false;
+	if (name->isEqualTo(*exceptionName)) return false;
 	else return parentFrame->deleteProperty(engine, name);
 }
 
@@ -898,7 +900,7 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 bool Processor::run(Int32 count) {
 	Value* vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
-	FunctionFrame* frame = cstackPointer->frame;
+	Frame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
 	GCHeap& heap = engine.heap();
@@ -1073,7 +1075,7 @@ bool Processor::run(Int32 count) {
 			}
 			case CATCH_FRAME_OP: {
 				++cstackPointer;
-			//	frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
+				frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
 				pop(vsp, 1);
 				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
 				cstackPointer->vstackPointer = vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
@@ -1146,7 +1148,8 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 			case Processor::CALL_METHOD_OP:
 			case Processor::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
 			case Processor::CONST_OP:
-			case Processor::GEN_FUNC_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
+			case Processor::GEN_FUNC_OP:
+			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 			default: break;
@@ -1780,7 +1783,7 @@ void Compiler::parseVarDeclarations() {
 	while (true) {
 		const Char* b = p; // FIX : sub
 		parseIdentifier(false);
-		if (p == b) throw std::runtime_error("Expected identifier");
+		if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
 		String* identifier = String::newHashedString(engine.heap(), b, p);
 		Int32 index;
 		LocalNameMap& nameMap = function->localNames;
@@ -1864,11 +1867,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				String identifier(b, p);
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE || (isBreak && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(identifier))) {
-					switch (s->type) {
-						case Scope::TRY_TYPE: s->finallys.push_back(emitForwardBranch(Processor::JSR_OP)); break;
-						case Scope::FINALLY_TYPE: emit(Processor::POP_FRAME_OP); break;
-						default: break;
-					}
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
+						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
 				if (s == 0) {
@@ -1983,18 +1984,14 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope* s = firstScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
-					switch (s->type) {
-						case Scope::TRY_TYPE: {
-							if (!safeKept) {
-								safeKeep(returnXValue);
-								safeKept = true;
-							}
-							s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
-							break;
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
+						if (!safeKept) {
+							safeKeep(returnXValue);
+							safeKept = true;
 						}
-						case Scope::FINALLY_TYPE: emit(Processor::POP_FRAME_OP); break;
-						default: break;
+						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 					}
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
 				makeRValue(returnXValue);
@@ -2005,31 +2002,73 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case TRY_STATEMENT: {
 				Scope tryScope(Scope::TRY_TYPE, firstScope);
-				expectToken("{", true); // FIX : sub for block
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
+				expectToken("{", true); // FIX : sub for block
 				parseStatementList(&tryScope);
 				expectToken("}", false);
-				Int32 finallyPoint = emitForwardBranch(Processor::JSR_OP);
-				Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+				tryScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
+				Int32 catchEndPoint = -1;
+				
+				// Catcher
+				
+				bool gotCatch = false;
+				if (eatToken("catch", true)) {
+					gotCatch = true;
+					expectToken("(", true);
+					const Char* b = p;
+					parseIdentifier(false);
+					if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
+					String* exceptionVarName = String::newHashedString(engine.heap(), b, p);
+					LocalNameMap& nameMap = function->localNames;
+					Int32 hadLocalIndex = -1;
+					LocalNameMap::iterator it = nameMap.find(exceptionVarName);
+					if (it != nameMap.end()) {
+						hadLocalIndex = it->second;
+						nameMap.erase(it);
+					}
+					completeForwardBranch(catchPoint);
+					catchPoint = emitForwardBranch(Processor::TRY_OP);
+					emitWithConstant(Processor::CATCH_FRAME_OP, Value(exceptionVarName));
+					expectToken(")", true);
+					Scope catchScope(Scope::CATCH_TYPE, firstScope);
+					expectToken("{", true); // FIX : sub
+					parseStatementList(&catchScope);
+					expectToken("}", false);
+					emit(Processor::POP_FRAME_OP); // FIX : move POP_FRAME to first in FINALLY block
+					catchScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
+					for (std::vector<Int32>::const_iterator it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
+						completeForwardBranch(*it);
+					if (hadLocalIndex >= 0) nameMap[exceptionVarName] = hadLocalIndex;
+				}
+				
+				// Finally
+				
+				for (std::vector<Int32>::const_iterator it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
+					completeForwardBranch(*it);
+				emit(Processor::TRIED_OP);
+				Int32 rethrowPoint = markBackwardBranch();
 				if (eatToken("finally", true)) {
 					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
-					expectToken("{", true);
-					completeForwardBranch(finallyPoint);
-					for (std::vector<Int32>::const_iterator it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
-						completeForwardBranch(*it);
-					emit(Processor::TRIED_OP);
-					Int32 rethrowPoint = markBackwardBranch();
+					expectToken("{", true); // FIX : sub
 					parseStatementList(&finallyScope);
 					expectToken("}", false);
-					emit(Processor::RETURN_OP);
-					completeForwardBranch(catchPoint);
-					XValue thrownXValue(XValue::PUSHED);
-					safeKeep(thrownXValue);
-					emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
-					makeRValue(thrownXValue);
-					emit(Processor::THROW_OP);
+				} else {
+					if (!gotCatch) throw std::runtime_error("Expected 'catch' or 'finally'");
 				}
-				completeForwardBranch(endPoint);
+				emit(Processor::RETURN_OP);
+				
+				// Re-thrower (could actually be eliminated if we only have catch and no finally)
+				
+				completeForwardBranch(catchPoint);
+				XValue thrownXValue(XValue::PUSHED);
+				safeKeep(thrownXValue);
+				emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
+				makeRValue(thrownXValue);
+				emit(Processor::THROW_OP);
+				completeForwardBranch(tryEndPoint);
+				if (catchEndPoint >= 0) completeForwardBranch(catchEndPoint);
 				break;
 			}
 			
