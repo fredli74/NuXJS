@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C216E621E300F22F76</string>
+						<string>F7AC03D516E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC037716E620B500F22F76</string>
@@ -256,7 +256,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C316E621E300F22F76</string>
+						<string>F7AC03D616E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC037916E620B500F22F76</string>
@@ -296,7 +296,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C416E621E300F22F76</string>
+						<string>F7AC03D716E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC002B16E5ECF500F22F76</string>
@@ -337,7 +337,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C516E621E300F22F76</string>
+						<string>F7AC03D816E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC037C16E620B500F22F76</string>
@@ -377,7 +377,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C616E621E300F22F76</string>
+						<string>F7AC03D916E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F737954516E4A9310089F97C</string>
@@ -418,7 +418,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC03C716E621E300F22F76</string>
+						<string>F7AC03DA16E62D5B00F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC037F16E620B500F22F76</string>
@@ -556,7 +556,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>goodtests.js</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -564,11 +564,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>goodtests.js</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7AC03BF16E621E300F22F76</string>
+										<string>F7AC03D416E62D5B00F22F76</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -580,10 +580,10 @@
 											<string>F747D3B616E1884D004C779E</string>
 											<string>F747D3D416E1AAAB004C779E</string>
 											<string>F763E3EF16E42B7D00BC9D6D</string>
-											<string>F7ACFF0916E4D42600F22F76</string>
-											<string>F7AC035F16E617D000F22F76</string>
-											<string>F7AC03BD16E621E300F22F76</string>
-											<string>F7AC03BE16E621E300F22F76</string>
+											<string>F7AC03CF16E62D5B00F22F76</string>
+											<string>F7AC03D016E62D5B00F22F76</string>
+											<string>F7AC03D216E62D5B00F22F76</string>
+											<string>F7AC03D316E62D5B00F22F76</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -784,7 +784,6 @@
 		<string>F7AC03C816E621E300F22F76</string>
 		<string>F7AC03C916E621E300F22F76</string>
 		<string>F7AC03CA16E621E300F22F76</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F7E6DA7A16DE27D6007AB92B</string>
@@ -793,6 +792,7 @@
 		<string>F737951D16E4A4610089F97C</string>
 		<string>F7AC00DB16E605CD00F22F76</string>
 		<string>F7ACFF0C16E4D42600F22F76</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -1167,7 +1167,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

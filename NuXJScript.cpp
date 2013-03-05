@@ -31,6 +31,8 @@
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
 //			TRY_OP, TRIED_OP and CATCH_FRAME_OP would go away then...
 //		if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
+//		(1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
+//			same problem with (0.003e3 == 3.0)
 //
 //	Compiler
 //
@@ -1111,6 +1113,9 @@ bool Processor::run(Int32 count) {
 				pop(vsp, 1);
 				break;				
 			}
+			case TYPEOF_OP: {
+				vsp[0].getTypeString()
+			}
 		}
 	}
 	cstackPointer->instructionPointer = ip;
@@ -1140,7 +1145,8 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
 		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
-		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME", "IN"
+		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
+		, "IN", "TYPEOF", "TYPEOF_NAMED"
 	};
 	CodeVector::const_iterator b = code.begin();
 	CodeVector::const_iterator it = b;
