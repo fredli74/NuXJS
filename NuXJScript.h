@@ -1,3 +1,111 @@
+// --- TODO ---
+//
+//	Run-time
+//
+//		eval support
+//		count (and run-time check) necessary value stack depth for functions
+//		native calls (and returns)
+//			need easier API, shouldn't crash if missing push etc
+//			no synchronized return to native code right now
+//			arguments are reversed on native calls, and will be gc'd as stack has already popped 
+//				arguments no longer reversed since we push forwards now, but will still be gc'd
+//		prototype support
+//		arguments container
+//		array object (length property support, optimized for numerical indexes?)
+//			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+//			only downside to that would be read and write named, which assumes the constant is a string pointer
+//			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
+//		basic library (math, string, array ops)
+//		assignable globals this in processor
+//
+//	Compiler
+//
+//		don't accept lf's after ++ etc (automatic ; insertion logic)
+//		for (in)
+//		global environment compiler (don't accept return etc)
+//		function name() { } syntax
+//		literal function names, e.g. myGlobalName = function myLocalName() { ... }
+//		exceptions (and catching both virtual and native)
+//			only thing left is integration with C++ exceptions
+//		instanceof operator
+//		new operator
+//			done, but need to implement prototype
+//		array literals
+//		object literals
+//
+//	GC
+//
+// --- LOW PRIO ---
+//
+// Run-time
+//
+//		divide by 0 checks? NaN checks?
+//			is currently not compatible with -ffast_math, which is bad I guess
+//			also isnan is not standard C++ :(, on Windows it is called _isnan
+//			do a special Value variation that tracks NAN and Infinities?
+//		(1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
+//			same problem with (0.003e3 == 3.0)
+//
+// Compiler
+//
+//		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+//
+// GC
+//
+// --- OPTIMIZE ---
+//
+//	Run-time
+//
+//		special write with pop instructions (very common)?
+//		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
+//			not too fond of the int cast in the byte array
+//		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
+//		quicker calls by using a frame stack for functions that do not create closures
+//		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
+//		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
+//			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
+//			TRY_OP, TRIED_OP and CATCH_FRAME_OP would go away then...
+//		if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
+//
+//	Compiler
+//
+//		jump optimizations
+//		pop void optimization (almost always occurs with a return;)?
+//		eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
+//		share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
+//		try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
+//			we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
+//			if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
+//		we could reuse free variable indexes in safeKeep, but it kind of feels like sub-optimization
+//		don't like the outputCode solution, setting / resetting stuff manually isn't good programming style
+//
+//	GC
+//
+//		take a shot at generational gc
+//			couldn't it work if we just make sure that a reference from old -> new gen protects the item in new gen until we sweep the old gen?
+//		no need for recursive marking, just add to one end of the list and continue looping to the end of list
+//		fast allocation pools
+//		automatic gc pace
+//		count actual memory allocated as in old NuXScript?
+//
+// --- DONE ---
+//
+//		for (;;)
+//		comma operator
+//		void operator
+//		delete operator
+//		proper string comparisons (< etc)
+//		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
+//			thinking of dropping mark etc from gcheap and have in engine instead, we could then have a gcheap list for protected items (probe these before general mark phase)
+//		break, continue etc (with labels!)
+//		virtual machine should include gc etc
+//		check that identifier is never one of the reserved words
+//		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
+//		maybe drop the scope vector and just put it all on the program stack
+//		switch
+//		in operator
+//		typeof operator
+
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
 
@@ -107,17 +215,18 @@ class Value {
 	public:		explicit Value(bool b);
 	public:		explicit Value(Int32 i);
 	public:		explicit Value(double d);
-	public:		explicit Value(String* s);
+	public:		explicit Value(const String* s);
 	public:		explicit Value(Object* o);
 	
 	public:		bool exists() const;
 	public:		bool isObject() const;
-	public:		String* getString() const;
+	public:		const String* getString() const;
 	public:		ScriptFunctionDef* getFunctionDef() const;
+	public:		const String* getTypeString() const;
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
 	public:		double toDouble() const;
-	public:		String* toString(GCHeap& heap) const;
+	public:		const String* toString(GCHeap& heap) const;
 	public:		Object* toObject(GCHeap& heap) const;
 	public:		bool operator==(const Value& y) const;
 	public:		bool operator<(const Value& y) const;
@@ -133,18 +242,19 @@ class Value {
 	protected:	union {
 					bool b;
 					double d;
-					String* s;
+					const String* s;
 					Object* o;
 				};
 };
 
 class Object : public GCItem {
 	public:		typedef GCItem super;
-	public:		virtual Function* asFunction() { return 0; } // FIX : no
-	public:		virtual bool hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v) { return false; }
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return false; }
-	public:		virtual bool deleteProperty(Engine& engine, const String* name) { return false; }
+	public:		virtual Function* asFunction();
+	public:		virtual const String* getTypeString() const;
+	public:		virtual bool hasProperty(Engine& engine, const String* name);
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
+	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 };
 
 class Table {
@@ -237,6 +347,7 @@ class Processor;
 class Function : public UserObject {
 	public:		typedef UserObject super;
 	public:		virtual Function* asFunction();
+	public:		virtual const String* getTypeString() const;
 	public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
 	public:		virtual void construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv);
 };
@@ -343,6 +454,8 @@ class Processor : public GCItem {
 					, CATCH_FRAME_OP								// operand: const index for exception variable name
 					, POP_FRAME_OP
 					, IN_OP											// stack: string, object -> boolean
+					, TYPEOF_OP										// stack: value -> string
+					, TYPEOF_NAMED_OP								// operand: const index (name), stack: -> string
 				};
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
@@ -372,7 +485,7 @@ public:	Value* vstackPointer;
 };
 
 enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
+	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
 	, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC
 	, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };

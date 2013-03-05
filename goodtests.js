@@ -239,3 +239,20 @@ print("nope" in o);
 print(o in o);
 print("o" in this);
 
+print((function() { print(x); var x; print(x); x = void print("turn to void"); return x })());
+
+(function() { var f = function() {
+	var a;
+	print(typeof a);
+	print(typeof null);
+	print(typeof false);
+	print(typeof 3.5);
+	print(typeof "zzz");
+	print(typeof f);
+	print(typeof "zzz"[1]);
+	print(typeof "zzz"[5]);
+	print(typeof doesNotExist);
+	doesExist = "I exist";
+	print(typeof doesExist);
+}; f(); })();
+

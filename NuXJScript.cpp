@@ -1,91 +1,3 @@
-// --- TODO ---
-//
-//	Run-time
-//
-//		eval support
-//		count (and run-time check) necessary value stack depth for functions
-//		special write with pop instructions (very common)?
-//		divide by 0 checks? NaN checks?
-//			is currently not compatible with -ffast_math, which is bad I guess
-//			also isnan is not standard C++ :(, on Windows it is called _isnan
-//			do a special Value variation that tracks NAN and Infinities?
-//		native calls (and returns)
-//			need easier API, shouldn't crash if missing push etc
-//			no synchronized return to native code right now
-//			arguments are reversed on native calls, and will be gc'd as stack has already popped 
-//				arguments no longer reversed since we push forwards now, but will still be gc'd
-//		prototype support
-//		arguments container
-//		array object (length property support, optimized for numerical indexes?)
-//			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
-//			only downside to that would be read and write named, which assumes the constant is a string pointer
-//			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
-//		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
-//			not too fond of the int cast in the byte array
-//		basic library (math, string, array ops)
-//		assignable globals this in processor
-//		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
-//		quicker calls by using a frame stack for functions that do not create closures
-//		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
-//		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
-//			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
-//			TRY_OP, TRIED_OP and CATCH_FRAME_OP would go away then...
-//		if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
-//		(1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
-//			same problem with (0.003e3 == 3.0)
-//
-//	Compiler
-//
-//		don't accept lf's after ++ etc (automatic ; insertion logic)
-//		for (in)
-//		global environment compiler (don't accept return etc)
-//		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
-//		function name() { } syntax
-//		literal function names, e.g. myGlobalName = function myLocalName() { ... }
-//		exceptions (and catching both virtual and native)
-//			only thing left is integration with C++ exceptions
-//		typeof operator
-//		instanceof operator
-//		new operator
-//			done, but need to implement prototype
-//		array literals
-//		object literals
-//		jump optimizations
-//		pop void optimization (almost always occurs with a return;)?
-//		eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
-//		share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
-//		try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
-//			we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
-//			if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
-//		we could reuse free variable indexes in safeKeep, but it kind of feels like sub-optimization
-//		don't like the outputCode solution, setting / resetting stuff manually isn't good programming style
-//
-//	GC
-//
-//		take a shot at generational gc
-//			couldn't it work if we just make sure that a reference from old -> new gen protects the item in new gen until we sweep the old gen?
-//		no need for recursive marking, just add to one end of the list and continue looping to the end of list
-//		fast allocation pools
-//		automatic gc pace
-//		count actual memory allocated as in old NuXScript?
-//
-// --- DONE ---
-//
-//		for (;;)
-//		comma operator
-//		void operator
-//		delete operator
-//		proper string comparisons (< etc)
-//		also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
-//			thinking of dropping mark etc from gcheap and have in engine instead, we could then have a gcheap list for protected items (probe these before general mark phase)
-//		break, continue etc (with labels!)
-//		virtual machine should include gc etc
-//		check that identifier is never one of the reserved words
-//		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
-//		maybe drop the scope vector and just put it all on the program stack
-//		switch
-//		in operator
-
 #include "assert.h"
 #include <cmath>
 #include <ctime>
@@ -305,16 +217,23 @@ struct QuickConstants {
 
 QuickConstants QUICK_CONSTANTS;
 
-String EMPTY_STRING("");
-String UNDEFINED_STRING("undefined");
-String NULL_STRING("null");
-String FALSE_STRING("false");
-String TRUE_STRING("true");
-String NAN_STRING("NaN");
-String INFINITY_STRING("Infinity");
-String MINUS_INFINITY_STRING("-Infinity");
-String ZERO_STRING("0");
-String LENGTH_STRING("length");
+// FIX : sort
+const String EMPTY_STRING("");
+const String UNDEFINED_STRING("undefined");
+const String OBJECT_STRING("object");
+const String BOOLEAN_STRING("boolean");
+const String NUMBER_STRING("number");
+const String STRING_STRING("string");
+const String FUNCTION_STRING("function");
+const String NULL_STRING("null");
+const String FALSE_STRING("false");
+const String TRUE_STRING("true");
+const String NAN_STRING("NaN");
+const String INFINITY_STRING("Infinity");
+const String MINUS_INFINITY_STRING("-Infinity");
+const String ZERO_STRING("0");
+const String LENGTH_STRING("length");
+const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
@@ -412,6 +331,15 @@ void GCList::claim(GCItem* item) {
 	item->_gcList = this;
 	++count;
 }
+
+/* --- Object --- */
+
+Function* Object::asFunction() { return 0; }
+const String* Object::getTypeString() const { return &OBJECT_STRING; }
+bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
+bool Object::getProperty(Engine& engine, const String* name, Value& v) { return false; }
+bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
+bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 
 /* --- Table --- */
 
@@ -534,7 +462,7 @@ Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
-Value::Value(String* s) : type(STRING_TYPE), s(s) { }
+Value::Value(const String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::exists() const { return type != NONEXISTENT_TYPE; }
@@ -545,7 +473,12 @@ ScriptFunctionDef* Value::getFunctionDef() const {
 	return reinterpret_cast<ScriptFunctionDef*>(o);
 }
 
-String* Value::getString() const {
+const String* Value::getTypeString() const {
+	if (type == OBJECT_TYPE) return o->getTypeString();
+	else return TYPE_STRINGS[static_cast<int>(type)];
+}
+
+const String* Value::getString() const {
 	assert(type == STRING_TYPE);
 	return s;
 }
@@ -579,7 +512,7 @@ double Value::toDouble() const {
 	}
 }
 
-String* Value::toString(GCHeap& heap) const {
+const String* Value::toString(GCHeap& heap) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
@@ -612,7 +545,7 @@ Object* Value::toObject(GCHeap& heap) const {
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: /* FIX */ return 0;
 		case NUMBER_TYPE: /* FIX */ return 0;
-		case STRING_TYPE: return s;
+		case STRING_TYPE: return const_cast<String*>(s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case OBJECT_TYPE: return o;
 	}
 }
@@ -713,8 +646,8 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 
 Value Value::add(GCHeap& heap, const Value& y) const {
 	if (type == STRING_TYPE || y.type == STRING_TYPE) {
-		String* ls = toString(heap);
-		String* rs = y.toString(heap);
+		const String* ls = toString(heap);
+		const String* rs = y.toString(heap);
 		if (rs->empty()) return Value(ls);
 		if (ls->empty()) return Value(rs);
 		return Value(heap.manage(new String(*ls, *rs)));
@@ -758,6 +691,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 /* --- Function --- */
 
 Function* Function::asFunction() { return this; }
+const String* Function::getTypeString() const { return &FUNCTION_STRING; }
 
 void Function::construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv) {
 	Object* newObject = heap.manage(new UserObject());
@@ -800,7 +734,9 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 /* --- FunctionFrame --- */
 
 FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(function->getEnvironment())
-		, functionDef(function->getDefinition()), locals(std::max(functionDef->localsCount, 1)) { }
+		, functionDef(function->getDefinition()), locals(std::max(functionDef->localsCount, 1)) {
+	std::fill(locals.begin(), locals.end(), Value(Value::UNDEFINED_TYPE)); // FIX : optimize
+}
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
@@ -1113,8 +1049,12 @@ bool Processor::run(Int32 count) {
 				pop(vsp, 1);
 				break;				
 			}
-			case TYPEOF_OP: {
-				vsp[0].getTypeString()
+			case TYPEOF_OP: vsp[0] = Value(vsp[0].getTypeString()); break;
+			case TYPEOF_NAMED_OP: {
+				Value v(Value::UNDEFINED_TYPE);
+				frame->getProperty(engine, cp[nextInt32(ip)].getString(), v);
+				push(vsp, Value(v.getTypeString()));
+				break;
 			}
 		}
 	}
@@ -1171,7 +1111,8 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 			case Processor::GEN_FUNC_OP:
 			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
-			case Processor::WRITE_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			case Processor::WRITE_NAMED_OP:
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -1184,8 +1125,8 @@ const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
-	GROUP, UNARY, BINARY, ASSIGNMENT, POST_UNARY, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
-	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR
+	GROUP, UNARY, BINARY, ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
+	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
@@ -1201,8 +1142,8 @@ struct OperatorInfo {
 // FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::ADD_OP },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::SUB_OP },
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::ADD_OP },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::SUB_OP },
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
 	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP },
@@ -1210,7 +1151,8 @@ const OperatorInfo PRE_OPS[] = {
 	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP },
 	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP },
 	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP },
-	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP }
+	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP },
+	{ "typeof", 0, PREFIX_PREC, RIGHT_TO_LEFT, TYPE_OF, Processor::TYPEOF_OP }
 };
 
 const OperatorInfo POST_OPS[] = {
@@ -1231,8 +1173,8 @@ const OperatorInfo POST_OPS[] = {
 	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::UNSIGNED_SHR_OP },
 	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP },
 	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP },
-	{ "++", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, Processor::ADD_OP },
-	{ "--", 0, POST_INC_DEC, LEFT_TO_RIGHT, POST_UNARY, Processor::SUB_OP },
+	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::ADD_OP },
+	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::SUB_OP },
 	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
 	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP },
@@ -1387,6 +1329,19 @@ void Compiler::eatToken() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
+void Compiler::makeRValue(XValue& xv) {
+	switch (xv.t) {
+		default: assert(0);
+		case XValue::PUSHED: return;
+		case XValue::NONE: emit(Processor::VOID_OP); break;
+		case XValue::CONSTANT: emitWithConstant(Processor::CONST_OP, xv.v); break;
+		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.toInt()); break;
+		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); break;
+		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
+	}
+	xv = XValue(XValue::PUSHED);
+}
+
 void Compiler::safeKeep(XValue& xv) {
 	switch (xv.t) {
 		case XValue::PUSHED:
@@ -1402,19 +1357,6 @@ void Compiler::safeKeep(XValue& xv) {
 		}
 		default: break;
 	}
-}
-
-void Compiler::makeRValue(XValue& xv) {
-	switch (xv.t) {
-		default: assert(0);
-		case XValue::PUSHED: return;
-		case XValue::NONE: emit(Processor::VOID_OP); break;
-		case XValue::CONSTANT: emitWithConstant(Processor::CONST_OP, xv.v); break;
-		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.toInt()); break;
-		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); break;
-		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
-	}
-	xv = XValue(XValue::PUSHED);
 }
 
 void Compiler::makeAssignment(XValue& xv) {
@@ -1484,7 +1426,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 	}
 	// FIX : sort
 	switch (op.type) {
-		case POST_UNARY: {
+		case POST_INC_DEC: {
 			XValue lv(v);
 			makeRValue(lv);
 			emit(Processor::REPUSH_OP);
@@ -1580,19 +1522,33 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			v = parseOperand(op);
 			break;
 		}
-		
-		case UNARY: {
+
+		case PRE_INC_DEC: {
 			v = parseOperand(op);
-			if (op.vmOp == Processor::ADD_OP || op.vmOp == Processor::SUB_OP) {
-				XValue lv(v);
-				makeRValue(lv);
-				emitWithConstant(Processor::CONST_OP, Value(1.0)); 
-				emit(op.vmOp);
-				makeAssignment(v);
+			XValue lv(v);
+			makeRValue(lv);
+			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
+			emit(op.vmOp);
+			makeAssignment(v);
+			break;
+		}
+		
+		case TYPE_OF: {
+			v = parseOperand(op);
+			if (v.t == XValue::NAMED) {
+				emitWithConstant(Processor::TYPEOF_NAMED_OP, v.v);
+				v = XValue(XValue::PUSHED);
 			} else {
 				makeRValue(v);
 				emit(op.vmOp);
 			}
+			break;
+		}
+			
+		case UNARY: {
+			v = parseOperand(op);
+			makeRValue(v);
+			emit(op.vmOp);
 			break;
 		}
 		
@@ -2223,7 +2179,7 @@ void GCHeap::mark(const GCItem* item) {
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
 		public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
-						String* s = (argc >= 1 ? argv[0].toString(heap) : &EMPTY_STRING);
+						const String* s = (argc >= 1 ? argv[0].toString(heap) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						processor->push(Value());
 					}
