@@ -197,6 +197,8 @@ struct StringObjectCompare {
 
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 
+typedef std::vector<Byte> CodeVector;
+
 // This is an Object so that we can store it as a constant
 class ScriptFunctionDef : public Object {
 	public:		typedef Object super;
@@ -206,7 +208,7 @@ class ScriptFunctionDef : public Object {
 	public:		const Value* getConstantsPointer() const;
 // FIX : protectize
 	public:		String* source;
-	public:		std::vector<Byte> code;
+	public:		CodeVector code;
 	public:		std::vector<Value> constants;
 	public:		Int32 argumentsCount;
 	public:		Int32 localsCount; // including arguments
@@ -416,7 +418,7 @@ class Compiler : public GCItem {
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
 	protected:	void parseVarDeclarations();
-	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd);
+	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 	protected:	void parseStatementList(Scope* firstScope);
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 	protected:	void expectSemicolon();
@@ -433,7 +435,7 @@ class Compiler : public GCItem {
 	protected:	std::map<Value, Int32> definedConstants;
 	protected:	const Char* p;
 	protected:	const Char* e;
-	protected:	std::vector<Byte>* outputCode;
+	protected:	CodeVector* outputCode;
 };
 
 #endif

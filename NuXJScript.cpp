@@ -1111,14 +1111,15 @@ bool Processor::run(Int32 count) {
 	return false;
 }
 
-static Int32 getInt32(std::vector<Byte>::const_iterator& it, const std::vector<Byte>::const_iterator& e) {
+// FIX : use accessCodeInt32
+static Int32 getInt32(CodeVector::const_iterator& it, const CodeVector::const_iterator& e) {
 	assert(e - it >= OPERAND_SIZE);
 	Int32 i = *reinterpret_cast<const Int32*>(&*it);
 	it += OPERAND_SIZE;
 	return i;
 }
 
-static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::vector<Value>& constants) {
+static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<Value>& constants) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
@@ -1134,9 +1135,9 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 		, "GEN_FUNC"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
 	};
-	std::vector<Byte>::const_iterator b = code.begin();
-	std::vector<Byte>::const_iterator it = b;
-	std::vector<Byte>::const_iterator e = code.end();
+	CodeVector::const_iterator b = code.begin();
+	CodeVector::const_iterator it = b;
+	CodeVector::const_iterator e = code.end();
 	while (it != e) {
 		Processor::Opcode opcode = static_cast<Processor::Opcode>(*it);
 		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
@@ -1165,6 +1166,8 @@ static void disassemble(GCHeap& heap, const std::vector<Byte>& code, const std::
 }
 
 /* --- Compiler --- */
+
+const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
@@ -1312,10 +1315,12 @@ void Compiler::emit(Processor::Opcode op) {
 	outputCode->push_back(op);
 }
 
+static Int32& accessCodeInt32(CodeVector& code, Int32 offset) { return *reinterpret_cast<Int32*>(&code[offset]); }
+
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
 	outputCode->push_back(op);
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
-	*reinterpret_cast<Int32*>(&(*outputCode)[outputCode->size() - OPERAND_SIZE]) = i;
+	accessCodeInt32(*outputCode, outputCode->size() - OPERAND_SIZE) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
@@ -1326,7 +1331,7 @@ Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
-	*reinterpret_cast<Int32*>(&(*outputCode)[point]) = outputCode->size() - point - OPERAND_SIZE;
+	accessCodeInt32(*outputCode, point) = outputCode->size() - point - OPERAND_SIZE;
 }
 
 Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
@@ -1871,8 +1876,10 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				const Char* b = p;
 				Scope* s = firstScope;
 				parseIdentifier(false);
+				// FIX : too complicated!! bone out...
 				String identifier(b, p);
-				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE || s->type == Scope::LABEL_TYPE)
+				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
+						|| ((isBreak || !identifier.empty()) && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(identifier))) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
 						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -1961,14 +1968,14 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				}
 				expectToken(";", true);
 				Int32 loopPoint = markBackwardBranch();
-				Int32 falsePoint = -1;
+				Int32 falsePoint = INVALID_CODE_POINT;
 				XValue xv;
 				if (parseOptionalExpression(xv, LOWEST_PREC)) {
 					makeRValue(xv);
 					falsePoint = emitForwardBranch(Processor::JF_OP);
 				}
 				expectToken(";", true);
-				std::vector<Byte> incCode;
+				CodeVector incCode;
 				outputCode = &incCode;
 				parseAndPopOptionalExpression();
 				expectToken(")", true);
@@ -1979,7 +1986,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
-				if (falsePoint >= 0) completeForwardBranch(falsePoint);
+				if (falsePoint != INVALID_CODE_POINT) completeForwardBranch(falsePoint);
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
@@ -2014,7 +2021,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				expectToken("}", false);
 				tryScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
-				Int32 catchEndPoint = -1;
+				Int32 catchEndPoint = INVALID_CODE_POINT;
 				
 				// Catcher
 				
@@ -2074,7 +2081,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				makeRValue(thrownXValue);
 				emit(Processor::THROW_OP);
 				completeForwardBranch(tryEndPoint);
-				if (catchEndPoint >= 0) completeForwardBranch(catchEndPoint);
+				if (catchEndPoint != INVALID_CODE_POINT) completeForwardBranch(catchEndPoint);
 				break;
 			}
 			
@@ -2095,9 +2102,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				expectToken(")", true);
 				expectToken("{", true);
 				Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
-				std::vector<Byte> testsCode;
+				CodeVector testsCode;
 				std::vector<Int32> jumpOffsets;
 				Int32 startOffset = outputCode->size();
+				Int32 defaultPoint = INVALID_CODE_POINT;
+				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				bool firstStatement = true;
 				eatWhite();
 				while (p != e && !eatToken("}", false)) {
@@ -2114,11 +2123,13 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						outputCode = &function->code;
 					} else if (eatToken("default", false)) {
 						expectToken(":", true);
+						if (defaultPoint != INVALID_CODE_POINT) throw std::runtime_error("More than one 'default:'");
+						defaultPoint = markBackwardBranch();
 					} else if (firstStatement) {
 						throw std::runtime_error("Expected 'case', 'default' or '}'");
 					} else {
 						const Char* b = p;
-						parseStatement(firstScope, firstScope);
+						parseStatement(&emptyLabelScope, &emptyLabelScope);
 						if (b == p) throw std::runtime_error("Expected '}'");
 					}
 					firstStatement = false;
@@ -2128,11 +2139,12 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);
-				for (std::vector<Int32>::const_iterator it = jumpOffsets.begin(), e = jumpOffsets.end(); it != e; ++it) {
-					testsCode[*it] -= outputCode->size() - startOffset;
-				}
+				for (std::vector<Int32>::const_iterator it = jumpOffsets.begin(), e = jumpOffsets.end(); it != e; ++it)
+					accessCodeInt32(testsCode, *it) -= outputCode->size() - startOffset;
 				outputCode->insert(outputCode->end(), testsCode.begin(), testsCode.end());
+				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
+				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			

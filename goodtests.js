@@ -1,5 +1,5 @@
 // function print(x) { console.log(x) }
-// function time(f) { var start = Date.now(); f(); console.log("elapsed: " + (Date.now() - start)); }
+// function time(f) { var start = Date.now(); f(); print("elapsed: " + (Date.now() - start)); }
 
   var i = 0 /* comment */ ;   // more comment
  j = 1234.5 /* multi
@@ -157,3 +157,11 @@ for(var x=-3;x<=3;++x)switch(x+3){case 1:case 2:case 1+2:print(x)}
 
 var f = function(n) { print('test:' + n); };
 for (var x = -3; x <= 3; ++x) switch (  x + 3  )   { case 1  : case 2  : case f ( x )   , 1 + 3  : print(x) }
+
+switch (3) { case 2: print("NO"); default: print("HEJ"); case 3: print("3") }
+
+switch ("1") { case 1: print('1'); case "1": print('"1"'); case 2.0: print("continues to 2"); break; case "3": print("but not to 3"); case "1": print('Second "1" is not executed'); default: print("Neither is default") }
+
+switch (1.0) { case 0: print('0'); default: print('default'); case "1.0": print('1'); case "1": print('"1"'); case 2.0: print("continues to 2"); break; case "3": print("but not to 3"); case "1": print('Second "1" is not executed'); }
+
+for (var i = 0; i < 10; ++i) { switch (i) { case 5: continue }; print(i) }
