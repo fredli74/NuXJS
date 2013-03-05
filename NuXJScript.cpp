@@ -202,7 +202,7 @@ struct QuickConstants {
 	}
 	void cleanup() {
 		for (int i = 32; i < 127; ++i) {
-			delete ascii[i - 32].getString();
+			delete ascii[i - 32].getAsString();
 			ascii[i - 32] = Value(Value::NONEXISTENT_TYPE);
 		}
 		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
@@ -302,6 +302,18 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
+class String::CharEnumerator : public Enumerator { // FIX : .cpp local
+	public:		typedef Enumerator super;
+	public:		CharEnumerator(GCHeap& heap, const String* s) : heap(heap), s(s), index(0) { }
+	public:		virtual void gcMark(GCHeap& heap) { heap.mark(s); super::gcMark(heap); }
+	public:		virtual const String* nextPropertyName() { return (index >= s->size() ? 0 : Value(index++).toString(heap)); }
+	protected:	GCHeap& heap;
+	protected:	const String* s;
+	protected:	Int32 index;
+};
+
+Enumerator* String::getEnumerator(Engine& engine) { return new CharEnumerator(engine.heap(), this); }
+
 /* --- GCItem --- */
 
 GCItem::GCItem() : _gcList(0), _gcPrev(this), _gcNext(this) { }
@@ -334,12 +346,21 @@ void GCList::claim(GCItem* item) {
 
 /* --- Object --- */
 
+class EmptyEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+	public:		const String* nextPropertyName() { return 0; }
+};
+
+EmptyEnumerator EMPTY_ENUMERATOR;
+
 Function* Object::asFunction() { return 0; }
+Enumerator* Object::asEnumerator() { return 0; }
 const String* Object::getTypeString() const { return &OBJECT_STRING; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
 bool Object::getProperty(Engine& engine, const String* name, Value& v) { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
+Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
@@ -467,21 +488,9 @@ Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::exists() const { return type != NONEXISTENT_TYPE; }
 bool Value::isObject() const { return type == OBJECT_TYPE; }
-
-ScriptFunctionDef* Value::getFunctionDef() const {
-	assert(type == OBJECT_TYPE);
-	return reinterpret_cast<ScriptFunctionDef*>(o);
-}
-
-const String* Value::getTypeString() const {
-	if (type == OBJECT_TYPE) return o->getTypeString();
-	else return TYPE_STRINGS[static_cast<int>(type)];
-}
-
-const String* Value::getString() const {
-	assert(type == STRING_TYPE);
-	return s;
-}
+const String* Value::getAsString() const { assert(type == STRING_TYPE); return s; }
+Object* Value::getAsObject() const { assert(type == OBJECT_TYPE); return o; }
+const String* Value::getTypeString() const { return (type == OBJECT_TYPE ? o->getTypeString() : TYPE_STRINGS[static_cast<int>(type)]); }
 
 bool Value::toBool() const {
 	switch (type) {
@@ -858,13 +867,13 @@ bool Processor::run(Int32 count) {
 			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v(Value::NONEXISTENT_TYPE);
-				bool success = frame->getProperty(engine, cp[nextInt32(ip)].getString(), v);
+				bool success = frame->getProperty(engine, cp[nextInt32(ip)].getAsString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = frame->setProperty(engine, cp[nextInt32(ip)].getString(), vsp[0]);
+				bool success = frame->setProperty(engine, cp[nextInt32(ip)].getAsString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
@@ -990,7 +999,8 @@ bool Processor::run(Int32 count) {
 			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
-				push(vsp, Value(heap.manage(new ScriptFunction(cp[nextInt32(ip)].getFunctionDef(), frame))));
+				Object* o = cp[nextInt32(ip)].getAsObject();
+				push(vsp, Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
 				break;
 			}
 			case FRAME_OP: push(vsp, Value(frame)); break;
@@ -1019,7 +1029,7 @@ bool Processor::run(Int32 count) {
 			}
 			case CATCH_FRAME_OP: {
 				++cstackPointer;
-				frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
+				frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getAsString(), vsp[0]));
 				pop(vsp, 1);
 				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
 				cstackPointer->vstackPointer = vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
@@ -1052,8 +1062,24 @@ bool Processor::run(Int32 count) {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].getTypeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(engine, cp[nextInt32(ip)].getString(), v);
+				frame->getProperty(engine, cp[nextInt32(ip)].getAsString(), v);
 				push(vsp, Value(v.getTypeString()));
+				break;
+			}
+			case GET_ENUMERATOR_OP: {
+				Object* o = vsp[0].toObject(heap);
+				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(engine)));
+				break;
+			}
+			case NEXT_PROPERTY_OP: {
+				Object* o = vsp[0].getAsObject();
+				Int32 offset = nextInt32(ip);
+				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName();
+				if (name != 0) vsp[0] = Value(name);
+				else {
+					ip += offset;
+					pop(vsp, 1);
+				}
 				break;
 			}
 		}
@@ -1087,6 +1113,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "GEN_FUNC"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
 		, "IN", "TYPEOF", "TYPEOF_NAMED"
+		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
 	CodeVector::const_iterator b = code.begin();
 	CodeVector::const_iterator it = b;
@@ -1101,7 +1128,8 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 			case Processor::JF_OP:
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
-			case Processor::TRY_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + OPERAND_SIZE); break;
+			case Processor::TRY_OP:
+			case Processor::NEXT_PROPERTY_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + OPERAND_SIZE); break;
 			case Processor::READ_INDEXED_OP:
 			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
 			case Processor::CALL_GLOBAL_OP:
@@ -1112,7 +1140,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getAsString()->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -1196,7 +1224,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
 	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP },
-	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::IN_OP }
+	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::IN_OP }	// Important: must be last
 };
 
 // FIX : sort
@@ -1227,7 +1255,7 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function), outputCode(&function->code) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function), outputCode(&function->code), safeKeptIndexCount(0) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
@@ -1349,13 +1377,34 @@ void Compiler::safeKeep(XValue& xv) {
 		case XValue::NAMED:
 		case XValue::PROPERTY: {
 			makeRValue(xv);
-			Int32 tempLocalIndex = function->localsCount++;
+			Int32 tempLocalIndex;
+			if (!freeSafeKeepingIndexes.empty()) {
+				tempLocalIndex = freeSafeKeepingIndexes.back();
+				freeSafeKeepingIndexes.pop_back();
+			} else {
+				tempLocalIndex = function->localsCount++;
+				safeKeptIndexCount++;
+			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
 			emit(Processor::POP_OP);
 			xv = XValue(XValue::INDEXED, Value(tempLocalIndex));
 			break;
 		}
 		default: break;
+	}
+}
+
+void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FIX : <- wouldn't need makeRValue if all these weren't destructive
+	XValue xvCopy(xv); // FIX : this is beginning to feel silly
+	if (makeRValue) Compiler::makeRValue(xv);
+	if (xvCopy.t == XValue::INDEXED) {
+		Int32 index = xvCopy.v.toInt();
+		if (doReset) {
+			emit(Processor::VOID_OP);
+			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+			emit(Processor::POP_OP);
+		}
+		freeSafeKeepingIndexes.push_back(index);
 	}
 }
 
@@ -1612,7 +1661,7 @@ static int findReservedKeyword(int n /* string length */, const Char* s) {
 		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
 	};
 	if (n < 2 || n > 10) return -1;
-	int stringIndex = QUICK_HASH_TABLE[((s[1] + s[0] << 3) - n) & 255];
+	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
@@ -1640,7 +1689,7 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
+bool Compiler::parseOptionalExpression(XValue& v, bool acceptInOperator, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
 	if (!parseOperator(v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
@@ -1742,7 +1791,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
     }
 	const Char* b = p;
     eatWhite();
-    while (parseOperator(v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
+    while (parseOperator(v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
 		eatWhite();
 	}
@@ -1751,12 +1800,12 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 }
 
 void Compiler::parseExpression(XValue& v, Precedence precedence) {
-	if (!parseOptionalExpression(v, precedence)) throw std::runtime_error("Expected expression");
+	if (!parseOptionalExpression(v, true, precedence)) throw std::runtime_error("Expected expression");
 }
 
-void Compiler::parseAndPopOptionalExpression() {
+void Compiler::parseAndPopOptionalExpression() { // FIX : drop
 	XValue xv;
-	if (parseOptionalExpression(xv, LOWEST_PREC)) discard(xv);
+	if (parseOptionalExpression(xv, true, LOWEST_PREC)) discard(xv);
 }
 
 void Compiler::parseVarDeclarations() {
@@ -1783,6 +1832,28 @@ void Compiler::parseVarDeclarations() {
 		if (!eatToken(",", true)) break;
 		eatWhite();
 	}
+}
+
+void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const XValue& iterXValue) {
+	XValue enumXValue; // FIX : sub
+	parseExpression(enumXValue, LOWEST_PREC); // FIX : SUB
+	makeRValue(enumXValue);
+	emit(Processor::GET_ENUMERATOR_OP);
+	safeKeep(enumXValue);
+	expectToken(")", true);
+	Int32 loopPoint = markBackwardBranch();
+	XValue xv(enumXValue); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
+	makeRValue(xv);
+	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
+	xv = iterXValue; // copy so that makeAssignment doesn't change it to pushed, FIX : is this good clean code? what about xv = makeRValue(xv) as the normal one instead?
+	makeAssignment(xv);
+	discard(xv);
+	parseStatement(emptyLabelScope, emptyLabelScope);
+	completeContinues(emptyLabelScope, scopeLabelsEnd);
+	emitBackwardBranch(Processor::JMP_OP, loopPoint);
+	completeForwardBranch(exitLoopPoint);
+	completeBreaks(emptyLabelScope);
+	returnSafeKept(enumXValue, true, false);
 }
 
 void Compiler::expectSemicolon() {
@@ -1901,11 +1972,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				parseExpression(xv, LOWEST_PREC); // FIX : SUB
 				makeRValue(xv);
 				expectToken(")", true);
-				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
+				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
-				completeForwardBranch(falsePoint);
+				completeForwardBranch(exitLoopPoint);
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
@@ -1929,20 +2000,30 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 			
 			case FOR_STATEMENT: {
+				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
 				if (eatToken("var", true)) {
 					eatWhite();
 					parseVarDeclarations();
 				} else {
-					parseAndPopOptionalExpression();
+					XValue iterXValue;
+					if (parseOptionalExpression(iterXValue, false, LOWEST_PREC)) {
+						if (eatToken("in", true)) {
+							parseForInStatement(&emptyLabelScope, scopeLabelsEnd, iterXValue);
+							break;
+						} else {
+							discard(iterXValue);
+						}
+					}
 				}
 				expectToken(";", true);
 				Int32 loopPoint = markBackwardBranch();
-				Int32 falsePoint = INVALID_CODE_POINT;
+				Int32 exitLoopPoint = INVALID_CODE_POINT;
 				XValue xv;
-				if (parseOptionalExpression(xv, LOWEST_PREC)) {
+				if (parseOptionalExpression(xv, true, LOWEST_PREC)) {
 					makeRValue(xv);
-					falsePoint = emitForwardBranch(Processor::JF_OP);
+					exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				}
 				expectToken(";", true);
 				CodeVector incCode;
@@ -1950,20 +2031,18 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				parseAndPopOptionalExpression();
 				expectToken(")", true);
 				outputCode = &function->code;
-				Scope emptyLabelScope(EMPTY_STRING, firstScope);
-				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
-				if (falsePoint != INVALID_CODE_POINT) completeForwardBranch(falsePoint);
+				if (exitLoopPoint != INVALID_CODE_POINT) completeForwardBranch(exitLoopPoint);
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
 			case RETURN_STATEMENT: {
 				XValue returnXValue;
-				parseOptionalExpression(returnXValue, LOWEST_PREC);
+				parseOptionalExpression(returnXValue, true, LOWEST_PREC);
 				Scope* s = firstScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
@@ -1977,7 +2056,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
-				makeRValue(returnXValue);
+				if (safeKept) returnSafeKept(returnXValue, false, true);
+				else makeRValue(returnXValue);
 				emit(Processor::RETURN_OP);
 				expectSemicolon();
 				break;
@@ -2048,7 +2128,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				XValue thrownXValue(XValue::PUSHED);
 				safeKeep(thrownXValue);
 				emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
-				makeRValue(thrownXValue);
+				returnSafeKept(thrownXValue, true, true);
 				emit(Processor::THROW_OP);
 				completeForwardBranch(tryEndPoint);
 				if (catchEndPoint != INVALID_CODE_POINT) completeForwardBranch(catchEndPoint);
@@ -2082,7 +2162,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				while (p != e && !eatToken("}", false)) {
 					if (eatToken("case", false)) {
 						outputCode = &testsCode;
-						XValue xv(controlXValue); // copy so that makeRValue doesn't change it to pushed
+						XValue xv(controlXValue); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
 						makeRValue(xv);
 						parseExpression(xv, LOWEST_PREC);
 						expectToken(":", true);
@@ -2115,6 +2195,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
 				completeBreaks(&emptyLabelScope);
+				returnSafeKept(controlXValue, true, false);
 				break;
 			}
 			
@@ -2131,14 +2212,27 @@ void Compiler::parseStatementList(Scope* firstScope) {
 	} while (p != e && b != p);
 }
 
-const Char* Compiler::compile(const Char* b, const Char* e) { outputCode = &function->code; p = b; this->e = e; parseStatementList(0); return p; }
+const Char* Compiler::compile(const Char* b, const Char* e) {
+	outputCode = &function->code;
+	freeSafeKeepingIndexes.clear();
+	safeKeptIndexCount = 0;
+	p = b;
+	this->e = e;
+	parseStatementList(0);
+	return p;
+}
+
 void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 void Compiler::finish() {
 	emit(Processor::VOID_OP);
 	emit(Processor::RETURN_OP);
 	// FIX : shrink code vector (copy to quickarray instead?)
+assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
+freeSafeKeepingIndexes.clear();
+	assert(outputCode == &function->code);
 disassemble(engine.heap(), *outputCode, function->constants);
+std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -2195,10 +2289,6 @@ int main(int argc, const char* argv[]) {
 	static String PRINT_STRING("print");
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
-	ScriptFunctionDef functionDef;
-	heap.protect(&functionDef);
-	Compiler compiler(engine, &functionDef);
-	heap.protect(&compiler);
 	String source(EMPTY_STRING);
 	std::auto_ptr<std::ifstream> inputFileStream;
 	std::istream* inStream = &std::cin;
@@ -2208,8 +2298,6 @@ int main(int argc, const char* argv[]) {
 	}
 	while (inStream->good()) {
 		try {
-			functionDef.code.clear();
-			
 			std::string s;
 			std::getline(*inStream, s);
 			if (!s.empty()) {
@@ -2217,6 +2305,10 @@ int main(int argc, const char* argv[]) {
 				source = String(source, line);
 				source = String(source, LF_STRING);
 			} else {
+				ScriptFunctionDef functionDef;
+				heap.protect(&functionDef);
+				Compiler compiler(engine, &functionDef);
+				heap.protect(&compiler);
 				compiler.compile(source);
 				compiler.finish();
 				
@@ -2238,8 +2330,8 @@ int main(int argc, const char* argv[]) {
 					
 					size_t sweptCount = heap.gc();
 
-					std::cerr << "\tKept: " << heap.size() << std::endl;
-					std::cerr << "\tSwept: " << sweptCount << std::endl;
+					std::cerr << "\tGC kept: " << heap.size() << std::endl;
+					std::cerr << "\tGC swept: " << sweptCount << std::endl;
 					
 					if (done) {
 						std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;

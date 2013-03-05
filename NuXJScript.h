@@ -49,6 +49,9 @@
 // Compiler
 //
 //		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+//		safe-kept variables aren't resetted on early exits, e.g.
+//			b: switch (x) { case 1: switch(x) { case 2: break b } }
+//			won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
 //
 // GC
 //
@@ -66,6 +69,9 @@
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
 //			TRY_OP, TRIED_OP and CATCH_FRAME_OP would go away then...
 //		if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
+//		ERASE_INDEXED_OP for quickly resetting safe kept variables, worth it? (three instructions now, void, write, pop)
+//		NEXT_PROPERTY_OP is always preceeded by READ_INDEXED (since it is always a non-constant safe-kept variable), combine into one instruction (with two operands)
+//			if we don't do the REPUSH idea instead of safe-keeping so much
 //
 //	Compiler
 //
@@ -76,8 +82,10 @@
 //		try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
 //			we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
 //			if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
-//		we could reuse free variable indexes in safeKeep, but it kind of feels like sub-optimization
 //		don't like the outputCode solution, setting / resetting stuff manually isn't good programming style
+//		if it wasn't for the problem with the value stack order in the return statement (i.e. the return expression has to be emitted before any "early exits pop's" etc are emitted) we wouldn't have to use safeKeep so much, but could just keep stuff on the stack and repush (e.g. the enumerator object for "for in")
+//			actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
+//		switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
 //
 //	GC
 //
@@ -105,6 +113,7 @@
 //		switch
 //		in operator
 //		typeof operator
+//		we could reuse free variable indexes in safeKeep (by having a way to "return" them and a queue with free ones), but it kind of feels like sub-optimization
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -220,8 +229,8 @@ class Value {
 	
 	public:		bool exists() const;
 	public:		bool isObject() const;
-	public:		const String* getString() const;
-	public:		ScriptFunctionDef* getFunctionDef() const;
+	public:		const String* getAsString() const;
+	public:		Object* getAsObject() const;
 	public:		const String* getTypeString() const;
 	public:		bool toBool() const;
 	public:		Int32 toInt() const;
@@ -247,14 +256,23 @@ class Value {
 				};
 };
 
+class Enumerator;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction();
+	public:		virtual Enumerator* asEnumerator();
 	public:		virtual const String* getTypeString() const;
 	public:		virtual bool hasProperty(Engine& engine, const String* name);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
+	public:		virtual Enumerator* getEnumerator(Engine& engine);
+};
+
+class Enumerator : public Object {
+	public:		typedef Object super;
+	public:		virtual Enumerator* asEnumerator() { return this; }
+	public:		virtual const String* nextPropertyName() = 0;
 };
 
 class Table {
@@ -294,10 +312,11 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		Table::HashType calcHash() const;
 	public:		bool isEqualTo(const String& o) const;
 	public:		bool isLessThan(const String& o) const;
-	public:		const Char* accessChars() const; // FIX : <- drop
 	public:		std::wstring toStdString() const;
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
+	public:		virtual Enumerator* getEnumerator(Engine& engine);
 	protected:	mutable size_t hash;
+	protected:	class CharEnumerator;
 };
 
 struct StringObjectCompare {
@@ -456,6 +475,8 @@ class Processor : public GCItem {
 					, IN_OP											// stack: string, object -> boolean
 					, TYPEOF_OP										// stack: value -> string
 					, TYPEOF_NAMED_OP								// operand: const index (name), stack: -> string
+					, GET_ENUMERATOR_OP								// stack: object -> enumerator
+					, NEXT_PROPERTY_OP								// immediate: exit loop offset, stack: enumerator -> string
 				};
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
@@ -525,14 +546,15 @@ class Compiler : public GCItem {
 	protected:	void emitBackwardBranch(Processor::Opcode op, Int32 point);
 	protected:	void completeContinues(const Scope* fromScope, const Scope* untilScope);
 	protected:	void completeBreaks(const Scope* scope);
-	protected:	XValue parseOperand(const OperatorInfo& op);
+	protected:	XValue parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
 	protected:	void parseRValueOperand(const OperatorInfo& op);
 	protected:	void parseFunctionCall(XValue& v, Processor::Opcode op);
 	protected:	bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	protected:	void parseExpression(XValue& v, Precedence precedence);
-	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
+	protected:	bool parseOptionalExpression(XValue& v, bool acceptInOperator, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
 	protected:	void parseVarDeclarations();
+	protected:	void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const XValue& iterXValue);
 	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 	protected:	void parseStatementList(Scope* firstScope);
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
@@ -540,6 +562,7 @@ class Compiler : public GCItem {
 	protected:	void expectToken(const char* t, bool eatLeadingWhite);
 	protected:	void eatToken();
 	protected:	void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+	protected:	void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
 	protected:	void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.
 	protected:	void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
 	protected:	void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
@@ -551,6 +574,8 @@ class Compiler : public GCItem {
 	protected:	const Char* p;
 	protected:	const Char* e;
 	protected:	CodeVector* outputCode;
+	protected:	std::vector<Int32> freeSafeKeepingIndexes;
+	protected:	Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
 };
 
 #endif

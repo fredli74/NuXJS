@@ -256,3 +256,4 @@ print((function() { print(x); var x; print(x); x = void print("turn to void"); r
 	print(typeof doesExist);
 }; f(); })();
 
+a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x)
