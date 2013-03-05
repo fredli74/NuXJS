@@ -44,7 +44,6 @@
 //			only thing left is integration with C++ exceptions
 //		typeof operator
 //		instanceof operator
-//		in operator
 //		new operator
 //			done, but need to implement prototype
 //		array literals
@@ -83,6 +82,7 @@
 //		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
 //		maybe drop the scope vector and just put it all on the program stack
 //		switch
+//		in operator
 
 #include "assert.h"
 #include <cmath>

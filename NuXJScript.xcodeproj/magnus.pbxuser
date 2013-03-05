@@ -164,6 +164,15 @@
 			F7AC037C16E620B500F22F76 = F7AC037C16E620B500F22F76 /* PBXTextBookmark */;
 			F7AC037E16E620B500F22F76 = F7AC037E16E620B500F22F76 /* PBXTextBookmark */;
 			F7AC037F16E620B500F22F76 = F7AC037F16E620B500F22F76 /* PBXTextBookmark */;
+			F7AC03BD16E621E300F22F76 /* PBXTextBookmark */ = F7AC03BD16E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03BE16E621E300F22F76 /* PBXTextBookmark */ = F7AC03BE16E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03BF16E621E300F22F76 /* PBXTextBookmark */ = F7AC03BF16E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C216E621E300F22F76 /* PBXTextBookmark */ = F7AC03C216E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C316E621E300F22F76 /* PBXTextBookmark */ = F7AC03C316E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C416E621E300F22F76 /* PBXTextBookmark */ = F7AC03C416E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C516E621E300F22F76 /* PBXTextBookmark */ = F7AC03C516E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C616E621E300F22F76 /* PBXTextBookmark */ = F7AC03C616E621E300F22F76 /* PBXTextBookmark */;
+			F7AC03C716E621E300F22F76 /* PBXTextBookmark */ = F7AC03C716E621E300F22F76 /* PBXTextBookmark */;
 			F7ACFF0916E4D42600F22F76 = F7ACFF0916E4D42600F22F76 /* PBXTextBookmark */;
 			F7D451C116DCCC790039338A = F7D451C116DCCC790039338A /* PBXTextBookmark */;
 			F7D451C216DCCC790039338A = F7D451C216DCCC790039338A /* PBXTextBookmark */;
@@ -304,6 +313,11 @@
 		name = perftest6.js;
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/perftest6.js;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {1329, 585}}";
+			sepNavSelRange = "{145, 0}";
+			sepNavVisRange = "{0, 145}";
+		};
 	};
 	F747D3B616E1884D004C779E /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
@@ -348,9 +362,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1123, 30316}}";
-			sepNavSelRange = "{66194, 0}";
-			sepNavVisRange = "{65766, 732}";
+			sepNavIntBoundsRect = "{{0, 0}, {1174, 30433}}";
+			sepNavSelRange = "{76408, 0}";
+			sepNavVisRange = "{39412, 1965}";
 			sepNavWindowFrame = "{{95, -0}, {1221, 878}}";
 		};
 	};
@@ -611,6 +625,11 @@
 		name = badtests.js;
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/badtests.js;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {1174, 1027}}";
+			sepNavSelRange = "{387, 0}";
+			sepNavVisRange = "{0, 462}";
+		};
 	};
 	F7AC00ED16E605D700F22F76 /* NuXJScript.cpp:247 */ = {
 		isa = PBXFileBreakpoint;
@@ -670,7 +689,7 @@
 		isa = PBXTextBookmark;
 		fRef = F7AC030B16E614A600F22F76 /* goodtests.js */;
 		rLen = 0;
-		rLoc = 9223372036854775808;
+		rLoc = 9223372036854776980;
 		rType = 0;
 	};
 	F7AC030B16E614A600F22F76 /* goodtests.js */ = {
@@ -695,7 +714,7 @@
 		fRef = F7AC030B16E614A600F22F76 /* goodtests.js */;
 		name = "goodtests.js: 172";
 		rLen = 0;
-		rLoc = 8979;
+		rLoc = 10151;
 		rType = 0;
 		vrLen = 2785;
 		vrLoc = 6194;
@@ -735,7 +754,7 @@
 		fRef = F7AC037616E620B500F22F76 /* goodtests.js */;
 		name = "goodtests.js: 172";
 		rLen = 0;
-		rLoc = 8979;
+		rLoc = 10151;
 		rType = 0;
 		vrLen = 3336;
 		vrLoc = 5500;
@@ -746,6 +765,12 @@
 		name = goodtests.js;
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/goodtests.js;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {1643, 2171}}";
+			sepNavSelRange = "{9151, 0}";
+			sepNavVisRange = "{6896, 2255}";
+			sepNavWindowFrame = "{{19, 0}, {1221, 878}}";
+		};
 	};
 	F7AC037716E620B500F22F76 /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
@@ -807,6 +832,11 @@
 		name = BadThingsAboutJS.txt;
 		path = /Users/magnus/Desktop/BadThingsAboutJS.txt;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {1174, 727}}";
+			sepNavSelRange = "{129, 0}";
+			sepNavVisRange = "{0, 129}";
+		};
 	};
 	F7AC037E16E620B500F22F76 /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
@@ -853,6 +883,96 @@
 		originalNumberOfMultipleMatches = 1;
 		state = 1;
 	};
+	F7AC03BD16E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 20";
+		rLen = 0;
+		rLoc = 565;
+		rType = 0;
+		vrLen = 1677;
+		vrLoc = 0;
+	};
+	F7AC03BE16E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 267";
+		rLen = 0;
+		rLoc = 11852;
+		rType = 0;
+		vrLen = 1783;
+		vrLoc = 20808;
+	};
+	F7AC03BF16E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 73";
+		rLen = 0;
+		rLoc = 4428;
+		rType = 0;
+		vrLen = 2640;
+		vrLoc = 2690;
+	};
+	F7AC03C216E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7ACFF0F16E4D42600F22F76 /* AdvancedJS.txt */;
+		name = "AdvancedJS.txt: 131";
+		rLen = 0;
+		rLoc = 2761;
+		rType = 0;
+		vrLen = 1187;
+		vrLoc = 1573;
+	};
+	F7AC03C316E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7AC00DE16E605CD00F22F76 /* badtests.js */;
+		name = "badtests.js: 44";
+		rLen = 0;
+		rLoc = 387;
+		rType = 0;
+		vrLen = 462;
+		vrLoc = 0;
+	};
+	F7AC03C416E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2138";
+		rLen = 0;
+		rLoc = 76408;
+		rType = 0;
+		vrLen = 1965;
+		vrLoc = 39412;
+	};
+	F7AC03C516E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7AC037D16E620B500F22F76 /* BadThingsAboutJS.txt */;
+		name = "BadThingsAboutJS.txt: 5";
+		rLen = 0;
+		rLoc = 129;
+		rType = 0;
+		vrLen = 129;
+		vrLoc = 0;
+	};
+	F7AC03C616E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 292";
+		rLen = 0;
+		rLoc = 10550;
+		rType = 0;
+		vrLen = 3350;
+		vrLoc = 10453;
+	};
+	F7AC03C716E621E300F22F76 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F737967316E4BBB80089F97C /* perftest6.js */;
+		name = "perftest6.js: 9";
+		rLen = 0;
+		rLoc = 145;
+		rType = 0;
+		vrLen = 145;
+		vrLoc = 0;
+	};
 	F7ACFF0916E4D42600F22F76 /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
 		fRef = F763E3E016E4291500BC9D6D /* goodresults.txt */;
@@ -869,6 +989,11 @@
 		name = AdvancedJS.txt;
 		path = /Users/magnus/Desktop/AdvancedJS.txt;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {1643, 1703}}";
+			sepNavSelRange = "{2761, 0}";
+			sepNavVisRange = "{1573, 1187}";
+		};
 	};
 	F7ACFF4D16E52A9A00F22F76 /* NuXJScript.cpp:1860 */ = {
 		isa = PBXFileBreakpoint;
@@ -908,9 +1033,9 @@
 	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1447, 6071}}";
-			sepNavSelRange = "{4321, 0}";
-			sepNavVisRange = "{3710, 1031}";
+			sepNavIntBoundsRect = "{{0, 0}, {1034, 5525}}";
+			sepNavSelRange = "{10550, 0}";
+			sepNavVisRange = "{10453, 3350}";
 			sepNavWindowFrame = "{{487, 0}, {953, 878}}";
 		};
 	};
