@@ -1,0 +1,38 @@
+Exception: Expected expression
+Exception: Syntax error
+Exception: Syntax error
+Exception: Illegal l-value
+Exception: Missing */
+Exception: Unterminated string
+Exception: Unterminated string
+Exception: Illegal escape character
+Exception: Illegal escape character
+Exception: Expected ',' or ')'
+Exception: Expected expression
+Exception: Expected expression
+Exception: Expected ',' or ')'
+Exception: Expected identifier
+Exception: Expected identifier
+Exception: Illegal use of reserved keyword
+Exception: Illegal use of reserved keyword
+Exception: Expected identifier
+Exception: Expected identifier
+Exception: Expected identifier
+Exception: Expected ',' or ')'
+Exception: Expected '{'
+Exception: Invalid number
+Exception: Invalid number
+Exception: Expected identifier
+Exception: Expected identifier
+Exception: Duplicate label
+Exception: Undefined label
+Exception: Undefined label
+Exception: Illegal label for continue
+Exception: Illegal break
+Exception: Illegal continue
+Exception: Expected '{'
+Exception: Expected '}'
+Exception: Expected 'catch' or 'finally'
+Exception: Expected identifier
+Exception: Expected expression
+Exception: Expected 'case', 'default' or '}'

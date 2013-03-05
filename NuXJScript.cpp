@@ -57,6 +57,8 @@
 //		try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
 //			we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
 //			if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
+//		we could reuse free variable indexes in safeKeep, but it kind of feels like sub-optimization
+//		don't like the outputCode solution, setting / resetting stuff manually isn't good programming style
 //
 //	GC
 //
@@ -235,7 +237,6 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
 	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
-	if (p >= e || (*p != '"' && *p != '\'')) throw std::runtime_error("Illegal string literal");
 	Char endChar = *p;
 	const Char* b = ++p;
 	Char* d = buffer;
@@ -243,6 +244,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 		if (*p == '\\' && p + 1 < e) {
 			d = std::copy(b, p, d);
 			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
+			b = p;
 			UInt32 l;
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
 			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
@@ -1266,7 +1268,7 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function), outputCode(&function->code) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
@@ -1307,32 +1309,31 @@ void Compiler::eatWhite() {
 }
 
 void Compiler::emit(Processor::Opcode op) {
-	std::vector<Byte>& code = function->code;
-	code.push_back(op);
+	outputCode->push_back(op);
 }
 
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
-	std::vector<Byte>& code = function->code;
-	code.push_back(op);
-	code.resize(code.size() + OPERAND_SIZE);
-	*reinterpret_cast<Int32*>(&code[code.size() - OPERAND_SIZE]) = i;
+	outputCode->push_back(op);
+	outputCode->resize(outputCode->size() + OPERAND_SIZE);
+	*reinterpret_cast<Int32*>(&(*outputCode)[outputCode->size() - OPERAND_SIZE]) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
-	std::vector<Byte>& code = function->code;
-	code.push_back(op);
-	Int32 point = code.size();
-	code.resize(code.size() + OPERAND_SIZE);
+	outputCode->push_back(op);
+	Int32 point = outputCode->size();
+	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	return point;
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
-	std::vector<Byte>& code = function->code;
-	*reinterpret_cast<Int32*>(&code[point]) = code.size() - point - OPERAND_SIZE;
+	*reinterpret_cast<Int32*>(&(*outputCode)[point]) = outputCode->size() - point - OPERAND_SIZE;
 }
 
-Int32 Compiler::markBackwardBranch() { return function->code.size(); }
-void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) { emitWithInt32(op, point - (function->code.size() + 5)); }
+Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
+
+void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
+	emitWithInt32(op, point - (outputCode->size() + 5));
+}
 
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
@@ -1436,9 +1437,9 @@ void Compiler::parseRValueOperand(const OperatorInfo& op) {
 void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 	eatWhite();
 	Int32 count = 0;
-	while (p != e && *p != ')') {
+	while (p != e && !eatToken(")", false)) {
 		if (count != 0) {
-			expectToken(",", false);
+			if (!eatToken(",", false)) throw std::runtime_error("Expected ',' or ')'");
 			eatWhite();
 		}
 		parseExpression(v, COMMA_PREC);
@@ -1446,7 +1447,7 @@ void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 		eatWhite();
 		++count;
 	}
-	expectToken(")", false);
+	if (p == e) throw std::runtime_error("Expected ',' or ')'");
 	emitWithInt32(op, count);
 	v = XValue(XValue::PUSHED);
 }
@@ -1686,9 +1687,9 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					// FIX : the optional function identifier
 					expectToken("(", true);
 					eatWhite();
-					while (p != e && *p != ')') {
+					while (p != e && !eatToken(")", false)) {
 						if (func->argumentsCount != 0) {
-							expectToken(",", false);
+							if (!eatToken(",", false)) throw std::runtime_error("Expected ',' or ')'");
 							eatWhite();
 						}
 						const Char* b = p;
@@ -1699,7 +1700,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						func->argumentsCount++;
 						eatWhite();
 					}
-					expectToken(")", false);
+					if (p == e) throw std::runtime_error("Expected ',' or ')'");
 					expectToken("{", true);
 					{
 						Compiler funcCompiler(engine, func);
@@ -1721,8 +1722,8 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
 						UInt32 i;
-						const Char* b = p;
-						p = parseHex(b + 2, e, i);
+						const Char* b = p += 2;
+						p = parseHex(b, e, i);
 						if (p == b) throw std::runtime_error("Invalid number");
 						v = XValue(XValue::CONSTANT, Value((Int32)(i)));
 						break;
@@ -1830,6 +1831,8 @@ void Compiler::completeBreaks(const Scope* scope) {
 		completeForwardBranch(*it);
 }
 
+// FIX : make member functions of all the different statements
+
 void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	eatWhite();	
 		
@@ -1869,7 +1872,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope* s = firstScope;
 				parseIdentifier(false);
 				String identifier(b, p);
-				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE || (isBreak && s->type == Scope::LABEL_TYPE))
+				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE || s->type == Scope::LABEL_TYPE)
 						&& s->label.isEqualTo(identifier))) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
 						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -1965,17 +1968,16 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					falsePoint = emitForwardBranch(Processor::JF_OP);
 				}
 				expectToken(";", true);
-				std::vector<Byte>& code = function->code;	// FIX : make it possible to set output code array (sub-instance of Compiler?)
-				Int32 incPoint = code.size();
+				std::vector<Byte> incCode;
+				outputCode = &incCode;
 				parseAndPopOptionalExpression();
 				expectToken(")", true);
-				std::vector<Byte> incCode(code.begin() + incPoint, code.end());
-				code.resize(incPoint);
+				outputCode = &function->code;
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				parseStatement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
-				code.insert(code.end(), incCode.begin(), incCode.end());
+				outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
 				if (falsePoint >= 0) completeForwardBranch(falsePoint);
 				completeBreaks(&emptyLabelScope);
@@ -2085,6 +2087,55 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				break;
 			}
 			
+			case SWITCH_STATEMENT: {
+				expectToken("(", true);
+				XValue controlXValue; // FIX : sub
+				parseExpression(controlXValue, LOWEST_PREC); // FIX : SUB
+				safeKeep(controlXValue);
+				expectToken(")", true);
+				expectToken("{", true);
+				Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
+				std::vector<Byte> testsCode;
+				std::vector<Int32> jumpOffsets;
+				Int32 startOffset = outputCode->size();
+				bool firstStatement = true;
+				eatWhite();
+				while (p != e && !eatToken("}", false)) {
+					if (eatToken("case", false)) {
+						outputCode = &testsCode;
+						XValue xv(controlXValue); // copy so that makeRValue doesn't change it to pushed
+						makeRValue(xv);
+						parseExpression(xv, LOWEST_PREC);
+						expectToken(":", true);
+						makeRValue(xv);
+						emit(Processor::STRICT_EQ_OP);
+						emitWithInt32(Processor::JT_OP, function->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
+						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
+						outputCode = &function->code;
+					} else if (eatToken("default", false)) {
+						expectToken(":", true);
+					} else if (firstStatement) {
+						throw std::runtime_error("Expected 'case', 'default' or '}'");
+					} else {
+						const Char* b = p;
+						parseStatement(firstScope, firstScope);
+						if (b == p) throw std::runtime_error("Expected '}'");
+					}
+					firstStatement = false;
+					eatWhite();
+				}
+				if (p == e) throw std::runtime_error("Expected '}'");
+				
+				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
+				completeForwardBranch(testsPoint);
+				for (std::vector<Int32>::const_iterator it = jumpOffsets.begin(), e = jumpOffsets.end(); it != e; ++it) {
+					testsCode[*it] -= outputCode->size() - startOffset;
+				}
+				outputCode->insert(outputCode->end(), testsCode.begin(), testsCode.end());
+				completeForwardBranch(donePoint);
+				break;
+			}
+			
 			default: assert(0);
 		}
 	}
@@ -2098,14 +2149,14 @@ void Compiler::parseStatementList(Scope* firstScope) {
 	} while (p != e && b != p);
 }
 
-const Char* Compiler::compile(const Char* b, const Char* e) { p = b; this->e = e; parseStatementList(0); return p; }
+const Char* Compiler::compile(const Char* b, const Char* e) { outputCode = &function->code; p = b; this->e = e; parseStatementList(0); return p; }
 void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 void Compiler::finish() {
 	emit(Processor::VOID_OP);
 	emit(Processor::RETURN_OP);
 	// FIX : shrink code vector (copy to quickarray instead?)
-disassemble(engine.heap(), function->code, function->constants);
+disassemble(engine.heap(), *outputCode, function->constants);
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }

@@ -433,6 +433,7 @@ class Compiler : public GCItem {
 	protected:	std::map<Value, Int32> definedConstants;
 	protected:	const Char* p;
 	protected:	const Char* e;
+	protected:	std::vector<Byte>* outputCode;
 };
 
 #endif

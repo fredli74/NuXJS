@@ -60,7 +60,7 @@ for (var x = 3, y = 5 ; x < 100 && y < 15 ; ++y) { s += y + "," };
 print(s)
 
 s = "";
-for (var x = 1 ; x < 100 ; x += (x < 50 ? 10 : 20)) { if (x > 20) s += x + "," };
+for (var x = 1, y = 1 ; x < 100 ; x += (x < 50 ? 10 : 20), ++y) { if (x > 20) s += x + "," + y + "," };
 print(s)
 
 x=9;(function() { var y=3,x=5 })(); print(x)
@@ -115,40 +115,45 @@ print((function() { try { return 1 } finally { return 3; print(2) } })());
 print(function() { var x = 0; try { return ++x; } finally { x++; print(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
-// try { (function() { try { throw "x" } finally { try { throw "y" } catch (x) { print(x) } } })() } catch (x) { print(x) }
+try { (function() { try { throw "x" } finally { try { throw "y" } catch (x) { print(x) } } })() } catch (x) { print(x) }
 
 thrower=function(a) { print("throwing: " + a); throw ("thrown: " + a); print("not here"); }
 print((function() { b: try { thrower("throw me") } finally { print("fake catcher") ; break b }; return("ok then...") })());
 print((function() { try { try { thrower("throw me") } finally { print("fake catcher") ; thrower("throwed again"); }; } finally { return("ok then...") } })());
 
-(function() { var y = null; var x = 3; try { throw 7 } catch (x) { print(x); try { thrower(9) } catch (x) { print(x); }; x=5; print(x); print(delete x); y = function() { print(x) } }; y(); print(x) })()
+(function() { var y = null; var x = 3; try { throw 7 } catch (x) { print(x); try { thrower(9) } catch (x) { print(x); }; x=5; print(x); print(delete x); y = function() { print(x) } }; y(); print(x) })();
 
-((function() { try { x: { try { throw "oops" } finally { print("finally") } } } catch (x) { print("caught: " + x) } })())
+((function() { try { x: { try { throw "oops" } finally { print("finally") } } } catch (x) { print("caught: " + x) } })());
 // finally
 // caught: oops
 
-((function() { try { x: { try { break x; thrower("oops") } finally { print("finally") } } } catch (x) { print("caught: " + x) } })())
+((function() { try { x: { try { break x; thrower("oops") } finally { print("finally") } } } catch (x) { print("caught: " + x) } })());
 // finally
 
-((function() { try { x: { try { throw "oops" } finally { print("finally"); break x } }; print("broken") } catch (x) { print("caught: " + x) } })())
+((function() { try { x: { try { throw "oops" } finally { print("finally"); break x } }; print("broken") } catch (x) { print("caught: " + x) } })());
 // finally
 // broken
 
-((function() { try { x: while (true) { try { break x; thrower("oops") } finally { print("finally") }; print("nope") } } catch (x) { print("caught: " + x) } })())
+((function() { try { x: while (true) { try { break x; thrower("oops") } finally { print("finally") }; print("nope") } } catch (x) { print("caught: " + x) } })());
 // finally
 
-print((function() { try { return "hej" } finally { print("finally") } })())
+print((function() { try { return "hej" } finally { print("finally") } })());
 // finally
 // "hej"
 
-((function() { b: try { return "hej" } finally { print("finally"); break b }; print("didn't return") })())
+((function() { b: try { return "hej" } finally { print("finally"); break b }; print("didn't return") })());
 // finally
 // didn't return
 
-print((function() { var x = 1; b: try { return ++x } finally { print("finally " + x) } })())
+print((function() { var x = 1; b: try { return ++x } finally { print("finally " + x) } })());
 // finally 2
 // 2
 
-print((function() { var x = 1; b: try { return x++ } finally { print("finally " + x) } })())
+print((function() { var x = 1; b: try { return x++ } finally { print("finally " + x) } })());
 // finally 2
 // 1
+
+for(var x=-3;x<=3;++x)switch(x+3){case 1:case 2:case 1+2:print(x)}
+
+var f = function(n) { print('test:' + n); };
+for (var x = -3; x <= 3; ++x) switch (  x + 3  )   { case 1  : case 2  : case f ( x )   , 1 + 3  : print(x) }
