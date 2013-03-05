@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC033C16E616E400F22F76</string>
+						<string>F7AC037516E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC030A16E614A600F22F76</string>
@@ -256,7 +256,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC033D16E616E400F22F76</string>
+						<string>F7AC037716E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC030D16E614A600F22F76</string>
@@ -296,7 +296,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC033E16E616E400F22F76</string>
+						<string>F7AC037916E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC00DD16E605CD00F22F76</string>
@@ -336,7 +336,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC033F16E616E400F22F76</string>
+						<string>F7AC037B16E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC002B16E5ECF500F22F76</string>
@@ -377,7 +377,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC034016E616E400F22F76</string>
+						<string>F7AC037C16E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F7AC005C16E5F0B800F22F76</string>
@@ -417,7 +417,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC034116E616E400F22F76</string>
+						<string>F7AC037E16E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F737954516E4A9310089F97C</string>
@@ -458,7 +458,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7AC034216E616E400F22F76</string>
+						<string>F7AC037F16E620B500F22F76</string>
 						<key>history</key>
 						<array>
 							<string>F737967216E4BBB80089F97C</string>
@@ -608,7 +608,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7AC033B16E616E400F22F76</string>
+										<string>F7AC037416E620B500F22F76</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -621,9 +621,9 @@
 											<string>F747D3D416E1AAAB004C779E</string>
 											<string>F763E3EF16E42B7D00BC9D6D</string>
 											<string>F7ACFF0916E4D42600F22F76</string>
-											<string>F7AC02F216E6146A00F22F76</string>
-											<string>F7AC033116E6167B00F22F76</string>
-											<string>F7AC033216E6167B00F22F76</string>
+											<string>F7AC035F16E617D000F22F76</string>
+											<string>F7AC037216E620B500F22F76</string>
+											<string>F7AC037316E620B500F22F76</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -821,11 +821,9 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7AC032E16E6161500F22F76</string>
 		<string>F7ACFF5E16E52ACE00F22F76</string>
 		<string>F7ACFF5F16E52ACE00F22F76</string>
 		<string>1CD10A99069EF8BA00B06720</string>
-		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F7E6DA7A16DE27D6007AB92B</string>
 		<string>F72734B016E26D1A00AC7191</string>
 		<string>F7AC005A16E5F0B800F22F76</string>
@@ -833,6 +831,7 @@
 		<string>F7AC00DB16E605CD00F22F76</string>
 		<string>F7ACFF0C16E4D42600F22F76</string>
 		<string>F7AC030816E614A600F22F76</string>
+		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
@@ -853,8 +852,6 @@
 					<key>Dock</key>
 					<array>
 						<dict>
-							<key>BecomeActive</key>
-							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -877,6 +874,8 @@
 							<string>419pt</string>
 						</dict>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -929,7 +928,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>

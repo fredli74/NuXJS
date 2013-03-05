@@ -36,7 +36,6 @@
 //
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		for (in)
-//		switch
 //		global environment compiler (don't accept return etc)
 //		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
 //		function name() { } syntax
@@ -83,6 +82,7 @@
 //		check that identifier is never one of the reserved words
 //		drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
 //		maybe drop the scope vector and just put it all on the program stack
+//		switch
 
 #include "assert.h"
 #include <cmath>
@@ -1104,6 +1104,13 @@ bool Processor::run(Int32 count) {
 				catchers.pop_back();
 				break;
 			}
+			case IN_OP: {
+				Object* o = vsp[0].toObject(heap);
+				if (o == 0) error();
+				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].toString(heap)));
+				pop(vsp, 1);
+				break;				
+			}
 		}
 	}
 	cstackPointer->instructionPointer = ip;
@@ -1133,7 +1140,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
 		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
-		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
+		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME", "IN"
 	};
 	CodeVector::const_iterator b = code.begin();
 	CodeVector::const_iterator it = b;
@@ -1240,7 +1247,8 @@ const OperatorInfo POST_OPS[] = {
 	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP },
 	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
 	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
-	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP }
+	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP },
+	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::IN_OP }
 };
 
 // FIX : sort

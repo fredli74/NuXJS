@@ -165,3 +165,15 @@ switch ("1") { case 1: print('1'); case "1": print('"1"'); case 2.0: print("cont
 switch (1.0) { case 0: print('0'); default: print('default'); case "1.0": print('1'); case "1": print('"1"'); case 2.0: print("continues to 2"); break; case "3": print("but not to 3"); case "1": print('Second "1" is not executed'); }
 
 for (var i = 0; i < 10; ++i) { switch (i) { case 5: continue }; print(i) }
+
+print("hejsan".length);
+
+s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output 10, string lengths are not writable
+
+MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
+print("name" in o);
+print("age" in o);
+print("nope" in o);
+print(o in o);
+print("o" in this);
+

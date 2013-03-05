@@ -141,6 +141,7 @@ class Value {
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	public:		virtual Function* asFunction() { return 0; } // FIX : no
+	public:		virtual bool hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v) { return false; }
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 	public:		virtual bool deleteProperty(Engine& engine, const String* name) { return false; }
@@ -309,7 +310,7 @@ Value* vstackPointer;  // doesn't change during function execution, i.e. entry v
 
 class Processor : public GCItem {
 	public:		typedef GCItem super;
-	public:		enum Opcode {
+	public:		enum Opcode {	// FIX : sort
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
@@ -341,6 +342,7 @@ class Processor : public GCItem {
 					, TRIED_OP
 					, CATCH_FRAME_OP								// operand: const index for exception variable name
 					, POP_FRAME_OP
+					, IN_OP											// stack: string, object -> boolean
 				};
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 	public:		virtual void gcMark(GCHeap& heap);
