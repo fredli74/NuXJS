@@ -301,7 +301,27 @@ f=function() { print(arguments[0]); print(arguments[1]); print(arguments[2]); };
 
 f=function(a,b,c,d,e) { print(arguments[0]); print(arguments[1]); print(arguments[2]); }; f(1,'b',true);
 
-f=function(a,b,c,d,e) { print(arguments[0]); a = 111; print(arguments[0]); arguments[0] = 222; print(a) }; f(1,'b',true);
+f=function() { for (var i = 0, l = arguments.length; i < l; ++i) print(arguments[i]) }; f('ole', 'dole', 'doff');
+
+f=function(a,b,c,d,e) {
+	print(arguments[0]);
+	a = 111;
+	print(arguments[0]);
+	arguments[0] = 222;
+	print(a);
+	delete arguments[0];
+	print(arguments[0]);
+	arguments[0] = 333;
+	print(arguments[0]);
+	print(a);
+	print (arguments.length);
+	arguments.length = 100;
+	print(arguments.length);
+	arguments.length = 0;
+	print(arguments.length);
+	print(arguments[1]);
+};
+f(1,'b',true);
 
 f = function() { for (arguments in "abcd") print(arguments); }; f();
 

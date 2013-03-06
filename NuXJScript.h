@@ -10,8 +10,6 @@
 //			arguments are reversed on native calls, and will be gc'd as stack has already popped 
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
 //		prototype support
-//		arguments container
-//			we need to decide what should happen when deleting members still...
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
@@ -118,6 +116,8 @@
 //		typeof operator
 //		we could reuse free variable indexes in safeKeep (by having a way to "return" them and a queue with free ones), but it kind of feels like sub-optimization
 //		for (in)
+//		arguments container
+//			we need to decide what should happen when deleting members still...
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -362,12 +362,14 @@ class StringListEnumerator : public Enumerator {
 
 class UserObject : public Object {
 	public:		typedef Object super;
+	public:		UserObject(Object* prototype = 0);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	public:		virtual Enumerator* getEnumerator(Engine& engine);
 	protected:	Table properties;
+	protected:	Object* prototype;
 };
 
 class Engine {
@@ -383,8 +385,8 @@ class Function : public UserObject {
 	public:		typedef UserObject super;
 	public:		virtual Function* asFunction();
 	public:		virtual const String* getTypeString() const;
-	public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
-	public:		virtual void construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv);
+	public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+	public:		virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
 };
 
 class NativeFunction : public Function {
@@ -396,7 +398,7 @@ class ScriptFunction : public Function {
 	public:		typedef Function super;
 	public:		ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
+	public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
 	public:		ScriptFunctionDef* getDefinition() const;
 	public:		Object* getEnvironment() const;
 	protected:	ScriptFunctionDef* const definition;
@@ -421,6 +423,7 @@ class FunctionFrame : public Frame {
 	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
 	protected:	const ScriptFunctionDef* const functionDef;
 	protected:	Object* const environment;
+	protected:	const Int32 passedArgumentsCount;
 	protected:	QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
 	protected:	Value argumentsValue;
 };
@@ -444,9 +447,11 @@ class ArgumentsObject : public UserObject {
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	protected:	Value* findProperty(const String* name);
 	protected:	FunctionFrame* frame;
 	protected:	Int32 argumentsCount;
+	protected:	QuickArray<Byte, 32> deletedArguments;
 };
 
 struct Context { // FIX : make Processor local

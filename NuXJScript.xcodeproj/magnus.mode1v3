@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC83B16E78656007CAB35</string>
+						<string>F73AC8F416E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC63F16E75F99007CAB35</string>
@@ -256,7 +256,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC83C16E78656007CAB35</string>
+						<string>F73AC8F516E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC64516E75F99007CAB35</string>
@@ -296,7 +296,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC83D16E78656007CAB35</string>
+						<string>F73AC8F616E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC64D16E75F99007CAB35</string>
@@ -336,7 +336,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC83E16E78656007CAB35</string>
+						<string>F73AC8F716E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052B16E6C342008F4FDA</string>
@@ -376,7 +376,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC83F16E78656007CAB35</string>
+						<string>F73AC8F816E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052D16E6C342008F4FDA</string>
@@ -416,7 +416,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC84016E78656007CAB35</string>
+						<string>F73AC8F916E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052E16E6C342008F4FDA</string>
@@ -456,7 +456,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC84116E78656007CAB35</string>
+						<string>F73AC8FA16E7CA3A007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712053016E6C342008F4FDA</string>
@@ -552,7 +552,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>2</integer>
+									<integer>1</integer>
 									<integer>0</integer>
 								</array>
 							</array>
@@ -594,7 +594,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.h</string>
+								<string>goodtests.js</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -602,11 +602,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.h</string>
+										<string>goodtests.js</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F73AC83A16E78656007CAB35</string>
+										<string>F73AC8F316E7CA3A007CAB35</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -623,12 +623,12 @@
 											<string>F73AC61716E75721007CAB35</string>
 											<string>F73AC67416E76652007CAB35</string>
 											<string>F73AC6BC16E776E5007CAB35</string>
-											<string>F73AC75316E77F01007CAB35</string>
 											<string>F73AC7E616E782E6007CAB35</string>
-											<string>F73AC82416E78629007CAB35</string>
-											<string>F73AC82616E78629007CAB35</string>
-											<string>F73AC83916E78656007CAB35</string>
-											<string>F73AC82516E78629007CAB35</string>
+											<string>F73AC84716E7B186007CAB35</string>
+											<string>F73AC8D116E7C99A007CAB35</string>
+											<string>F73AC8E216E7C9F8007CAB35</string>
+											<string>F73AC8F216E7CA3A007CAB35</string>
+											<string>F73AC8E116E7C9F8007CAB35</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -826,7 +826,7 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F73AC83016E78629007CAB35</string>
+		<string>F73AC8DB16E7C99A007CAB35</string>
 		<string>F73AC66416E76029007CAB35</string>
 		<string>F73AC66516E76029007CAB35</string>
 		<string>1CD10A99069EF8BA00B06720</string>
@@ -858,8 +858,6 @@
 					<key>Dock</key>
 					<array>
 						<dict>
-							<key>BecomeActive</key>
-							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>
@@ -882,6 +880,8 @@
 							<string>419pt</string>
 						</dict>
 						<dict>
+							<key>BecomeActive</key>
+							<true/>
 							<key>ContentConfiguration</key>
 							<dict>
 								<key>PBXProjectModuleGUID</key>

@@ -234,6 +234,7 @@ const String MINUS_INFINITY_STRING("-Infinity");
 const String ZERO_STRING("0");
 const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
+const String PROTOTYPE_STRING("prototype");
 const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
@@ -456,6 +457,8 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- UserObject --- */
 
+UserObject::UserObject(Object* prototype) : prototype(prototype) { }
+
 bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
@@ -467,8 +470,11 @@ bool UserObject::getProperty(Engine& engine, const String* name, Value& v) {
 		v = b->value;
 		return true;
 	}
-	v = Value(Value::UNDEFINED_TYPE);
-	return false;
+	if (prototype != 0) return prototype->getProperty(engine, name, v);
+	else {
+		v = Value(Value::UNDEFINED_TYPE);
+		return false;
+	}
 }
 
 bool UserObject::deleteProperty(Engine& engine, const String* name) {
@@ -485,6 +491,7 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 
 void UserObject::gcMark(GCHeap& heap) {
 	properties.mark(heap);
+	heap.mark(prototype);
 	super::gcMark(heap);
 }
 
@@ -713,11 +720,14 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 Function* Function::asFunction() { return this; }
 const String* Function::getTypeString() const { return &FUNCTION_STRING; }
 
-void Function::construct(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv) {
-	Object* newObject = heap.manage(new UserObject());
+void Function::construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv) {
+	Object* prototype = 0;
+	Value v;
+	if (getProperty(engine, &PROTOTYPE_STRING, v) && v.isObject()) prototype = v.getAsObject();
+	Object* newObject = engine.heap().manage(new UserObject(prototype));
 	Value thisValue(newObject);
 	processor->push(thisValue);
-	call(heap, processor, argc, argv, thisValue);
+	call(engine, processor, argc, argv, thisValue);
 }
 
 /* --- ScriptFunction --- */
@@ -726,7 +736,7 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
+void ScriptFunction::call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
 	processor->enterCall(this, argc, argv, thisValue);
 }
 
@@ -739,14 +749,15 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 /* --- ArgumentsObject --- */
 
 ArgumentsObject::ArgumentsObject(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
-		, argumentsCount(argumentsCount) {
+		, argumentsCount(argumentsCount), deletedArguments(argumentsCount) {
 	properties.assign(&LENGTH_STRING, Value(argumentsCount));
+	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
 Value* ArgumentsObject::findProperty(const String* name) {
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
-	return (q == name->end() && i < argumentsCount ? frame->getLocalsPointer() + i : 0);
+	return (q == name->end() && i < argumentsCount && !deletedArguments[i] ? frame->getLocalsPointer() + i : 0);
 }
 
 bool ArgumentsObject::getProperty(Engine& engine, const String* name, Value& v) {
@@ -759,6 +770,11 @@ bool ArgumentsObject::setProperty(Engine& engine, const String* name, const Valu
 	return (p == 0 ? super::setProperty(engine, name, v) : (*p = v, true));
 }
 
+bool ArgumentsObject::deleteProperty(Engine& engine, const String* name) {
+	Value* p = findProperty(name);
+	return (p == 0 ? super::deleteProperty(engine, name) : (deletedArguments[p - frame->getLocalsPointer()] = true));
+}
+
 void ArgumentsObject::gcMark(GCHeap& heap) {
 	heap.mark(frame);
 	super::gcMark(heap);
@@ -768,7 +784,7 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 
 FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
 		: environment(function->getEnvironment()), functionDef(function->getDefinition())
-		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
+		, passedArgumentsCount(argc), locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT_TYPE) {
 	localsPointer = locals.begin() + functionDef->varsCount;
 	std::fill(locals.begin(), localsPointer, Value(Value::UNDEFINED_TYPE)); // FIX : optimize
@@ -786,7 +802,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
-			Object* o = engine.heap().manage(new ArgumentsObject(this, locals.size() - functionDef->varsCount));
+			Object* o = engine.heap().manage(new ArgumentsObject(this, passedArgumentsCount));
 			argumentsValue = Value(o);
 		}
 		v = argumentsValue;
@@ -993,7 +1009,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 2;
-				f->call(heap, this, n, vsp - n + 1, Value(thisObject));
+				f->call(engine, this, n, vsp - n + 1, Value(thisObject));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1009,7 +1025,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->call(heap, this, n, vsp - n + 1, Value(Value::UNDEFINED_TYPE));
+				f->call(engine, this, n, vsp - n + 1, Value(Value::UNDEFINED_TYPE));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1025,7 +1041,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->construct(heap, this, n, vsp - n + 1);
+				f->construct(engine, this, n, vsp - n + 1);
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1075,7 +1091,7 @@ bool Processor::run(Int32 count) {
 			}
 			case THROW_OP: {
 				const Value& exception = vsp[0];
-				if (catchers.empty()) {
+				if (catchers.empty()) { // FIX
 					std::wcout << "Unhandled exception: " << (exception.toString(heap))->toStdString().c_str() << std::endl;
 					error();
 				}
@@ -2353,8 +2369,8 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
-		public:		virtual void call(GCHeap& heap, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
-						const String* s = (argc >= 1 ? argv[0].toString(heap) : &EMPTY_STRING);
+		public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
+						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						processor->push(Value());
 					}
