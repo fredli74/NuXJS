@@ -684,7 +684,7 @@ void Value::mark(GCHeap& heap) const {
 
 /* --- ScriptFunctionDef --- */
 
-ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), localsCount(0) { }
+ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), varsCount(0) { }
 
 bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const {
 	LocalNameMap::const_iterator it = localNames.find(name);
@@ -734,14 +734,23 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 	heap.mark(environment);
 	super::gcMark(heap);
 }
-
 #if 0
 /* --- ArgumentsObject --- */
 
-ArgumentsObject(FunctionFrame* frame) : frame(frame) { }
+ArgumentsObject(FunctionFrame* frame) : frame(frame), argumentsCount(frame->functionDef->argumentsCount) {
+	properties.assign(&LENGTH_STRING, argumentsCount);
+}
 
-bool ArgumentsObject::setProperty(Engine& engine, const String* name, Value& v) {
-	if (name->s == "length") return 
+bool ArgumentsObject::getProperty(Engine& engine, String* name, Value& v) {
+	UInt32 i;
+	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
+	if (q == name->end() && i < argumentsCount) {
+		v = frame->getLocalsPointer()
+		const Char* p = begin() + i;
+		if (32 <= *p && *p < 127) v = QUICK_CONSTANTS.ascii[*p - 32];
+		else v = Value(engine.heap().manage(new String(p, p + 1)));
+		return true;
+	}	
 }
 
 void ArgumentsObject::gcMark(GCHeap& heap) {
@@ -749,11 +758,11 @@ void ArgumentsObject::gcMark(GCHeap& heap) {
 	super::gcMark(heap);
 }
 #endif
-
 /* --- FunctionFrame --- */
 
 FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(function->getEnvironment())
-		, functionDef(function->getDefinition()), locals(std::max(functionDef->localsCount, 1)) {
+		, functionDef(function->getDefinition()), locals(functionDef->argumentsCount + functionDef->varsCount) {
+	localsPointer = locals.begin() + functionDef->varsCount;
 	std::fill(locals.begin(), locals.end(), Value(Value::UNDEFINED_TYPE)); // FIX : optimize
 }
 
@@ -762,8 +771,8 @@ FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(funct
 bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
-		assert(0 <= index && index < locals.size());
-		v = locals[index];
+		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
+		v = localsPointer[index];
 		return true;
 	} else {
 		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster
@@ -773,8 +782,8 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
-		assert(0 <= index && index < locals.size());
-		locals[index] = v;
+		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
+		localsPointer[index] = v;
 		return true;
 	} else {
 		return environment->setProperty(engine, name, v);
@@ -798,7 +807,9 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 /* --- CatchFrame --- */
 
 CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
-		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
+		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) {
+	localsPointer = parentFrame->getLocalsPointer();
+}
 
 void CatchFrame::gcMark(GCHeap& heap) {
 	heap.mark(parentFrame);
@@ -1393,7 +1404,7 @@ void Compiler::safeKeep(XValue& xv) {
 				tempLocalIndex = freeSafeKeepingIndexes.back();
 				freeSafeKeepingIndexes.pop_back();
 			} else {
-				tempLocalIndex = function->localsCount++;
+				tempLocalIndex = -(++function->varsCount);
 				safeKeptIndexCount++;
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
@@ -1730,9 +1741,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						const Char* b = p;
 						parseIdentifier(false);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->localNames[String::newHashedString(engine.heap(), b, p)] = func->localsCount;
-						func->localsCount++;
-						func->argumentsCount++;
+						func->localNames[String::newHashedString(engine.heap(), b, p)] = func->argumentsCount++;
 						eatWhite();
 					}
 					if (p == e) throw std::runtime_error("Expected ',' or ')'");
@@ -1829,7 +1838,7 @@ Int32 Compiler::parseVarDeclaration() {
 	LocalNameMap::const_iterator it = nameMap.find(identifier);
 	if (it != nameMap.end()) index = it->second;
 	else {
-		index = function->localsCount++;
+		index = -(++function->varsCount);
 		nameMap[identifier] = index;
 	}
 	if (eatToken("=", true)) {
@@ -2127,10 +2136,12 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
 					String* exceptionVarName = String::newHashedString(engine.heap(), b, p);
 					LocalNameMap& nameMap = function->localNames;
-					Int32 hadLocalIndex = -1;
+					bool hadLocalIndex = false;
+					Int32 localIndex = -1;
 					LocalNameMap::iterator it = nameMap.find(exceptionVarName);
 					if (it != nameMap.end()) {
-						hadLocalIndex = it->second;
+						hadLocalIndex = true;
+						localIndex = it->second;
 						nameMap.erase(it);
 					}
 					completeForwardBranch(catchPoint);
@@ -2146,7 +2157,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 					for (std::vector<Int32>::const_iterator it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
 						completeForwardBranch(*it);
-					if (hadLocalIndex >= 0) nameMap[exceptionVarName] = hadLocalIndex;
+					if (hadLocalIndex) nameMap[exceptionVarName] = localIndex;
 				}
 				
 				// Finally
@@ -2277,6 +2288,8 @@ freeSafeKeepingIndexes.clear();
 	assert(outputCode == &function->code);
 disassemble(engine.heap(), *outputCode, function->constants);
 std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
+std::cerr << "\tVars: " << function->varsCount << std::endl;
+std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -2358,7 +2371,6 @@ int main(int argc, const char* argv[]) {
 				
 				std::cerr << "\tCode: " << functionDef.code.size() << std::endl;
 				std::cerr << "\tConstants: " << functionDef.constants.size() << std::endl;
-				std::cerr << "\tLocals: " << functionDef.localsCount << std::endl;
 				
 				Value vstack[1024];
 				Context cstack[1024];
@@ -2373,9 +2385,8 @@ int main(int argc, const char* argv[]) {
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
-
-					std::cerr << "\tGC kept: " << heap.size() << std::endl;
 					std::cerr << "\tGC swept: " << sweptCount << std::endl;
+					std::cerr << "\tGC kept: " << heap.size() << std::endl;
 					
 					if (done) {
 						std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;

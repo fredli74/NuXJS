@@ -272,9 +272,24 @@ o = new MyObject; o.qwerty = "qwerty"; o.zxcv = "zxcv"; o.asdf = "asdf"; for (i 
 
 o[123] = 123; o[987] = 987; o[" space "] = " space "; for (i in o) { print(i); o[i + " 2"] = o[i] + " 2" }
 
+print("");
+for (i in o) { if (i >= "m" && i < "s") continue; print(i); }
+print("");
+
+print("");
+for (i in o) { if (i >= "m" && i < "s") break; print(i); }
+print("");
+
 for (i in o) { print(i); o[i + " 3"] = o[i] + " 3" }
 
 for (i in o) { print(i); o[i + " 4"] = o[i] + " 4" }
 
 for (i in o) print(i);
+
+a=function() { b = function() { c = function() { return d++ }; return c; }; var d = 23 ; return b }
+b=a()()
+print(b());
+print(b());
+print(b());
+print(b());
 

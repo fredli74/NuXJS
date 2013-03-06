@@ -21,7 +21,6 @@
 //	Compiler
 //
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
-//		for (in)
 //		global environment compiler (don't accept return etc)
 //		function name() { } syntax
 //		literal function names, e.g. myGlobalName = function myLocalName() { ... }
@@ -64,6 +63,8 @@
 //			not too fond of the int cast in the byte array
 //		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
 //		quicker calls by using a frame stack for functions that do not create closures
+//			problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
+//			two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
@@ -86,6 +87,7 @@
 //		if it wasn't for the problem with the value stack order in the return statement (i.e. the return expression has to be emitted before any "early exits pop's" etc are emitted) we wouldn't have to use safeKeep so much, but could just keep stuff on the stack and repush (e.g. the enumerator object for "for in")
 //			actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
 //		switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
+//		fast lookup of operators (some clever quick hashing)
 //
 //	GC
 //
@@ -114,6 +116,7 @@
 //		in operator
 //		typeof operator
 //		we could reuse free variable indexes in safeKeep (by having a way to "return" them and a queue with free ones), but it kind of feels like sub-optimization
+//		for (in)
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -127,7 +130,7 @@ typedef unsigned int UInt32;
 typedef unsigned char Byte;
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
-const UInt32 BUILT_IN_LOCALS_COUNT = 8;
+const UInt32 FRAME_BUILT_IN_LOCALS_COUNT = 8;
 const size_t STRING_BUILT_IN_LENGTH = 16;
 const double EPSILON = 1.0e-300;
 
@@ -136,8 +139,7 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 	public:		explicit QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
 	public:		explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
 
-	public:		void swap(QuickArray& other)
-				{
+	public:		void swap(QuickArray& other) {
 					if (this != &other) {
 						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
 						std::swap(n, other.n);
@@ -147,8 +149,7 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 					}
 				}
 				
-	public:		QuickArray& operator=(const QuickArray& copy)
-				{
+	public:		QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
 						QuickArray<T, BUILT_IN_COUNT> na(copy.n);
 						std::copy(copy.p, copy.p + copy.n, na.p);
@@ -342,7 +343,7 @@ class ScriptFunctionDef : public Object {
 	public:		CodeVector code;
 	public:		std::vector<Value> constants;
 	public:		Int32 argumentsCount;
-	public:		Int32 localsCount; // including arguments
+	public:		Int32 varsCount; // not including arguments
 	public:		LocalNameMap localNames;
 };
 
@@ -414,7 +415,8 @@ class ArgumentsObject : public UserObject {
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		virtual const ScriptFunctionDef* getFunctionDef() const = 0;
-	public:		virtual Value* getLocalsPointer() const = 0;
+	public:		Value* getLocalsPointer() const { return localsPointer; }
+	protected:	Value* localsPointer;
 };
 
 class FunctionFrame : public Frame {
@@ -425,10 +427,9 @@ class FunctionFrame : public Frame {
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
-	public:		virtual Value* getLocalsPointer() const { return locals.begin(); }
 	protected:	const ScriptFunctionDef* const functionDef;
 	protected:	Object* const environment;
-	protected:	QuickArray<Value, BUILT_IN_LOCALS_COUNT> locals;
+	protected:	QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
 };
 
 class CatchFrame : public Frame {
@@ -439,7 +440,6 @@ class CatchFrame : public Frame {
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
 	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return parentFrame->getFunctionDef(); }
-	public:		virtual Value* getLocalsPointer() const { return parentFrame->getLocalsPointer(); }
 	protected:	Frame* parentFrame;
 	protected:	const String* exceptionName;
 	protected:	Value exceptionValue;
