@@ -233,6 +233,7 @@ const String INFINITY_STRING("Infinity");
 const String MINUS_INFINITY_STRING("-Infinity");
 const String ZERO_STRING("0");
 const String LENGTH_STRING("length");
+const String ARGUMENTS_STRING("arguments");
 const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
@@ -734,36 +735,45 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 	heap.mark(environment);
 	super::gcMark(heap);
 }
-#if 0
+
 /* --- ArgumentsObject --- */
 
-ArgumentsObject(FunctionFrame* frame) : frame(frame), argumentsCount(frame->functionDef->argumentsCount) {
-	properties.assign(&LENGTH_STRING, argumentsCount);
+ArgumentsObject::ArgumentsObject(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
+		, argumentsCount(argumentsCount) {
+	properties.assign(&LENGTH_STRING, Value(argumentsCount));
 }
 
-bool ArgumentsObject::getProperty(Engine& engine, String* name, Value& v) {
+Value* ArgumentsObject::findProperty(const String* name) {
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
-	if (q == name->end() && i < argumentsCount) {
-		v = frame->getLocalsPointer()
-		const Char* p = begin() + i;
-		if (32 <= *p && *p < 127) v = QUICK_CONSTANTS.ascii[*p - 32];
-		else v = Value(engine.heap().manage(new String(p, p + 1)));
-		return true;
-	}	
+	return (q == name->end() && i < argumentsCount ? frame->getLocalsPointer() + i : 0);
+}
+
+bool ArgumentsObject::getProperty(Engine& engine, const String* name, Value& v) {
+	Value* p = findProperty(name);
+	return (p == 0 ? super::getProperty(engine, name, v) : (v = *p, true));
+}
+
+bool ArgumentsObject::setProperty(Engine& engine, const String* name, const Value& v) {
+	Value* p = findProperty(name);
+	return (p == 0 ? super::setProperty(engine, name, v) : (*p = v, true));
 }
 
 void ArgumentsObject::gcMark(GCHeap& heap) {
 	heap.mark(frame);
 	super::gcMark(heap);
 }
-#endif
+
 /* --- FunctionFrame --- */
 
-FunctionFrame::FunctionFrame(const ScriptFunction* function) : environment(function->getEnvironment())
-		, functionDef(function->getDefinition()), locals(functionDef->argumentsCount + functionDef->varsCount) {
+FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
+		: environment(function->getEnvironment()), functionDef(function->getDefinition())
+		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
+		, argumentsValue(Value::NONEXISTENT_TYPE) {
 	localsPointer = locals.begin() + functionDef->varsCount;
-	std::fill(locals.begin(), locals.end(), Value(Value::UNDEFINED_TYPE)); // FIX : optimize
+	std::fill(locals.begin(), localsPointer, Value(Value::UNDEFINED_TYPE)); // FIX : optimize
+	Value* e = std::copy(argv, argv + argc, localsPointer);
+	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), Value(Value::UNDEFINED_TYPE));
 }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
@@ -774,9 +784,15 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 		v = localsPointer[index];
 		return true;
-	} else {
-		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster
-	}
+	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
+		if (!argumentsValue.exists()) {
+			Object* o = engine.heap().manage(new ArgumentsObject(this, locals.size() - functionDef->varsCount));
+			argumentsValue = Value(o);
+		}
+		v = argumentsValue;
+		return true;
+	} else if (environment->getProperty(engine, name, v)) return true; // FIX: can we do a looping non-recursive solution? faster
+	else return false;
 }
 
 bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
@@ -784,6 +800,9 @@ bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value&
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 		localsPointer[index] = v;
+		return true;
+	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
+		argumentsValue = v;
 		return true;
 	} else {
 		return environment->setProperty(engine, name, v);
@@ -861,14 +880,12 @@ void Processor::error() {
 
 void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func));
+	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func, argc, argv));
 	++cstackPointer;
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
 	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
-	Value* lp = frame->getLocalsPointer();
-	std::fill(std::copy(argv, argv + std::min(argc, def->argumentsCount), lp), lp + def->argumentsCount, Value(Value::UNDEFINED_TYPE));
 }
 
 bool Processor::run(Int32 count) {
@@ -1632,7 +1649,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		
 		case ASSIGNMENT: {
 			XValue lv(v);
-			if (op.vmOp != Processor::INVALID_OP) {
+			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
 				makeRValue(lv);
 				parseRValueOperand(op);
 				emit(op.vmOp);
@@ -1828,27 +1845,35 @@ void Compiler::parseAndPopOptionalExpression() { // FIX : drop
 	if (parseOptionalExpression(xv, LOWEST_PREC)) discard(xv);
 }
 
-Int32 Compiler::parseVarDeclaration() {
+Compiler::XValue Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
 	if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
 	String* identifier = String::newHashedString(engine.heap(), b, p);
-	Int32 index;
-	LocalNameMap& nameMap = function->localNames;
-	LocalNameMap::const_iterator it = nameMap.find(identifier);
-	if (it != nameMap.end()) index = it->second;
-	else {
-		index = -(++function->varsCount);
-		nameMap[identifier] = index;
+	XValue lv;
+	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
+		lv = XValue(XValue::NAMED, Value(identifier));
+	} else {
+		Int32 index;
+		LocalNameMap& nameMap = function->localNames;
+		LocalNameMap::const_iterator it = nameMap.find(identifier);
+		if (it != nameMap.end()) index = it->second;
+		else {
+			index = -(++function->varsCount);
+			nameMap[identifier] = index;
+		}
+		lv = XValue(XValue::INDEXED, Value(index));
 	}
+	
 	if (eatToken("=", true)) {
-		XValue xv;
-		parseExpression(xv, COMMA_PREC); // FIX : SUB
-		makeRValue(xv);
-		emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+		XValue rv;
+		parseExpression(rv, COMMA_PREC); // FIX : SUB
+		makeRValue(rv);
+		XValue lvCopy(lv); // FIX : NOT AGAIN!!
+		makeAssignment(lvCopy);
 		emit(Processor::POP_OP);
 	}
-	return index;
+	return lv;
 }
 
 void Compiler::parseVarDeclarations() {
@@ -2038,10 +2063,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (eatToken("var", true)) {
 					eatWhite();
 					acceptInOperator = false;
-					Int32 varIndex = parseVarDeclaration();
+					XValue iterXValue = parseVarDeclaration();
 					acceptInOperator = true;
 					if (eatToken("in", true)) {
-						XValue iterXValue(XValue::INDEXED, Value(varIndex));
 						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
 						break;
 					} else {

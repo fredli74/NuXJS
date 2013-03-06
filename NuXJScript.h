@@ -11,6 +11,7 @@
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
 //		prototype support
 //		arguments container
+//			we need to decide what should happen when deleting members still...
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
@@ -402,16 +403,6 @@ class ScriptFunction : public Function {
 	protected:	Object* const environment; // Usually the global object or the frame of the context that created this function.
 };
 
-#if 0
-class ArgumentsObject : public UserObject {
-	public:		typedef UserObject super;
-	public:		ArgumentsObject(FunctionFrame* frame);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Engine& engine, String* name, Value& v);
-	protected:	FunctionFrame* frame;
-};
-#endif
-
 class Frame : public Object {
 	public:		typedef Object super;
 	public:		virtual const ScriptFunctionDef* getFunctionDef() const = 0;
@@ -419,9 +410,10 @@ class Frame : public Object {
 	protected:	Value* localsPointer;
 };
 
+class ArgumentsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
-	public:		FunctionFrame(const ScriptFunction* function);
+	public:		FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -430,6 +422,7 @@ class FunctionFrame : public Frame {
 	protected:	const ScriptFunctionDef* const functionDef;
 	protected:	Object* const environment;
 	protected:	QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
+	protected:	Value argumentsValue;
 };
 
 class CatchFrame : public Frame {
@@ -443,6 +436,17 @@ class CatchFrame : public Frame {
 	protected:	Frame* parentFrame;
 	protected:	const String* exceptionName;
 	protected:	Value exceptionValue;
+};
+
+class ArgumentsObject : public UserObject {
+	public:		typedef UserObject super;
+	public:		ArgumentsObject(FunctionFrame* frame, Int32 argumentsCount);
+	public:		virtual void gcMark(GCHeap& heap);
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
+	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+	protected:	Value* findProperty(const String* name);
+	protected:	FunctionFrame* frame;
+	protected:	Int32 argumentsCount;
 };
 
 struct Context { // FIX : make Processor local
@@ -567,7 +571,7 @@ class Compiler : public GCItem {
 	protected:	void parseExpression(XValue& v, Precedence precedence);
 	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
-	protected:	Int32 parseVarDeclaration();
+	protected:	Compiler::XValue parseVarDeclaration();
 	protected:	void parseVarDeclarations();
 	protected:	void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, XValue& iterXValue);
 	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
