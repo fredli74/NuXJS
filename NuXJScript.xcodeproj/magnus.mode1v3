@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F416E7CA3A007CAB35</string>
+						<string>F73ACA4316E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC63F16E75F99007CAB35</string>
@@ -256,7 +256,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F516E7CA3A007CAB35</string>
+						<string>F73ACA4416E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC64516E75F99007CAB35</string>
@@ -296,7 +296,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F616E7CA3A007CAB35</string>
+						<string>F73ACA4516E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F73AC64D16E75F99007CAB35</string>
@@ -336,7 +336,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F716E7CA3A007CAB35</string>
+						<string>F73ACA4616E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052B16E6C342008F4FDA</string>
@@ -376,7 +376,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F816E7CA3A007CAB35</string>
+						<string>F73ACA4716E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052D16E6C342008F4FDA</string>
@@ -416,7 +416,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8F916E7CA3A007CAB35</string>
+						<string>F73ACA4816E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712052E16E6C342008F4FDA</string>
@@ -456,7 +456,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F73AC8FA16E7CA3A007CAB35</string>
+						<string>F73ACA4916E801F7007CAB35</string>
 						<key>history</key>
 						<array>
 							<string>F712053016E6C342008F4FDA</string>
@@ -552,7 +552,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>1</integer>
+									<integer>2</integer>
 									<integer>0</integer>
 								</array>
 							</array>
@@ -594,7 +594,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>goodtests.js</string>
+								<string>NuXJScript.h</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -602,11 +602,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>goodtests.js</string>
+										<string>NuXJScript.h</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F73AC8F316E7CA3A007CAB35</string>
+										<string>F73ACA4216E801F7007CAB35</string>
 										<key>history</key>
 										<array>
 											<string>F7E2D18816DCB1C000271B91</string>
@@ -626,9 +626,9 @@
 											<string>F73AC7E616E782E6007CAB35</string>
 											<string>F73AC84716E7B186007CAB35</string>
 											<string>F73AC8D116E7C99A007CAB35</string>
-											<string>F73AC8E216E7C9F8007CAB35</string>
-											<string>F73AC8F216E7CA3A007CAB35</string>
-											<string>F73AC8E116E7C9F8007CAB35</string>
+											<string>F73AC9C316E7FFB9007CAB35</string>
+											<string>F73ACA3816E801F3007CAB35</string>
+											<string>F73ACA1816E800F9007CAB35</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -826,9 +826,9 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F73AC8DB16E7C99A007CAB35</string>
 		<string>F73AC66416E76029007CAB35</string>
 		<string>F73AC66516E76029007CAB35</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F7E6DA7A16DE27D6007AB92B</string>
@@ -838,7 +838,6 @@
 		<string>F73AC64B16E75F99007CAB35</string>
 		<string>F73AC64316E75F99007CAB35</string>
 		<string>F73AC63D16E75F99007CAB35</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -1182,7 +1181,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {1111, 590}}</string>
 								<key>RubberWindowFrame</key>
-								<string>328 158 1111 631 0 0 1440 878 </string>
+								<string>329 247 1111 631 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXDebugCLIModule</string>
@@ -1211,11 +1210,11 @@
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.consoleV3</string>
 			<key>WindowString</key>
-			<string>328 158 1111 631 0 0 1440 878 </string>
+			<string>329 247 1111 631 0 0 1440 878 </string>
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

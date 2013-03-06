@@ -306,12 +306,15 @@ class Table {
 class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		typedef Object super;
 	public:		typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
-	public:		static String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
+	public:		static const String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
+	public:		static const String* fromInt(GCHeap& heap, Int32 i);
+	public:		static const String* fromDouble(GCHeap& heap, double d);
 	public:		String();
 	public:		String(const String& o);
 	public:		String(const Char* b, const Char* e);
 	public:		String(const String& l, const String& r);
-	public:		String(const char* sz);
+	public:		String(const std::wstring& s);
+	public:		template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 	public:		Table::HashType calcHash() const;
 	public:		bool isEqualTo(const String& o) const;
 	public:		bool isLessThan(const String& o) const;
@@ -319,7 +322,6 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual Enumerator* getEnumerator(Engine& engine);
 	protected:	mutable size_t hash;
-	protected:	class CharEnumerator;
 };
 
 struct StringObjectCompare {
@@ -348,11 +350,20 @@ class ScriptFunctionDef : public Object {
 	public:		LocalNameMap localNames;
 };
 
+class RangeEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+	public:		RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
+	public:		virtual const String* nextPropertyName() { return (index >= to ? 0 : Value(index++).toString(heap)); }
+	protected:	GCHeap& heap;
+	protected:	const Int32 to;
+	protected:	Int32 index;
+};
+
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
 	public:		StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
 	public:		void add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-	public:		void sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); }
+	public:		void sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
 	public:		virtual void gcMark(GCHeap& heap) { for (const String** p = list.begin(); p != list.end(); ++p) heap.mark(*p); super::gcMark(heap); }
 	public:		virtual const String* nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 	protected:	QuickArray<const String*, 8> list;
@@ -412,7 +423,7 @@ class Frame : public Object {
 	protected:	Value* localsPointer;
 };
 
-class ArgumentsObject;
+class Arguments;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 	public:		FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
@@ -441,13 +452,14 @@ class CatchFrame : public Frame {
 	protected:	Value exceptionValue;
 };
 
-class ArgumentsObject : public UserObject {
+class Arguments : public UserObject {
 	public:		typedef UserObject super;
-	public:		ArgumentsObject(FunctionFrame* frame, Int32 argumentsCount);
+	public:		Arguments(FunctionFrame* frame, Int32 argumentsCount);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
+	public:		virtual Enumerator* getEnumerator(Engine& engine);
 	protected:	Value* findProperty(const String* name);
 	protected:	FunctionFrame* frame;
 	protected:	Int32 argumentsCount;

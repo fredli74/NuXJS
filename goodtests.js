@@ -230,8 +230,12 @@ switch (1.0) { case 0: print('0'); default: print('default'); case "1.0": print(
 
 for (var i = 0; i < 10; ++i) { switch (i) { case 5: continue }; print(i) }
 
-print("hejsan".length);
-
+print("abcdefgh"[0]);
+print("abcdefgh"[4]);
+print("abcdefgh"[8]);
+print("abcdefgh"[-1]);
+print("abcdefgh".length);
+s = "abcdefgh"; s = s[0] + s[3] + s[7] + s[1]; print(s);
 s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output 10, string lengths are not writable
 
 MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
@@ -303,6 +307,15 @@ f=function(a,b,c,d,e) { print(arguments[0]); print(arguments[1]); print(argument
 
 f=function() { for (var i = 0, l = arguments.length; i < l; ++i) print(arguments[i]) }; f('ole', 'dole', 'doff');
 
+f=function() { g = function () { print(arguments[0]); print(arguments[1]); }; return g; }; f('a')('b');
+
+print('');
+f=function() { for (var i in arguments) print(i) }; f('1', '2', '3', '4');
+
+print('');
+f=function() { arguments["extra"] = null; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
+print('');
+
 f=function(a,b,c,d,e) {
 	print(arguments[0]);
 	a = 111;
@@ -323,7 +336,10 @@ f=function(a,b,c,d,e) {
 };
 f(1,'b',true);
 
+print('');
 f = function() { for (arguments in "abcd") print(arguments); }; f();
+print('');
 
 f = function() { for (var arguments = 3 in "abcd") print(arguments); }; f();
+print('');
 

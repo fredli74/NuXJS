@@ -178,16 +178,14 @@ static bool isComment(const Char* p, const Char* e) {
 
 /* --- String --- */
 
-String::String(const char* sz) : QArray(strlen(sz)), hash(0) { std::copy(sz, sz + size(), begin()); calcHash(); }
-
 const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
 struct QuickConstants {
 	QuickConstants() {
 		try {
 			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
 			for (int i = 32; i < 127; ++i) {
-				char buf[2] = { i, 0 };
-				ascii[i - 32] = Value(new String(buf));
+				Char buf[1] = { i };
+				ascii[i - 32] = Value(new String(buf, buf + 1));
 			}
 			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
 				Char buffer[32];
@@ -240,16 +238,11 @@ const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
 String::String(const String& o) : QArray(o), hash(o.hash) { }
+String::String(const std::wstring& s) : QArray(s.size()), hash(0) { std::copy(s.begin(), s.end(), begin()); }
 
 String::String(const String& l, const String& r) : QArray(l.size() + r.size()), hash(0) {
 	Char* e = std::copy(l.begin(), l.end(), begin());
 	std::copy(r.begin(), r.end(), e);
-}
-
-String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
-	String* o = heap.manage(new String(b, e));
-	o->calcHash();
-	return o;
 }
 
 bool String::getProperty(Engine& engine, const String* name, Value& v) {
@@ -304,17 +297,31 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-class String::CharEnumerator : public Enumerator { // FIX : .cpp local
-	public:		typedef Enumerator super;
-	public:		CharEnumerator(GCHeap& heap, const String* s) : heap(heap), s(s), index(0) { }
-	public:		virtual void gcMark(GCHeap& heap) { heap.mark(s); super::gcMark(heap); }
-	public:		virtual const String* nextPropertyName() { return (index >= s->size() ? 0 : Value(index++).toString(heap)); }
-	protected:	GCHeap& heap;
-	protected:	const String* s;
-	protected:	Int32 index;
-};
+Enumerator* String::getEnumerator(Engine& engine) { return new RangeEnumerator(engine.heap(), 0, size()); }
 
-Enumerator* String::getEnumerator(Engine& engine) { return new CharEnumerator(engine.heap(), this); }
+const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
+	String* o = heap.manage(new String(b, e));
+	o->calcHash();
+	return o;
+}
+
+const String* String::fromInt(GCHeap& heap, Int32 i) {
+	Char buffer[32];
+	return (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
+		 ? QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
+		 : heap.manage(new String(intToString(buffer, i), buffer + 32));
+}
+
+const String* String::fromDouble(GCHeap& heap, double d) {
+	Char buffer[32];
+	if (static_cast<Int32>(d) == d) return fromInt(heap, static_cast<Int32>(d));
+	if (isNaN(d)) return &NAN_STRING;
+	double x = fabs(d);
+	if (x <= EPSILON) return &ZERO_STRING;
+	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
+	std::pair<Char*, Char*> r = doubleToString(buffer, d);
+	return heap.manage(new String(r.first, r.second));
+}
 
 /* --- GCItem --- */
 
@@ -485,7 +492,7 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 Enumerator* UserObject::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
-	list->sort();
+	// list->sort(); // FIX : bad idea?
 	return list;
 }
 
@@ -545,21 +552,7 @@ const String* Value::toString(GCHeap& heap) const {
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
 		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
-		case NUMBER_TYPE: {
-			Char buffer[32];
-			int i = static_cast<int>(d);
-			if (i == d) {
-				if (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
-					return QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
-				else return heap.manage(new String(intToString(buffer, i), buffer + 32));
-			}
-			if (isNaN(d)) return &NAN_STRING;
-			double x = fabs(d);
-			if (x <= EPSILON) return &ZERO_STRING;
-			if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
-			std::pair<Char*, Char*> r = doubleToString(buffer, d);
-			return heap.manage(new String(r.first, r.second));
-		}
+		case NUMBER_TYPE: return String::fromDouble(heap, d);
 		case STRING_TYPE: return s;
 case OBJECT_TYPE: return heap.manage(new String("<object>"));
 	}
@@ -746,38 +739,48 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 	super::gcMark(heap);
 }
 
-/* --- ArgumentsObject --- */
+/* --- Arguments --- */
 
-ArgumentsObject::ArgumentsObject(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
+Arguments::Arguments(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
 		, argumentsCount(argumentsCount), deletedArguments(argumentsCount) {
 	properties.assign(&LENGTH_STRING, Value(argumentsCount));
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
-Value* ArgumentsObject::findProperty(const String* name) {
+Value* Arguments::findProperty(const String* name) {
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
 	return (q == name->end() && i < argumentsCount && !deletedArguments[i] ? frame->getLocalsPointer() + i : 0);
 }
 
-bool ArgumentsObject::getProperty(Engine& engine, const String* name, Value& v) {
+bool Arguments::getProperty(Engine& engine, const String* name, Value& v) {
 	Value* p = findProperty(name);
 	return (p == 0 ? super::getProperty(engine, name, v) : (v = *p, true));
 }
 
-bool ArgumentsObject::setProperty(Engine& engine, const String* name, const Value& v) {
+bool Arguments::setProperty(Engine& engine, const String* name, const Value& v) {
 	Value* p = findProperty(name);
 	return (p == 0 ? super::setProperty(engine, name, v) : (*p = v, true));
 }
 
-bool ArgumentsObject::deleteProperty(Engine& engine, const String* name) {
+bool Arguments::deleteProperty(Engine& engine, const String* name) {
 	Value* p = findProperty(name);
 	return (p == 0 ? super::deleteProperty(engine, name) : (deletedArguments[p - frame->getLocalsPointer()] = true));
 }
 
-void ArgumentsObject::gcMark(GCHeap& heap) {
+void Arguments::gcMark(GCHeap& heap) {
 	heap.mark(frame);
 	super::gcMark(heap);
+}
+
+Enumerator* Arguments::getEnumerator(Engine& engine) {
+	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount));
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b))
+		if (!b->key->isEqualTo(LENGTH_STRING)) list->add(b->key);
+	for (Int32 i = 0; i < argumentsCount; ++i)
+		if (!deletedArguments[i]) list->add(Value(i).toString(engine.heap()));
+	// list->sort(); // FIX : bad idea?
+	return list;
 }
 
 /* --- FunctionFrame --- */
@@ -802,7 +805,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
-			Object* o = engine.heap().manage(new ArgumentsObject(this, passedArgumentsCount));
+			Object* o = engine.heap().manage(new Arguments(this, passedArgumentsCount));
 			argumentsValue = Value(o);
 		}
 		v = argumentsValue;
@@ -1827,7 +1830,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					const Char* b = p;
 					parseIdentifier(false);
 					if (p == b) return false; // fix : nicer way?
-					String* identifier = String::newHashedString(engine.heap(), b, p);
+					const String* identifier = String::newHashedString(engine.heap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->localNames;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1865,7 +1868,7 @@ Compiler::XValue Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
 	if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
-	String* identifier = String::newHashedString(engine.heap(), b, p);
+	const String* identifier = String::newHashedString(engine.heap(), b, p);
 	XValue lv;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
 		lv = XValue(XValue::NAMED, Value(identifier));
@@ -2174,7 +2177,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					const Char* b = p;
 					parseIdentifier(false);
 					if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
-					String* exceptionVarName = String::newHashedString(engine.heap(), b, p);
+					const String* exceptionVarName = String::newHashedString(engine.heap(), b, p);
 					LocalNameMap& nameMap = function->localNames;
 					bool hadLocalIndex = false;
 					Int32 localIndex = -1;
@@ -2387,18 +2390,18 @@ int main(int argc, const char* argv[]) {
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
 	String source(EMPTY_STRING);
-	std::auto_ptr<std::ifstream> inputFileStream;
-	std::istream* inStream = &std::cin;
+	std::auto_ptr<std::wifstream> inputFileStream;
+	std::wistream* inStream = &std::wcin;
 	if (argc >= 2) {
-		inputFileStream.reset(new std::ifstream(argv[1]));
+		inputFileStream.reset(new std::wifstream(argv[1]));
 		inStream = inputFileStream.get();
 	}
 	while (inStream->good()) {
 		try {
-			std::string s;
+			std::wstring s;
 			std::getline(*inStream, s);
 			if (!s.empty()) {
-				String line(s.c_str());
+				String line(s);
 				source = String(source, line);
 				source = String(source, LF_STRING);
 			} else {
