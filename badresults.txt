@@ -36,3 +36,6 @@ Exception: Expected 'catch' or 'finally'
 Exception: Expected identifier
 Exception: Expected expression
 Exception: Expected 'case', 'default' or '}'
+Exception: Illegal l-value
+Exception: Expected ';'
+Exception: Illegal l-value

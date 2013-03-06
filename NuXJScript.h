@@ -286,6 +286,7 @@ class Table {
 					Value value;
 				};
 	public:		Table(UInt32 n = TABLE_BUILT_IN_N);
+	public:		UInt32 getLoadCount() const;
 	public:		const Bucket* getFirst() const;
 	public:		const Bucket* getNext(const Bucket* b) const;
 	public:		const Bucket* lookup(const String* key);
@@ -345,12 +346,25 @@ class ScriptFunctionDef : public Object {
 	public:		LocalNameMap localNames;
 };
 
+class StringListEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+	public:		StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
+	public:		void add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
+	public:		void sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); }
+	public:		virtual void gcMark(GCHeap& heap) { for (const String** p = list.begin(); p != list.end(); ++p) heap.mark(*p); super::gcMark(heap); }
+	public:		virtual const String* nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
+	protected:	QuickArray<const String*, 8> list;
+	protected:	UInt32 actualCount;
+	protected:	UInt32 nextIndex;
+};
+
 class UserObject : public Object {
 	public:		typedef Object super;
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
 	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 	public:		virtual bool deleteProperty(Engine& engine, const String* name);
+	public:		virtual Enumerator* getEnumerator(Engine& engine);
 	protected:	Table properties;
 };
 
@@ -449,8 +463,8 @@ class Processor : public GCItem {
 					, WRITE_INDEXED_OP								// operand: local index, stack: value -> value
 					, READ_NAMED_OP									// operand: const index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const index (name), stack: value -> value
-					, GET_PROPERTY_OP								// stack: name, object -> value
-					, SET_PROPERTY_OP								// stack: name, object -> value
+					, GET_PROPERTY_OP								// stack: object, name -> value
+					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
 					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
 					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP				// stack: left value, right value -> result value
@@ -551,10 +565,11 @@ class Compiler : public GCItem {
 	protected:	void parseFunctionCall(XValue& v, Processor::Opcode op);
 	protected:	bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
 	protected:	void parseExpression(XValue& v, Precedence precedence);
-	protected:	bool parseOptionalExpression(XValue& v, bool acceptInOperator, Precedence precedence);
+	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
 	protected:	void parseAndPopOptionalExpression();
+	protected:	Int32 parseVarDeclaration();
 	protected:	void parseVarDeclarations();
-	protected:	void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const XValue& iterXValue);
+	protected:	void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, XValue& iterXValue);
 	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 	protected:	void parseStatementList(Scope* firstScope);
 	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
@@ -576,6 +591,7 @@ class Compiler : public GCItem {
 	protected:	CodeVector* outputCode;
 	protected:	std::vector<Int32> freeSafeKeepingIndexes;
 	protected:	Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
+	protected:	bool acceptInOperator;
 };
 
 #endif

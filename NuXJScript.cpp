@@ -378,7 +378,8 @@ UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
 
 Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
 
-const Table::Bucket* Table::getFirst() const { return getNext(&buckets[0]); }
+UInt32 Table::getLoadCount() const { return loadCount; }
+const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
@@ -474,10 +475,19 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 	return true;
 }
 
+Enumerator* UserObject::getEnumerator(Engine& engine) {
+	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount()));
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
+	list->sort();
+	return list;
+}
+
 void UserObject::gcMark(GCHeap& heap) {
 	properties.mark(heap);
 	super::gcMark(heap);
 }
+
+/* --- Value --- */
 
 Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
@@ -1255,7 +1265,8 @@ struct Compiler::XValue {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function), outputCode(&function->code), safeKeptIndexCount(0) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function)
+		, outputCode(&function->code), safeKeptIndexCount(0), acceptInOperator(true) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
@@ -1689,7 +1700,7 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-bool Compiler::parseOptionalExpression(XValue& v, bool acceptInOperator, Precedence precedence) {
+bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
 	if (!parseOperator(v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
@@ -1800,41 +1811,47 @@ bool Compiler::parseOptionalExpression(XValue& v, bool acceptInOperator, Precede
 }
 
 void Compiler::parseExpression(XValue& v, Precedence precedence) {
-	if (!parseOptionalExpression(v, true, precedence)) throw std::runtime_error("Expected expression");
+	if (!parseOptionalExpression(v, precedence)) throw std::runtime_error("Expected expression");
 }
 
 void Compiler::parseAndPopOptionalExpression() { // FIX : drop
 	XValue xv;
-	if (parseOptionalExpression(xv, true, LOWEST_PREC)) discard(xv);
+	if (parseOptionalExpression(xv, LOWEST_PREC)) discard(xv);
+}
+
+Int32 Compiler::parseVarDeclaration() {
+	const Char* b = p; // FIX : sub
+	parseIdentifier(false);
+	if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
+	String* identifier = String::newHashedString(engine.heap(), b, p);
+	Int32 index;
+	LocalNameMap& nameMap = function->localNames;
+	LocalNameMap::const_iterator it = nameMap.find(identifier);
+	if (it != nameMap.end()) index = it->second;
+	else {
+		index = function->localsCount++;
+		nameMap[identifier] = index;
+	}
+	if (eatToken("=", true)) {
+		XValue xv;
+		parseExpression(xv, COMMA_PREC); // FIX : SUB
+		makeRValue(xv);
+		emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+		emit(Processor::POP_OP);
+	}
+	return index;
 }
 
 void Compiler::parseVarDeclarations() {
 	while (true) {
-		const Char* b = p; // FIX : sub
-		parseIdentifier(false);
-		if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
-		String* identifier = String::newHashedString(engine.heap(), b, p);
-		Int32 index;
-		LocalNameMap& nameMap = function->localNames;
-		LocalNameMap::const_iterator it = nameMap.find(identifier);
-		if (it != nameMap.end()) index = it->second;
-		else {
-			index = function->localsCount++;
-			nameMap[identifier] = index;
-		}
-		if (eatToken("=", true)) {
-			XValue xv;
-			parseExpression(xv, COMMA_PREC); // FIX : SUB
-			makeRValue(xv);
-			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
-			emit(Processor::POP_OP);
-		}
+		parseVarDeclaration();
 		if (!eatToken(",", true)) break;
 		eatWhite();
 	}
 }
 
-void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const XValue& iterXValue) {
+void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+		, XValue& iterXValue) {
 	XValue enumXValue; // FIX : sub
 	parseExpression(enumXValue, LOWEST_PREC); // FIX : SUB
 	makeRValue(enumXValue);
@@ -1845,9 +1862,14 @@ void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd
 	XValue xv(enumXValue); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
 	makeRValue(xv);
 	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
-	xv = iterXValue; // copy so that makeAssignment doesn't change it to pushed, FIX : is this good clean code? what about xv = makeRValue(xv) as the normal one instead?
-	makeAssignment(xv);
-	discard(xv);
+	xv = XValue(XValue::PUSHED);
+	if (!iterCode.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
+		safeKeep(xv);
+		outputCode->insert(outputCode->end(), iterCode.begin(), iterCode.end());
+		returnSafeKept(xv, true, true);
+	}
+	makeAssignment(iterXValue);
+	discard(iterXValue);
 	parseStatement(emptyLabelScope, emptyLabelScope);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
@@ -2003,16 +2025,37 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
+				CodeVector initCode;
 				if (eatToken("var", true)) {
 					eatWhite();
-					parseVarDeclarations();
+					acceptInOperator = false;
+					Int32 varIndex = parseVarDeclaration();
+					acceptInOperator = true;
+					if (eatToken("in", true)) {
+						XValue iterXValue(XValue::INDEXED, Value(varIndex));
+						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
+						break;
+					} else {
+						if (eatToken(",", true)) {
+							eatWhite();
+							acceptInOperator = false;
+							parseVarDeclarations();
+							acceptInOperator = true;
+						}
+					}
 				} else {
 					XValue iterXValue;
-					if (parseOptionalExpression(iterXValue, false, LOWEST_PREC)) {
+					outputCode = &initCode;
+					acceptInOperator = false;
+					bool gotExpression = parseOptionalExpression(iterXValue, LOWEST_PREC);
+					acceptInOperator = true;
+					outputCode = &function->code;
+					if (gotExpression) {
 						if (eatToken("in", true)) {
-							parseForInStatement(&emptyLabelScope, scopeLabelsEnd, iterXValue);
+							parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
 							break;
 						} else {
+							outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
 							discard(iterXValue);
 						}
 					}
@@ -2021,7 +2064,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Int32 loopPoint = markBackwardBranch();
 				Int32 exitLoopPoint = INVALID_CODE_POINT;
 				XValue xv;
-				if (parseOptionalExpression(xv, true, LOWEST_PREC)) {
+				if (parseOptionalExpression(xv, LOWEST_PREC)) {
 					makeRValue(xv);
 					exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				}
@@ -2042,7 +2085,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case RETURN_STATEMENT: {
 				XValue returnXValue;
-				parseOptionalExpression(returnXValue, true, LOWEST_PREC);
+				parseOptionalExpression(returnXValue, LOWEST_PREC);
 				Scope* s = firstScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
@@ -2218,6 +2261,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	safeKeptIndexCount = 0;
 	p = b;
 	this->e = e;
+	acceptInOperator = true;
 	parseStatementList(0);
 	return p;
 }

@@ -68,6 +68,8 @@ print((x == 3.1 ? 'a' : 'b') == 'b')
 print((x == 3.0 ? (x >= 3.0 ? 'a' : 'b') : 'c') == 'a')
 print((x != 3.0 ? (x >= 3.0 ? 'a' : 'b') : (x > 3.0 ? 'c' : 'd')) == 'd')
 
+f = function() { }
+var a = 1 , b = 2 , c , d = 1 in f ; print(a + ", " + b + ", " + c + ", " + d);
 
 var i = 0 ;   while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
  do { j = j - i * 0.5 } while ( i ++ < 2000 )
@@ -256,4 +258,23 @@ print((function() { print(x); var x; print(x); x = void print("turn to void"); r
 	print(typeof doesExist);
 }; f(); })();
 
-a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x)
+s = ''; for ( a in "abcdefgh" ) s += a + ','; print(s);
+s = ''; for ( var a in "abcdefgh" ) s += a + ','; print(s);
+s = ''; for ( var a = 100 in "abcdefgh" ) s += a + ','; print(s);
+s = ''; for ( var a = 100 in "" ) ; print(a);
+a = new MyObject; for (a.x in "abcd") print(a.x)
+a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x); for (var i = 0; i < x; ++i) print(a[i]);
+a = new MyObject; f = function() { print("tick "); return 0 }; for (a[f()] in "abcd") { print (a[0]) }
+
+for (i in o) print(i);
+
+o = new MyObject; o.qwerty = "qwerty"; o.zxcv = "zxcv"; o.asdf = "asdf"; for (i in o) print(i);
+
+o[123] = 123; o[987] = 987; o[" space "] = " space "; for (i in o) { print(i); o[i + " 2"] = o[i] + " 2" }
+
+for (i in o) { print(i); o[i + " 3"] = o[i] + " 3" }
+
+for (i in o) { print(i); o[i + " 4"] = o[i] + " 4" }
+
+for (i in o) print(i);
+

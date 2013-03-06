@@ -78,3 +78,9 @@ switch () { }
 
 switch (3) { x=1 }
 
+(true ? a : b) = 3
+
+for (var x = 3, y = 5 in f; x < 100 && y < 15 ; ++y) { s += y + "," };
+
+for ( a = 100 in "abcdefgh" ) ;
+
