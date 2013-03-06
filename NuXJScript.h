@@ -176,6 +176,8 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 	public:		GCItem();
+	public:		GCItem(const GCItem& copy);
+	public:		GCItem& operator=(const GCItem& copy);
 	public:		virtual void gcMark(GCHeap& heap);
 	public:		virtual ~GCItem();
 	protected:	GCList* _gcList;
@@ -202,6 +204,8 @@ class GCHeap {
 	protected:	GCList* newList;
 	protected:	GCList managedLists[2];
 	protected:	GCList rootList;
+	private:	GCHeap(const GCHeap& other); // N/A
+	private:	GCHeap& operator=(const GCHeap& other); // N/A
 };
 
 class Engine;
@@ -246,7 +250,7 @@ class Value {
 	public:		bool isLessThan(const Value& y) const;
 	public:		bool isLessThanOrEqualTo(const Value& y) const;
 	public:		Value add(GCHeap& heap, const Value& y) const;
-	public:		void mark(GCHeap& heap) const;
+	public:		void markIn(GCHeap& heap) const;
 
 	protected:	bool compareStrictly(const Value& y) const;
 	protected:	Type type;	
@@ -342,7 +346,7 @@ class ScriptFunctionDef : public Object {
 	public:		bool lookupLocalName(const String* name, Int32& index) const;
 	public:		const Value* getConstantsPointer() const;
 // FIX : protectize
-	public:		String* source;
+	public:		const String* source;
 	public:		CodeVector code;
 	public:		std::vector<Value> constants;
 	public:		Int32 argumentsCount;
@@ -352,8 +356,8 @@ class ScriptFunctionDef : public Object {
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-	public:		RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
-	public:		virtual const String* nextPropertyName() { return (index >= to ? 0 : Value(index++).toString(heap)); }
+	public:		RangeEnumerator(GCHeap& heap, Int32 from, Int32 count);
+	public:		virtual const String* nextPropertyName();
 	protected:	GCHeap& heap;
 	protected:	const Int32 to;
 	protected:	Int32 index;
@@ -361,11 +365,11 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-	public:		StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
-	public:		void add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-	public:		void sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
-	public:		virtual void gcMark(GCHeap& heap) { for (const String** p = list.begin(); p != list.end(); ++p) heap.mark(*p); super::gcMark(heap); }
-	public:		virtual const String* nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
+	public:		StringListEnumerator(UInt32 maxCount);
+	public:		void add(const String* s);
+	public:		void sort(); // FIX : bad idea?
+	public:		virtual void gcMark(GCHeap& heap);
+	public:		virtual const String* nextPropertyName();
 	protected:	QuickArray<const String*, 8> list;
 	protected:	UInt32 actualCount;
 	protected:	UInt32 nextIndex;
@@ -463,7 +467,8 @@ class Arguments : public UserObject {
 	protected:	Value* findProperty(const String* name);
 	protected:	FunctionFrame* frame;
 	protected:	Int32 argumentsCount;
-	protected:	QuickArray<Byte, 32> deletedArguments;
+	protected:	Value lengthProperty;
+	protected:	QuickArray<Byte, 8> deletedArguments;
 };
 
 struct Context { // FIX : make Processor local

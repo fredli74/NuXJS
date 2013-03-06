@@ -1,2 +1,3 @@
-build/Debug/NuXJScript <goodtests.js 2>/dev/null >goodresults.txt
-build/Debug/NuXJScript <badtests.js 2>/dev/null >badresults.txt
+build/Debug/NuXJScript <goodTests.js 2>/dev/null >goodResults.txt
+build/Debug/NuXJScript <unconformTests.js 2>/dev/null >unconformResults.txt
+build/Debug/NuXJScript <badTests.js 2>/dev/null >badResults.txt

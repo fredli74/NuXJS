@@ -1,0 +1,23 @@
+MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
+
+for (i in o) print(i);
+ 
+o = new MyObject; o.qwerty = "qwerty"; o.zxcv = "zxcv"; o.asdf = "asdf"; for (i in o) print(i);
+ 
+print("");
+for (i in o) { if (i >= "m" && i < "s") continue; print(i); }
+print("");
+ 
+print("");
+for (i in o) { if (i >= "m" && i < "s") break; print(i); }
+print("");
+ 
+for (i in o) { print(i); o[i + " 3"] = o[i] + " 3" }
+ 
+for (i in o) { print(i); o[i + " 4"] = o[i] + " 4" }
+ 
+for (i in o) print(i);
+
+print('');
+f=function() { arguments["extra"] = null; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
+print('');

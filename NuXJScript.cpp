@@ -313,12 +313,13 @@ const String* String::fromInt(GCHeap& heap, Int32 i) {
 }
 
 const String* String::fromDouble(GCHeap& heap, double d) {
-	Char buffer[32];
-	if (static_cast<Int32>(d) == d) return fromInt(heap, static_cast<Int32>(d));
+	Int32 i = static_cast<Int32>(d);
+	if (i == d) return fromInt(heap, i);
 	if (isNaN(d)) return &NAN_STRING;
 	double x = fabs(d);
 	if (x <= EPSILON) return &ZERO_STRING;
 	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
+	Char buffer[32];
 	std::pair<Char*, Char*> r = doubleToString(buffer, d);
 	return heap.manage(new String(r.first, r.second));
 }
@@ -326,6 +327,8 @@ const String* String::fromDouble(GCHeap& heap, double d) {
 /* --- GCItem --- */
 
 GCItem::GCItem() : _gcList(0), _gcPrev(this), _gcNext(this) { }
+GCItem::GCItem(const GCItem& copy) : _gcList(0), _gcPrev(0), _gcNext(0) { }
+GCItem& GCItem::operator=(const GCItem& copy) { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
 void GCItem::gcMark(GCHeap& heap) { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
@@ -409,7 +412,7 @@ void Table::mark(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		heap.mark(buckets[i].key);
-		buckets[i].value.mark(heap);
+		buckets[i].value.markIn(heap);
 		if (buckets[i].value.exists()) rebuildLoadCount++;
 	}
 	if (rebuildLoadCount != loadCount) {
@@ -501,6 +504,19 @@ void UserObject::gcMark(GCHeap& heap) {
 	heap.mark(prototype);
 	super::gcMark(heap);
 }
+
+/* --- RangeEnumerator --- */
+
+RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
+const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : String::fromInt(heap, index++)); }
+
+/* --- StringListEnumerator --- */
+
+StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
+void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
+void StringListEnumerator::sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
+void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
+const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 
 /* --- Value --- */
 
@@ -675,7 +691,7 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 	return Value(toDouble() + y.toDouble());
 }
 				
-void Value::mark(GCHeap& heap) const {
+void Value::markIn(GCHeap& heap) const {
 	switch (type) {
 		case STRING_TYPE: heap.mark(s); break;
 		case OBJECT_TYPE: heap.mark(o); break;
@@ -697,12 +713,10 @@ bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const 
 void ScriptFunctionDef::gcMark(GCHeap& heap) {
 	heap.mark(source);
 	// FIX : subs
-	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it) {
-		it->mark(heap);
-	}
-	for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it) {
+	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it)
+		it->markIn(heap);
+	for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it)
 		heap.mark(it->first);
-	}
 	super::gcMark(heap);
 }
 
@@ -742,15 +756,15 @@ void ScriptFunction::gcMark(GCHeap& heap) {
 /* --- Arguments --- */
 
 Arguments::Arguments(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
-		, argumentsCount(argumentsCount), deletedArguments(argumentsCount) {
-	properties.assign(&LENGTH_STRING, Value(argumentsCount));
+		, argumentsCount(argumentsCount), lengthProperty(argumentsCount), deletedArguments(argumentsCount + 1) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
 Value* Arguments::findProperty(const String* name) {
+	if (name->isEqualTo(LENGTH_STRING)) return (deletedArguments[0] ? 0 : &lengthProperty);
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
-	return (q == name->end() && i < argumentsCount && !deletedArguments[i] ? frame->getLocalsPointer() + i : 0);
+	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getLocalsPointer() + i : 0);
 }
 
 bool Arguments::getProperty(Engine& engine, const String* name, Value& v) {
@@ -765,11 +779,14 @@ bool Arguments::setProperty(Engine& engine, const String* name, const Value& v) 
 
 bool Arguments::deleteProperty(Engine& engine, const String* name) {
 	Value* p = findProperty(name);
-	return (p == 0 ? super::deleteProperty(engine, name) : (deletedArguments[p - frame->getLocalsPointer()] = true));
+	if (p == 0) return super::deleteProperty(engine, name);
+	else if (p == &lengthProperty) return (deletedArguments[0] = true);
+	else return (deletedArguments[p - frame->getLocalsPointer() + 1] = true);
 }
 
 void Arguments::gcMark(GCHeap& heap) {
 	heap.mark(frame);
+	lengthProperty.markIn(heap);
 	super::gcMark(heap);
 }
 
@@ -778,7 +795,7 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b))
 		if (!b->key->isEqualTo(LENGTH_STRING)) list->add(b->key);
 	for (Int32 i = 0; i < argumentsCount; ++i)
-		if (!deletedArguments[i]) list->add(Value(i).toString(engine.heap()));
+		if (!deletedArguments[i]) list->add(String::fromInt(engine.heap(), i));
 	// list->sort(); // FIX : bad idea?
 	return list;
 }
@@ -838,7 +855,8 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 	heap.mark(functionDef);
 	heap.mark(environment);
 	// FIX : subs
-	for (Int32 i = 0; i < locals.size(); ++i) locals[i].mark(heap);
+	for (Int32 i = 0; i < locals.size(); ++i) locals[i].markIn(heap);
+	argumentsValue.markIn(heap);
 	super::gcMark(heap);
 }
 
@@ -852,7 +870,7 @@ CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Va
 void CatchFrame::gcMark(GCHeap& heap) {
 	heap.mark(parentFrame);
 	heap.mark(exceptionName);
-	exceptionValue.mark(heap);
+	exceptionValue.markIn(heap);
 	super::gcMark(heap);
 }
 
@@ -881,7 +899,7 @@ Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, V
 }
 
 void Processor::gcMark(GCHeap& heap) {
-	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->mark(heap);
+	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->markIn(heap);
 	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap.mark(csp->frame);
 	super::gcMark(heap);
 }
@@ -1317,9 +1335,8 @@ Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine)
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
-	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) {
-		it->first.mark(heap);
-	}
+	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
+		it->first.markIn(heap);
 	super::gcMark(heap);
 }
 

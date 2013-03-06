@@ -269,29 +269,7 @@ s = ''; for ( var a = 100 in "" ) ; print(a);
 a = new MyObject; for (a.x in "abcd") print(a.x)
 a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x); for (var i = 0; i < x; ++i) print(a[i]);
 a = new MyObject; f = function() { print("tick "); return 0 }; for (a[f()] in "abcd") { print (a[0]) }
-
-/* FIX : reenable, random output order makes it impossible to compare against established engines
-for (i in o) print(i);
- 
-o = new MyObject; o.qwerty = "qwerty"; o.zxcv = "zxcv"; o.asdf = "asdf"; for (i in o) print(i);
- 
-o[123] = 123; o[987] = 987; o[" space "] = " space "; for (i in o) { print(i); o[i + " 2"] = o[i] + " 2" }
- 
-print("");
-for (i in o) { if (i >= "m" && i < "s") continue; print(i); }
-print("");
- 
-print("");
-for (i in o) { if (i >= "m" && i < "s") break; print(i); }
-print("");
- 
-for (i in o) { print(i); o[i + " 3"] = o[i] + " 3" }
- 
-for (i in o) { print(i); o[i + " 4"] = o[i] + " 4" }
- 
-for (i in o) print(i);
-*/
-
+  
 a=function() { b = function() { c = function() { return d++ }; return c; }; var d = 23 ; return b }
 b=a()()
 print(b());
@@ -311,9 +289,6 @@ f=function() { g = function () { print(arguments[0]); print(arguments[1]); }; re
 
 print('');
 f=function() { for (var i in arguments) print(i) }; f('1', '2', '3', '4');
-
-print('');
-f=function() { arguments["extra"] = null; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
 print('');
 
 f=function(a,b,c,d,e) {
