@@ -245,12 +245,13 @@ class Value {
 				bool exists() const;
 				bool isNumber() const;
 				bool isObject() const;
-				double getAsDouble() const;
-				const String* getAsString() const;
-				Object* getAsObject() const;
-				const String* getTypeString() const;
+				double asDouble() const;
+				Int32 asInt() const;
+				const String* asString() const;
+				Object* asObject() const;
+				const String* typeString() const;
 				bool toBool() const;
-				Int32 toInt() const;
+				Int32 toInt() const; // FIX : ?
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
 				Object* toObject(GCHeap& heap) const;
@@ -283,8 +284,8 @@ class Object : public GCItem {
 				
 				virtual Function* asFunction();
 				virtual Enumerator* asEnumerator();
-				virtual const String* getTypeString() const;
-				virtual const String* getClassName() const;
+				virtual const String* typeString() const;
+				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -343,8 +344,8 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				String(const String& l, const String& r);
 				String(const std::wstring& s);
 				template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				virtual const String* getTypeString() const;
-				virtual const String* getClassName() const;
+				virtual const String* typeString() const;
+				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				Table::HashType calcHash() const;
@@ -434,8 +435,8 @@ class Function : public UserObject {
 	public:		typedef UserObject super;
 
 				virtual Function* asFunction();
-				virtual const String* getTypeString() const;
-				virtual const String* getClassName() const;
+				virtual const String* typeString() const;
+				virtual const String* className() const;
 				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
 				virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
 };
@@ -503,7 +504,7 @@ class Arguments : public UserObject {
 	public:		typedef UserObject super;
 
 				Arguments(FunctionFrame* frame, Int32 argumentsCount);
-				virtual const String* getClassName() const;
+				virtual const String* className() const;
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -540,9 +541,9 @@ class Processor : public GCItem {
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
 					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
-					, SHL_OP, SHR_OP, UNSIGNED_SHR_OP				// stack: left value, right value -> result value
-					, PLUS_OP, MINUS_OP, BIT_NOT_OP, NOT_OP			// stack: value -> value
-					, STRICT_EQ_OP, STRICT_NEQ_OP, EQ_OP, NEQ_OP	// stack: value -> boolean
+					, SHL_OP, SHR_OP, USHR_OP						// stack: left value, right value -> result value
+					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
+					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: value -> boolean
 					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
@@ -579,7 +580,7 @@ class Processor : public GCItem {
 				Int32 readInt32(const Byte* ip);
 				Int32 nextInt32(const Byte*& ip);
 				void callStub(const Byte*& ip, const Byte* stub);
-				void oneToNumber(const Byte*& ip, Value* vsp);
+				void numberTrap(const Byte*& ip, Value* vsp);
 				void error();
 
 				Engine& engine;
@@ -634,8 +635,6 @@ class Compiler : public GCItem {
 					std::vector<Int32> finallys; // source points for finally jsr's
 				};
 
-				void eatComment();
-				void eatWhite();
 				void emit(Processor::Opcode op);
 				void emitWithInt32(Processor::Opcode op, Int32 i);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
@@ -661,6 +660,7 @@ class Compiler : public GCItem {
 				bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				void expectSemicolon();
 				void expectToken(const char* t, bool eatLeadingWhite);
+				void eatWhite();
 				void eatToken();
 				void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
 				void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
