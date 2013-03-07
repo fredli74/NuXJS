@@ -16,6 +16,8 @@
 //		basic library (math, string, array ops)
 //		assignable globals this in processor
 //		true primitive <-> object conversions
+//		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
+//		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
 //
 //	Compiler
 //

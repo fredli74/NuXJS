@@ -101,8 +101,12 @@ print(-0xCFCFCFCF == -3486502863);
 print(~~0xCFCFCFCF == -808464433);
 print((80189565849)>>0 == -1414812775);
 print(-808464433>>>0 == 0xCFCFCFCF);
+print(1.0/0.0); // Should be Infinity
+print(-1.0/0.0);  // Should be -Infinity
 print(~~(1.0/0.0) == 0);
 print(~~(-1.0/0.0) == 0);
+print(+"q"); // Should be NaN
+print(~~(+"q") == 0);
 
 var i = 0 ;   while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
  do { j = j - i * 0.5 } while ( i ++ < 2000 )
@@ -388,4 +392,15 @@ print('');
 
 f = function() { for (var arguments = 3 in "abcd") print(arguments); }; f();
 print('');
+
+print("*** value conversion ***");
+
+i = 0;
+f = function(s) { this.valueOf = function() { print(s); return ++i; } };
+a = new f('a'); b = new f('b'); c = new f('c');
+print(a+b+c);
+print(a-b-c);
+print(a-(b-c));
+print(a+b*c);
+print(a*b+c);
 

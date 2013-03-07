@@ -59,6 +59,36 @@ true
 true
 true
 true
+*** integers ***
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+Infinity
+-Infinity
+true
+true
+NaN
+true
 2001, -250015.5
 2001, -250015.5
 *** special numbers ***
