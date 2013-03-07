@@ -568,7 +568,8 @@ class Processor : public GCItem {
 				virtual void gcMark(GCHeap& heap);
 				void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
 				void push(const Value& v);
-				bool run(Int32 count);
+				void resetTimeOut(Int32 clockCycles);
+				bool run();
 				
 	protected:	void push(Value*& vsp, const Value& v);
 				void pop(Value*& vsp, int count);
@@ -582,7 +583,9 @@ class Processor : public GCItem {
 				Value* const vstackStart;
 				Value* const vstackEnd;
 				Context* cstackPointer;
+				Int32 clockCyclesLeft;
 public:	Value* vstackPointer;
+public:	const Byte* instructionPointer;
 
 	protected:	struct Catcher {
 					Catcher(Context* csp, Value* vsp, const Byte* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }

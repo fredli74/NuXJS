@@ -910,7 +910,7 @@ const int OPERAND_SIZE = (sizeof (Int32) / sizeof (Byte));
 
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1) {
+		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1),clockCyclesLeft(0x7FFFFFFF) {
 }
 
 void Processor::gcMark(GCHeap& heap) {
@@ -925,6 +925,7 @@ void Processor::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackSt
 void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 Int32 Processor::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
 Int32 Processor::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
+void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
 	throw std::runtime_error("error"); // FIX
@@ -940,16 +941,16 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 }
 
-bool Processor::run(Int32 count) {
-	Value*& vsp = vstackPointer;
-	const Byte* ip = cstackPointer->instructionPointer;
-	Frame* frame = cstackPointer->frame;
+bool Processor::run() {
+	Value* vsp = this->vstackPointer;
+	const Byte* ip = this->cstackPointer->instructionPointer;
+	Frame* frame = this->cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
-	GCHeap& heap = engine.heap();
-	while (--count >= 0) {
+	GCHeap& heap = this->engine.heap();
+	Int32 clockCyclesLeft = this->clockCyclesLeft;
+	while (--clockCyclesLeft >= 0) {
 		switch (*ip++) {
-			default: assert(0);
 			case POP_OP: pop(vsp, 1); break;
 			case REPUSH_OP: push(vsp, vsp[0]); break;
 			case CONST_OP: push(vsp, cp[nextInt32(ip)]); break;
@@ -957,27 +958,27 @@ bool Processor::run(Int32 count) {
 			case WRITE_INDEXED_OP: lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP: {
 				Value v(Value::NONEXISTENT_TYPE);
-				bool success = frame->getProperty(engine, cp[nextInt32(ip)].getAsString(), v);
+				bool success = frame->getProperty(this->engine, cp[nextInt32(ip)].getAsString(), v);
 				if (!success) error();
 				push(vsp, v);
 				break;
 			}
 			case WRITE_NAMED_OP:  {
-				bool success = frame->setProperty(engine, cp[nextInt32(ip)].getAsString(), vsp[0]);
+				bool success = frame->setProperty(this->engine, cp[nextInt32(ip)].getAsString(), vsp[0]);
 				if (!success) error();
 				break;
 			}
 			case GET_PROPERTY_OP: {
 				Object* o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				o->getProperty(engine, vsp[0].toString(heap), vsp[-1]);
+				o->getProperty(this->engine, vsp[0].toString(heap), vsp[-1]);
 				pop(vsp, 1);
 				break;
 			}
 			case SET_PROPERTY_OP: {
 				Object* o = vsp[-2].toObject(heap);
 				if (o == 0) error();
-				o->setProperty(engine, vsp[-1].toString(heap), vsp[0]);
+				o->setProperty(this->engine, vsp[-1].toString(heap), vsp[0]);
 				vsp[-2] = vsp[0];
 				pop(vsp, 2);
 				break;
@@ -1008,50 +1009,45 @@ bool Processor::run(Int32 count) {
 			case JMP_OP: ip += readInt32(ip) + OPERAND_SIZE; break;
 			case JSR_OP: {
 				Int32 offset = nextInt32(ip);
-				cstackPointer->instructionPointer = ip;
-				++cstackPointer;
-				cstackPointer->frame = frame;
-				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
-				cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+				this->cstackPointer->instructionPointer = ip;
+				++(this->cstackPointer);
+				this->cstackPointer->frame = frame;
+				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
+				this->cstackPointer->vstackPointer = this->vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 				ip += offset;
 				break;
 			}
 			case JT_OP: ip += (vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
 			case JF_OP: ip += (!vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
 			case RETURN_OP: {
-				if (cstackPointer == cstackStart) {
+				if (this->cstackPointer == this->cstackStart) {
 					// FIX : yeah, we can't you know :) we need a new way to return properly to native caller
 					// cstackPointer->instructionPointer = ip;
-					vstackPointer = vsp;
+					this->clockCyclesLeft = clockCyclesLeft;
+					this->vstackPointer = vsp;
 					return true;
 				}
-				assert(frame == (cstackPointer - 1)->frame || vsp == cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
-				--cstackPointer;
-				ip = cstackPointer->instructionPointer;
-				frame = cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
-				break;
+				assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
+				--(this->cstackPointer);
+				this->vstackPointer = vsp;
+				goto recover;
 			}
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = nextInt32(ip);
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT_TYPE);
-				thisObject->getProperty(engine, vsp[-n].toString(heap), v);
+				thisObject->getProperty(this->engine, vsp[-n].toString(heap), v);
 				Object* o = v.toObject(heap);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				cstackPointer->instructionPointer = ip;
-				vstackPointer = vsp - n - 2;
-				f->call(engine, this, n, vstackPointer + 3, Value(thisObject));
-				vsp = vstackPointer;
-				ip = cstackPointer->instructionPointer;
-				frame = cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
-				break;
+				this->cstackPointer->instructionPointer = ip;
+				this->clockCyclesLeft = clockCyclesLeft;
+				vsp -= n + 2;
+				this->vstackPointer = vsp;
+				f->call(this->engine, this, n, vsp + 3, Value(thisObject));
+				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = nextInt32(ip);
@@ -1059,15 +1055,12 @@ bool Processor::run(Int32 count) {
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				cstackPointer->instructionPointer = ip;
-				vstackPointer = vsp - n - 1;
-				f->call(engine, this, n, vstackPointer + 2, Value(Value::UNDEFINED_TYPE));
-				vsp = vstackPointer;
-				ip = cstackPointer->instructionPointer;
-				frame = cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
-				break;
+				this->cstackPointer->instructionPointer = ip;
+				this->clockCyclesLeft = clockCyclesLeft;
+				vsp -= n + 1;
+				this->vstackPointer = vsp;
+				f->call(this->engine, this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
+				goto recover;
 			}
 			case NEW_OP: {
 				Int32 n = nextInt32(ip);
@@ -1075,18 +1068,15 @@ bool Processor::run(Int32 count) {
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				cstackPointer->instructionPointer = ip;
-				vstackPointer = vsp - n - 1;
-				f->construct(engine, this, n, vstackPointer + 2);
-				vsp = vstackPointer;
-				ip = cstackPointer->instructionPointer;
-				frame = cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
-				break;
+				this->cstackPointer->instructionPointer = ip;
+				this->clockCyclesLeft = clockCyclesLeft;
+				vsp -= n + 1;
+				this->vstackPointer = vsp;
+				f->construct(this->engine, this, n, vsp + 2);
+				goto recover;
 			}
 			case NEW_RESULT_OP: poppush(vsp, (vsp[0].isObject() ? vsp[0] : vsp[-1])); break;
-			case THIS_OP: push(vsp, cstackPointer->thisValue); break;
+			case THIS_OP: push(vsp, this->cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
 				Object* o = cp[nextInt32(ip)].getAsObject();
@@ -1097,20 +1087,20 @@ bool Processor::run(Int32 count) {
 			case DELETE_OP: {
 				Object* o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				poppush(vsp, Value(o->deleteProperty(engine, vsp[0].toString(heap))));
+				poppush(vsp, Value(o->deleteProperty(this->engine, vsp[0].toString(heap))));
 				break;
 			}
 			case POP_FRAME_OP: {
-				assert(cstackPointer != cstackStart);
-				--cstackPointer;
-				frame = cstackPointer->frame;
+				assert(this->cstackPointer != cstackStart);
+				--(this->cstackPointer);
+				frame = this->cstackPointer->frame;
 				assert(cp == frame->getFunctionDef()->getConstantsPointer());
 				assert(lp == frame->getLocalsPointer());
 				break;
 			}
 			case TRY_OP: {
 				ip += OPERAND_SIZE;
-				catchers.push_back(Catcher(cstackPointer, vsp, ip + readInt32(ip - OPERAND_SIZE)));
+				catchers.push_back(Catcher(this->cstackPointer, vsp, ip + readInt32(ip - OPERAND_SIZE)));
 				break;
 			}
 			case TRIED_OP: {
@@ -1118,11 +1108,11 @@ bool Processor::run(Int32 count) {
 				break;
 			}
 			case CATCH_FRAME_OP: {
-				++cstackPointer;
-				frame = cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getAsString(), vsp[0]));
+				++(this->cstackPointer);
+				frame = this->cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getAsString(), vsp[0]));
 				pop(vsp, 1);
-				cstackPointer->thisValue = (cstackPointer - 1)->thisValue;
-				cstackPointer->vstackPointer = vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
+				this->cstackPointer->vstackPointer = this->vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 				break;
 			}
 			case THROW_OP: {
@@ -1132,33 +1122,31 @@ bool Processor::run(Int32 count) {
 					error();
 				}
 				const Catcher& catcher = catchers.back();
-				cstackPointer = catcher.cstackPointer;
-				vsp = catcher.vstackPointer;
-				push(vsp, exception);
-				ip = catcher.instructionPointer;
-				frame = cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
+				this->cstackPointer = catcher.cstackPointer;
+				this->vstackPointer = catcher.vstackPointer;
+				push(this->vstackPointer, exception);
+				this->cstackPointer->instructionPointer = catcher.instructionPointer;
+				this->clockCyclesLeft = clockCyclesLeft;
 				catchers.pop_back();
-				break;
+				goto recover;
 			}
 			case IN_OP: {
 				Object* o = vsp[0].toObject(heap);
 				if (o == 0) error();
-				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].toString(heap)));
+				vsp[-1] = Value(o->hasProperty(this->engine, vsp[-1].toString(heap)));
 				pop(vsp, 1);
 				break;				
 			}
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].getTypeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(engine, cp[nextInt32(ip)].getAsString(), v);
+				frame->getProperty(this->engine, cp[nextInt32(ip)].getAsString(), v);
 				push(vsp, Value(v.getTypeString()));
 				break;
 			}
 			case GET_ENUMERATOR_OP: {
 				Object* o = vsp[0].toObject(heap);
-				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(engine)));
+				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(this->engine)));
 				break;
 			}
 			case NEXT_PROPERTY_OP: {
@@ -1172,10 +1160,21 @@ bool Processor::run(Int32 count) {
 				}
 				break;
 			}
+			recover: {
+				vsp = this->vstackPointer;
+				ip = this->cstackPointer->instructionPointer;
+				clockCyclesLeft = this->clockCyclesLeft;
+				frame = this->cstackPointer->frame;
+				cp = frame->getFunctionDef()->getConstantsPointer();
+				lp = frame->getLocalsPointer();
+				break;
+			}
+			default: assert(0);
 		}
 	}
 	cstackPointer->instructionPointer = ip;
-	vstackPointer = vsp;
+	this->vstackPointer = vsp;
+	this->clockCyclesLeft = clockCyclesLeft;
 	return false;
 }
 
@@ -2469,7 +2468,8 @@ int main(int argc, const char* argv[]) {
 				
 				clock_t start = ::clock();	
 				do {
-					done = processor.run(10000000);
+					processor.resetTimeOut(10000000);
+					done = processor.run();
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
