@@ -297,7 +297,7 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-Enumerator* String::getEnumerator(Engine& engine) { return new RangeEnumerator(engine.heap(), 0, size()); }
+Enumerator* String::getEnumerator(Engine& engine) { return engine.heap().manage(new RangeEnumerator(engine.heap(), 0, size())); }
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	String* o = heap.manage(new String(b, e));
@@ -2394,12 +2394,12 @@ void GCHeap::mark(const GCItem* item) {
 
 
 int main(int argc, const char* argv[]) {
-	static const String LF_STRING("\n");
+	const String LF_STRING("\n");
+	const String PRINT_STRING("print");
 	GCHeap heap;
 	Engine engine(heap);
 	UserObject globals;
 	heap.protect(&globals);
-	static String PRINT_STRING("print");
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
 	String source(EMPTY_STRING);
@@ -2465,5 +2465,8 @@ int main(int argc, const char* argv[]) {
 			source = EMPTY_STRING;
 		}
 	}
+// for running leaks:
+// std::wstring s;
+// std::getline(std::wcin, s);
 	return 0;
 }
