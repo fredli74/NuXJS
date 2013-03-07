@@ -325,11 +325,11 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F73ACCFC16E81E98007CAB35</string>
+										<string>F73ACD2B16E82E39007CAB35</string>
 										<key>history</key>
 										<array>
-											<string>F73ACCCE16E81D1A007CAB35</string>
-											<string>F73ACCDD16E81D50007CAB35</string>
+											<string>F73ACD0016E81F1D007CAB35</string>
+											<string>F73ACD2916E82E18007CAB35</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -341,14 +341,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 0}, {1226, 543}}</string>
+								<string>{{0, 0}, {1226, 776}}</string>
 								<key>RubberWindowFrame</key>
 								<string>6 56 1434 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
 							<key>Proportion</key>
-							<string>543pt</string>
+							<string>776pt</string>
 						</dict>
 						<dict>
 							<key>ContentConfiguration</key>
@@ -361,14 +361,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 548}, {1226, 233}}</string>
+								<string>{{0, 781}, {1226, 0}}</string>
 								<key>RubberWindowFrame</key>
 								<string>6 56 1434 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>XCDetailModule</string>
 							<key>Proportion</key>
-							<string>233pt</string>
+							<string>0pt</string>
 						</dict>
 					</array>
 					<key>Proportion</key>

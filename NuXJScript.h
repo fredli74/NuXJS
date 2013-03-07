@@ -73,6 +73,7 @@
 //		ERASE_INDEXED_OP for quickly resetting safe kept variables, worth it? (three instructions now, void, write, pop)
 //		NEXT_PROPERTY_OP is always preceeded by READ_INDEXED (since it is always a non-constant safe-kept variable), combine into one instruction (with two operands)
 //			if we don't do the REPUSH idea instead of safe-keeping so much
+//		Make writes terminal and REPUSH in a = b = c type of expression...
 //
 //	Compiler
 //
@@ -204,7 +205,7 @@ class GCList : public GCItem {
 class GCHeap {
 	public:		GCHeap();
 				template<class T> T* manage(T* item) { currentList->claim(item); return item; }
-				template<class T> T* protect(T* item) { rootList.claim(item); return item; }
+				template<class T> T* protect(T* item) { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
 				size_t size() const;
 				size_t gc();
 				void mark(const GCItem* item);
