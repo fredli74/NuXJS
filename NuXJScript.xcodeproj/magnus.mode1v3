@@ -325,11 +325,11 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F73ACC4516E81785007CAB35</string>
+										<string>F73ACC8C16E81AA9007CAB35</string>
 										<key>history</key>
 										<array>
-											<string>F73ACC4416E81785007CAB35</string>
-											<string>F73ACC3416E81702007CAB35</string>
+											<string>F73ACC5216E81968007CAB35</string>
+											<string>F73ACC5316E81968007CAB35</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -527,12 +527,14 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F73ACC0116E80F32007CAB35</string>
+		<string>F73ACC6816E819D8007CAB35</string>
+		<string>F73ACC5516E81968007CAB35</string>
+		<string>F73ACC5A16E81968007CAB35</string>
 		<string>F73ACC0216E80F32007CAB35</string>
 		<string>F73ACC0316E80F32007CAB35</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
-		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -559,7 +561,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CD0528F0623707200166675</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.h</string>
+								<string>NuXJScript.cpp</string>
 								<key>StatusBarVisibility</key>
 								<true/>
 							</dict>
@@ -909,7 +911,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

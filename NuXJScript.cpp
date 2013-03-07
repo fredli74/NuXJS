@@ -797,8 +797,8 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 /* --- FunctionFrame --- */
 
 FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
-		: environment(function->getEnvironment()), functionDef(function->getDefinition())
-		, passedArgumentsCount(argc), locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
+		: super(function->getDefinition()), environment(function->getEnvironment()), passedArgumentsCount(argc)
+		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT_TYPE) {
 	localsPointer = locals.begin() + functionDef->varsCount;
 	std::fill(locals.begin(), localsPointer, Value(Value::UNDEFINED_TYPE)); // FIX : optimize
@@ -857,7 +857,8 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 /* --- CatchFrame --- */
 
 CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
-		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) {
+		: super(parentFrame->getFunctionDef()), parentFrame(parentFrame), exceptionName(exceptionName)
+		, exceptionValue(exceptionValue) {
 	localsPointer = parentFrame->getLocalsPointer();
 }
 

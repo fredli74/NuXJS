@@ -451,11 +451,12 @@ class ScriptFunction : public Function {
 
 class Frame : public Object {
 	public:		typedef Object super;
-
-				virtual const ScriptFunctionDef* getFunctionDef() const = 0;
+				Frame(const ScriptFunctionDef* functionDef) : functionDef(functionDef) { }
+				const ScriptFunctionDef* getFunctionDef() const { return functionDef; }
 				Value* getLocalsPointer() const { return localsPointer; }
-
-	protected:	Value* localsPointer;
+				
+	protected:	const ScriptFunctionDef* const functionDef;
+				Value* localsPointer;
 };
 
 class Arguments;
@@ -467,10 +468,8 @@ class FunctionFrame : public Frame {
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
 
-	protected:	const ScriptFunctionDef* const functionDef;
-				Object* const environment;
+	protected:	Object* const environment;
 				const Int32 passedArgumentsCount;
 				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
 				Value argumentsValue;
@@ -484,7 +483,6 @@ class CatchFrame : public Frame {
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual const ScriptFunctionDef* getFunctionDef() const { return parentFrame->getFunctionDef(); }
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
