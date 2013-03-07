@@ -1,5 +1,5 @@
 if [ -z "$1" ]; then
-	EXE="build/Release/NuXJScript"
+	EXE="build/Release/NuXJScript -s -t"
 else
 	EXE=$1
 fi
@@ -7,6 +7,6 @@ fi
 for f in perftest*.js; do
 	echo
 	echo $f
-	time $EXE $f 2>/dev/null
+	time $EXE $f
 	echo
 done
