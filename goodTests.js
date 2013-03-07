@@ -395,6 +395,7 @@ print('');
 
 print("*** value conversion ***");
 
+/*
 i = 0;
 f = function(s) { this.valueOf = function() { print(s); return ++i; } };
 a = new f('a'); b = new f('b'); c = new f('c');
@@ -403,4 +404,4 @@ print(a-b-c);
 print(a-(b-c));
 print(a+b*c);
 print(a*b+c);
-
+*/

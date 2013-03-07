@@ -2,7 +2,7 @@ echo "### GOOD TESTS ###"
 echo
 echo --- NuX ---
 echo
-build/Debug/NuXJScript <goodTests.js 2>/dev/null | diff --strip-trailing-cr goodResults.txt -
+build/Debug/NuXJScript -s <goodTests.js | diff --strip-trailing-cr goodResults.txt -
 if [[ -e $(which v8) ]]; then
 	echo
 	echo --- V8 ---

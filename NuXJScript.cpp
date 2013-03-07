@@ -10,6 +10,8 @@
 #include <map>
 #include "NuXJScript.h"
 
+	bool supressStdErr = false; // FIX : drop
+
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
 static int strncmp(const Char* a, const char* b, size_t n) {
 	int i = 0;
@@ -2360,10 +2362,12 @@ void Compiler::finish() {
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 freeSafeKeepingIndexes.clear();
 	assert(outputCode == &function->code);
-disassemble(engine.heap(), *outputCode, function->constants);
-std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
-std::cerr << "\tVars: " << function->varsCount << std::endl;
-std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
+if (!supressStdErr) {
+	disassemble(engine.heap(), *outputCode, function->constants);
+	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
+	std::cerr << "\tVars: " << function->varsCount << std::endl;
+	std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
+}
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -2423,9 +2427,17 @@ int main(int argc, const char* argv[]) {
 	String source(EMPTY_STRING);
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;
-	if (argc >= 2) {
-		inputFileStream.reset(new std::wifstream(argv[1]));
-		inStream = inputFileStream.get();
+	bool doTime = false;
+	for (int argi = 1; argi < argc; ++argi) {
+		if (strcmp(argv[argi], "-t") == 0) doTime = true;
+		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
+		else if (inputFileStream.get() == 0) {
+			inputFileStream.reset(new std::wifstream(argv[argi]));
+			inStream = inputFileStream.get();
+		} else {
+			std::cout << "Too many arguments" << std::endl;
+			return 1;
+		}
 	}
 	while (inStream->good()) {
 		try {
@@ -2443,8 +2455,10 @@ int main(int argc, const char* argv[]) {
 				compiler.compile(source);
 				compiler.finish();
 				
-				std::cerr << "\tCode: " << functionDef.code.size() << std::endl;
-				std::cerr << "\tConstants: " << functionDef.constants.size() << std::endl;
+				if (!supressStdErr) {
+					std::cerr << "\tCode: " << functionDef.code.size() << std::endl;
+					std::cerr << "\tConstants: " << functionDef.constants.size() << std::endl;
+				}
 				
 				Value vstack[1024];
 				Context cstack[1024];
@@ -2459,16 +2473,22 @@ int main(int argc, const char* argv[]) {
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
-					std::cerr << "\tGC swept: " << sweptCount << std::endl;
-					std::cerr << "\tGC kept: " << heap.size() << std::endl;
+					if (!supressStdErr) {
+						std::cerr << "\tGC swept: " << sweptCount << std::endl;
+						std::cerr << "\tGC kept: " << heap.size() << std::endl;
+					}
 					
 					if (done) {
-						std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;
-						assert(processor.vstackPointer - vstack + 1 == 1);
-						std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
-						clock_t end = ::clock();
-						const double divisor = (CLOCKS_PER_SEC / 1000.0);
-						std::cerr << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
+						if (!supressStdErr) {
+							std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;
+							assert(processor.vstackPointer - vstack + 1 == 1);
+							std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+						}
+						if (doTime) {
+							clock_t end = ::clock();
+							const double divisor = (CLOCKS_PER_SEC / 1000.0);
+							std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
+						}
 					}
 				} while (!done);
 				source = EMPTY_STRING;

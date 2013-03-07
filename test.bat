@@ -2,7 +2,7 @@
 echo.
 echo ### GOOD TESTS ###
 echo.
-.\Debug\NuXJScript.exe <goodtests.js 2>NUL >goodcheck.txt
+.\Debug\NuXJScript.exe -s <goodtests.js >goodcheck.txt
 fc goodcheck.txt goodresults.txt
 del goodcheck.txt
 rem echo.
