@@ -941,7 +941,7 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 }
 
 bool Processor::run(Int32 count) {
-	Value* vsp = vstackPointer;
+	Value*& vsp = vstackPointer;
 	const Byte* ip = cstackPointer->instructionPointer;
 	Frame* frame = cstackPointer->frame;
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
@@ -1045,7 +1045,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 2;
-				f->call(engine, this, n, vsp - n + 1, Value(thisObject));
+				f->call(engine, this, n, vstackPointer + 3, Value(thisObject));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1061,7 +1061,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->call(engine, this, n, vsp - n + 1, Value(Value::UNDEFINED_TYPE));
+				f->call(engine, this, n, vstackPointer + 2, Value(Value::UNDEFINED_TYPE));
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
@@ -1077,7 +1077,7 @@ bool Processor::run(Int32 count) {
 				if (f == 0) error();
 				cstackPointer->instructionPointer = ip;
 				vstackPointer = vsp - n - 1;
-				f->construct(engine, this, n, vsp - n + 1);
+				f->construct(engine, this, n, vstackPointer + 2);
 				vsp = vstackPointer;
 				ip = cstackPointer->instructionPointer;
 				frame = cstackPointer->frame;
