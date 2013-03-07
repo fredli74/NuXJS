@@ -1,69 +1,67 @@
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-true
-1, 2, undefined, false
-2001, -250015.5
-2001, -250015.5
-a:first, b:2, c:true
-610
-610
+*** comments ***
 0
-1232766
-undefined
-undefined
+1234.5
+*** numbers ***
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+*** more numbers ***
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+2001, -250015.5
+2001, -250015.5
+*** special numbers ***
 NaN
 false
 false
@@ -73,6 +71,7 @@ false
 false
 true
 true
+*** booleans ***
 ok
 ok
 ok
@@ -80,19 +79,62 @@ ok
 ok
 ok
 ok
+*** strings ***
+a
+e
+undefined
+undefined
+8
+adhb
+10
+10
+*** objects ***
+true
+true
+false
+false
+true
+*** types ***
+undefined
+undefined
+turn to void
+undefined
+undefined
+object
+boolean
+number
+string
+function
+string
+undefined
+undefined
+string
+*** functions ***
+1, 2, undefined, false
+a:first, b:2, c:true
+610
+610
+0
+1232766
+undefined
+undefined
+9
+*** for statement ***
 0,1,2,3,4,5,6,7,8,9,
 10,11,12,13,14,15,16,17,18,19,
 5,6,7,8,9,10,11,12,13,14,
 21,3,31,4,41,5,51,6,71,7,91,8,
-9
-true
-true
-false
-false
-false
-true
+*** new statement ***
 a: undefined, b: undefined, c: cee
 a: aah, b: bee, c: cee
+*** delete statement ***
+true
+true
+false
+false
+false
+true
+*** break & continue ***
 before 1
 after 1
 before 2
@@ -324,6 +366,7 @@ thonk
 iter 7
 iter 8
 iter 9
+*** try, catch, finally ***
 a0
 b0
 bf
@@ -381,6 +424,7 @@ finally 2
 2
 finally 2
 1
+*** switch ***
 -2
 -1
 0
@@ -408,33 +452,7 @@ continues to 2
 7
 8
 9
-a
-e
-undefined
-undefined
-8
-adhb
-10
-10
-true
-true
-false
-false
-true
-undefined
-undefined
-turn to void
-undefined
-undefined
-object
-boolean
-number
-string
-function
-string
-undefined
-undefined
-string
+*** for in ***
 0,1,2,3,4,5,6,7,
 0,1,2,3,4,5,6,7,
 0,1,2,3,4,5,6,7,
@@ -456,10 +474,12 @@ tick
 2
 tick 
 3
+*** closures ***
 23
 24
 25
 26
+*** arguments ***
 true
 <object>
 3

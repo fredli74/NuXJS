@@ -215,14 +215,17 @@ struct QuickConstants {
 
 QuickConstants QUICK_CONSTANTS;
 
-// FIX : sort
+// FIX : sort, merge to few lines
 const String EMPTY_STRING("");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
+const String O_BJECT_STRING("Object");
 const String BOOLEAN_STRING("boolean");
 const String NUMBER_STRING("number");
 const String STRING_STRING("string");
+const String S_TRING_STRING("String");
 const String FUNCTION_STRING("function");
+const String F_UNCTION_STRING("Function");
 const String NULL_STRING("null");
 const String FALSE_STRING("false");
 const String TRUE_STRING("true");
@@ -232,6 +235,7 @@ const String MINUS_INFINITY_STRING("-Infinity");
 const String ZERO_STRING("0");
 const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
+const String A_RGUMENTS_STRING("Arguments");
 const String PROTOTYPE_STRING("prototype");
 const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
@@ -244,6 +248,9 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 	Char* e = std::copy(l.begin(), l.end(), begin());
 	std::copy(r.begin(), r.end(), e);
 }
+
+const String* String::getTypeString() const { return &STRING_STRING; }
+const String* String::getClassName() const { return &S_TRING_STRING; }
 
 bool String::getProperty(Engine& engine, const String* name, Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
@@ -363,6 +370,7 @@ struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { 
 Function* Object::asFunction() { return 0; }
 Enumerator* Object::asEnumerator() { return 0; }
 const String* Object::getTypeString() const { return &OBJECT_STRING; }
+const String* Object::getClassName() const { return &O_BJECT_STRING; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
 bool Object::getProperty(Engine& engine, const String* name, Value& v) { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
@@ -518,6 +526,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 Value::Value(Type type) : type(type) { }
 Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
+Value::Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
 Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
 Value::Value(const String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
@@ -538,7 +547,13 @@ bool Value::toBool() const {
 	}
 }
 
-Int32 Value::toInt() const { return static_cast<Int32>(toDouble()); } // FIX : should do modulo, see http://www.ecma-international.org/ecma-262/5.1/#sec-9.6
+Int32 Value::toInt() const {
+	double d = toDouble();
+	int i = static_cast<Int32>(d);
+	if (i == d) return i;
+	if (isNaN(d) || fabs(d) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
+	return (d >= 0) ? static_cast<UInt32>(fmod(d, 4294967296.0)) : -static_cast<UInt32>(fmod(-d, 4294967296.0));
+}
 
 double Value::toDouble() const {
 	switch (type) {
@@ -721,6 +736,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 
 Function* Function::asFunction() { return this; }
 const String* Function::getTypeString() const { return &FUNCTION_STRING; }
+const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 
 void Function::construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv) {
 	Object* prototype = 0;
@@ -754,6 +770,8 @@ Arguments::Arguments(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
 		, argumentsCount(argumentsCount), lengthProperty(argumentsCount), deletedArguments(argumentsCount + 1) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
+
+const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
 
 Value* Arguments::findProperty(const String* name) {
 	if (name->isEqualTo(LENGTH_STRING)) return (deletedArguments[0] ? 0 : &lengthProperty);
@@ -970,9 +988,9 @@ bool Processor::run(Int32 count) {
 			case OR_OP: poppush(vsp, Value(vsp[-1].toInt() | vsp[0].toInt())); break;
 			case XOR_OP: poppush(vsp, Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
 			case AND_OP: poppush(vsp, Value(vsp[-1].toInt() & vsp[0].toInt())); break;
-			case SHL_OP: poppush(vsp, Value(vsp[-1].toInt() << vsp[0].toInt())); break;
-			case SHR_OP: poppush(vsp, Value(vsp[-1].toInt() >> vsp[0].toInt())); break;
-			case UNSIGNED_SHR_OP: poppush(vsp, Value((Int32)((UInt32)(vsp[-1].toInt()) >> vsp[0].toInt()))); break;
+			case SHL_OP: poppush(vsp, Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case SHR_OP: poppush(vsp, Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case UNSIGNED_SHR_OP: poppush(vsp, Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
 			case PLUS_OP: vsp[0] = Value(vsp[0].toDouble()); break;
 			case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
 			case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
@@ -1813,11 +1831,11 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 			switch (*p) {
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
-						UInt32 i;
+						UInt32 u;
 						const Char* b = p += 2;
-						p = parseHex(b, e, i);
+						p = parseHex(b, e, u);
 						if (p == b) throw std::runtime_error("Invalid number");
-						v = XValue(XValue::CONSTANT, Value((Int32)(i)));
+						v = XValue(XValue::CONSTANT, Value(u));
 						break;
 					}
 					/* else continue */

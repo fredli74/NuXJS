@@ -1,11 +1,17 @@
+print("*** comments ***")
+
 // function print(x) { console.log(x) }
 // function time(f) { var start = Date.now(); f(); print("elapsed: " + (Date.now() - start)); }
 
-  var i = 0 /* comment */ ;   // more comment
+  var i = 0 /* comment */ ; print(i);  // more comment
  j = 1234.5 /* multi
  line
  comment
  */
+
+print(j);
+
+print("*** numbers ***")
 
 print(1+1 == 2)
 print(1.2+1.5 == 2.7)
@@ -29,6 +35,8 @@ print(3-9*3 == -24)
 print(-3-(-9)*-3 == -30)
 print(  -3  -  -9  *  -3   == -30)
 print( +   55  == 55)
+
+print("*** more numbers ***")
 
 var x=3
 print(x+9*5 == 48)
@@ -68,14 +76,109 @@ print((x == 3.1 ? 'a' : 'b') == 'b')
 print((x == 3.0 ? (x >= 3.0 ? 'a' : 'b') : 'c') == 'a')
 print((x != 3.0 ? (x >= 3.0 ? 'a' : 'b') : (x > 3.0 ? 'c' : 'd')) == 'd')
 
-f = function() { }
-var a = 1 , b = 2 , c , d = 1 in f ; print(a + ", " + b + ", " + c + ", " + d);
+print("*** integers ***")
+
+print(1 << 5 == 32)
+print(1 << 37 == 32)
+print(32 >> 5 == 1)
+print(32 >> 37 == 1)
+print(32 << -23 == 16384)
+print(16384 >> -23 == 32)
+print(-1 << 5 == -32)
+print(-1 << 37 == -32)
+print(-32 >> 5 == -1)
+print(-32 >> 37 == -1)
+print(-32 << -23 == -16384)
+print(-16384 >> -23 == -32)
+print(-16384 >>> 23 == 511)
+print(-16384 >>> -23 == 8388576)
+print(~~16384.9 == 16384);
+print(~~-16384.9 == -16384);
+print((-16384.9)>>0 == -16384);
+print(1<<31 == -2147483648);
+print(0xCFCFCFCF == 3486502863);
+print(-0xCFCFCFCF == -3486502863);
+print(~~0xCFCFCFCF == -808464433);
+print((80189565849)>>0 == -1414812775);
+print(-808464433>>>0 == 0xCFCFCFCF);
+print(~~(1.0/0.0) == 0);
+print(~~(-1.0/0.0) == 0);
 
 var i = 0 ;   while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
  do { j = j - i * 0.5 } while ( i ++ < 2000 )
  print (  i + ", " + j )  ;
 
 var i=0;for(j=1234.5;1E3>i;)j+=i,++i;do j-=0.5*i;while(2E3>i++);print(i+", "+j);
+
+print("*** special numbers ***")
+
+// FIX : infinity etc
+
+o = new (function(){});
+print(o.a+0) // NaN
+garlicNan=o.a+0
+cheeseNan=o.b+0
+print(garlicNan<cheeseNan) // NaN comparisons are always false
+print(garlicNan<=cheeseNan) // NaN comparisons are always false
+print(garlicNan==cheeseNan) // NaN comparisons are always false
+print(garlicNan===cheeseNan) // NaN comparisons are always false
+print(garlicNan>=cheeseNan) // NaN comparisons are always false
+print(garlicNan>cheeseNan) // NaN comparisons are always false
+print(garlicNan!=cheeseNan) // but this is true
+print(garlicNan!==cheeseNan) // but this is true
+
+print("*** booleans ***")
+
+if (false && false || true && true) print("ok"); else print("oops");
+if (!(false && true || true && false)) print("ok"); else print("oops")
+if (!(true && false || false && true)) print("ok"); else print("oops");
+if (false && true || true && false || !(false && false)) print("ok"); else print("oops")
+if ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 7<5)) print("ok"); else print("oops");
+if ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 5<7)) print("oops"); else print("ok");
+print ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 7<5) ? ("ok") : ("oops"));
+
+print("*** strings ***")
+
+print("abcdefgh"[0]);
+print("abcdefgh"[4]);
+print("abcdefgh"[8]);
+print("abcdefgh"[-1]);
+print("abcdefgh".length);
+s = "abcdefgh"; s = s[0] + s[3] + s[7] + s[1]; print(s);
+s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output 10, string lengths are not writable
+
+print("*** objects ***")
+
+MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
+print("name" in o);
+print("age" in o);
+print("nope" in o);
+print(o in o);
+print("o" in this);
+
+print("*** types ***")
+
+print((function() { print(x); var x; print(x); x = void print("turn to void"); return x })());
+
+(function() { var f = function() {
+	var a;
+	print(typeof a);
+	print(typeof null);
+	print(typeof false);
+	print(typeof 3.5);
+	print(typeof "zzz");
+	print(typeof f);
+	print(typeof "zzz"[1]);
+	print(typeof "zzz"[5]);
+	print(typeof doesNotExist);
+	doesExist = "I exist";
+	print(typeof doesExist);
+}; f(); })();
+
+print("*** functions ***")
+
+f = function() { }
+var a = 1 , b = 2 , c , d = 1 in f ; print(a + ", " + b + ", " + c + ", " + d);
 
 f = function ( a , b , c ) { print("a:" + a + ", b:" + b + ", c:" + c) }
 f ( 'first', 2, true )
@@ -92,25 +195,9 @@ print(f[999])
 print(f[1000])
 print(f[-1])
 
-print(f.a+0) // NaN
-garlicNan=f.a+0
-cheeseNan=f.b+0
-print(garlicNan<cheeseNan) // NaN comparisons are always false
-print(garlicNan<=cheeseNan) // NaN comparisons are always false
-print(garlicNan==cheeseNan) // NaN comparisons are always false
-print(garlicNan===cheeseNan) // NaN comparisons are always false
-print(garlicNan>=cheeseNan) // NaN comparisons are always false
-print(garlicNan>cheeseNan) // NaN comparisons are always false
-print(garlicNan!=cheeseNan) // but this is true
-print(garlicNan!==cheeseNan) // but this is true
+x=9;(function() { var y=3,x=5 })(); print(x)
 
-if (false && false || true && true) print("ok"); else print("oops");
-if (!(false && true || true && false)) print("ok"); else print("oops")
-if (!(true && false || false && true)) print("ok"); else print("oops");
-if (false && true || true && false || !(false && false)) print("ok"); else print("oops")
-if ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 7<5)) print("ok"); else print("oops");
-if ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 5<7)) print("oops"); else print("ok");
-print ((3<5 && 5<3 || 2==3 && 2==2) || !(3>4 || 7<5) ? ("ok") : ("oops"));
+print("*** for statement ***")
 
 s = "";
 for ( x = 0 ; x < 10 ; ++ x ) s += x + ","
@@ -127,7 +214,17 @@ s = "";
 for (var x = 1, y = 1 ; x < 100 ; x += (x < 50 ? 10 : 20), ++y) { if (x > 20) s += x + "," + y + "," };
 print(s)
 
-x=9;(function() { var y=3,x=5 })(); print(x)
+print("*** new statement ***")
+
+// FIX : test prototype
+
+f=function(a, b) { this.a=a; this.b=b; this.c="cee"; this.dump=function() { print("a: " + this.a  + ", b: " + this.b + ", c: " + this.c); } }
+x = new f
+x.dump()
+x = new f ( "aah" , "bee" )
+x.dump()
+
+print("*** delete statement ***")
 
 delete z;
 print(function() { z=3; return delete z }())
@@ -137,11 +234,7 @@ print(function() { var z=3; return delete z }())
 print(function() { var z=3; var g=function() {  return delete z; } ; return g; }()())
 print(delete "constant is always ok")
 
-f=function(a, b) { this.a=a; this.b=b; this.c="cee"; this.dump=function() { print("a: " + this.a  + ", b: " + this.b + ", c: " + this.c); } }
-x = new f
-x.dump()
-x = new f ( "aah" , "bee" )
-x.dump()
+print("*** break & continue ***")
 
 { var i = 0; while (++i < 5) { print("before " + i); if (i > 2) continue; print("after " + i) } }
 { var i = 0; while (++i < 5) { print("before " + i); if (i > 2) break; print("after " + i) } }
@@ -164,6 +257,8 @@ f()
 { a: { for (var x = 1; x < 10; ++x) for (var y = 1; y < 3; ++y) { print(x); if (x == 5) break a }; print("not here") } }
 
 { x = 0; a: for (var i = 0; i < 10; ++i) { if (++x < 8) continue a; print("iter " + i) } }
+
+print("*** try, catch, finally ***")
 
 a: try { print("a0"); b: { try { print("b0"); break b; print("b1") } finally { print("bf") } }; print("a1"); } finally { print("af") }
 a: try { print("a0"); b: { try { print("b0"); break a; print("b1") } finally { print("bf") } }; print("a1"); } finally { print("af") }
@@ -217,6 +312,8 @@ print((function() { var x = 1; b: try { return x++ } finally { print("finally " 
 // finally 2
 // 1
 
+print("*** switch ***")
+
 for(var x=-3;x<=3;++x)switch(x+3){case 1:case 2:case 1+2:print(x)}
 
 var f = function(n) { print('test:' + n); };
@@ -230,37 +327,7 @@ switch (1.0) { case 0: print('0'); default: print('default'); case "1.0": print(
 
 for (var i = 0; i < 10; ++i) { switch (i) { case 5: continue }; print(i) }
 
-print("abcdefgh"[0]);
-print("abcdefgh"[4]);
-print("abcdefgh"[8]);
-print("abcdefgh"[-1]);
-print("abcdefgh".length);
-s = "abcdefgh"; s = s[0] + s[3] + s[7] + s[1]; print(s);
-s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output 10, string lengths are not writable
-
-MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
-print("name" in o);
-print("age" in o);
-print("nope" in o);
-print(o in o);
-print("o" in this);
-
-print((function() { print(x); var x; print(x); x = void print("turn to void"); return x })());
-
-(function() { var f = function() {
-	var a;
-	print(typeof a);
-	print(typeof null);
-	print(typeof false);
-	print(typeof 3.5);
-	print(typeof "zzz");
-	print(typeof f);
-	print(typeof "zzz"[1]);
-	print(typeof "zzz"[5]);
-	print(typeof doesNotExist);
-	doesExist = "I exist";
-	print(typeof doesExist);
-}; f(); })();
+print("*** for in ***")
 
 s = ''; for ( a in "abcdefgh" ) s += a + ','; print(s);
 s = ''; for ( var a in "abcdefgh" ) s += a + ','; print(s);
@@ -269,13 +336,17 @@ s = ''; for ( var a = 100 in "" ) ; print(a);
 a = new MyObject; for (a.x in "abcd") print(a.x)
 a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x); for (var i = 0; i < x; ++i) print(a[i]);
 a = new MyObject; f = function() { print("tick "); return 0 }; for (a[f()] in "abcd") { print (a[0]) }
-  
+
+print("*** closures ***")
+
 a=function() { b = function() { c = function() { return d++ }; return c; }; var d = 23 ; return b }
 b=a()()
 print(b());
 print(b());
 print(b());
 print(b());
+
+print("*** arguments ***")
 
 f=function() { var a = arguments; var arguments; var b = arguments; var arguments = 3; var c = arguments; print(a==b); print(a); print(c) }; f();
 

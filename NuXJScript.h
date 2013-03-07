@@ -235,6 +235,7 @@ class Value {
 				explicit Value(Type type = NONEXISTENT_TYPE);
 				explicit Value(bool b);
 				explicit Value(Int32 i);
+				explicit Value(UInt32 u);
 				explicit Value(double d);
 				explicit Value(const String* s);
 				explicit Value(Object* o);
@@ -279,6 +280,7 @@ class Object : public GCItem {
 				virtual Function* asFunction();
 				virtual Enumerator* asEnumerator();
 				virtual const String* getTypeString() const;
+				virtual const String* getClassName() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -337,12 +339,14 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				String(const String& l, const String& r);
 				String(const std::wstring& s);
 				template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
+				virtual const String* getTypeString() const;
+				virtual const String* getClassName() const;
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual Enumerator* getEnumerator(Engine& engine);
 				Table::HashType calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
-				virtual Enumerator* getEnumerator(Engine& engine);
 
 	protected:	mutable size_t hash;
 };
@@ -427,6 +431,7 @@ class Function : public UserObject {
 
 				virtual Function* asFunction();
 				virtual const String* getTypeString() const;
+				virtual const String* getClassName() const;
 				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
 				virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
 };
@@ -494,6 +499,7 @@ class Arguments : public UserObject {
 	public:		typedef UserObject super;
 
 				Arguments(FunctionFrame* frame, Int32 argumentsCount);
+				virtual const String* getClassName() const;
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
