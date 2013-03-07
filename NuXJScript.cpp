@@ -948,8 +948,8 @@ bool Processor::run() {
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
 	Value* lp = frame->getLocalsPointer();
 	GCHeap& heap = this->engine.heap();
-	Int32 clockCyclesLeft = this->clockCyclesLeft;
-	while (--clockCyclesLeft >= 0) {
+	while (this->clockCyclesLeft >= 0) {
+		--(this->clockCyclesLeft);
 		switch (*ip++) {
 			case POP_OP: pop(vsp, 1); break;
 			case REPUSH_OP: push(vsp, vsp[0]); break;
@@ -1023,7 +1023,6 @@ bool Processor::run() {
 				if (this->cstackPointer == this->cstackStart) {
 					// FIX : yeah, we can't you know :) we need a new way to return properly to native caller
 					// cstackPointer->instructionPointer = ip;
-					this->clockCyclesLeft = clockCyclesLeft;
 					this->vstackPointer = vsp;
 					return true;
 				}
@@ -1043,7 +1042,6 @@ bool Processor::run() {
 				Function* f = o->asFunction();
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
-				this->clockCyclesLeft = clockCyclesLeft;
 				vsp -= n + 2;
 				this->vstackPointer = vsp;
 				f->call(this->engine, this, n, vsp + 3, Value(thisObject));
@@ -1056,7 +1054,6 @@ bool Processor::run() {
 				Function* f = o->asFunction();
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
-				this->clockCyclesLeft = clockCyclesLeft;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
 				f->call(this->engine, this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
@@ -1069,7 +1066,6 @@ bool Processor::run() {
 				Function* f = o->asFunction();
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
-				this->clockCyclesLeft = clockCyclesLeft;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
 				f->construct(this->engine, this, n, vsp + 2);
@@ -1126,7 +1122,6 @@ bool Processor::run() {
 				this->vstackPointer = catcher.vstackPointer;
 				push(this->vstackPointer, exception);
 				this->cstackPointer->instructionPointer = catcher.instructionPointer;
-				this->clockCyclesLeft = clockCyclesLeft;
 				catchers.pop_back();
 				goto recover;
 			}
@@ -1163,7 +1158,6 @@ bool Processor::run() {
 			recover: {
 				vsp = this->vstackPointer;
 				ip = this->cstackPointer->instructionPointer;
-				clockCyclesLeft = this->clockCyclesLeft;
 				frame = this->cstackPointer->frame;
 				cp = frame->getFunctionDef()->getConstantsPointer();
 				lp = frame->getLocalsPointer();
@@ -1174,7 +1168,6 @@ bool Processor::run() {
 	}
 	cstackPointer->instructionPointer = ip;
 	this->vstackPointer = vsp;
-	this->clockCyclesLeft = clockCyclesLeft;
 	return false;
 }
 
