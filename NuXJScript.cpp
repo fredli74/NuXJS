@@ -358,12 +358,7 @@ void GCList::claim(GCItem* item) {
 
 /* --- Object --- */
 
-class EmptyEnumerator : public Enumerator {
-	public:		typedef Enumerator super;
-	public:		const String* nextPropertyName() { return 0; }
-};
-
-EmptyEnumerator EMPTY_ENUMERATOR;
+struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
 
 Function* Object::asFunction() { return 0; }
 Enumerator* Object::asEnumerator() { return 0; }
@@ -791,11 +786,10 @@ void Arguments::gcMark(GCHeap& heap) {
 }
 
 Enumerator* Arguments::getEnumerator(Engine& engine) {
-	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b))
-		if (!b->key->isEqualTo(LENGTH_STRING)) list->add(b->key);
+	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
 	for (Int32 i = 0; i < argumentsCount; ++i)
-		if (!deletedArguments[i]) list->add(String::fromInt(engine.heap(), i));
+		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.heap(), i));
 	// list->sort(); // FIX : bad idea?
 	return list;
 }
@@ -1948,6 +1942,29 @@ void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd
 	returnSafeKept(enumXValue, true, false);
 }
 
+void Compiler::parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
+	expectToken(";", true);
+	Int32 loopPoint = markBackwardBranch();
+	Int32 exitLoopPoint = INVALID_CODE_POINT;
+	XValue xv;
+	if (parseOptionalExpression(xv, LOWEST_PREC)) {
+		makeRValue(xv);
+		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
+	}
+	expectToken(";", true);
+	CodeVector incCode;
+	outputCode = &incCode;
+	parseAndPopOptionalExpression();
+	expectToken(")", true);
+	outputCode = &function->code;
+	parseStatement(emptyLabelScope, emptyLabelScope);
+	completeContinues(emptyLabelScope, scopeLabelsEnd);
+	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
+	emitBackwardBranch(Processor::JMP_OP, loopPoint);
+	if (exitLoopPoint != INVALID_CODE_POINT) completeForwardBranch(exitLoopPoint);
+	completeBreaks(emptyLabelScope);
+}
+
 void Compiler::expectSemicolon() {
 	const Char* b = p;
 	eatWhite();
@@ -2103,7 +2120,6 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					acceptInOperator = true;
 					if (eatToken("in", true)) {
 						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
-						break;
 					} else {
 						if (eatToken(",", true)) {
 							eatWhite();
@@ -2111,6 +2127,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 							parseVarDeclarations();
 							acceptInOperator = true;
 						}
+						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				} else {
 					XValue iterXValue;
@@ -2119,36 +2136,14 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					bool gotExpression = parseOptionalExpression(iterXValue, LOWEST_PREC);
 					acceptInOperator = true;
 					outputCode = &function->code;
-					if (gotExpression) {
-						if (eatToken("in", true)) {
-							parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
-							break;
-						} else {
-							outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
-							discard(iterXValue);
-						}
+					if (gotExpression && eatToken("in", true)) {
+						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
+					} else {
+						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
+						discard(iterXValue);
+						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				}
-				expectToken(";", true);
-				Int32 loopPoint = markBackwardBranch();
-				Int32 exitLoopPoint = INVALID_CODE_POINT;
-				XValue xv;
-				if (parseOptionalExpression(xv, LOWEST_PREC)) {
-					makeRValue(xv);
-					exitLoopPoint = emitForwardBranch(Processor::JF_OP);
-				}
-				expectToken(";", true);
-				CodeVector incCode;
-				outputCode = &incCode;
-				parseAndPopOptionalExpression();
-				expectToken(")", true);
-				outputCode = &function->code;
-				parseStatement(&emptyLabelScope, &emptyLabelScope);
-				completeContinues(&emptyLabelScope, scopeLabelsEnd);
-				outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
-				emitBackwardBranch(Processor::JMP_OP, loopPoint);
-				if (exitLoopPoint != INVALID_CODE_POINT) completeForwardBranch(exitLoopPoint);
-				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
@@ -2389,7 +2384,7 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
-		public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
+					virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						processor->push(Value());

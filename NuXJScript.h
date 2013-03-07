@@ -9,13 +9,13 @@
 //			no synchronized return to native code right now
 //			arguments are reversed on native calls, and will be gc'd as stack has already popped 
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
-//		prototype support
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
 //		basic library (math, string, array ops)
 //		assignable globals this in processor
+//		true primitive <-> object conversions
 //
 //	Compiler
 //
@@ -26,8 +26,6 @@
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
-//		new operator
-//			done, but need to implement prototype
 //		array literals
 //		object literals
 //
@@ -43,6 +41,7 @@
 //			do a special Value variation that tracks NAN and Infinities?
 //		(1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
 //			same problem with (0.003e3 == 3.0)
+//		I don't know but the "emulation" in arguments object feels a bit over the top (registering deleted items etc)
 //
 // Compiler
 //
@@ -51,7 +50,9 @@
 //			b: switch (x) { case 1: switch(x) { case 2: break b } }
 //			won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
 //
-// GC
+// Other
+//
+//		included in tests should be to config the gc to sweep after every instruction
 //
 // --- OPTIMIZE ---
 //
@@ -118,6 +119,9 @@
 //		for (in)
 //		arguments container
 //			we need to decide what should happen when deleting members still...
+//		prototype support
+//		new operator
+//			done, but need to implement prototype
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -138,9 +142,9 @@ const double EPSILON = 1.0e-300;
 // FIX : name
 template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 	public:		explicit QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
-	public:		explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
+				explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
 
-	public:		void swap(QuickArray& other) {
+				void swap(QuickArray& other) {
 					if (this != &other) {
 						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
 						std::swap(n, other.n);
@@ -150,7 +154,7 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 					}
 				}
 				
-	public:		QuickArray& operator=(const QuickArray& copy) {
+				QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
 						QuickArray<T, BUILT_IN_COUNT> na(copy.n);
 						std::copy(copy.p, copy.p + copy.n, na.p);
@@ -159,15 +163,16 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 					return *this;
 				}
 				
-	public:		bool empty() const { return n == 0; }
-	public:		size_t size() const { return n; }
-	public:		operator T*() const { return p; }
-	public:		T* begin() const { return p; }
-	public:		T* end() const { return p + n; }
-	public:		~QuickArray() { if (p != a) delete [] p; }
+				bool empty() const { return n == 0; }
+				size_t size() const { return n; }
+				operator T*() const { return p; }
+				T* begin() const { return p; }
+				T* end() const { return p + n; }
+				~QuickArray() { if (p != a) delete [] p; }
+				
 	protected:	size_t n;
-	protected:	T* p;
-	protected:	T a[BUILT_IN_COUNT];
+				T* p;
+				T a[BUILT_IN_COUNT];
 };
 
 class GCList;
@@ -175,45 +180,46 @@ class GCHeap;
 class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
+
 	public:		GCItem();
-	public:		GCItem(const GCItem& copy);
-	public:		GCItem& operator=(const GCItem& copy);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual ~GCItem();
+				GCItem(const GCItem& copy);
+				GCItem& operator=(const GCItem& copy);
+				virtual void gcMark(GCHeap& heap);
+				virtual ~GCItem();
+
 	protected:	GCList* _gcList;
-	protected:	GCItem* _gcPrev;
-	protected:	GCItem* _gcNext;
+				GCItem* _gcPrev;
+				GCItem* _gcNext;
 };
 
 class GCList : public GCItem {
 	public:		GCList();
-	public:		size_t size() const;
-	public:		void claim(GCItem* item);
-	public:		void relinquish(GCItem* item);
+				size_t size() const;
+				void claim(GCItem* item);
+				void relinquish(GCItem* item);
+
 	protected:	size_t count;
 };
 
 class GCHeap {
-	public:		template<class T> T* manage(T* item) { currentList->claim(item); return item; }
-	public:		template<class T> T* protect(T* item) { rootList.claim(item); return item; }
 	public:		GCHeap();
-	public:		size_t size() const;
-	public:		size_t gc();
-	public:		void mark(const GCItem* item);
+				template<class T> T* manage(T* item) { currentList->claim(item); return item; }
+				template<class T> T* protect(T* item) { rootList.claim(item); return item; }
+				size_t size() const;
+				size_t gc();
+				void mark(const GCItem* item);
+
 	protected:	GCList* currentList;
-	protected:	GCList* newList;
-	protected:	GCList managedLists[2];
-	protected:	GCList rootList;
+				GCList* newList;
+				GCList managedLists[2];
+				GCList rootList;
+
 	private:	GCHeap(const GCHeap& other); // N/A
-	private:	GCHeap& operator=(const GCHeap& other); // N/A
+				GCHeap& operator=(const GCHeap& other); // N/A
 };
 
-class Engine;
-class Function;
 class String;
 class Object;
-class ScriptFunctionDef;
-
 class Value {
 	public:		enum Type {
 					NONEXISTENT_TYPE		// Used in tables for deleted entries. Never seen by script-code.
@@ -225,185 +231,206 @@ class Value {
 					, OBJECT_TYPE
 				};
 	
-	public:		explicit Value(Type type = NONEXISTENT_TYPE);
-	private:	explicit Value(void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
-	public:		explicit Value(bool b);
-	public:		explicit Value(Int32 i);
-	public:		explicit Value(double d);
-	public:		explicit Value(const String* s);
-	public:		explicit Value(Object* o);
+				explicit Value(Type type = NONEXISTENT_TYPE);
+				explicit Value(bool b);
+				explicit Value(Int32 i);
+				explicit Value(double d);
+				explicit Value(const String* s);
+				explicit Value(Object* o);
 	
-	public:		bool exists() const;
-	public:		bool isObject() const;
-	public:		const String* getAsString() const;
-	public:		Object* getAsObject() const;
-	public:		const String* getTypeString() const;
-	public:		bool toBool() const;
-	public:		Int32 toInt() const;
-	public:		double toDouble() const;
-	public:		const String* toString(GCHeap& heap) const;
-	public:		Object* toObject(GCHeap& heap) const;
-	public:		bool operator==(const Value& y) const;
-	public:		bool operator<(const Value& y) const;
-	public:		bool isStrictlyEqualTo(const Value& y) const;
-	public:		bool isEqualTo(const Value& y) const;
-	public:		bool isLessThan(const Value& y) const;
-	public:		bool isLessThanOrEqualTo(const Value& y) const;
-	public:		Value add(GCHeap& heap, const Value& y) const;
-	public:		void markIn(GCHeap& heap) const;
+				bool exists() const;
+				bool isObject() const;
+				const String* getAsString() const;
+				Object* getAsObject() const;
+				const String* getTypeString() const;
+				bool toBool() const;
+				Int32 toInt() const;
+				double toDouble() const;
+				const String* toString(GCHeap& heap) const;
+				Object* toObject(GCHeap& heap) const;
+				bool operator==(const Value& y) const;
+				bool operator<(const Value& y) const;
+				bool isStrictlyEqualTo(const Value& y) const;
+				bool isEqualTo(const Value& y) const;
+				bool isLessThan(const Value& y) const;
+				bool isLessThanOrEqualTo(const Value& y) const;
+				Value add(GCHeap& heap, const Value& y) const;
+				void markIn(GCHeap& heap) const;
 
 	protected:	bool compareStrictly(const Value& y) const;
-	protected:	Type type;	
-	protected:	union {
+				Type type;
+				union {
 					bool b;
 					double d;
 					const String* s;
 					Object* o;
 				};
+
+	private:	explicit Value(void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
+class Engine;
 class Enumerator;
+class Function;
 class Object : public GCItem {
 	public:		typedef GCItem super;
-	public:		virtual Function* asFunction();
-	public:		virtual Enumerator* asEnumerator();
-	public:		virtual const String* getTypeString() const;
-	public:		virtual bool hasProperty(Engine& engine, const String* name);
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Engine& engine, const String* name);
-	public:		virtual Enumerator* getEnumerator(Engine& engine);
+				
+				virtual Function* asFunction();
+				virtual Enumerator* asEnumerator();
+				virtual const String* getTypeString() const;
+				virtual bool hasProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getEnumerator(Engine& engine);
 };
 
 class Enumerator : public Object {
 	public:		typedef Object super;
-	public:		virtual Enumerator* asEnumerator() { return this; }
-	public:		virtual const String* nextPropertyName() = 0;
+				
+				virtual Enumerator* asEnumerator() { return this; }
+				virtual const String* nextPropertyName() = 0;
 };
 
 class Table {
-	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
-	protected:	static UInt32 suggestN(UInt32 count); // FIX : keep?
 	public:		typedef UInt32 HashType;
-	public:		struct Bucket {
+				
+				struct Bucket {
 					Bucket();
 					HashType hash;
 					const String* key;
 					Value value;
 				};
-	public:		Table(UInt32 n = TABLE_BUILT_IN_N);
-	public:		UInt32 getLoadCount() const;
-	public:		const Bucket* getFirst() const;
-	public:		const Bucket* getNext(const Bucket* b) const;
-	public:		const Bucket* lookup(const String* key);
-	public:		void assign(const String* key, const Value& value);
-	public:		void erase(const String* key);
-	public:		void mark(GCHeap& heap);
-	protected:	void update(const String* key, const Value& value);
-	protected:	Bucket* find(const String* key, HashType hash) const;
-	protected:	UInt32 rebuild(UInt32 newN);
-	protected:	UInt32 n; ///< Size of member table is two to the power of n.
-	protected:	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
-	protected:	UInt32 loadCount; ///< Count of buckets with defined keys.
+				
+				Table(UInt32 n = TABLE_BUILT_IN_N);
+				UInt32 getLoadCount() const;
+				const Bucket* getFirst() const;
+				const Bucket* getNext(const Bucket* b) const;
+				const Bucket* lookup(const String* key);
+				void assign(const String* key, const Value& value);
+				void erase(const String* key);
+				void mark(GCHeap& heap);
+
+	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
+				static UInt32 suggestN(UInt32 count); // FIX : keep?
+				void update(const String* key, const Value& value);
+				Bucket* find(const String* key, HashType hash) const;
+				UInt32 rebuild(UInt32 newN);
+				
+				UInt32 n; ///< Size of member table is two to the power of n.
+				QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
+				UInt32 loadCount; ///< Count of buckets with defined keys.
 };
 
 class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		typedef Object super;
-	public:		typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
-	public:		static const String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
-	public:		static const String* fromInt(GCHeap& heap, Int32 i);
-	public:		static const String* fromDouble(GCHeap& heap, double d);
-	public:		String();
-	public:		String(const String& o);
-	public:		String(const Char* b, const Char* e);
-	public:		String(const String& l, const String& r);
-	public:		String(const std::wstring& s);
-	public:		template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-	public:		Table::HashType calcHash() const;
-	public:		bool isEqualTo(const String& o) const;
-	public:		bool isLessThan(const String& o) const;
-	public:		std::wstring toStdString() const;
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual Enumerator* getEnumerator(Engine& engine);
+				typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
+
+				static const String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
+				static const String* fromInt(GCHeap& heap, Int32 i);
+				static const String* fromDouble(GCHeap& heap, double d);
+
+				String();
+				String(const String& o);
+				String(const Char* b, const Char* e);
+				String(const String& l, const String& r);
+				String(const std::wstring& s);
+				template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
+				Table::HashType calcHash() const;
+				bool isEqualTo(const String& o) const;
+				bool isLessThan(const String& o) const;
+				std::wstring toStdString() const;
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual Enumerator* getEnumerator(Engine& engine);
+
 	protected:	mutable size_t hash;
 };
 
 struct StringObjectCompare {
-	bool operator() (const String* a, const String* b) const {
-		return (a != b && a->isLessThan(*b));
-	}
+	bool operator() (const String* a, const String* b) const { return (a != b && a->isLessThan(*b)); }
 };
 
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
-
-typedef std::vector<Byte> CodeVector;
+typedef std::vector<Byte> CodeVector; // FIX : use QArray in all these places
 
 // This is an Object so that we can store it as a constant
-class ScriptFunctionDef : public Object {
+class ScriptFunctionDef : public Object {	
 	public:		typedef Object super;
-	public:		ScriptFunctionDef();
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		bool lookupLocalName(const String* name, Int32& index) const;
-	public:		const Value* getConstantsPointer() const;
+				
+				ScriptFunctionDef();
+				virtual void gcMark(GCHeap& heap);
+				bool lookupLocalName(const String* name, Int32& index) const;
+				const Value* getConstantsPointer() const;
+
 // FIX : protectize
 	public:		const String* source;
-	public:		CodeVector code;
-	public:		std::vector<Value> constants;
-	public:		Int32 argumentsCount;
-	public:		Int32 varsCount; // not including arguments
-	public:		LocalNameMap localNames;
+				CodeVector code;
+				std::vector<Value> constants;
+				Int32 argumentsCount;
+				Int32 varsCount; // not including arguments
+				LocalNameMap localNames;
 };
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-	public:		RangeEnumerator(GCHeap& heap, Int32 from, Int32 count);
-	public:		virtual const String* nextPropertyName();
+				RangeEnumerator(GCHeap& heap, Int32 from, Int32 count);
+				virtual const String* nextPropertyName();
+				
 	protected:	GCHeap& heap;
-	protected:	const Int32 to;
-	protected:	Int32 index;
+				const Int32 to;
+				Int32 index;
 };
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-	public:		StringListEnumerator(UInt32 maxCount);
-	public:		void add(const String* s);
-	public:		void sort(); // FIX : bad idea?
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual const String* nextPropertyName();
+				StringListEnumerator(UInt32 maxCount);
+				void add(const String* s);
+				void sort(); // FIX : bad idea?
+				virtual void gcMark(GCHeap& heap);
+				virtual const String* nextPropertyName();
+
 	protected:	QuickArray<const String*, 8> list;
-	protected:	UInt32 actualCount;
-	protected:	UInt32 nextIndex;
+				UInt32 actualCount;
+				UInt32 nextIndex;
 };
 
 class UserObject : public Object {
 	public:		typedef Object super;
-	public:		UserObject(Object* prototype = 0);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Engine& engine, const String* name);
-	public:		virtual Enumerator* getEnumerator(Engine& engine);
-	protected:	Table properties;
-	protected:	Object* prototype;
+				
+				UserObject(Object* prototype = 0);
+				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getEnumerator(Engine& engine);
+				
+	protected:	void populateStringListEnumerator(StringListEnumerator* list);
+				
+				Table properties;
+				Object* prototype;
 };
 
 class Engine {
 	friend class String;
+	
 	public:		Engine(GCHeap& heap) : gcHeap(heap) { gcHeap.protect(&stringPrototype); };
-	public:		GCHeap& heap() { return gcHeap; }
+				GCHeap& heap() { return gcHeap; }
+
 	protected:	GCHeap& gcHeap;
-	protected:	UserObject stringPrototype;
+				UserObject stringPrototype;
 };
 
 class Processor;
 class Function : public UserObject {
 	public:		typedef UserObject super;
-	public:		virtual Function* asFunction();
-	public:		virtual const String* getTypeString() const;
-	public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
-	public:		virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
+
+				virtual Function* asFunction();
+				virtual const String* getTypeString() const;
+				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+				virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
 };
 
+// FIX : do something nice here :)
 class NativeFunction : public Function {
 	public:		typedef Function super;
 };
@@ -411,64 +438,74 @@ class NativeFunction : public Function {
 // This is actually a closure, but ECMAScript calls them Function objects.
 class ScriptFunction : public Function {
 	public:		typedef Function super;
-	public:		ScriptFunction(ScriptFunctionDef* definition, Object* environment);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
-	public:		ScriptFunctionDef* getDefinition() const;
-	public:		Object* getEnvironment() const;
+				
+				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
+				virtual void gcMark(GCHeap& heap);
+				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
+				ScriptFunctionDef* getDefinition() const;
+				Object* getEnvironment() const;
+
 	protected:	ScriptFunctionDef* const definition;
-	protected:	Object* const environment; // Usually the global object or the frame of the context that created this function.
+				Object* const environment; // Usually the global object or the frame of the context that created this function.
 };
 
 class Frame : public Object {
 	public:		typedef Object super;
-	public:		virtual const ScriptFunctionDef* getFunctionDef() const = 0;
-	public:		Value* getLocalsPointer() const { return localsPointer; }
+
+				virtual const ScriptFunctionDef* getFunctionDef() const = 0;
+				Value* getLocalsPointer() const { return localsPointer; }
+
 	protected:	Value* localsPointer;
 };
 
 class Arguments;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
-	public:		FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Engine& engine, const String* name);
-	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
+
+				FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
+				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual const ScriptFunctionDef* getFunctionDef() const { return functionDef; } // FIX : not inline
+
 	protected:	const ScriptFunctionDef* const functionDef;
-	protected:	Object* const environment;
-	protected:	const Int32 passedArgumentsCount;
-	protected:	QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
-	protected:	Value argumentsValue;
+				Object* const environment;
+				const Int32 passedArgumentsCount;
+				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
+				Value argumentsValue;
 };
 
 class CatchFrame : public Frame {
 	public:		typedef Frame super;
-	public:		CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Engine& engine, const String* name);
-	public:		virtual const ScriptFunctionDef* getFunctionDef() const { return parentFrame->getFunctionDef(); }
+
+				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
+				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual const ScriptFunctionDef* getFunctionDef() const { return parentFrame->getFunctionDef(); }
+
 	protected:	Frame* parentFrame;
-	protected:	const String* exceptionName;
-	protected:	Value exceptionValue;
+				const String* exceptionName;
+				Value exceptionValue;
 };
 
 class Arguments : public UserObject {
 	public:		typedef UserObject super;
-	public:		Arguments(FunctionFrame* frame, Int32 argumentsCount);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value& v);
-	public:		virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-	public:		virtual bool deleteProperty(Engine& engine, const String* name);
-	public:		virtual Enumerator* getEnumerator(Engine& engine);
+
+				Arguments(FunctionFrame* frame, Int32 argumentsCount);
+				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getEnumerator(Engine& engine);
+
 	protected:	Value* findProperty(const String* name);
-	protected:	FunctionFrame* frame;
-	protected:	Int32 argumentsCount;
-	protected:	Value lengthProperty;
-	protected:	QuickArray<Byte, 8> deletedArguments;
+				FunctionFrame* frame;
+				Int32 argumentsCount;
+				Value lengthProperty;
+				QuickArray<Byte, 8> deletedArguments;
 };
 
 struct Context { // FIX : make Processor local
@@ -480,7 +517,8 @@ Value* vstackPointer;  // doesn't change during function execution, i.e. entry v
 
 class Processor : public GCItem {
 	public:		typedef GCItem super;
-	public:		enum Opcode {	// FIX : sort
+
+				enum Opcode {	// FIX : sort
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
@@ -518,31 +556,35 @@ class Processor : public GCItem {
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
 					, NEXT_PROPERTY_OP								// immediate: exit loop offset, stack: enumerator -> string
 				};
+
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
-	public:		void push(const Value& v);
-	public:		bool run(Int32 count);
+				virtual void gcMark(GCHeap& heap);
+				void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
+				void push(const Value& v);
+				bool run(Int32 count);
+				
 	protected:	void push(Value*& vsp, const Value& v);
-	protected:	void pop(Value*& vsp, int count);
-	protected:	void poppush(Value*& vsp, const Value& v);
-	protected:	Int32 readInt32(const Byte* ip);
-	protected:	Int32 nextInt32(const Byte*& ip);
-	protected:	void error();
-	protected:	Engine& engine;
-	protected:	Context* const cstackStart;
-	protected:	Context* const cstackEnd;
-	protected:	Value* const vstackStart;
-	protected:	Value* const vstackEnd;
-	protected:	Context* cstackPointer;
+				void pop(Value*& vsp, int count);
+				void poppush(Value*& vsp, const Value& v);
+				Int32 readInt32(const Byte* ip);
+				Int32 nextInt32(const Byte*& ip);
+				void error();
+				Engine& engine;
+				Context* const cstackStart;
+				Context* const cstackEnd;
+				Value* const vstackStart;
+				Value* const vstackEnd;
+				Context* cstackPointer;
 public:	Value* vstackPointer;
+
 	protected:	struct Catcher {
 					Catcher(Context* csp, Value* vsp, const Byte* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }
 					Context* cstackPointer;
 					Value* vstackPointer;
 					const Byte* instructionPointer;
 				};
-	protected:	std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
+				
+				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
 };
 
 enum Precedence {
@@ -554,12 +596,14 @@ enum Precedence {
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
-	public:		struct XValue; // FIX : rename to ExpressionResult
-	public:		Compiler(Engine& engine, ScriptFunctionDef* function);
-	public:		virtual void gcMark(GCHeap& heap);
-	public:		const Char* compile(const Char* b, const Char* e);
-	public:		void compile(const String& source);
-	public:		void finish();
+				struct XValue; // FIX : rename to ExpressionResult
+				
+				Compiler(Engine& engine, ScriptFunctionDef* function);
+				virtual void gcMark(GCHeap& heap);
+				const Char* compile(const Char* b, const Char* e);
+				void compile(const String& source);
+				void finish();
+
 	protected:	struct Scope { // FIX : .cpp local
 					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
 					Scope(Type type, Scope* next) : type(type), next(next) { }
@@ -575,49 +619,52 @@ class Compiler : public GCItem {
 					std::vector<Int32> continues; // source points for continue jmp's
 					std::vector<Int32> finallys; // source points for finally jsr's
 				};
-	protected:	void eatComment();
-	protected:	void eatWhite();
-	protected:	void emit(Processor::Opcode op);
-	protected:	void emitWithInt32(Processor::Opcode op, Int32 i);
-	protected:	void emitWithConstant(Processor::Opcode op, const Value& constant);
-	protected:	Int32 emitForwardBranch(Processor::Opcode op);
-	protected:	void completeForwardBranch(Int32 point);
-	protected:	Int32 markBackwardBranch();
-	protected:	void emitBackwardBranch(Processor::Opcode op, Int32 point);
-	protected:	void completeContinues(const Scope* fromScope, const Scope* untilScope);
-	protected:	void completeBreaks(const Scope* scope);
-	protected:	XValue parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
-	protected:	void parseRValueOperand(const OperatorInfo& op);
-	protected:	void parseFunctionCall(XValue& v, Processor::Opcode op);
-	protected:	bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-	protected:	void parseExpression(XValue& v, Precedence precedence);
-	protected:	bool parseOptionalExpression(XValue& v, Precedence precedence);
-	protected:	void parseAndPopOptionalExpression();
-	protected:	Compiler::XValue parseVarDeclaration();
-	protected:	void parseVarDeclarations();
-	protected:	void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, XValue& iterXValue);
-	protected:	void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
-	protected:	void parseStatementList(Scope* firstScope);
-	protected:	bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
-	protected:	void expectSemicolon();
-	protected:	void expectToken(const char* t, bool eatLeadingWhite);
-	protected:	void eatToken();
-	protected:	void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
-	protected:	void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
-	protected:	void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.
-	protected:	void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
-	protected:	void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
-	protected:	bool isLeadingIdentifierChar(Char c);
-	protected:	void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
-	protected:	Engine& engine; // FIX : necessary?
-	protected:	ScriptFunctionDef* const function;
-	protected:	std::map<Value, Int32> definedConstants;
-	protected:	const Char* p;
-	protected:	const Char* e;
-	protected:	CodeVector* outputCode;
-	protected:	std::vector<Int32> freeSafeKeepingIndexes;
-	protected:	Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
-	protected:	bool acceptInOperator;
+
+				void eatComment();
+				void eatWhite();
+				void emit(Processor::Opcode op);
+				void emitWithInt32(Processor::Opcode op, Int32 i);
+				void emitWithConstant(Processor::Opcode op, const Value& constant);
+				Int32 emitForwardBranch(Processor::Opcode op);
+				void completeForwardBranch(Int32 point);
+				Int32 markBackwardBranch();
+				void emitBackwardBranch(Processor::Opcode op, Int32 point);
+				void completeContinues(const Scope* fromScope, const Scope* untilScope);
+				void completeBreaks(const Scope* scope);
+				XValue parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
+				void parseRValueOperand(const OperatorInfo& op);
+				void parseFunctionCall(XValue& v, Processor::Opcode op);
+				bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
+				void parseExpression(XValue& v, Precedence precedence);
+				bool parseOptionalExpression(XValue& v, Precedence precedence);
+				void parseAndPopOptionalExpression();
+				Compiler::XValue parseVarDeclaration();
+				void parseVarDeclarations();
+				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, XValue& iterXValue);
+				void parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
+				void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
+				void parseStatementList(Scope* firstScope);
+				bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
+				void expectSemicolon();
+				void expectToken(const char* t, bool eatLeadingWhite);
+				void eatToken();
+				void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+				void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
+				void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
+				void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
+				bool isLeadingIdentifierChar(Char c);
+				void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
+
+				Engine& engine; // FIX : necessary?
+				ScriptFunctionDef* const function;
+				std::map<Value, Int32> definedConstants;
+				const Char* p;
+				const Char* e;
+				CodeVector* outputCode;
+				std::vector<Int32> freeSafeKeepingIndexes;
+				Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
+				bool acceptInOperator;
 };
 
 #endif

@@ -21,3 +21,12 @@ for (i in o) print(i);
 print('');
 f=function() { arguments["extra"] = null; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
 print('');
+
+print('');
+f=function() { delete arguments[1]; for (var i in arguments) print(i); arguments[1] = 'back'; print(''); for (var i in arguments) print(i); }; f('1', '2', '3', '4');
+print('');
+
+print('');
+f=function() { delete arguments.length; arguments.length = 'back'; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
+print('');
+
