@@ -243,7 +243,9 @@ class Value {
 				explicit Value(Object* o);
 	
 				bool exists() const;
+				bool isNumber() const;
 				bool isObject() const;
+				double getAsDouble() const;
 				const String* getAsString() const;
 				Object* getAsObject() const;
 				const String* getTypeString() const;
@@ -576,7 +578,10 @@ class Processor : public GCItem {
 				void poppush(Value*& vsp, const Value& v);
 				Int32 readInt32(const Byte* ip);
 				Int32 nextInt32(const Byte*& ip);
+				void callStub(const Byte*& ip, const Byte* stub);
+				void oneToNumber(const Byte*& ip, Value* vsp);
 				void error();
+
 				Engine& engine;
 				Context* const cstackStart;
 				Context* const cstackEnd;
@@ -584,8 +589,7 @@ class Processor : public GCItem {
 				Value* const vstackEnd;
 				Context* cstackPointer;
 				Int32 clockCyclesLeft;
-public:	Value* vstackPointer;
-public:	const Byte* instructionPointer;
+public:	Value* vstackPointer; // FIX : not public, just for an assert now
 
 	protected:	struct Catcher {
 					Catcher(Context* csp, Value* vsp, const Byte* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }

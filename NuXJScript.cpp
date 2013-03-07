@@ -535,6 +535,8 @@ Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::exists() const { return type != NONEXISTENT_TYPE; }
 bool Value::isObject() const { return type == OBJECT_TYPE; }
+bool Value::isNumber() const { return type == NUMBER_TYPE; }
+double Value::getAsDouble() const { assert(type == NUMBER_TYPE); return d; }
 const String* Value::getAsString() const { assert(type == STRING_TYPE); return s; }
 Object* Value::getAsObject() const { assert(type == OBJECT_TYPE); return o; }
 const String* Value::getTypeString() const { return (type == OBJECT_TYPE ? o->getTypeString() : TYPE_STRINGS[static_cast<int>(type)]); }
@@ -941,13 +943,34 @@ void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, c
 	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 }
 
+void Processor::callStub(const Byte*& ip, const Byte* stub) {
+	this->cstackPointer->instructionPointer = ip;
+	++(this->cstackPointer); // FIX : bounds check? or reserve?
+	this->cstackPointer->frame = 0;
+	this->cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
+	this->cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+	ip = stub;
+}
+
+void Processor::oneToNumber(const Byte*& ip, Value* vsp) {
+	assert(!vsp->isNumber());
+	--ip;
+	if (vsp->isObject()) callStub(ip, 0);
+	else *vsp = Value(vsp->toDouble());
+}
+
 bool Processor::run() {
-	Value* vsp = this->vstackPointer;
-	const Byte* ip = this->cstackPointer->instructionPointer;
-	Frame* frame = this->cstackPointer->frame;
-	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
-	Value* lp = frame->getLocalsPointer();
-	GCHeap& heap = this->engine.heap();
+	// Contrary to convention, I use this-> in this method to emphasize which identifiers are "slow" members and "fast" local variables. (Although the actual performance difference is probably minimal or non-existent.)
+
+	Value* vsp = this->vstackPointer;									// vsp and this->vstackPointer are synchronized only when necessary (i.e. they are not always identical)
+	const Byte* ip = this->cstackPointer->instructionPointer;			// ip and this->cstackPointer->instructionPointer are synchronized only when necessary
+	Frame* frame = this->cstackPointer->frame;							// frame is 100% synchronized with this->cstackPointer->frame (i.e. they should always be identical)
+	const Value* cp = frame->getFunctionDef()->getConstantsPointer();	// cp is 100% synchronized
+	Value* lp = frame->getLocalsPointer();								// lp is 100% synchronized
+	GCHeap& heap = this->engine.heap();									// heap is 100% synchronized
+
+	double d0, d1;
+
 	while (this->clockCyclesLeft >= 0) {
 		--(this->clockCyclesLeft);
 		switch (*ip++) {
@@ -994,7 +1017,7 @@ bool Processor::run() {
 			case SHL_OP: poppush(vsp, Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case SHR_OP: poppush(vsp, Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case UNSIGNED_SHR_OP: poppush(vsp, Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP: vsp[0] = Value(vsp[0].toDouble()); break;
+			case PLUS_OP: if (!vsp->isNumber()) oneToNumber(ip, vsp); vsp[0] = Value(vsp->getAsDouble()); break;
 			case MINUS_OP: vsp[0] = Value(-vsp[0].toDouble()); break;
 			case BIT_NOT_OP: vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP: vsp[0] = Value(!vsp[0].toBool()); break;
@@ -1010,7 +1033,7 @@ bool Processor::run() {
 			case JSR_OP: {
 				Int32 offset = nextInt32(ip);
 				this->cstackPointer->instructionPointer = ip;
-				++(this->cstackPointer);
+				++(this->cstackPointer); // FIX : bounds check? or reserve?
 				this->cstackPointer->frame = frame;
 				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
 				this->cstackPointer->vstackPointer = this->vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
@@ -1166,7 +1189,7 @@ bool Processor::run() {
 			default: assert(0);
 		}
 	}
-	cstackPointer->instructionPointer = ip;
+	this->cstackPointer->instructionPointer = ip;
 	this->vstackPointer = vsp;
 	return false;
 }
