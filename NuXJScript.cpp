@@ -927,12 +927,11 @@ void Processor::error() {
 	throw std::runtime_error("error"); // FIX
 }
 
-void Processor::chain(Continuation* continuation) {
+void Processor::chain(Continuation* continuation, const Value& thisValue) {
 	++cstackPointer; // FIX : overflow check
 	cstackPointer->frame = 0;
-	cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
+	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = 0;
-	cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 	continuations.push_back(continuation);
 }
 
@@ -943,7 +942,6 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
-	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -952,12 +950,12 @@ void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Function* f;
 	if (getProperty(engine, &TO_STRING_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ThrowIfObject : public Processor::Continuation {
-			virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) {
+			virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) {
 				if (processor.peek(0).asObject() != 0) processor.error();
-				return false;
+				return true;
 			}
 		} THROW_IF_OBJECT;
-		processor.chain(&THROW_IF_OBJECT);
+		processor.chain(&THROW_IF_OBJECT, Value(this));
 		f->call(engine, processor, 0, 0, Value(this));
 	} else {
 		processor.error();
@@ -970,15 +968,15 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 	Function* f;
 	if (getProperty(engine, &VALUE_OF_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ToPrimitiveStringOrThrow : public Processor::Continuation {
-			virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) {
+			virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) {
 				Object* o = processor.peek(0).asObject();
-				if (o == 0) return false;
+				if (o == 0) return true;
 				processor.pop();
 				thisValue.asObject()->toPrimitiveStringOrThrow(engine, processor);
-				return false;
+				return true;
 			}
 		} TO_PRIMITIVE_STRING_OR_THROW;
-		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW);
+		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW, Value(this));
 		f->call(engine, processor, 0, 0, Value(this));
 	} else {
 		toPrimitiveStringOrThrow(engine, processor);
@@ -999,15 +997,30 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp) {
 bool Processor::run() {
 	// Contrary to convention, I use this-> in this method to emphasize which identifiers are "slow" members and "fast" local variables. (Although the actual performance difference is probably minimal or non-existent.)
 
-	Value* vsp = this->vstackPointer;									// vsp and this->vstackPointer are synchronized only when necessary (i.e. they are not always identical)
+	GCHeap& heap = this->engine.heap();									// heap is 100% synchronized
+	Value*& vsp = this->vstackPointer;									// vsp and this->vstackPointer are synchronized only when necessary (i.e. they are not always identical)
+
+recover: // FIX : better term than recover
+	assert(this->cstackPointer >= cstackStart);
 	const CodeWord* ip = this->cstackPointer->instructionPointer;		// ip and this->cstackPointer->instructionPointer are synchronized only when necessary
+
+	if (ip == 0) {
+		assert(!continuations.empty());
+		Continuation* continuator = continuations.back();
+	//	this->vstackPointer = vsp;
+		Value thisValue(this->cstackPointer->thisValue);
+		--(this->cstackPointer);
+		continuations.pop_back();
+		if (!continuator->execute(engine, *this, thisValue)) return false;
+		goto recover;
+	}
+
 	Frame* frame = this->cstackPointer->frame;							// frame is 100% synchronized with this->cstackPointer->frame (i.e. they should always be identical)
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();	// cp is 100% synchronized
 	Value* lp = frame->getLocalsPointer();								// lp is 100% synchronized
-	GCHeap& heap = this->engine.heap();									// heap is 100% synchronized
 	Object* o;
 	Int32 offset;
-
+	
 	while (this->clockCyclesLeft >= 0) {
 		--(this->clockCyclesLeft);
 		switch (*ip++) {
@@ -1071,25 +1084,11 @@ bool Processor::run() {
 							++(this->cstackPointer); // FIX : bounds check? or reserve?
 							this->cstackPointer->frame = frame;
 							this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
-							this->cstackPointer->vstackPointer = this->vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 							ip += offset;
 							break;
 
-			case RETURN_OP:	{ assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
-							this->vstackPointer = vsp;
-Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
-							--(this->cstackPointer);
-							assert(this->cstackPointer >= cstackStart);
-							if (this->cstackPointer->instructionPointer == 0) {
-								--(this->cstackPointer);
-								assert(this->cstackPointer < cstackStart || this->cstackPointer->instructionPointer != 0);
-								assert(!continuations.empty());
-								Continuation* continuator = continuations.back();
-								bool complete = continuator->execContinuation(engine, *this, thisValue);
-								continuations.pop_back();
-								if (complete) return true;
-							}
-							goto recover; }
+			case RETURN_OP:	--(this->cstackPointer);
+							goto recover;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = nextInt32(ip);
@@ -1103,7 +1102,7 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 2;
-				this->vstackPointer = vsp;
+			//	this->vstackPointer = vsp;
 				f->call(this->engine, *this, n, vsp + 3, Value(thisObject));
 				goto recover;
 			}
@@ -1115,7 +1114,7 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
-				this->vstackPointer = vsp;
+			//	this->vstackPointer = vsp;
 				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
 				goto recover;
 			}
@@ -1127,7 +1126,7 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				if (f == 0) error();
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
-				this->vstackPointer = vsp;
+			//	this->vstackPointer = vsp;
 				f->construct(this->engine, *this, n, vsp + 2);
 				goto recover;
 			}
@@ -1169,7 +1168,6 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				frame = this->cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
 				pop(vsp, 1);
 				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
-				this->cstackPointer->vstackPointer = this->vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 				break;
 			}
 			case THROW_OP: {
@@ -1180,7 +1178,8 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				}
 				const Catcher& catcher = catchers.back();
 				this->cstackPointer = catcher.cstackPointer;
-				this->vstackPointer = catcher.vstackPointer;
+				vsp = catcher.vstackPointer;
+			//	this->vstackPointer = vsp;
 				push(this->vstackPointer, exception);
 				this->cstackPointer->instructionPointer = catcher.instructionPointer;
 				catchers.pop_back();
@@ -1217,20 +1216,12 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				}
 				break;
 			}
-			recover: { // FIX : better term than recover
-				vsp = this->vstackPointer;
-				ip = this->cstackPointer->instructionPointer;
-				frame = this->cstackPointer->frame;
-				cp = frame->getFunctionDef()->getConstantsPointer();
-				lp = frame->getLocalsPointer();
-				break;
-			}
 			default: assert(0);
 		}
 	}
 	this->cstackPointer->instructionPointer = ip;
-	this->vstackPointer = vsp;
-	return false;
+//	this->vstackPointer = vsp;
+	return true;
 }
 
 // FIX : use accessCodeInt32
@@ -2464,7 +2455,7 @@ void GCHeap::mark(const GCItem* item) {
 	};
 
 	struct ReturnToHost : public Processor::Continuation {
-		virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) { return true; }
+		virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) { return false; }
 	} RETURN_TO_HOST;
 
 int main(int argc, const char* argv[]) {
@@ -2516,14 +2507,14 @@ int main(int argc, const char* argv[]) {
 				Processor::Context cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.chain(&RETURN_TO_HOST);
+				processor.chain(&RETURN_TO_HOST, Value(&globals));
 				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
 				bool done = false;
 				
 				clock_t start = ::clock();	
 				do {
 					processor.resetTimeOut(10000000);
-					done = processor.run();
+					done = !processor.run();
 					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();

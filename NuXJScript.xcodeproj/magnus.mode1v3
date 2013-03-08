@@ -325,7 +325,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7A15F7716E9E661007ED51D</string>
+										<string>F7A15FE816E9ED10007ED51D</string>
 										<key>history</key>
 										<array>
 											<string>F7E88F8A16E894970042DC89</string>
@@ -346,8 +346,8 @@
 											<string>F7A15E1716E96C21007ED51D</string>
 											<string>F7A15E1916E96C21007ED51D</string>
 											<string>F7A15F0716E9865F007ED51D</string>
-											<string>F7A15F0816E9865F007ED51D</string>
-											<string>F7A15F0916E9865F007ED51D</string>
+											<string>F7A15F9516E9E8E6007ED51D</string>
+											<string>F7A15FBA16E9EAA4007ED51D</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -545,14 +545,12 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F7A15F7016E9E659007ED51D</string>
-		<string>F7A15F0B16E9865F007ED51D</string>
 		<string>F7A15D9E16E95738007ED51D</string>
 		<string>F7A15D9F16E95738007ED51D</string>
-		<string>1C78EAAD065D492600B07095</string>
-		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
+		<string>1C78EAAD065D492600B07095</string>
+		<string>1CD10A99069EF8BA00B06720</string>
 	</array>
 	<key>WindowString</key>
 	<string>3 56 1434 822 0 0 1440 878 </string>
@@ -771,7 +769,7 @@
 			<key>WindowToolGUID</key>
 			<string>1CD10A99069EF8BA00B06720</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -928,7 +926,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

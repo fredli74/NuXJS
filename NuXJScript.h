@@ -523,12 +523,11 @@ class Processor : public GCItem {
 	public:		typedef GCItem super;
 
 	public:		struct Continuation {
-					public:		virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) = 0;
+					public:		virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) = 0;
 				};
 
 				struct Context { // FIX : make Processor local
 					const CodeWord* instructionPointer;
-				Value* vstackPointer;  // doesn't change during function execution, i.e. entry value stack pointer, FIX : keep, only in debug?
 					Frame* frame; // doesn't change during function execution
 					Value thisValue; // FIX : pointer instead? // doesn't change during function execution
 				};
@@ -584,9 +583,9 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				virtual void gcMark(GCHeap& heap);
-				void chain(Continuation* continuation);
+				void chain(Continuation* continuation, const Value& thisValue);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
-				void call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
+	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level
 				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);
