@@ -188,9 +188,9 @@ struct QuickConstants {
 	QuickConstants() {
 		try {
 			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
-			for (int i = 32; i < 127; ++i) {
+			for (int i = 0; i < 127; ++i) {
 				Char buf[1] = { i };
-				ascii[i - 32] = Value(new String(buf, buf + 1));
+				ascii[i] = Value(new String(buf, buf + 1));
 			}
 			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
 				Char buffer[32];
@@ -204,9 +204,9 @@ struct QuickConstants {
 		}
 	}
 	void cleanup() {
-		for (int i = 32; i < 127; ++i) {
-			delete ascii[i - 32].getString();
-			ascii[i - 32] = Value(Value::NONEXISTENT_TYPE);
+		for (int i = 0; i < 127; ++i) {
+			delete ascii[i].getString();
+			ascii[i] = Value(Value::NONEXISTENT_TYPE);
 		}
 		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
 			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
@@ -214,7 +214,7 @@ struct QuickConstants {
 		}
 	}
 	~QuickConstants() { cleanup(); }
-	Value ascii[127 - 32];
+	Value ascii[127];
 	String* integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
 };
 
@@ -268,12 +268,10 @@ bool String::getProperty(Engine& engine, const String* name, Value& v) {
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
 	if (q == name->end() && i < size()) {
 		const Char* p = begin() + i;
-		if (32 <= *p && *p < 127) v = QUICK_CONSTANTS.ascii[*p - 32];
+		if (*p < 127) v = QUICK_CONSTANTS.ascii[*p];
 		else v = Value(engine.heap().manage(new String(p, p + 1)));
 		return true;
-	}
-	v = Value(Value::UNDEFINED_TYPE);
-	return false;
+	} else return engine.stringPrototype.getProperty(engine, name, v);
 }
 
 // FIX : speed up by skipping when string is really long
@@ -904,23 +902,20 @@ const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-		, cstackPointer(cstackStart - 1), vstackPointer(vstackStart - 1),clockCyclesLeft(0x7FFFFFFF) {
+		, csp(cstackStart - 1), vsp(vstackStart - 1),clockCyclesLeft(0x7FFFFFFF) {
 }
 
 void Processor::gcMark(GCHeap& heap) {
-	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->markIn(heap);
-	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap.mark(csp->frame);
+	for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
+	for (Context* c = cstackStart; c != csp + 1; ++c) heap.mark(c->frame);
 	super::gcMark(heap);
 }
 
-void Processor::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
-void Processor::push(const Value& v) { push(vstackPointer, v); }
-void Processor::pop(Value*& vsp, Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
-void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
-void Processor::pop(Int32 count) { pop(vstackPointer, count); }
-Value& Processor::peek(Int32 offset) { assert(vstackPointer - offset >= vstackStart); return vstackPointer[-offset]; }
-Int32 Processor::readInt32(const CodeWord* ip) { return *reinterpret_cast<const Int32*>(ip); }
-Int32 Processor::nextInt32(const CodeWord*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
+void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
+void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
+void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
+Value& Processor::peek(Int32 offset) { assert(vsp - offset >= vstackStart); return vsp[-offset]; }
+Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
@@ -928,20 +923,20 @@ void Processor::error() {
 }
 
 void Processor::chain(Continuation* continuation, const Value& thisValue) {
-	++cstackPointer; // FIX : overflow check
-	cstackPointer->frame = 0;
-	cstackPointer->thisValue = thisValue;
-	cstackPointer->instructionPointer = 0;
+	++csp; // FIX : overflow check
+	csp->frame = 0;
+	csp->thisValue = thisValue;
+	csp->instructionPointer = 0;
 	continuations.push_back(continuation);
 }
 
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
 	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func, argc, argv));
-	++cstackPointer; // FIX : overflow check
-	cstackPointer->frame = frame;
-	cstackPointer->thisValue = thisValue;
-	cstackPointer->instructionPointer = &def->code[0];
+	++csp; // FIX : overflow check
+	csp->frame = frame;
+	csp->thisValue = thisValue;
+	csp->instructionPointer = &def->code[0];
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -985,189 +980,179 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 
 // We should be able to call "chain()" to add any number of continuations (don't call them callCompleted)... no need to have continuation as an argument to call etc...
 
-bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp) {
+bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	Object* o = vsp->asObject();
 	if (o == 0) return false;
-	this->cstackPointer->instructionPointer = rollbackIp;
-	this->vstackPointer = --vsp;
+	csp->instructionPointer = rollbackIp;
+	--vsp;
 	o->toPrimitiveNumber(engine, *this);
 	return true;
 }
 
 bool Processor::run() {
-	// Contrary to convention, I use this-> in this method to emphasize which identifiers are "slow" members and "fast" local variables. (Although the actual performance difference is probably minimal or non-existent.)
-
-	GCHeap& heap = this->engine.heap();									// heap is 100% synchronized
-	Value*& vsp = this->vstackPointer;									// vsp and this->vstackPointer are synchronized only when necessary (i.e. they are not always identical)
+	GCHeap& heap = engine.heap();									// heap is 100% synchronized
 
 recover: // FIX : better term than recover
-	assert(this->cstackPointer >= cstackStart);
-	const CodeWord* ip = this->cstackPointer->instructionPointer;		// ip and this->cstackPointer->instructionPointer are synchronized only when necessary
+	assert(csp >= cstackStart);
+	ip = csp->instructionPointer;		// ip and csp->instructionPointer are synchronized only when necessary
 
 	if (ip == 0) {
 		assert(!continuations.empty());
 		Continuation* continuator = continuations.back();
-	//	this->vstackPointer = vsp;
-		Value thisValue(this->cstackPointer->thisValue);
-		--(this->cstackPointer);
+		Value thisValue(csp->thisValue);
+		--csp;
 		continuations.pop_back();
 		if (!continuator->execute(engine, *this, thisValue)) return false;
 		goto recover;
 	}
 
-	Frame* frame = this->cstackPointer->frame;							// frame is 100% synchronized with this->cstackPointer->frame (i.e. they should always be identical)
+	Frame* frame = csp->frame;							// frame is 100% synchronized with csp->frame (i.e. they should always be identical)
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();	// cp is 100% synchronized
 	Value* lp = frame->getLocalsPointer();								// lp is 100% synchronized
 	Object* o;
 	Int32 offset;
 	
-	while (this->clockCyclesLeft >= 0) {
-		--(this->clockCyclesLeft);
+	while (clockCyclesLeft >= 0) {
+		--clockCyclesLeft;
 		switch (*ip++) {
-			case POP_OP:			pop(vsp, 1); break;
-			case REPUSH_OP:			push(vsp, vsp[0]); break;
-			case CONST_OP:			push(vsp, cp[nextInt32(ip)]); break;
-			case READ_INDEXED_OP:	push(vsp, lp[nextInt32(ip)]); break;
-			case WRITE_INDEXED_OP:	lp[nextInt32(ip)] = vsp[0]; break;
+			case POP_OP:			pop(1); break;
+			case REPUSH_OP:			push(vsp[0]); break;
+			case CONST_OP:			push(cp[operand()]); break;
+			case READ_INDEXED_OP:	push(lp[operand()]); break;
+			case WRITE_INDEXED_OP:	lp[operand()] = vsp[0]; break;
 			case READ_NAMED_OP:		{
 										Value v(Value::NONEXISTENT_TYPE);
-										bool success = frame->getProperty(this->engine, cp[nextInt32(ip)].getString(), v);
+										bool success = frame->getProperty(engine, cp[operand()].getString(), v);
 										if (!success) error();
-										push(vsp, v);
+										push(v);
 									}
 									break;
 									
-			case WRITE_NAMED_OP:	if (!frame->setProperty(this->engine, cp[nextInt32(ip)].getString(), vsp[0]))
+			case WRITE_NAMED_OP:	if (!frame->setProperty(engine, cp[operand()].getString(), vsp[0]))
 										error();
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
-									o->getProperty(this->engine, vsp[0].toString(heap), vsp[-1]);
-									pop(vsp, 1);
+									o->getProperty(engine, vsp[0].toString(heap), vsp[-1]);
+									pop(1);
 									break;
 			
 			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(heap)) == 0) error();
-									o->setProperty(this->engine, vsp[-1].toString(heap), vsp[0]);
+									o->setProperty(engine, vsp[-1].toString(heap), vsp[0]);
 									vsp[-2] = vsp[0];
-									pop(vsp, 2);
+									pop(2);
 									break;
 									
-			case ADD_OP:	poppush(vsp, vsp[-1].add(heap, vsp[0])); break;
-			case SUB_OP:	poppush(vsp, Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
-			case MUL_OP:	poppush(vsp, Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
-			case DIV_OP:	poppush(vsp, Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
-			case MOD_OP:	poppush(vsp, Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
-			case OR_OP:		poppush(vsp, Value(vsp[-1].toInt() | vsp[0].toInt())); break;
-			case XOR_OP:	poppush(vsp, Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
-			case AND_OP:	poppush(vsp, Value(vsp[-1].toInt() & vsp[0].toInt())); break;
-			case SHL_OP:	poppush(vsp, Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
-			case SHR_OP:	poppush(vsp, Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
-			case USHR_OP:	poppush(vsp, Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(vsp[0].toDouble()); break;
-			case MINUS_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(-vsp[0].toDouble()); break;
-			case INV_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(~vsp[0].toInt()); break;
+			case ADD_OP:	poppush(vsp[-1].add(heap, vsp[0])); break;
+			case SUB_OP:	poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
+			case MUL_OP:	poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
+			case DIV_OP:	poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
+			case MOD_OP:	poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case OR_OP:		poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
+			case XOR_OP:	poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
+			case AND_OP:	poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
+			case SHL_OP:	poppush(Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case SHR_OP:	poppush(Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case USHR_OP:	poppush(Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
+			case PLUS_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(-vsp[0].toDouble()); break;
+			case INV_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
-			case X_EQ_OP:	poppush(vsp, Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
-			case X_NEQ_OP:	poppush(vsp, Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
-			case EQ_OP:		poppush(vsp, Value(vsp[-1].isEqualTo(vsp[0]))); break;
-			case NEQ_OP:	poppush(vsp, Value(!vsp[-1].isEqualTo(vsp[0]))); break;
-			case LT_OP:		poppush(vsp, Value(vsp[-1].isLessThan(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case LEQ_OP:	poppush(vsp, Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GT_OP:		poppush(vsp, Value(vsp[0].isLessThan(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GEQ_OP:	poppush(vsp, Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case JMP_OP:	ip += readInt32(ip) + OPERAND_SIZE; break;							
-			case JT_OP:		ip += (vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
-			case JF_OP:		ip += (!vsp[0].toBool() ? readInt32(ip) + OPERAND_SIZE : OPERAND_SIZE); pop(vsp, 1); break;
+			case X_EQ_OP:	poppush(Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case X_NEQ_OP:	poppush(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case EQ_OP:		poppush(Value(vsp[-1].isEqualTo(vsp[0]))); break;
+			case NEQ_OP:	poppush(Value(!vsp[-1].isEqualTo(vsp[0]))); break;
+			case LT_OP:		poppush(Value(vsp[-1].isLessThan(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case LEQ_OP:	poppush(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case JMP_OP:	offset = operand(); ip += offset; break;							
+			case JT_OP:		offset = operand(); ip += (vsp[0].toBool() ? offset : 0); pop(1); break;
+			case JF_OP:		offset = operand(); ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
 
-			case JSR_OP:	offset = nextInt32(ip);
-							this->cstackPointer->instructionPointer = ip;
-							++(this->cstackPointer); // FIX : bounds check? or reserve?
-							this->cstackPointer->frame = frame;
-							this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
+			case JSR_OP:	offset = operand();
+							csp->instructionPointer = ip;
+							++csp; // FIX : bounds check? or reserve?
+							csp->frame = frame;
+							csp->thisValue = (csp - 1)->thisValue;
 							ip += offset;
 							break;
 
-			case RETURN_OP:	--(this->cstackPointer);
+			case RETURN_OP:	--csp;
 							goto recover;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
-				Int32 n = nextInt32(ip);
+				Int32 n = operand();
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT_TYPE);
-				thisObject->getProperty(this->engine, vsp[-n].toString(heap), v);
+				thisObject->getProperty(engine, vsp[-n].toString(heap), v);
 				o = v.toObject(heap);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				this->cstackPointer->instructionPointer = ip;
+				csp->instructionPointer = ip;
 				vsp -= n + 2;
-			//	this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 3, Value(thisObject));
+				f->call(engine, *this, n, vsp + 3, Value(thisObject));
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
-				Int32 n = nextInt32(ip);
+				Int32 n = operand();
 				o = vsp[-n].toObject(heap);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				this->cstackPointer->instructionPointer = ip;
+				csp->instructionPointer = ip;
 				vsp -= n + 1;
-			//	this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
+				f->call(engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
 				goto recover;
 			}
 			case NEW_OP: {
-				Int32 n = nextInt32(ip);
+				Int32 n = operand();
 				o = vsp[-n].toObject(heap);
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				this->cstackPointer->instructionPointer = ip;
+				csp->instructionPointer = ip;
 				vsp -= n + 1;
-			//	this->vstackPointer = vsp;
-				f->construct(this->engine, *this, n, vsp + 2);
+				f->construct(engine, *this, n, vsp + 2);
 				goto recover;
 			}
-			case NEW_RESULT_OP: poppush(vsp, (vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
-			case THIS_OP: push(vsp, this->cstackPointer->thisValue); break;
-			case VOID_OP: push(vsp, Value(Value::UNDEFINED_TYPE)); break;
+			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
+			case THIS_OP: push(csp->thisValue); break;
+			case VOID_OP: push(Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
-				o = cp[nextInt32(ip)].asObject();
+				o = cp[operand()].asObject();
 				assert(o != 0);
-				push(vsp, Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
+				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
 				break;
 			}
-			case FRAME_OP: push(vsp, Value(frame)); break;
+			case FRAME_OP: push(Value(frame)); break;
 			case DELETE_OP: {
 				o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				poppush(vsp, Value(o->deleteProperty(this->engine, vsp[0].toString(heap))));
+				poppush(Value(o->deleteProperty(engine, vsp[0].toString(heap))));
 				break;
 			}
 			case POP_FRAME_OP: {
-				assert(this->cstackPointer != cstackStart);
-				--(this->cstackPointer);
-				frame = this->cstackPointer->frame;
+				assert(csp != cstackStart);
+				--csp;
+				frame = csp->frame;
 				assert(cp == frame->getFunctionDef()->getConstantsPointer());
 				assert(lp == frame->getLocalsPointer());
 				break;
 			}
 			case TRY_OP: {
-				ip += OPERAND_SIZE;
-				catchers.push_back(Catcher(this->cstackPointer, vsp, ip + readInt32(ip - OPERAND_SIZE)));
+				offset = operand();
+				catchers.push_back(Catcher(csp, vsp, ip + offset));
 				break;
 			}
-			case TRIED_OP: {
-				catchers.pop_back();
-				break;
-			}
+			case TRIED_OP: catchers.pop_back(); break;
 			case CATCH_FRAME_OP: {
-				++(this->cstackPointer);
-				frame = this->cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
-				pop(vsp, 1);
-				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
+				++csp;
+				frame = csp->frame = heap.manage(new CatchFrame(frame, cp[operand()].getString(), vsp[0]));
+				pop(1);
+				csp->thisValue = (csp - 1)->thisValue;
 				break;
 			}
 			case THROW_OP: {
@@ -1177,50 +1162,48 @@ recover: // FIX : better term than recover
 					error();
 				}
 				const Catcher& catcher = catchers.back();
-				this->cstackPointer = catcher.cstackPointer;
-				vsp = catcher.vstackPointer;
-			//	this->vstackPointer = vsp;
-				push(this->vstackPointer, exception);
-				this->cstackPointer->instructionPointer = catcher.instructionPointer;
+				csp = catcher.csp;
+				vsp = catcher.vsp;
+				push(exception);
+				csp->instructionPointer = catcher.instructionPointer;
 				catchers.pop_back();
 				goto recover;
 			}
 			case IN_OP: {
 				o = vsp[0].toObject(heap);
 				if (o == 0) error();
-				vsp[-1] = Value(o->hasProperty(this->engine, vsp[-1].toString(heap)));
-				pop(vsp, 1);
+				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].toString(heap)));
+				pop(1);
 				break;				
 			}
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(this->engine, cp[nextInt32(ip)].getString(), v);
-				push(vsp, Value(v.typeString()));
+				frame->getProperty(engine, cp[operand()].getString(), v);
+				push(Value(v.typeString()));
 				break;
 			}
 			case GET_ENUMERATOR_OP: {
 				o = vsp[0].toObject(heap);
-				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(this->engine)));
+				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(engine)));
 				break;
 			}
 			case NEXT_PROPERTY_OP: {
 				o = vsp[0].asObject();
 				assert(o != 0);
-				Int32 offset = nextInt32(ip);
+				Int32 offset = operand();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName();
 				if (name != 0) vsp[0] = Value(name);
 				else {
 					ip += offset;
-					pop(vsp, 1);
+					pop(1);
 				}
 				break;
 			}
 			default: assert(0);
 		}
 	}
-	this->cstackPointer->instructionPointer = ip;
-//	this->vstackPointer = vsp;
+	csp->instructionPointer = ip;
 	return true;
 }
 
@@ -2442,6 +2425,30 @@ void GCHeap::mark(const GCItem* item) {
 	}
 }
 
+class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all the others?!
+	public:		typedef HostFunction super;
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+					if (argc == 1) {
+						Char c = argv[0].toInt();
+						if (c < 127) {
+							processor.push(Value(QUICK_CONSTANTS.ascii[c]));
+							return;
+						}
+					}
+					String* s = engine.heap().manage(new String(argc));
+					for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
+					processor.push(Value(s));
+				}
+};
+
+const String FROM_CHAR_CODE_STRING("fromCharCode");
+FromCharCodeFunction FROM_CHAR_CODE_FUNCTION;
+
+Engine::Engine(GCHeap& heap) : gcHeap(heap) {
+	gcHeap.protect(&FROM_CHAR_CODE_FUNCTION);
+	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(&FROM_CHAR_CODE_FUNCTION));
+	gcHeap.protect(&stringPrototype);
+}
 
 #include <fstream>
 
@@ -2465,6 +2472,7 @@ int main(int argc, const char* argv[]) {
 	Engine engine(heap);
 	UserObject globals;
 	heap.protect(&globals);
+	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
 	String source(EMPTY_STRING);
@@ -2513,7 +2521,7 @@ int main(int argc, const char* argv[]) {
 				
 				clock_t start = ::clock();	
 				do {
-					processor.resetTimeOut(10000000);
+					processor.resetTimeOut(20000000);
 					done = !processor.run();
 					Value v = vstack[0];
 					
@@ -2525,8 +2533,8 @@ int main(int argc, const char* argv[]) {
 					
 					if (done) {
 						if (!supressStdErr) {
-							std::cerr << "\tOn stack: " << (processor.vstackPointer - vstack + 1) << std::endl;
-							assert(processor.vstackPointer - vstack + 1 == 1);
+							std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
+							assert(processor.vsp - vstack + 1 == 1);
 							std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						}
 						if (doTime) {

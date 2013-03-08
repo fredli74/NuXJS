@@ -1,5 +1,4 @@
 Array = function() { };
-
 seed = 2463534242;
 myrand = function() {
 	var y = seed;

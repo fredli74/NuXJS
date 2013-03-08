@@ -74,7 +74,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "perftest1.js"
+            argument = "perftest8.js"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

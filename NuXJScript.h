@@ -81,6 +81,8 @@
 //	Compiler
 //
 //		jump optimizations
+//			another way to deal with it would be to think in the lines of the break scopes... complete forward jumps first at definite end-point, I think this was the way I solved it in ACL
+//			we should at least have two alternative JF and JT, JF_NO_POP, JT_NO_POP that doesn't pop on jump
 //		pop void optimization (almost always occurs with a return;)?
 //		eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
 //		share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
@@ -287,7 +289,7 @@ class Object : public GCItem {
 				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
 
@@ -344,8 +346,9 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				String(const String& o);
 				String(const Char* b, const Char* e);
 				String(const String& l, const String& r);
-				String(const std::wstring& s);
-				template<size_t N> String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
+				explicit String(const std::wstring& s);
+				explicit String(size_t length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
+				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value& v);
@@ -425,7 +428,7 @@ class UserObject : public Object {
 class Engine {
 	friend class String;
 	
-	public:		Engine(GCHeap& heap) : gcHeap(heap) { gcHeap.protect(&stringPrototype); };
+	public:		Engine(GCHeap& heap);
 				GCHeap& heap() { return gcHeap; }
 
 	protected:	GCHeap& gcHeap;
@@ -533,9 +536,9 @@ class Processor : public GCItem {
 				};
 
 	protected:	struct Catcher {
-					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }
-					Context* cstackPointer;
-					Value* vstackPointer;
+					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : csp(csp), vsp(vsp), instructionPointer(ip) { }
+					Context* csp;
+					Value* vsp;
 					const CodeWord* instructionPointer;
 				};
 				
@@ -593,22 +596,20 @@ class Processor : public GCItem {
 				bool run();
 void error(); // FIX
 				
-	protected:	void push(Value*& vsp, const Value& v);
-				void pop(Value*& vsp, Int32 count);
-				void poppush(Value*& vsp, const Value& v);
-				Int32 readInt32(const CodeWord* ip);
-				Int32 nextInt32(const CodeWord*& ip);
+	protected:	void poppush(const Value& v);
+				Int32 operand();
 				void callStub(const CodeWord*& ip, const CodeWord* stub);
-				bool toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp);
+				bool toPrimitiveTrap(const CodeWord* rollbackIp);
 
 				Engine& engine;
 				Context* const cstackStart;
 				Context* const cstackEnd;
 				Value* const vstackStart;
 				Value* const vstackEnd;
-				Context* cstackPointer;
+				Context* csp;
 				Int32 clockCyclesLeft;
-public:	Value* vstackPointer; // FIX : not public, just for an assert now
+public:	Value* vsp; // FIX : not public, just for an assert now
+public:	const CodeWord* ip;
 };
 
 enum Precedence {
