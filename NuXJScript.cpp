@@ -741,7 +741,7 @@ void Function::construct(Engine& engine, Processor& processor, Int32 argc, const
 	Object* newObject = engine.heap().manage(new UserObject(prototype));
 	Value thisValue(newObject);
 	processor.push(thisValue);
-	call(engine, processor, argc, argv, thisValue, 0);
+	call(engine, processor, argc, argv, thisValue);
 }
 
 /* --- ScriptFunction --- */
@@ -750,8 +750,8 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator) {
-	processor.call(this, argc, argv, thisValue, continuator);
+void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+	processor.chain(this, argc, argv, thisValue);
 }
 
 void ScriptFunction::gcMark(GCHeap& heap) {
@@ -910,8 +910,6 @@ Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, V
 void Processor::gcMark(GCHeap& heap) {
 	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->markIn(heap);
 	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap.mark(csp->frame);
-	for (std::vector<Continuator*>::const_iterator it = continuations.begin(), e = continuations.end(); it != e; ++it)
-		heap.mark(*it);
 	super::gcMark(heap);
 }
 
@@ -920,12 +918,22 @@ void Processor::push(const Value& v) { push(vstackPointer, v); }
 void Processor::pop(Value*& vsp, Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
 void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 void Processor::pop(Int32 count) { pop(vstackPointer, count); }
+Value& Processor::peek(Int32 offset) { assert(vstackPointer - offset >= vstackStart); return vstackPointer[-offset]; }
 Int32 Processor::readInt32(const CodeWord* ip) { return *reinterpret_cast<const Int32*>(ip); }
 Int32 Processor::nextInt32(const CodeWord*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
 	throw std::runtime_error("error"); // FIX
+}
+
+void Processor::chain(Continuation* continuation) {
+	++cstackPointer; // FIX : overflow check
+	cstackPointer->frame = 0;
+	cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
+	cstackPointer->instructionPointer = 0;
+	cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+	continuations.push_back(continuation);
 }
 
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
@@ -938,30 +946,19 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const
 	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 }
 
-void Processor::call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuation) {
-	if (continuation != 0) {
-		++cstackPointer; // FIX : overflow check
-		cstackPointer->frame = 0;
-		cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
-		cstackPointer->instructionPointer = 0;
-		cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
-		continuations.push_back(continuation);
-	}
-	chain(func, argc, argv, thisValue);
-}
-
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Value v;
 	Object* o;
 	Function* f;
 	if (getProperty(engine, &TO_STRING_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ThrowIfObject : public Continuator {
-			virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) {
-				if (returnValue.asObject() != 0) processor.error();
+		static struct ThrowIfObject : public Processor::Continuation {
+			virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) {
+				if (processor.peek(0).asObject() != 0) processor.error();
 				return false;
 			}
 		} THROW_IF_OBJECT;
-		f->call(engine, processor, 0, 0, Value(this), &THROW_IF_OBJECT);
+		processor.chain(&THROW_IF_OBJECT);
+		f->call(engine, processor, 0, 0, Value(this));
 	} else {
 		processor.error();
 	}
@@ -972,16 +969,17 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 	Object* o;
 	Function* f;
 	if (getProperty(engine, &VALUE_OF_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ToPrimitiveStringOrThrow : public Continuator {
-			virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) {
-				Object* o = returnValue.asObject();
+		static struct ToPrimitiveStringOrThrow : public Processor::Continuation {
+			virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) {
+				Object* o = processor.peek(0).asObject();
 				if (o == 0) return false;
 				processor.pop();
 				thisValue.asObject()->toPrimitiveStringOrThrow(engine, processor);
 				return false;
 			}
 		} TO_PRIMITIVE_STRING_OR_THROW;
-		f->call(engine, processor, 0, 0, Value(this), &TO_PRIMITIVE_STRING_OR_THROW);
+		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW);
+		f->call(engine, processor, 0, 0, Value(this));
 	} else {
 		toPrimitiveStringOrThrow(engine, processor);
 	}
@@ -1086,8 +1084,8 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 								--(this->cstackPointer);
 								assert(this->cstackPointer < cstackStart || this->cstackPointer->instructionPointer != 0);
 								assert(!continuations.empty());
-								Continuator* continuator = continuations.back();
-								bool complete = continuator->callCompleted(engine, *this, thisValue, vsp[0]);
+								Continuation* continuator = continuations.back();
+								bool complete = continuator->execContinuation(engine, *this, thisValue);
 								continuations.pop_back();
 								if (complete) return true;
 							}
@@ -1106,7 +1104,7 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 2;
 				this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 3, Value(thisObject), 0);
+				f->call(this->engine, *this, n, vsp + 3, Value(thisObject));
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
@@ -1118,7 +1116,7 @@ Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE), 0);
+				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
 				goto recover;
 			}
 			case NEW_OP: {
@@ -2458,17 +2456,15 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public HostFunction {
 		public:		typedef HostFunction super;
-					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator = 0) {
+					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						Value r = Value();
-						if (continuator != 0) continuator->callCompleted(engine, processor, thisValue, r);
-						processor.push(r);
+						processor.push(Value(Value::UNDEFINED_TYPE));
 					}
 	};
 
-	struct ReturnToHost : public Continuator {
-		virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) { return true; }
+	struct ReturnToHost : public Processor::Continuation {
+		virtual bool execContinuation(Engine& engine, Processor& processor, const Value& thisValue) { return true; }
 	} RETURN_TO_HOST;
 
 int main(int argc, const char* argv[]) {
@@ -2517,10 +2513,11 @@ int main(int argc, const char* argv[]) {
 				}
 				
 				Value vstack[1024];
-				Context cstack[1024];
+				Processor::Context cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.call(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals), &RETURN_TO_HOST);
+				processor.chain(&RETURN_TO_HOST);
+				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
 				bool done = false;
 				
 				clock_t start = ::clock();	
