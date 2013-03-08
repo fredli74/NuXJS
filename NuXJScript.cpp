@@ -901,8 +901,12 @@ bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
-		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-		, csp(cstackStart - 1), vsp(vstackStart - 1),clockCyclesLeft(0x7FFFFFFF) {
+	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
+	, csp(cstackStart), vsp(vstackStart - 1), ip(0), clockCyclesLeft(0x7FFFFFFF) {
+	// FIX : yuck
+	csp->frame = 0;
+	csp->ip = 0;
+	csp->thisValue = Value(Value::NONEXISTENT_TYPE);
 }
 
 void Processor::gcMark(GCHeap& heap) {
@@ -2442,11 +2446,9 @@ class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all th
 };
 
 const String FROM_CHAR_CODE_STRING("fromCharCode");
-FromCharCodeFunction FROM_CHAR_CODE_FUNCTION;
 
 Engine::Engine(GCHeap& heap) : gcHeap(heap) {
-	gcHeap.protect(&FROM_CHAR_CODE_FUNCTION);
-	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(&FROM_CHAR_CODE_FUNCTION));
+	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	gcHeap.protect(&stringPrototype);
 }
 
