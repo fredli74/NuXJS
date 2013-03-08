@@ -136,6 +136,7 @@ typedef unsigned short Char;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
+typedef Byte CodeWord;
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 FRAME_BUILT_IN_LOCALS_COUNT = 8;
@@ -243,12 +244,8 @@ class Value {
 				explicit Value(Object* o);
 	
 				bool exists() const;
-				bool isNumber() const;
-				bool isObject() const;
-				double asDouble() const;
-				Int32 asInt() const;
-				const String* asString() const;
 				Object* asObject() const;
+				const String* getString() const;
 				const String* typeString() const;
 				bool toBool() const;
 				Int32 toInt() const; // FIX : ?
@@ -361,7 +358,7 @@ struct StringObjectCompare {
 };
 
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
-typedef std::vector<Byte> CodeVector; // FIX : use QArray in all these places
+typedef std::vector<CodeWord> CodeVector; // FIX : use QArray in all these places
 
 // This is an Object so that we can store it as a constant
 class ScriptFunctionDef : public Object {	
@@ -437,8 +434,8 @@ class Function : public UserObject {
 				virtual Function* asFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
-				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
-				virtual void construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv);
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+				virtual void construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv);
 };
 
 // FIX : do something nice here :)
@@ -452,7 +449,7 @@ class ScriptFunction : public Function {
 				
 				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 				virtual void gcMark(GCHeap& heap);
-				virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue);
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue);
 				ScriptFunctionDef* getDefinition() const;
 				Object* getEnvironment() const;
 
@@ -518,8 +515,13 @@ class Arguments : public UserObject {
 				QuickArray<Byte, 8> deletedArguments;
 };
 
+// FIX : GCItem or simply owned by Processor?
+class Continuator : public GCItem {
+	public:		virtual void callCompleted(const Value& returnValue) = 0;
+};
+
 struct Context { // FIX : make Processor local
-	const Byte* instructionPointer;
+	const CodeWord* instructionPointer;
 Value* vstackPointer;  // doesn't change during function execution, i.e. entry value stack pointer, FIX : keep, only in debug?
 	Frame* frame; // doesn't change during function execution
 	Value thisValue; // FIX : pointer instead? // doesn't change during function execution
@@ -569,7 +571,8 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				virtual void gcMark(GCHeap& heap);
-				void enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue = Value(Value::UNDEFINED_TYPE));
+				void chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
+				void call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuation = 0);
 				void push(const Value& v);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
@@ -577,10 +580,10 @@ class Processor : public GCItem {
 	protected:	void push(Value*& vsp, const Value& v);
 				void pop(Value*& vsp, int count);
 				void poppush(Value*& vsp, const Value& v);
-				Int32 readInt32(const Byte* ip);
-				Int32 nextInt32(const Byte*& ip);
-				void callStub(const Byte*& ip, const Byte* stub);
-				void numberTrap(const Byte*& ip, Value* vsp);
+				Int32 readInt32(const CodeWord* ip);
+				Int32 nextInt32(const CodeWord*& ip);
+				void callStub(const CodeWord*& ip, const CodeWord* stub);
+				bool toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp);
 				void error();
 
 				Engine& engine;
@@ -593,13 +596,14 @@ class Processor : public GCItem {
 public:	Value* vstackPointer; // FIX : not public, just for an assert now
 
 	protected:	struct Catcher {
-					Catcher(Context* csp, Value* vsp, const Byte* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }
+					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : cstackPointer(csp), vstackPointer(vsp), instructionPointer(ip) { }
 					Context* cstackPointer;
 					Value* vstackPointer;
-					const Byte* instructionPointer;
+					const CodeWord* instructionPointer;
 				};
 				
 				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
+				std::vector<Continuator*> continuations; // FIX : std::vector slow? linked list? in callstack directly? I have a feeling there is a more elegant solution to all this
 };
 
 enum Precedence {

@@ -174,7 +174,7 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-static Int32 wrapToInt(double d) {
+static Int32 wrapToInt(double d) { // FIX : merge back into toInt?
 	int i = static_cast<Int32>(d);
 	if (i == d) return i;
 	if (isNaN(d) || fabs(d) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
@@ -205,7 +205,7 @@ struct QuickConstants {
 	}
 	void cleanup() {
 		for (int i = 32; i < 127; ++i) {
-			delete ascii[i - 32].asString();
+			delete ascii[i - 32].getString();
 			ascii[i - 32] = Value(Value::NONEXISTENT_TYPE);
 		}
 		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
@@ -242,6 +242,8 @@ const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
 const String PROTOTYPE_STRING("prototype");
+const String VALUE_OF_STRING("valueOf");
+const String TO_STRING_STRING("toString");
 const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
@@ -537,12 +539,8 @@ Value::Value(const String* s) : type(STRING_TYPE), s(s) { }
 Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 
 bool Value::exists() const { return type != NONEXISTENT_TYPE; }
-bool Value::isObject() const { return type == OBJECT_TYPE; }
-bool Value::isNumber() const { return type == NUMBER_TYPE; }
-double Value::asDouble() const { assert(type == NUMBER_TYPE); return d; }
-Int32 Value::asInt() const { assert(type == NUMBER_TYPE); return wrapToInt(d); }
-const String* Value::asString() const { assert(type == STRING_TYPE); return s; }
-Object* Value::asObject() const { assert(type == OBJECT_TYPE); return o; }
+Object* Value::asObject() const { return (type == OBJECT_TYPE ? o : 0); }
+const String* Value::getString() const { assert(type == STRING_TYPE); return s; }
 const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeString() : TYPE_STRINGS[static_cast<int>(type)]); }
 
 bool Value::toBool() const {
@@ -734,13 +732,12 @@ Function* Function::asFunction() { return this; }
 const String* Function::typeString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
 
-void Function::construct(Engine& engine, Processor* processor, Int32 argc, const Value* argv) {
-	Object* prototype = 0;
+void Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv) {
 	Value v;
-	if (getProperty(engine, &PROTOTYPE_STRING, v) && v.isObject()) prototype = v.asObject();
+	Object* prototype = (getProperty(engine, &PROTOTYPE_STRING, v) ? v.asObject() : 0);
 	Object* newObject = engine.heap().manage(new UserObject(prototype));
 	Value thisValue(newObject);
-	processor->push(thisValue);
+	processor.push(thisValue);
 	call(engine, processor, argc, argv, thisValue);
 }
 
@@ -750,8 +747,8 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
-	processor->enterCall(this, argc, argv, thisValue);
+void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+	processor.chain(this, argc, argv, thisValue);
 }
 
 void ScriptFunction::gcMark(GCHeap& heap) {
@@ -900,7 +897,7 @@ bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 
 /* --- Processor --- */
 
-const int OPERAND_SIZE = (sizeof (Int32) / sizeof (Byte));
+const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 		: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
@@ -910,6 +907,8 @@ Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, V
 void Processor::gcMark(GCHeap& heap) {
 	for (Value* vsp = vstackStart; vsp != vstackPointer + 1; ++vsp) vsp->markIn(heap);
 	for (Context* csp = cstackStart; csp != cstackPointer + 1; ++csp) heap.mark(csp->frame);
+	for (std::vector<Continuator*>::const_iterator it = continuations.begin(), e = continuations.end(); it != e; ++it)
+		heap.mark(*it);
 	super::gcMark(heap);
 }
 
@@ -917,44 +916,70 @@ void Processor::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd);
 void Processor::push(const Value& v) { push(vstackPointer, v); }
 void Processor::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
 void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
-Int32 Processor::readInt32(const Byte* ip) { return *reinterpret_cast<const Int32*>(ip); }
-Int32 Processor::nextInt32(const Byte*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
+Int32 Processor::readInt32(const CodeWord* ip) { return *reinterpret_cast<const Int32*>(ip); }
+Int32 Processor::nextInt32(const CodeWord*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
 	throw std::runtime_error("error"); // FIX
 }
 
-void Processor::enterCall(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
+void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
 	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func, argc, argv));
-	++cstackPointer;
+	++cstackPointer; // FIX : overflow check
 	cstackPointer->frame = frame;
 	cstackPointer->thisValue = thisValue;
 	cstackPointer->instructionPointer = &def->code[0];
 	cstackPointer->vstackPointer = vstackPointer;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
 }
 
-void Processor::callStub(const Byte*& ip, const Byte* stub) {
-	this->cstackPointer->instructionPointer = ip;
-	++(this->cstackPointer); // FIX : bounds check? or reserve?
-	this->cstackPointer->frame = 0;
-	this->cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
-	this->cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
-	ip = stub;
+void Processor::call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuation) {
+	++cstackPointer; // FIX : overflow check
+	cstackPointer->frame = 0;
+	cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
+	cstackPointer->instructionPointer = 0;
+	cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+	continuations.push_back(continuation);
+	chain(func, argc, argv, thisValue);
+}
+/*
+void Object::toPrimitiveNumber(Engine& engine, Processor& processor, Value* v) {
+Let valueOf be the result of calling the [[Get]] internal method of object O with argument "valueOf".
+If IsCallable(valueOf) is true then,
+	Value v;
+	if (getProperty(engine, VALUE_OF_STRING, v) && v.isObject()) {
+		Object* asObject()
+	"valueOf"
 }
 
-void Processor::numberTrap(const Byte*& ip, Value* vsp) {
-	assert(!vsp->isNumber());
-	if (vsp->isObject()) callStub(--ip, 0);
-	else *vsp = Value(vsp->toDouble());
+Let val be the result of calling the [[Call]] internal method of valueOf, with O as the this value and an empty argument list.
+If val is a primitive value, return val.
+Let toString be the result of calling the [[Get]] internal method of object O with argument "toString".
+If IsCallable(toString) is true then,
+Let str be the result of calling the [[Call]] internal method of toString, with O as the this value and an empty argument list.
+If str is a primitive value, return str.
+Throw a TypeError exception.
+*/
+bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp) {
+	Object* o = vsp->asObject();
+	if (o == 0) return false;
+	this->cstackPointer->instructionPointer = rollbackIp;
+	this->vstackPointer = vsp;
+/*	class MyContinuator : public Continuator {
+		public:		virtual void callCompleted(const Value& returnValue) {
+					}
+	};
+	MyContinuator* continuator = engine.heap().manage(new MyContinuator(
+	vsp->asObject()->*/
+	return true;
 }
 
 bool Processor::run() {
 	// Contrary to convention, I use this-> in this method to emphasize which identifiers are "slow" members and "fast" local variables. (Although the actual performance difference is probably minimal or non-existent.)
 
 	Value* vsp = this->vstackPointer;									// vsp and this->vstackPointer are synchronized only when necessary (i.e. they are not always identical)
-	const Byte* ip = this->cstackPointer->instructionPointer;			// ip and this->cstackPointer->instructionPointer are synchronized only when necessary
+	const CodeWord* ip = this->cstackPointer->instructionPointer;		// ip and this->cstackPointer->instructionPointer are synchronized only when necessary
 	Frame* frame = this->cstackPointer->frame;							// frame is 100% synchronized with this->cstackPointer->frame (i.e. they should always be identical)
 	const Value* cp = frame->getFunctionDef()->getConstantsPointer();	// cp is 100% synchronized
 	Value* lp = frame->getLocalsPointer();								// lp is 100% synchronized
@@ -972,13 +997,13 @@ bool Processor::run() {
 			case WRITE_INDEXED_OP:	lp[nextInt32(ip)] = vsp[0]; break;
 			case READ_NAMED_OP:		{
 										Value v(Value::NONEXISTENT_TYPE);
-										bool success = frame->getProperty(this->engine, cp[nextInt32(ip)].asString(), v);
+										bool success = frame->getProperty(this->engine, cp[nextInt32(ip)].getString(), v);
 										if (!success) error();
 										push(vsp, v);
 									}
 									break;
 									
-			case WRITE_NAMED_OP:	if (!frame->setProperty(this->engine, cp[nextInt32(ip)].asString(), vsp[0]))
+			case WRITE_NAMED_OP:	if (!frame->setProperty(this->engine, cp[nextInt32(ip)].getString(), vsp[0]))
 										error();
 									break;
 									
@@ -1004,9 +1029,9 @@ bool Processor::run() {
 			case SHL_OP:	poppush(vsp, Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case SHR_OP:	poppush(vsp, Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case USHR_OP:	poppush(vsp, Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP:	if (!vsp->isNumber()) numberTrap(ip, vsp); vsp[0] = Value(vsp[0].asDouble()); break;
-			case MINUS_OP:	if (!vsp->isNumber()) numberTrap(ip, vsp); vsp[0] = Value(-vsp[0].asDouble()); break;
-			case INV_OP:	if (!vsp->isNumber()) numberTrap(ip, vsp); vsp[0] = Value(~vsp[0].asInt()); break;
+			case PLUS_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(-vsp[0].toDouble()); break;
+			case INV_OP:	if (toPrimitiveTrap(ip - 1, vsp)) goto recover; vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
 			case X_EQ_OP:	poppush(vsp, Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
 			case X_NEQ_OP:	poppush(vsp, Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
@@ -1029,15 +1054,24 @@ bool Processor::run() {
 							ip += offset;
 							break;
 
-			case RETURN_OP:	if (this->cstackPointer == this->cstackStart) {
-								// FIX : yeah, we can't you know :) we need a new way to return properly to native caller
-								// cstackPointer->instructionPointer = ip;
-								this->vstackPointer = vsp;
-								return true;
-							}
-							assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
-							--(this->cstackPointer);
+			case RETURN_OP:	assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
 							this->vstackPointer = vsp;
+							--(this->cstackPointer);
+							assert(this->cstackPointer >= cstackStart);
+							if (this->cstackPointer->instructionPointer == 0) {
+								--(this->cstackPointer);
+								assert(this->cstackPointer < cstackStart || this->cstackPointer->instructionPointer != 0);
+								assert(!continuations.empty());
+								Continuator* continuator = continuations.back();
+								if (continuator == 0) {
+									continuations.pop_back();
+									return true;
+								} else {
+									continuator->callCompleted(*vsp);
+									pop(vsp, 1);
+									continuations.pop_back();
+								}
+							}
 							goto recover;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
@@ -1053,7 +1087,7 @@ bool Processor::run() {
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 2;
 				this->vstackPointer = vsp;
-				f->call(this->engine, this, n, vsp + 3, Value(thisObject));
+				f->call(this->engine, *this, n, vsp + 3, Value(thisObject));
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
@@ -1065,7 +1099,7 @@ bool Processor::run() {
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
-				f->call(this->engine, this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
+				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
 				goto recover;
 			}
 			case NEW_OP: {
@@ -1077,14 +1111,15 @@ bool Processor::run() {
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
-				f->construct(this->engine, this, n, vsp + 2);
+				f->construct(this->engine, *this, n, vsp + 2);
 				goto recover;
 			}
-			case NEW_RESULT_OP: poppush(vsp, (vsp[0].isObject() ? vsp[0] : vsp[-1])); break;
+			case NEW_RESULT_OP: poppush(vsp, (vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(vsp, this->cstackPointer->thisValue); break;
 			case VOID_OP: push(vsp, Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
 				o = cp[nextInt32(ip)].asObject();
+				assert(o != 0);
 				push(vsp, Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
 				break;
 			}
@@ -1114,7 +1149,7 @@ bool Processor::run() {
 			}
 			case CATCH_FRAME_OP: {
 				++(this->cstackPointer);
-				frame = this->cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].asString(), vsp[0]));
+				frame = this->cstackPointer->frame = heap.manage(new CatchFrame(frame, cp[nextInt32(ip)].getString(), vsp[0]));
 				pop(vsp, 1);
 				this->cstackPointer->thisValue = (this->cstackPointer - 1)->thisValue;
 				this->cstackPointer->vstackPointer = this->vstackPointer; // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
@@ -1144,7 +1179,7 @@ bool Processor::run() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(this->engine, cp[nextInt32(ip)].asString(), v);
+				frame->getProperty(this->engine, cp[nextInt32(ip)].getString(), v);
 				push(vsp, Value(v.typeString()));
 				break;
 			}
@@ -1155,6 +1190,7 @@ bool Processor::run() {
 			}
 			case NEXT_PROPERTY_OP: {
 				o = vsp[0].asObject();
+				assert(o != 0);
 				Int32 offset = nextInt32(ip);
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName();
 				if (name != 0) vsp[0] = Value(name);
@@ -1164,7 +1200,7 @@ bool Processor::run() {
 				}
 				break;
 			}
-			recover: {
+			recover: { // FIX : better term than recover
 				vsp = this->vstackPointer;
 				ip = this->cstackPointer->instructionPointer;
 				frame = this->cstackPointer->frame;
@@ -1231,7 +1267,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].asString()->toStdString(); break;
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -1449,7 +1485,7 @@ void Compiler::makeRValue(XValue& xv) {
 		case XValue::PUSHED: return;
 		case XValue::NONE: emit(Processor::VOID_OP); break;
 		case XValue::CONSTANT: emitWithConstant(Processor::CONST_OP, xv.v); break;
-		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.asInt()); break;
+		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 	}
@@ -1484,7 +1520,7 @@ void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FI
 	XValue xvCopy(xv); // FIX : this is beginning to feel silly
 	if (makeRValue) Compiler::makeRValue(xv);
 	if (xvCopy.t == XValue::INDEXED) {
-		Int32 index = xvCopy.v.asInt();
+		Int32 index = xvCopy.v.toInt();
 		if (doReset) {
 			emit(Processor::VOID_OP);
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
@@ -1497,7 +1533,7 @@ void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FI
 void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
 		default: throw std::runtime_error("Illegal l-value"); // FIX : ECMA like the word "reference"
-		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.asInt()); break;
+		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -2403,10 +2439,10 @@ void GCHeap::mark(const GCItem* item) {
 
 	class PrintFunction : public NativeFunction {
 		public:		typedef NativeFunction super;
-					virtual void call(Engine& engine, Processor* processor, Int32 argc, const Value* argv, const Value& thisValue) {
+					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						processor->push(Value());
+						processor.push(Value());
 					}
 	};
 
@@ -2460,7 +2496,7 @@ int main(int argc, const char* argv[]) {
 				Context cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.enterCall(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
+				processor.call(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals), 0);
 				bool done = false;
 				
 				clock_t start = ::clock();	
