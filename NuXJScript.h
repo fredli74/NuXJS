@@ -44,6 +44,7 @@
 //		(1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
 //			same problem with (0.003e3 == 3.0)
 //		I don't know but the "emulation" in arguments object feels a bit over the top (registering deleted items etc)
+//		Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
 //
 // Compiler
 //
@@ -428,11 +429,13 @@ class UserObject : public Object {
 class Engine {
 	friend class String;
 	
-	public:		Engine(GCHeap& heap);
-				GCHeap& heap() { return gcHeap; }
+	public:		Engine(GCHeap& heap, Object* globalThis);
+				GCHeap& getHeap() const { return gcHeap; }
+				Object* getGlobalThis() const { return globalThis; }
 
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
+				Object* globalThis;
 };
 
 class Function : public UserObject {
@@ -441,7 +444,7 @@ class Function : public UserObject {
 				virtual Function* asFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual void construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv);
 };
 
@@ -456,7 +459,7 @@ class ScriptFunction : public Function {
 				
 				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 				virtual void gcMark(GCHeap& heap);
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue);
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				ScriptFunctionDef* getDefinition() const;
 				Object* getEnvironment() const;
 
@@ -526,13 +529,13 @@ class Processor : public GCItem {
 	public:		typedef GCItem super;
 
 	public:		struct Continuation {
-					public:		virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) = 0;
+					public:		virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) = 0;
 				};
 
 				struct Context { // FIX : make Processor local
 					const CodeWord* ip;
 					Frame* frame; // doesn't change during function execution
-					Value thisValue; // FIX : pointer instead? // doesn't change during function execution
+					Object* thisValue; // FIX : pointer instead? // doesn't change during function execution
 				};
 
 	protected:	struct Catcher {
@@ -586,9 +589,9 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				virtual void gcMark(GCHeap& heap);
-				void chain(Continuation* continuation, const Value& thisValue);
-				void chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
-	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
+				void chain(Continuation* continuation, Object* thisValue);
+				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
+	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level
 				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);

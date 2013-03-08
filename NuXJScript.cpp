@@ -269,7 +269,7 @@ bool String::getProperty(Engine& engine, const String* name, Value& v) {
 	if (q == name->end() && i < size()) {
 		const Char* p = begin() + i;
 		if (*p < 127) v = QUICK_CONSTANTS.ascii[*p];
-		else v = Value(engine.heap().manage(new String(p, p + 1)));
+		else v = Value(engine.getHeap().manage(new String(p, p + 1)));
 		return true;
 	} else return engine.stringPrototype.getProperty(engine, name, v);
 }
@@ -309,7 +309,7 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-Enumerator* String::getEnumerator(Engine& engine) { return engine.heap().manage(new RangeEnumerator(engine.heap(), 0, size())); }
+Enumerator* String::getEnumerator(Engine& engine) { return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size())); }
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	String* o = heap.manage(new String(b, e));
@@ -501,7 +501,7 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 }
 
 Enumerator* UserObject::getEnumerator(Engine& engine) {
-	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount()));
+	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
 	// list->sort(); // FIX : bad idea?
 	return list;
@@ -736,10 +736,9 @@ const String* Function::className() const { return &F_UNCTION_STRING; }
 void Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv) {
 	Value v;
 	Object* prototype = (getProperty(engine, &PROTOTYPE_STRING, v) ? v.asObject() : 0);
-	Object* newObject = engine.heap().manage(new UserObject(prototype));
-	Value thisValue(newObject);
-	processor.push(thisValue);
-	call(engine, processor, argc, argv, thisValue);
+	Object* newObject = engine.getHeap().manage(new UserObject(prototype));
+	processor.push(Value(newObject));
+	call(engine, processor, argc, argv, newObject);
 }
 
 /* --- ScriptFunction --- */
@@ -748,7 +747,7 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 }
 
@@ -798,10 +797,10 @@ void Arguments::gcMark(GCHeap& heap) {
 }
 
 Enumerator* Arguments::getEnumerator(Engine& engine) {
-	StringListEnumerator* list = engine.heap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
+	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
 	for (Int32 i = 0; i < argumentsCount; ++i)
-		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.heap(), i));
+		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
 	// list->sort(); // FIX : bad idea?
 	return list;
 }
@@ -828,7 +827,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
-			Object* o = engine.heap().manage(new Arguments(this, passedArgumentsCount));
+			Object* o = engine.getHeap().manage(new Arguments(this, passedArgumentsCount));
 			argumentsValue = Value(o);
 		}
 		v = argumentsValue;
@@ -906,7 +905,7 @@ Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, V
 	// FIX : yuck
 	csp->frame = 0;
 	csp->ip = 0;
-	csp->thisValue = Value(Value::NONEXISTENT_TYPE);
+	csp->thisValue = 0;
 }
 
 void Processor::gcMark(GCHeap& heap) {
@@ -926,7 +925,7 @@ void Processor::error() {
 	throw std::runtime_error("error"); // FIX
 }
 
-void Processor::chain(Continuation* continuation, const Value& thisValue) {
+void Processor::chain(Continuation* continuation, Object* thisValue) {
 	csp->ip = ip;
 	++csp; // FIX : overflow check
 	csp->frame = 0;
@@ -935,9 +934,9 @@ void Processor::chain(Continuation* continuation, const Value& thisValue) {
 	continuations.push_back(continuation);
 }
 
-void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
+void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func, argc, argv));
+	FunctionFrame* frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	csp->ip = ip;
 	++csp; // FIX : overflow check
 	csp->frame = frame;
@@ -951,13 +950,13 @@ void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Function* f;
 	if (getProperty(engine, &TO_STRING_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ThrowIfObject : public Processor::Continuation {
-			virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) {
+			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
 				if (processor.peek(0).asObject() != 0) processor.error();
 				return true;
 			}
 		} THROW_IF_OBJECT;
-		processor.chain(&THROW_IF_OBJECT, Value(this));
-		f->call(engine, processor, 0, 0, Value(this));
+		processor.chain(&THROW_IF_OBJECT, this);
+		f->call(engine, processor, 0, 0, this);
 	} else {
 		processor.error();
 	}
@@ -969,16 +968,16 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 	Function* f;
 	if (getProperty(engine, &VALUE_OF_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ToPrimitiveStringOrThrow : public Processor::Continuation {
-			virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) {
+			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
 				Object* o = processor.peek(0).asObject();
 				if (o == 0) return true;
 				processor.pop();
-				thisValue.asObject()->toPrimitiveStringOrThrow(engine, processor);
+				thisValue->toPrimitiveStringOrThrow(engine, processor);
 				return true;
 			}
 		} TO_PRIMITIVE_STRING_OR_THROW;
-		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW, Value(this));
-		f->call(engine, processor, 0, 0, Value(this));
+		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW, this);
+		f->call(engine, processor, 0, 0, this);
 	} else {
 		toPrimitiveStringOrThrow(engine, processor);
 	}
@@ -996,7 +995,7 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 }
 
 bool Processor::run() {
-	GCHeap& heap = engine.heap();
+	GCHeap& heap = engine.getHeap();
 
 recover: // FIX : better term than recover
 	assert(csp >= cstackStart);
@@ -1004,7 +1003,7 @@ recover: // FIX : better term than recover
 	if (ip == 0) {
 		assert(!continuations.empty());
 		Continuation* continuator = continuations.back();
-		Value thisValue(csp->thisValue);
+		Object* thisValue = csp->thisValue;
 		--csp;
 		ip = csp->ip;
 		continuations.pop_back();
@@ -1099,7 +1098,7 @@ recover: // FIX : better term than recover
 				Function* f = o->asFunction();
 				if (f == 0) error();
 				vsp -= n + 2;
-				f->call(engine, *this, n, vsp + 3, Value(thisObject));
+				f->call(engine, *this, n, vsp + 3, thisObject);
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
@@ -1109,7 +1108,7 @@ recover: // FIX : better term than recover
 				Function* f = o->asFunction();
 				if (f == 0) error();
 				vsp -= n + 1;
-				f->call(engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
+				f->call(engine, *this, n, vsp + 2, engine.getGlobalThis());
 				goto recover;
 			}
 			case NEW_OP: {
@@ -1123,7 +1122,7 @@ recover: // FIX : better term than recover
 				goto recover;
 			}
 			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
-			case THIS_OP: push(csp->thisValue); break;
+			case THIS_OP: push(Value(csp->thisValue)); break;
 			case VOID_OP: push(Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
 				o = cp[operand()].asObject();
@@ -1372,7 +1371,7 @@ static int findStatementToken(int n /* string length */, const Char* s) {
 struct Compiler::XValue {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
 	XValue() : t(NONE), v(Value::UNDEFINED_TYPE) { }
-	XValue(Type type, const Value& value = Value()) : t(type), v(value) { }
+	XValue(Type type, const Value& value = Value(Value::NONEXISTENT_TYPE)) : t(type), v(value) { }
 	Type t;
 	Value v;
 };
@@ -1631,7 +1630,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			const Char* b = p;
 			parseIdentifier(true);
 			if (p == b) throw std::runtime_error("Expected identifier");
-			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.heap(), b, p)));
+			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
 		}
@@ -1824,7 +1823,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					break;
 				}
 				case FUNCTION_LITERAL: {
-					ScriptFunctionDef* func = engine.heap().manage(new ScriptFunctionDef());
+					ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
 					expectToken("(", true);
 					eatWhite();
@@ -1836,14 +1835,14 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						const Char* b = p;
 						parseIdentifier(false);
 						if (p == b) throw std::runtime_error("Expected identifier");
-						func->localNames[String::newHashedString(engine.heap(), b, p)] = func->argumentsCount++;
+						func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
 						eatWhite();
 					}
 					if (p == e) throw std::runtime_error("Expected ',' or ')'");
 					expectToken("{", true);
 					{
 						Compiler funcCompiler(engine, func);
-						engine.heap().protect(&funcCompiler);
+						engine.getHeap().protect(&funcCompiler);
 						p = funcCompiler.compile(p, e);
 						funcCompiler.finish();
 					}
@@ -1882,14 +1881,14 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					v = XValue(XValue::CONSTANT, Value(String::newHashedString(engine.heap(), buffer, unescapeEnd)));
+					v = XValue(XValue::CONSTANT, Value(String::newHashedString(engine.getHeap(), buffer, unescapeEnd)));
 					break;
 				}
 				default: {
 					const Char* b = p;
 					parseIdentifier(false);
 					if (p == b) return false; // fix : nicer way?
-					const String* identifier = String::newHashedString(engine.heap(), b, p);
+					const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->localNames;
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
@@ -1927,7 +1926,7 @@ Compiler::XValue Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
 	if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
-	const String* identifier = String::newHashedString(engine.heap(), b, p);
+	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 	XValue lv;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
 		lv = XValue(XValue::NAMED, Value(identifier));
@@ -2237,7 +2236,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					const Char* b = p;
 					parseIdentifier(false);
 					if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
-					const String* exceptionVarName = String::newHashedString(engine.heap(), b, p);
+					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
 					LocalNameMap& nameMap = function->localNames;
 					bool hadLocalIndex = false;
 					Int32 localIndex = -1;
@@ -2390,7 +2389,7 @@ assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 freeSafeKeepingIndexes.clear();
 	assert(outputCode == &function->code);
 if (!supressStdErr) {
-	disassemble(engine.heap(), *outputCode, function->constants);
+	disassemble(engine.getHeap(), *outputCode, function->constants);
 	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
 	std::cerr << "\tVars: " << function->varsCount << std::endl;
 	std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
@@ -2431,7 +2430,7 @@ void GCHeap::mark(const GCItem* item) {
 
 class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all the others?!
 	public:		typedef HostFunction super;
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 					if (argc == 1) {
 						Char c = argv[0].toInt();
 						if (c < 127) {
@@ -2439,7 +2438,7 @@ class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all th
 							return;
 						}
 					}
-					String* s = engine.heap().manage(new String(argc));
+					String* s = engine.getHeap().manage(new String(argc));
 					for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
 					processor.push(Value(s));
 				}
@@ -2447,32 +2446,33 @@ class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all th
 
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
-Engine::Engine(GCHeap& heap) : gcHeap(heap) {
-	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
+Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(globalThis) {
+	gcHeap.protect(globalThis);
 	gcHeap.protect(&stringPrototype);
+	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 }
 
 #include <fstream>
 
 	class PrintFunction : public HostFunction {
 		public:		typedef HostFunction super;
-					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
-						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
+					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						processor.push(Value(Value::UNDEFINED_TYPE));
 					}
 	};
 
 	struct ReturnToHost : public Processor::Continuation {
-		virtual bool execute(Engine& engine, Processor& processor, const Value& thisValue) { return false; }
+		virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) { return false; }
 	} RETURN_TO_HOST;
 
 int main(int argc, const char* argv[]) {
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
 	GCHeap heap;
-	Engine engine(heap);
 	UserObject globals;
+	Engine engine(heap, &globals);
 	heap.protect(&globals);
 	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
 	PrintFunction printFunction;
@@ -2517,8 +2517,8 @@ int main(int argc, const char* argv[]) {
 				Processor::Context cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.chain(&RETURN_TO_HOST, Value(&globals));
-				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals));
+				processor.chain(&RETURN_TO_HOST, &globals);
+				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, &globals);
 				bool done = false;
 				
 				clock_t start = ::clock();	
