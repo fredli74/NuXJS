@@ -923,20 +923,22 @@ void Processor::error() {
 }
 
 void Processor::chain(Continuation* continuation, const Value& thisValue) {
+	csp->ip = ip;
 	++csp; // FIX : overflow check
 	csp->frame = 0;
 	csp->thisValue = thisValue;
-	csp->instructionPointer = 0;
+	ip = 0;
 	continuations.push_back(continuation);
 }
 
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
 	FunctionFrame* frame = engine.heap().manage(new FunctionFrame(func, argc, argv));
+	csp->ip = ip;
 	++csp; // FIX : overflow check
 	csp->frame = frame;
 	csp->thisValue = thisValue;
-	csp->instructionPointer = &def->code[0];
+	ip = &def->code[0];
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -983,32 +985,32 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	Object* o = vsp->asObject();
 	if (o == 0) return false;
-	csp->instructionPointer = rollbackIp;
+	ip = rollbackIp;
 	--vsp;
 	o->toPrimitiveNumber(engine, *this);
 	return true;
 }
 
 bool Processor::run() {
-	GCHeap& heap = engine.heap();									// heap is 100% synchronized
+	GCHeap& heap = engine.heap();
 
 recover: // FIX : better term than recover
 	assert(csp >= cstackStart);
-	ip = csp->instructionPointer;		// ip and csp->instructionPointer are synchronized only when necessary
 
 	if (ip == 0) {
 		assert(!continuations.empty());
 		Continuation* continuator = continuations.back();
 		Value thisValue(csp->thisValue);
 		--csp;
+		ip = csp->ip;
 		continuations.pop_back();
 		if (!continuator->execute(engine, *this, thisValue)) return false;
 		goto recover;
 	}
 
-	Frame* frame = csp->frame;							// frame is 100% synchronized with csp->frame (i.e. they should always be identical)
-	const Value* cp = frame->getFunctionDef()->getConstantsPointer();	// cp is 100% synchronized
-	Value* lp = frame->getLocalsPointer();								// lp is 100% synchronized
+	Frame* frame = csp->frame;
+	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
+	Value* lp = frame->getLocalsPointer();
 	Object* o;
 	Int32 offset;
 	
@@ -1071,7 +1073,7 @@ recover: // FIX : better term than recover
 			case JF_OP:		offset = operand(); ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
 
 			case JSR_OP:	offset = operand();
-							csp->instructionPointer = ip;
+							csp->ip = ip;
 							++csp; // FIX : bounds check? or reserve?
 							csp->frame = frame;
 							csp->thisValue = (csp - 1)->thisValue;
@@ -1079,6 +1081,7 @@ recover: // FIX : better term than recover
 							break;
 
 			case RETURN_OP:	--csp;
+							ip = csp->ip;
 							goto recover;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
@@ -1091,7 +1094,6 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				csp->instructionPointer = ip;
 				vsp -= n + 2;
 				f->call(engine, *this, n, vsp + 3, Value(thisObject));
 				goto recover;
@@ -1102,7 +1104,6 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				csp->instructionPointer = ip;
 				vsp -= n + 1;
 				f->call(engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
 				goto recover;
@@ -1113,7 +1114,6 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				csp->instructionPointer = ip;
 				vsp -= n + 1;
 				f->construct(engine, *this, n, vsp + 2);
 				goto recover;
@@ -1149,6 +1149,7 @@ recover: // FIX : better term than recover
 			}
 			case TRIED_OP: catchers.pop_back(); break;
 			case CATCH_FRAME_OP: {
+				csp->ip = ip;
 				++csp;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, cp[operand()].getString(), vsp[0]));
 				pop(1);
@@ -1162,10 +1163,10 @@ recover: // FIX : better term than recover
 					error();
 				}
 				const Catcher& catcher = catchers.back();
+				ip = catcher.ip;
 				csp = catcher.csp;
 				vsp = catcher.vsp;
 				push(exception);
-				csp->instructionPointer = catcher.instructionPointer;
 				catchers.pop_back();
 				goto recover;
 			}
@@ -1203,7 +1204,6 @@ recover: // FIX : better term than recover
 			default: assert(0);
 		}
 	}
-	csp->instructionPointer = ip;
 	return true;
 }
 

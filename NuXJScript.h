@@ -530,16 +530,16 @@ class Processor : public GCItem {
 				};
 
 				struct Context { // FIX : make Processor local
-					const CodeWord* instructionPointer;
+					const CodeWord* ip;
 					Frame* frame; // doesn't change during function execution
 					Value thisValue; // FIX : pointer instead? // doesn't change during function execution
 				};
 
 	protected:	struct Catcher {
-					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : csp(csp), vsp(vsp), instructionPointer(ip) { }
+					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : csp(csp), vsp(vsp), ip(ip) { }
 					Context* csp;
 					Value* vsp;
-					const CodeWord* instructionPointer;
+					const CodeWord* ip;
 				};
 				
 				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
