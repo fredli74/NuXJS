@@ -1409,7 +1409,7 @@ void Compiler::completeForwardBranch(Int32 point) {
 Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
 
 void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
-	emitWithInt32(op, point - (outputCode->size() + 5));
+	emitWithInt32(op, point - (outputCode->size() + OPERAND_SIZE + 1));
 }
 
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {

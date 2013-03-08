@@ -139,7 +139,7 @@ typedef unsigned short Char;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
-typedef Byte CodeWord;
+typedef Int32 CodeWord;
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 FRAME_BUILT_IN_LOCALS_COUNT = 8;
