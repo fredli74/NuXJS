@@ -395,6 +395,17 @@ print('');
 
 print("*** value conversion ***");
 
+OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)
+TestObject = function() { };
+TestObject.prototype = new OneHundredEleven;
+o2 = new TestObject; print(+o2)
+
+AString = function() { this.valueOf = null; this.toString = function() { print("good toString"); return "stringy"; } };
+o = new AString; print(+o)
+
+StringAgain = function() { this.valueOf = function() { print("bad valueOf"); return this }; this.toString = function() { print("good toString"); return "stringy"; } };
+o = new StringAgain; print(+o)
+ 
 /*
 i = 0;
 f = function(s) { this.valueOf = function() { print(s); return ++i; } };

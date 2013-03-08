@@ -741,7 +741,7 @@ void Function::construct(Engine& engine, Processor& processor, Int32 argc, const
 	Object* newObject = engine.heap().manage(new UserObject(prototype));
 	Value thisValue(newObject);
 	processor.push(thisValue);
-	call(engine, processor, argc, argv, thisValue);
+	call(engine, processor, argc, argv, thisValue, 0);
 }
 
 /* --- ScriptFunction --- */
@@ -750,8 +750,8 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
-	processor.chain(this, argc, argv, thisValue);
+void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator) {
+	processor.call(this, argc, argv, thisValue, continuator);
 }
 
 void ScriptFunction::gcMark(GCHeap& heap) {
@@ -917,8 +917,9 @@ void Processor::gcMark(GCHeap& heap) {
 
 void Processor::push(Value*& vsp, const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void Processor::push(const Value& v) { push(vstackPointer, v); }
-void Processor::pop(Value*& vsp, int count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
+void Processor::pop(Value*& vsp, Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
 void Processor::poppush(Value*& vsp, const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
+void Processor::pop(Int32 count) { pop(vstackPointer, count); }
 Int32 Processor::readInt32(const CodeWord* ip) { return *reinterpret_cast<const Int32*>(ip); }
 Int32 Processor::nextInt32(const CodeWord*& ip) { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
@@ -938,43 +939,62 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, const
 }
 
 void Processor::call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuation) {
-	++cstackPointer; // FIX : overflow check
-	cstackPointer->frame = 0;
-	cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
-	cstackPointer->instructionPointer = 0;
-	cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
-	continuations.push_back(continuation);
+	if (continuation != 0) {
+		++cstackPointer; // FIX : overflow check
+		cstackPointer->frame = 0;
+		cstackPointer->thisValue = Value(Value::NONEXISTENT_TYPE);
+		cstackPointer->instructionPointer = 0;
+		cstackPointer->vstackPointer = 0;  // FIX : i think ->vstackPointer here will go, at least if we keep the "catch stack" solution
+		continuations.push_back(continuation);
+	}
 	chain(func, argc, argv, thisValue);
 }
-/*
-void Object::toPrimitiveNumber(Engine& engine, Processor& processor, Value* v) {
-Let valueOf be the result of calling the [[Get]] internal method of object O with argument "valueOf".
-If IsCallable(valueOf) is true then,
+
+void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Value v;
-	if (getProperty(engine, VALUE_OF_STRING, v) && v.isObject()) {
-		Object* asObject()
-	"valueOf"
+	Object* o;
+	Function* f;
+	if (getProperty(engine, &TO_STRING_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
+		static struct ThrowIfObject : public Continuator {
+			virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) {
+				if (returnValue.asObject() != 0) processor.error();
+				return false;
+			}
+		} THROW_IF_OBJECT;
+		f->call(engine, processor, 0, 0, Value(this), &THROW_IF_OBJECT);
+	} else {
+		processor.error();
+	}
 }
 
-Let val be the result of calling the [[Call]] internal method of valueOf, with O as the this value and an empty argument list.
-If val is a primitive value, return val.
-Let toString be the result of calling the [[Get]] internal method of object O with argument "toString".
-If IsCallable(toString) is true then,
-Let str be the result of calling the [[Call]] internal method of toString, with O as the this value and an empty argument list.
-If str is a primitive value, return str.
-Throw a TypeError exception.
-*/
+void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
+	Value v;
+	Object* o;
+	Function* f;
+	if (getProperty(engine, &VALUE_OF_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
+		static struct ToPrimitiveStringOrThrow : public Continuator {
+			virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) {
+				Object* o = returnValue.asObject();
+				if (o == 0) return false;
+				processor.pop();
+				thisValue.asObject()->toPrimitiveStringOrThrow(engine, processor);
+				return false;
+			}
+		} TO_PRIMITIVE_STRING_OR_THROW;
+		f->call(engine, processor, 0, 0, Value(this), &TO_PRIMITIVE_STRING_OR_THROW);
+	} else {
+		toPrimitiveStringOrThrow(engine, processor);
+	}
+}
+
+// We should be able to call "chain()" to add any number of continuations (don't call them callCompleted)... no need to have continuation as an argument to call etc...
+
 bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp) {
 	Object* o = vsp->asObject();
 	if (o == 0) return false;
 	this->cstackPointer->instructionPointer = rollbackIp;
-	this->vstackPointer = vsp;
-/*	class MyContinuator : public Continuator {
-		public:		virtual void callCompleted(const Value& returnValue) {
-					}
-	};
-	MyContinuator* continuator = engine.heap().manage(new MyContinuator(
-	vsp->asObject()->*/
+	this->vstackPointer = --vsp;
+	o->toPrimitiveNumber(engine, *this);
 	return true;
 }
 
@@ -1057,8 +1077,9 @@ bool Processor::run() {
 							ip += offset;
 							break;
 
-			case RETURN_OP:	assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
+			case RETURN_OP:	{ assert(frame == (this->cstackPointer - 1)->frame || vsp == this->cstackPointer->vstackPointer + 1); // Fail here and we have an unbalanced stack.
 							this->vstackPointer = vsp;
+Value thisValue = this->cstackPointer->thisValue; // FIX : <- blääh
 							--(this->cstackPointer);
 							assert(this->cstackPointer >= cstackStart);
 							if (this->cstackPointer->instructionPointer == 0) {
@@ -1066,16 +1087,11 @@ bool Processor::run() {
 								assert(this->cstackPointer < cstackStart || this->cstackPointer->instructionPointer != 0);
 								assert(!continuations.empty());
 								Continuator* continuator = continuations.back();
-								if (continuator == 0) {
-									continuations.pop_back();
-									return true;
-								} else {
-									continuator->callCompleted(*vsp);
-									pop(vsp, 1);
-									continuations.pop_back();
-								}
+								bool complete = continuator->callCompleted(engine, *this, thisValue, vsp[0]);
+								continuations.pop_back();
+								if (complete) return true;
 							}
-							goto recover;
+							goto recover; }
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = nextInt32(ip);
@@ -1090,7 +1106,7 @@ bool Processor::run() {
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 2;
 				this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 3, Value(thisObject));
+				f->call(this->engine, *this, n, vsp + 3, Value(thisObject), 0);
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
@@ -1102,7 +1118,7 @@ bool Processor::run() {
 				this->cstackPointer->instructionPointer = ip;
 				vsp -= n + 1;
 				this->vstackPointer = vsp;
-				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE));
+				f->call(this->engine, *this, n, vsp + 2, Value(Value::UNDEFINED_TYPE), 0);
 				goto recover;
 			}
 			case NEW_OP: {
@@ -2440,15 +2456,20 @@ void GCHeap::mark(const GCItem* item) {
 
 #include <fstream>
 
-	class PrintFunction : public NativeFunction {
-		public:		typedef NativeFunction super;
-					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) {
+	class PrintFunction : public HostFunction {
+		public:		typedef HostFunction super;
+					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator = 0) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.heap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						processor.push(Value());
+						Value r = Value();
+						if (continuator != 0) continuator->callCompleted(engine, processor, thisValue, r);
+						processor.push(r);
 					}
 	};
 
+	struct ReturnToHost : public Continuator {
+		virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) { return true; }
+	} RETURN_TO_HOST;
 
 int main(int argc, const char* argv[]) {
 	const String LF_STRING("\n");
@@ -2499,7 +2520,7 @@ int main(int argc, const char* argv[]) {
 				Context cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.call(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals), 0);
+				processor.call(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, Value(&globals), &RETURN_TO_HOST);
 				bool done = false;
 				
 				clock_t start = ::clock();	

@@ -552,3 +552,12 @@ b
 3
 
 *** value conversion ***
+click
+111
+click
+111
+good toString
+NaN
+bad valueOf
+good toString
+NaN

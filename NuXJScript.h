@@ -76,6 +76,7 @@
 //		NEXT_PROPERTY_OP is always preceeded by READ_INDEXED (since it is always a non-constant safe-kept variable), combine into one instruction (with two operands)
 //			if we don't do the REPUSH idea instead of safe-keeping so much
 //		Make writes terminal and REPUSH in a = b = c type of expression...
+//		Don't lookup names in frame when not necessary. (And use hash table!)
 //
 //	Compiler
 //
@@ -276,6 +277,7 @@ class Value {
 class Engine;
 class Enumerator;
 class Function;
+class Processor;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
@@ -288,6 +290,9 @@ class Object : public GCItem {
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
+
+				void toPrimitiveStringOrThrow(Engine& engine, Processor& processor);
+				void toPrimitiveNumber(Engine& engine, Processor& processor);
 };
 
 class Enumerator : public Object {
@@ -427,19 +432,23 @@ class Engine {
 				UserObject stringPrototype;
 };
 
-class Processor;
+// FIX : GCItem or simply owned by Processor?
+class Continuator : public GCItem {
+	public:		virtual bool callCompleted(Engine& engine, Processor& processor, const Value& thisValue, Value& returnValue) = 0;
+};
+
 class Function : public UserObject {
 	public:		typedef UserObject super;
 
 				virtual Function* asFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue) = 0;
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator) = 0;
 				virtual void construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv);
 };
 
 // FIX : do something nice here :)
-class NativeFunction : public Function {
+class HostFunction : public Function {
 	public:		typedef Function super;
 };
 
@@ -449,7 +458,7 @@ class ScriptFunction : public Function {
 				
 				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 				virtual void gcMark(GCHeap& heap);
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue);
+				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuator);
 				ScriptFunctionDef* getDefinition() const;
 				Object* getEnvironment() const;
 
@@ -515,11 +524,6 @@ class Arguments : public UserObject {
 				QuickArray<Byte, 8> deletedArguments;
 };
 
-// FIX : GCItem or simply owned by Processor?
-class Continuator : public GCItem {
-	public:		virtual void callCompleted(const Value& returnValue) = 0;
-};
-
 struct Context { // FIX : make Processor local
 	const CodeWord* instructionPointer;
 Value* vstackPointer;  // doesn't change during function execution, i.e. entry value stack pointer, FIX : keep, only in debug?
@@ -571,20 +575,21 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				virtual void gcMark(GCHeap& heap);
-				void chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue);
+				void chain(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue); // FIX : drop
 				void call(ScriptFunction* func, Int32 argc, const Value* argv, const Value& thisValue, Continuator* continuation = 0);
-				void push(const Value& v);
+				void push(const Value& v); // FIX : wow, this feels low level
+				void pop(Int32 count = 1);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
+void error(); // FIX
 				
 	protected:	void push(Value*& vsp, const Value& v);
-				void pop(Value*& vsp, int count);
+				void pop(Value*& vsp, Int32 count);
 				void poppush(Value*& vsp, const Value& v);
 				Int32 readInt32(const CodeWord* ip);
 				Int32 nextInt32(const CodeWord*& ip);
 				void callStub(const CodeWord*& ip, const CodeWord* stub);
 				bool toPrimitiveTrap(const CodeWord* rollbackIp, Value* vsp);
-				void error();
 
 				Engine& engine;
 				Context* const cstackStart;
