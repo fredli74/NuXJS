@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7A15E5E16E974F4007ED51D</string>
+						<string>F7A15E6A16E9763B007ED51D</string>
 						<key>history</key>
 						<array>
 							<string>F7A15E4C16E974BB007ED51D</string>
@@ -366,7 +366,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7A15E5D16E974F4007ED51D</string>
+										<string>F7A15E6916E9763B007ED51D</string>
 										<key>history</key>
 										<array>
 											<string>F7E88F8A16E894970042DC89</string>
@@ -387,8 +387,8 @@
 											<string>F7E8913C16E8EFBD0042DC89</string>
 											<string>F7A15E1716E96C21007ED51D</string>
 											<string>F7A15E1916E96C21007ED51D</string>
-											<string>F7A15E5116E974DA007ED51D</string>
-											<string>F7A15E5216E974DA007ED51D</string>
+											<string>F7A15E6116E97627007ED51D</string>
+											<string>F7A15E6216E97627007ED51D</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -591,8 +591,8 @@
 		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
-		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 		<string>F7A15E5416E974DA007ED51D</string>
+		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
 	<string>3 56 1434 822 0 0 1440 878 </string>

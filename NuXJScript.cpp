@@ -546,19 +546,20 @@ const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeS
 bool Value::toBool() const {
 	switch (type) {
 		default: assert(0);
-		case UNDEFINED_TYPE: return false;
+		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return b;
 		case NUMBER_TYPE: return (d != 0.0);
+		case STRING_TYPE: return (!s->empty());
+		case OBJECT_TYPE: return true;
 	}
 }
 
-Int32 Value::toInt() const { return wrapToInt(toDouble()); }
-
 double Value::toDouble() const {
 	switch (type) {
-		default: assert(0); // FIX : object type
-		case UNDEFINED_TYPE: return NaN();
+		default: assert(0);
+		case UNDEFINED_TYPE:
+		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
 		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
 		case NUMBER_TYPE: return d;
@@ -571,6 +572,8 @@ double Value::toDouble() const {
 		}
 	}
 }
+
+Int32 Value::toInt() const { return wrapToInt(toDouble()); }
 
 const String* Value::toString(GCHeap& heap) const {
 	switch (type) {
