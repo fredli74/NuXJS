@@ -174,13 +174,6 @@ static Char* unescape(Char* buffer, const Char*& p, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-static Int32 wrapToInt(double d) { // FIX : merge back into toInt?
-	int i = static_cast<Int32>(d);
-	if (i == d) return i;
-	if (isNaN(d) || fabs(d) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
-	return (d >= 0) ? static_cast<UInt32>(fmod(d, 4294967296.0)) : -static_cast<UInt32>(fmod(-d, 4294967296.0));
-}
-
 /* --- String --- */
 
 const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
@@ -373,7 +366,6 @@ void GCList::claim(GCItem* item) {
 struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
 
 Function* Object::asFunction() { return 0; }
-Enumerator* Object::asEnumerator() { return 0; }
 const String* Object::typeString() const { return &OBJECT_STRING; }
 const String* Object::className() const { return &O_BJECT_STRING; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
@@ -386,9 +378,7 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT_TYPE) { }
 
-UInt32 Table::calcMaxLoad(UInt32 bucketCount) {
-	return (bucketCount - (bucketCount >> 3) - 1);
-}
+UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
 
 UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
 	UInt32 n = 0;
@@ -404,7 +394,7 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = &buckets[buckets.size()];
-	while (++b != e && !b->value.exists()) { }
+	while (++b != e && (b->key == 0 || !b->value.exists())) { }
 	return (b == e ? 0 : b);
 }
 
@@ -413,7 +403,7 @@ const Table::Bucket* Table::lookup(const String* key) {
 	return (b->key != 0 ? b : 0);
 }
 
-void Table::assign(const String* key, const Value& value) { assert(value.exists()); update(key, value); }
+void Table::assign(const String* key, const Value& value) { update(key, value); }
 void Table::erase(const String* key) { update(key, Value(Value::NONEXISTENT_TYPE)); }
 
 void Table::mark(GCHeap& heap) {
@@ -421,7 +411,7 @@ void Table::mark(GCHeap& heap) {
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		heap.mark(buckets[i].key);
 		buckets[i].value.markIn(heap);
-		if (buckets[i].value.exists()) rebuildLoadCount++;
+		if (buckets[i].key != 0 && buckets[i].value.exists()) rebuildLoadCount++;
 	}
 	if (rebuildLoadCount != loadCount) {
 		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
@@ -459,8 +449,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].value.exists()) {
-			assert(buckets[i].key != 0);
+		if (buckets[i].key != 0 && buckets[i].value.exists()) {
 			UInt32 j = buckets[i].key->calcHash() & mask;
 			while (newBuckets[j].key != 0) j = (j + 1) & mask;
 			newBuckets[j] = buckets[i];
@@ -528,17 +517,6 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 
 /* --- Value --- */
 
-Value::Value(Type type) : type(type) { }
-Value::Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
-Value::Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
-Value::Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
-Value::Value(double d) : type(NUMBER_TYPE), d(d) { }
-Value::Value(const String* s) : type(STRING_TYPE), s(s) { }
-Value::Value(Object* o) : type(OBJECT_TYPE), o(o) { }
-
-bool Value::exists() const { return type != NONEXISTENT_TYPE; }
-Object* Value::asObject() const { return (type == OBJECT_TYPE ? o : 0); }
-const String* Value::getString() const { assert(type == STRING_TYPE); return s; }
 const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeString() : TYPE_STRINGS[static_cast<int>(type)]); }
 
 bool Value::toBool() const {
@@ -571,7 +549,12 @@ double Value::toDouble() const {
 	}
 }
 
-Int32 Value::toInt() const { return wrapToInt(toDouble()); }
+Int32 Value::toInt() const {
+	int i = static_cast<Int32>(d);
+	if (i == d) return i;
+	if (isNaN(d) || fabs(d) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
+	return (d >= 0) ? static_cast<UInt32>(fmod(d, 4294967296.0)) : -static_cast<UInt32>(fmod(-d, 4294967296.0));
+}
 
 const String* Value::toString(GCHeap& heap) const {
 	switch (type) {
@@ -733,12 +716,8 @@ Function* Function::asFunction() { return this; }
 const String* Function::typeString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
 
-void Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv) {
-	Value v;
-	Object* prototype = (getProperty(engine, &PROTOTYPE_STRING, v) ? v.asObject() : 0);
-	Object* newObject = engine.getHeap().manage(new UserObject(prototype));
-	processor.push(Value(newObject));
-	call(engine, processor, argc, argv, newObject);
+Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return call(engine, processor, argc, argv, thisValue);
 }
 
 /* --- ScriptFunction --- */
@@ -747,8 +726,10 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
-void ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
+	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
+	return Value();
 }
 
 void ScriptFunction::gcMark(GCHeap& heap) {
@@ -897,8 +878,6 @@ bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 
 /* --- Processor --- */
 
-const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
-
 Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, csp(cstackStart), vsp(vstackStart - 1), ip(0), clockCyclesLeft(0x7FFFFFFF) {
@@ -982,8 +961,6 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 		toPrimitiveStringOrThrow(engine, processor);
 	}
 }
-
-// We should be able to call "chain()" to add any number of continuations (don't call them callCompleted)... no need to have continuation as an argument to call etc...
 
 bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	Object* o = vsp->asObject();
@@ -1079,7 +1056,7 @@ recover: // FIX : better term than recover
 							csp->ip = ip;
 							++csp; // FIX : bounds check? or reserve?
 							csp->frame = frame;
-							csp->thisValue = (csp - 1)->thisValue;
+							csp->thisValue = csp[-1].thisValue;
 							ip += offset;
 							break;
 
@@ -1097,8 +1074,9 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				vsp -= n + 2;
-				f->call(engine, *this, n, vsp + 3, thisObject);
+				Value* returnPointer = vsp - n - 1;
+				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject);
+				vsp -= n + 1;
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
@@ -1107,8 +1085,9 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				vsp -= n + 1;
-				f->call(engine, *this, n, vsp + 2, engine.getGlobalThis());
+				Value* returnPointer = vsp - n;
+				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobalThis());
+				vsp -= n;
 				goto recover;
 			}
 			case NEW_OP: {
@@ -1117,8 +1096,13 @@ recover: // FIX : better term than recover
 				if (o == 0) error();
 				Function* f = o->asFunction();
 				if (f == 0) error();
-				vsp -= n + 1;
-				f->construct(engine, *this, n, vsp + 2);
+				Value v(Value::NONEXISTENT_TYPE);
+				f->getProperty(engine, &PROTOTYPE_STRING, v); // FIX : standard object prototype if v.asObject() == 0 ?
+				Object* newObject = engine.getHeap().manage(new UserObject(v.asObject()));
+				Value* returnPointer = vsp - n;
+				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);
+				returnPointer[0] = Value(newObject);
+				vsp -= n - 1;
 				goto recover;
 			}
 			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
@@ -1156,7 +1140,7 @@ recover: // FIX : better term than recover
 				++csp;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, cp[operand()].getString(), vsp[0]));
 				pop(1);
-				csp->thisValue = (csp - 1)->thisValue;
+				csp->thisValue = csp[-1].thisValue;
 				break;
 			}
 			case THROW_OP: {
@@ -2430,17 +2414,12 @@ void GCHeap::mark(const GCItem* item) {
 
 class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all the others?!
 	public:		typedef HostFunction super;
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-					if (argc == 1) {
-						Char c = argv[0].toInt();
-						if (c < 127) {
-							processor.push(Value(QUICK_CONSTANTS.ascii[c]));
-							return;
-						}
-					}
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					Char c;
+					if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
 					String* s = engine.getHeap().manage(new String(argc));
 					for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
-					processor.push(Value(s));
+					return Value(s);
 				}
 };
 
@@ -2456,10 +2435,11 @@ Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(glob
 
 	class PrintFunction : public HostFunction {
 		public:		typedef HostFunction super;
-					virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						processor.push(Value(Value::UNDEFINED_TYPE));
+						return Value();
 					}
 	};
 
@@ -2481,9 +2461,13 @@ int main(int argc, const char* argv[]) {
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;
 	bool doTime = false;
+	long gcRate = 20000000;
+	bool pauseBeforeQuit = false;
 	for (int argi = 1; argi < argc; ++argi) {
 		if (strcmp(argv[argi], "-t") == 0) doTime = true;
 		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
+		else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) gcRate = atol(argv[++argi]);
+		else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
 		else if (inputFileStream.get() == 0) {
 			inputFileStream.reset(new std::wifstream(argv[argi]));
 			inStream = inputFileStream.get();
@@ -2523,7 +2507,7 @@ int main(int argc, const char* argv[]) {
 				
 				clock_t start = ::clock();	
 				do {
-					processor.resetTimeOut(20000000);
+					processor.resetTimeOut(gcRate);
 					done = !processor.run();
 					Value v = vstack[0];
 					
@@ -2558,8 +2542,6 @@ int main(int argc, const char* argv[]) {
 			source = EMPTY_STRING;
 		}
 	}
-// for running leaks:
-// std::wstring s;
-// std::getline(std::wcin, s);
+	if (pauseBeforeQuit) std::wcin.get();
 	return 0;
 }

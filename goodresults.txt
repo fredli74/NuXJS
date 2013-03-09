@@ -156,7 +156,29 @@ undefined
 21,3,31,4,41,5,51,6,71,7,91,8,
 *** new statement ***
 a: undefined, b: undefined, c: cee
+a: undefined, b: undefined, c: undefined
+a: undefined, b: undefined, c: hey
 a: aah, b: bee, c: cee
+a: aah, b: bee, c: hey
+true
+true
+true
+false
+true
+true
+true
+true
+false
+a: changed, b: bee, c: hey
+true
+true
+true
+true
+true
+false
+false
+true
+true
 *** delete statement ***
 true
 true
@@ -552,15 +574,6 @@ b
 3
 
 *** value conversion ***
-click
-111
-click
-111
-good toString
-NaN
-bad valueOf
-good toString
-NaN
 *** fun stuff ***
          !!!!!!!!"""""""""""""""""""""""""""##########$$$$%%&(.)(*2%$#######""""""""!!!!!!!!!!!!!!!!
         !!!!!!!"""""""""""""""""""""""""""###########$$$$%%&'(*0+('&%$$#######""""""""!!!!!!!!!!!!!!

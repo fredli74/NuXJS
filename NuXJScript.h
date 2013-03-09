@@ -4,11 +4,6 @@
 //
 //		eval support
 //		count (and run-time check) necessary value stack depth for functions
-//		native calls (and returns)
-//			need easier API, shouldn't crash if missing push etc
-//			no synchronized return to native code right now
-//			arguments are reversed on native calls, and will be gc'd as stack has already popped 
-//				arguments no longer reversed since we push forwards now, but will still be gc'd
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
@@ -18,6 +13,7 @@
 //		true primitive <-> object conversions
 //		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
 //		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
+//		for in should also include properties in prototypes, I believe
 //
 //	Compiler
 //
@@ -64,7 +60,6 @@
 //		special write with pop instructions (very common)?
 //		change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 //			not too fond of the int cast in the byte array
-//		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
 //		quicker calls by using a frame stack for functions that do not create closures
 //			problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
 //			two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
@@ -129,6 +124,12 @@
 //		prototype support
 //		new operator
 //			done, but need to implement prototype
+//		only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
+//		native calls (and returns)
+//			no synchronized return to native code right now
+//			need easier API, shouldn't crash if missing push etc
+//			arguments are reversed on native calls, and will be gc'd as stack has already popped 
+//				arguments no longer reversed since we push forwards now, but will still be gc'd
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -141,6 +142,7 @@ typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
 typedef Int32 CodeWord;
+const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 FRAME_BUILT_IN_LOCALS_COUNT = 8;
@@ -230,26 +232,32 @@ class String;
 class Object;
 class Value {
 	public:		enum Type {
-					NONEXISTENT_TYPE		// Used in tables for deleted entries. Never seen by script-code.
+					NONEXISTENT_TYPE = 0		// Used in tables for deleted entries. Never seen by script-code.
 					, UNDEFINED_TYPE
 					, NULL_TYPE
 					, BOOLEAN_TYPE
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
+					, BAD_TYPE = 0xBAADBAAD
 				};
+			
+			#if !defined(NDEBUG)
+				Value()	: type(BAD_TYPE) { }
+			#else
+				Value() { }
+			#endif
+				explicit Value(Type type) : type(type) { }
+				explicit Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
+				explicit Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
+				explicit Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
+				explicit Value(double d) : type(NUMBER_TYPE), d(d) { }
+				explicit Value(const String* s) : type(STRING_TYPE), s(s) { }
+				explicit Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 	
-				explicit Value(Type type = NONEXISTENT_TYPE);
-				explicit Value(bool b);
-				explicit Value(Int32 i);
-				explicit Value(UInt32 u);
-				explicit Value(double d);
-				explicit Value(const String* s);
-				explicit Value(Object* o);
-	
-				bool exists() const;
-				Object* asObject() const;
-				const String* getString() const;
+				bool exists() const { return type != NONEXISTENT_TYPE; }
+				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
+				const String* getString() const { assert(type == STRING_TYPE); return s; }
 				const String* typeString() const;
 				bool toBool() const;
 				Int32 toInt() const; // FIX : ?
@@ -285,7 +293,6 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 				
 				virtual Function* asFunction();
-				virtual Enumerator* asEnumerator();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
@@ -444,8 +451,8 @@ class Function : public UserObject {
 				virtual Function* asFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
-				virtual void construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 };
 
 // FIX : do something nice here :)
@@ -459,7 +466,7 @@ class ScriptFunction : public Function {
 				
 				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 				virtual void gcMark(GCHeap& heap);
-				virtual void call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				ScriptFunctionDef* getDefinition() const;
 				Object* getEnvironment() const;
 

@@ -220,13 +220,56 @@ print(s)
 
 print("*** new statement ***")
 
-// FIX : test prototype
-
 f=function(a, b) { this.a=a; this.b=b; this.c="cee"; this.dump=function() { print("a: " + this.a  + ", b: " + this.b + ", c: " + this.c); } }
 x = new f
 x.dump()
+
+g=function(c) { this.c=c }
+g.prototype = x;
+y = new g;
+y.dump();
+y = new g("hey")
+y.dump();
+
 x = new f ( "aah" , "bee" )
 x.dump()
+
+g=function(c) { this.c=c; this.d="dee" }
+g.prototype = x;
+y = new g("hey")
+y.dump();
+
+print("a" in x);
+print("b" in x);
+print("c" in x);
+print("d" in x);
+
+print("a" in y);
+print("b" in y);
+print("c" in y);
+print("d" in y);
+print("e" in y);
+
+h=function(e) { this.e=e; }
+h.prototype = y;
+z = new h("yo!")
+x.a="changed"
+z.dump();
+
+print("a" in z);
+print("b" in z);
+print("c" in z);
+print("d" in z);
+print("e" in z);
+
+g=function(c) { this.c=c; this.d="dee" }
+g.prototype = "not valid";
+y = new g("hey")
+print("a" in y);
+print("b" in y);
+print("c" in y);
+print("d" in y);
+
 
 print("*** delete statement ***")
 
@@ -394,18 +437,18 @@ f = function() { for (var arguments = 3 in "abcd") print(arguments); }; f();
 print('');
 
 print("*** value conversion ***");
-
+/*
 OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)
 TestObject = function() { };
 TestObject.prototype = new OneHundredEleven;
 o2 = new TestObject; print(+o2)
-
+ 
 AString = function() { this.valueOf = null; this.toString = function() { print("good toString"); return "stringy"; } };
 o = new AString; print(+o)
-
+ 
 StringAgain = function() { this.valueOf = function() { print("bad valueOf"); return this }; this.toString = function() { print("good toString"); return "stringy"; } };
 o = new StringAgain; print(+o)
- 
+ */
 /*
 i = 0;
 f = function(s) { this.valueOf = function() { print(s); return ++i; } };

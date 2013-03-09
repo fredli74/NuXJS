@@ -39,3 +39,9 @@ Exception: Expected 'case', 'default' or '}'
 Exception: Illegal l-value
 Exception: Expected ';'
 Exception: Illegal l-value
+Exception: error
+Exception: error
+Exception: error
+Exception: error
+Exception: error
+Exception: error

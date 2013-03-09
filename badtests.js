@@ -84,3 +84,17 @@ for (var x = 3, y = 5 in f; x < 100 && y < 15 ; ++y) { s += y + "," };
 
 for ( a = 100 in "abcdefgh" ) ;
 
+o = new(function() { });
+
+s = "not a function"; s(1,2,3);
+
+o.s = "also not a function"; o.s(1,2,3)
+
+stillNoFunction = new(function() { }); stillNoFunction(1,2,3)
+
+o.b = stillNoFunction; o.b(1,2,3)
+
+andAgain = new s
+
+andAgain = new o
+
