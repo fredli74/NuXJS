@@ -365,7 +365,15 @@ void GCList::claim(GCItem* item) {
 
 struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
 
+struct BadFunction : public Function { // FIX : .length?! and all the others?!
+	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+		processor.error(); // FIX : error string, type should be TypeError
+		return Value();
+	}
+} BAD_FUNCTION;
+
 Function* Object::asFunction() { return 0; }
+Function& Object::getFunction() { return BAD_FUNCTION; }
 const String* Object::typeString() const { return &OBJECT_STRING; }
 const String* Object::className() const { return &O_BJECT_STRING; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
@@ -518,6 +526,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 /* --- Value --- */
 
 const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeString() : TYPE_STRINGS[static_cast<int>(type)]); }
+Function& Value::getFunction() const { return (type != OBJECT_TYPE ? BAD_FUNCTION : o->getFunction()); }
 
 bool Value::toBool() const {
 	switch (type) {
@@ -713,6 +722,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 /* --- Function --- */
 
 Function* Function::asFunction() { return this; }
+Function& Function::getFunction() { return *this; }
 const String* Function::typeString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
 
@@ -1070,37 +1080,26 @@ recover: // FIX : better term than recover
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT_TYPE);
 				thisObject->getProperty(engine, vsp[-n].toString(heap), v);
-				o = v.toObject(heap);
-				if (o == 0) error();
-				Function* f = o->asFunction();
-				if (f == 0) error();
-				Value* returnPointer = vsp - n - 1;
-				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject);
+				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
+				*returnPointer = v.getFunction().call(engine, *this, n, returnPointer + 2, thisObject);
 				vsp -= n + 1;
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = operand();
-				o = vsp[-n].toObject(heap);
-				if (o == 0) error();
-				Function* f = o->asFunction();
-				if (f == 0) error();
-				Value* returnPointer = vsp - n;
-				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobalThis());
+				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				*returnPointer = vsp[-n].getFunction().call(engine, *this, n, returnPointer + 1, engine.getGlobalThis());
 				vsp -= n;
 				goto recover;
 			}
 			case NEW_OP: {
 				Int32 n = operand();
-				o = vsp[-n].toObject(heap);
-				if (o == 0) error();
-				Function* f = o->asFunction();
-				if (f == 0) error();
+				Function& f = vsp[-n].getFunction();
 				Value v(Value::NONEXISTENT_TYPE);
-				f->getProperty(engine, &PROTOTYPE_STRING, v); // FIX : standard object prototype if v.asObject() == 0 ?
+				f.getProperty(engine, &PROTOTYPE_STRING, v); // FIX : standard object prototype if v.asObject() == 0 ?
 				Object* newObject = engine.getHeap().manage(new UserObject(v.asObject()));
-				Value* returnPointer = vsp - n;
-				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);
+				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				returnPointer[1] = f.construct(engine, *this, n, returnPointer + 1, newObject);
 				returnPointer[0] = Value(newObject);
 				vsp -= n - 1;
 				goto recover;
@@ -2412,8 +2411,8 @@ void GCHeap::mark(const GCItem* item) {
 	}
 }
 
-class FromCharCodeFunction : public HostFunction { // FIX : .length?! and all the others?!
-	public:		typedef HostFunction super;
+class FromCharCodeFunction : public Function { // FIX : .length?! and all the others?!
+	public:		typedef Function super;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 					Char c;
 					if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
@@ -2433,8 +2432,8 @@ Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(glob
 
 #include <fstream>
 
-	class PrintFunction : public HostFunction {
-		public:		typedef HostFunction super;
+	class PrintFunction : public Function {
+		public:		typedef Function super;
 					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);

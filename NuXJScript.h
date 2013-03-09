@@ -230,6 +230,7 @@ class GCHeap {
 
 class String;
 class Object;
+class Function;
 class Value {
 	public:		enum Type {
 					NONEXISTENT_TYPE = 0		// Used in tables for deleted entries. Never seen by script-code.
@@ -257,6 +258,8 @@ class Value {
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
+				// FIX : reference, really? what's our policy with this
+				Function& getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
 				const String* typeString() const;
 				bool toBool() const;
@@ -292,7 +295,8 @@ class Processor;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
-				virtual Function* asFunction();
+				virtual Function* asFunction(); // FIX : needed?
+				virtual Function& getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
@@ -449,15 +453,11 @@ class Function : public UserObject {
 	public:		typedef UserObject super;
 
 				virtual Function* asFunction();
+				virtual Function& getFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-};
-
-// FIX : do something nice here :)
-class HostFunction : public Function {
-	public:		typedef Function super;
 };
 
 // This is actually a closure, but ECMAScript calls them Function objects.
