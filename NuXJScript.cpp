@@ -252,17 +252,17 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 const String* String::typeString() const { return &STRING_STRING; }
 const String* String::className() const { return &S_TRING_STRING; }
 
-bool String::getProperty(Engine& engine, const String* name, Value& v) {
+bool String::getProperty(Engine& engine, const String* name, Value* v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
-		v = Value(static_cast<Int32>(size()));
+		*v = Value(static_cast<Int32>(size()));
 		return true;
 	}
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
 	if (q == name->end() && i < size()) {
 		const Char* p = begin() + i;
-		if (*p < 127) v = QUICK_CONSTANTS.ascii[*p];
-		else v = Value(engine.getHeap().manage(new String(p, p + 1)));
+		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
+		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
 		return true;
 	} else return engine.stringPrototype.getProperty(engine, name, v);
 }
@@ -373,11 +373,11 @@ struct BadFunction : public Function { // FIX : .length?! and all the others?!
 } BAD_FUNCTION;
 
 Function* Object::asFunction() { return 0; }
-Function& Object::getFunction() { return BAD_FUNCTION; }
+Function* Object::getFunction() { return &BAD_FUNCTION; }
 const String* Object::typeString() const { return &OBJECT_STRING; }
 const String* Object::className() const { return &O_BJECT_STRING; }
-bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, v); }
-bool Object::getProperty(Engine& engine, const String* name, Value& v) { return false; }
+bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
+bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
@@ -479,17 +479,13 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 	return true;
 }
 
-bool UserObject::getProperty(Engine& engine, const String* name, Value& v) {
+bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
 	const Table::Bucket* b = properties.lookup(name);
 	if (b != 0) {
-		v = b->value;
+		*v = b->value;
 		return true;
 	}
-	if (prototype != 0) return prototype->getProperty(engine, name, v);
-	else {
-		v = Value(Value::UNDEFINED_TYPE);
-		return false;
-	}
+	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 }
 
 bool UserObject::deleteProperty(Engine& engine, const String* name) {
@@ -526,7 +522,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 /* --- Value --- */
 
 const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeString() : TYPE_STRINGS[static_cast<int>(type)]); }
-Function& Value::getFunction() const { return (type != OBJECT_TYPE ? BAD_FUNCTION : o->getFunction()); }
+Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : o->getFunction()); }
 
 bool Value::toBool() const {
 	switch (type) {
@@ -722,7 +718,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 /* --- Function --- */
 
 Function* Function::asFunction() { return this; }
-Function& Function::getFunction() { return *this; }
+Function* Function::getFunction() { return this; }
 const String* Function::typeString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
 
@@ -764,9 +760,9 @@ Value* Arguments::findProperty(const String* name) {
 	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getLocalsPointer() + i : 0);
 }
 
-bool Arguments::getProperty(Engine& engine, const String* name, Value& v) {
+bool Arguments::getProperty(Engine& engine, const String* name, Value* v) {
 	Value* p = findProperty(name);
-	return (p == 0 ? super::getProperty(engine, name, v) : (v = *p, true));
+	return (p == 0 ? super::getProperty(engine, name, v) : (*v = *p, true));
 }
 
 bool Arguments::setProperty(Engine& engine, const String* name, const Value& v) {
@@ -810,18 +806,18 @@ FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const V
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
-bool FunctionFrame::getProperty(Engine& engine, const String* name, Value& v) {
+bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) {
 		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
-		v = localsPointer[index];
+		*v = localsPointer[index];
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
 			Object* o = engine.getHeap().manage(new Arguments(this, passedArgumentsCount));
 			argumentsValue = Value(o);
 		}
-		v = argumentsValue;
+		*v = argumentsValue;
 		return true;
 	} else if (environment->getProperty(engine, name, v)) return true; // FIX: can we do a looping non-recursive solution? faster
 	else return false;
@@ -871,8 +867,8 @@ void CatchFrame::gcMark(GCHeap& heap) {
 	super::gcMark(heap);
 }
 
-bool CatchFrame::getProperty(Engine& engine, const String* name, Value& v) {
-	if (name->isEqualTo(*exceptionName)) { v = exceptionValue; return true; }
+bool CatchFrame::getProperty(Engine& engine, const String* name, Value* v) {
+	if (name->isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
 	else return parentFrame->getProperty(engine, name, v);
 }
 
@@ -937,7 +933,7 @@ void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Value v;
 	Object* o;
 	Function* f;
-	if (getProperty(engine, &TO_STRING_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
+	if (getProperty(engine, &TO_STRING_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ThrowIfObject : public Processor::Continuation {
 			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
 				if (processor.peek(0).asObject() != 0) processor.error();
@@ -955,7 +951,7 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 	Value v;
 	Object* o;
 	Function* f;
-	if (getProperty(engine, &VALUE_OF_STRING, v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
+	if (getProperty(engine, &VALUE_OF_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
 		static struct ToPrimitiveStringOrThrow : public Processor::Continuation {
 			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
 				Object* o = processor.peek(0).asObject();
@@ -1012,20 +1008,17 @@ recover: // FIX : better term than recover
 			case CONST_OP:			push(cp[operand()]); break;
 			case READ_INDEXED_OP:	push(lp[operand()]); break;
 			case WRITE_INDEXED_OP:	lp[operand()] = vsp[0]; break;
-			case READ_NAMED_OP:		{
-										Value v(Value::NONEXISTENT_TYPE);
-										bool success = frame->getProperty(engine, cp[operand()].getString(), v);
-										if (!success) error();
-										push(v);
-									}
+			case READ_NAMED_OP:		if (!frame->getProperty(engine, cp[operand()].getString(), ++vsp))
+										error(); // FIX : do we need to balance vsp on errors?
 									break;
 									
 			case WRITE_NAMED_OP:	if (!frame->setProperty(engine, cp[operand()].getString(), vsp[0]))
-										error();
+										error(); // FIX: really?
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
-									o->getProperty(engine, vsp[0].toString(heap), vsp[-1]);
+									if (!o->getProperty(engine, vsp[0].toString(heap), vsp - 1))
+										vsp[-1] = Value(Value::UNDEFINED_TYPE); // FIX : is this right?
 									pop(1);
 									break;
 			
@@ -1046,9 +1039,9 @@ recover: // FIX : better term than recover
 			case SHL_OP:	poppush(Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case SHR_OP:	poppush(Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case USHR_OP:	poppush(Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(vsp[0].toDouble()); break;
-			case MINUS_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(-vsp[0].toDouble()); break;
-			case INV_OP:	if (toPrimitiveTrap(ip - 1)) goto recover; vsp[0] = Value(~vsp[0].toInt()); break;
+			case PLUS_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(-vsp[0].toDouble()); break;
+			case INV_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
 			case X_EQ_OP:	poppush(Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
 			case X_NEQ_OP:	poppush(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
@@ -1079,27 +1072,27 @@ recover: // FIX : better term than recover
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT_TYPE);
-				thisObject->getProperty(engine, vsp[-n].toString(heap), v);
+				thisObject->getProperty(engine, vsp[-n].toString(heap), &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = v.getFunction().call(engine, *this, n, returnPointer + 2, thisObject);
+				*returnPointer = v.getFunction()->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n + 1;
 				goto recover;
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = vsp[-n].getFunction().call(engine, *this, n, returnPointer + 1, engine.getGlobalThis());
+				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobalThis()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				goto recover;
 			}
 			case NEW_OP: {
 				Int32 n = operand();
-				Function& f = vsp[-n].getFunction();
+				Function* f = vsp[-n].getFunction();
 				Value v(Value::NONEXISTENT_TYPE);
-				f.getProperty(engine, &PROTOTYPE_STRING, v); // FIX : standard object prototype if v.asObject() == 0 ?
+				f->getProperty(engine, &PROTOTYPE_STRING, &v); // FIX : standard object prototype if v.asObject() == 0 ?
 				Object* newObject = engine.getHeap().manage(new UserObject(v.asObject()));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				returnPointer[1] = f.construct(engine, *this, n, returnPointer + 1, newObject);
+				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
 				vsp -= n - 1;
 				goto recover;
@@ -1166,7 +1159,7 @@ recover: // FIX : better term than recover
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(engine, cp[operand()].getString(), v);
+				frame->getProperty(engine, cp[operand()].getString(), &v);
 				push(Value(v.typeString()));
 				break;
 			}

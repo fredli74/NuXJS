@@ -438,6 +438,20 @@ print('');
 
 print("*** value conversion ***");
 /*
+String comparison can be forced by: "" + a == "" + b.
+Numeric comparison can be forced by: +a == +b.
+Boolean comparison can be forced by: !a == !b.
+NOTE 2 The equality operators maintain the following invariants:
+ 
+A != B is equivalent to !(A == B).
+A == B is equivalent to B == A, except in the order of evaluation of A and B.
+ 
+new String("a") == "a" and "a" == new String("a")are both true.
+new String("a") == new String("a") is false.
+ 
+*/
+
+/*
 OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)
 TestObject = function() { };
 TestObject.prototype = new OneHundredEleven;
@@ -471,3 +485,4 @@ mandelbrot = function() {
 	}
 }
 mandelbrot()
+

@@ -258,8 +258,7 @@ class Value {
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
-				// FIX : reference, really? what's our policy with this
-				Function& getFunction() const; // returns a stub function that throws if value is not Function object
+				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
 				const String* typeString() const;
 				bool toBool() const;
@@ -296,11 +295,11 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 				
 				virtual Function* asFunction(); // FIX : needed?
-				virtual Function& getFunction(); // returns a stub function that throws if Object is not function
+				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
@@ -363,7 +362,7 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				virtual const String* typeString() const;
 				virtual const String* className() const;
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				Table::HashType calcHash() const;
 				bool isEqualTo(const String& o) const;
@@ -426,7 +425,7 @@ class UserObject : public Object {
 				
 				UserObject(Object* prototype = 0);
 				virtual void gcMark(GCHeap& heap);
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
@@ -453,7 +452,7 @@ class Function : public UserObject {
 	public:		typedef UserObject super;
 
 				virtual Function* asFunction();
-				virtual Function& getFunction();
+				virtual Function* getFunction();
 				virtual const String* typeString() const;
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
@@ -490,7 +489,7 @@ class FunctionFrame : public Frame {
 
 				FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
 				virtual void gcMark(GCHeap& heap);
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 
@@ -505,7 +504,7 @@ class CatchFrame : public Frame {
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
 				virtual void gcMark(GCHeap& heap);
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 
@@ -520,7 +519,7 @@ class Arguments : public UserObject {
 				Arguments(FunctionFrame* frame, Int32 argumentsCount);
 				virtual const String* className() const;
 				virtual void gcMark(GCHeap& heap);
-				virtual bool getProperty(Engine& engine, const String* name, Value& v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
