@@ -7,5 +7,5 @@ SET EXE=Release\NuXJScript -s -t
 FOR %%f IN (perftest*.js) DO (
 	ECHO %%f
 	ECHO.
-	timeit -s %EXE% %%f
+	timeit %EXE% %%f
 )

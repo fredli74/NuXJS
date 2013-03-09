@@ -545,10 +545,10 @@ class Processor : public GCItem {
 				};
 
 	protected:	struct Catcher {
-					Catcher(Context* csp, Value* vsp, const CodeWord* ip) : csp(csp), vsp(vsp), ip(ip) { }
-					Context* csp;
-					Value* vsp;
+					Catcher(const CodeWord* ip, Value* vsp, Context* csp) : ip(ip), csp(csp), vsp(vsp) { }
 					const CodeWord* ip;
+					Value* vsp;
+					Context* csp;
 				};
 				
 				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
@@ -598,7 +598,8 @@ class Processor : public GCItem {
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void push(const Value& v); // FIX : wow, this feels low level
+				void popCStack();
+				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);
 				void resetTimeOut(Int32 clockCycles);
@@ -615,10 +616,15 @@ void error(); // FIX
 				Context* const cstackEnd;
 				Value* const vstackStart;
 				Value* const vstackEnd;
-				Context* csp;
+
+public: // FIX : not public, just for some asserts now I think
 				Int32 clockCyclesLeft;
-public:	Value* vsp; // FIX : not public, just for an assert now
-public:	const CodeWord* ip;
+				const CodeWord* ip;
+				Value* vsp; // FIX : not public, just for an assert now
+				Context* csp;
+				Frame* frame;
+				const Value* constants;
+				Value* locals;
 };
 
 enum Precedence {

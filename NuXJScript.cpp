@@ -921,12 +921,14 @@ void Processor::chain(Continuation* continuation, Object* thisValue) {
 
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
-	FunctionFrame* frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
+	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	csp->ip = ip;
 	++csp; // FIX : overflow check
 	csp->frame = frame;
 	csp->thisValue = thisValue;
 	ip = &def->code[0];
+	constants = frame->getFunctionDef()->getConstantsPointer();
+	locals = frame->getLocalsPointer();
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -977,6 +979,15 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	return true;
 }
 
+void Processor::popCStack() {
+	--csp;
+	assert(csp >= cstackStart);
+if (csp->ip == 0) return; // FIX : don't like, ugly
+	frame = csp->frame;
+	constants = frame->getFunctionDef()->getConstantsPointer();
+	locals = frame->getLocalsPointer();
+}
+
 bool Processor::run() {
 	GCHeap& heap = engine.getHeap();
 
@@ -987,16 +998,16 @@ recover: // FIX : better term than recover
 		assert(!continuations.empty());
 		Continuation* continuator = continuations.back();
 		Object* thisValue = csp->thisValue;
-		--csp;
+		popCStack();
 		ip = csp->ip;
 		continuations.pop_back();
 		if (!continuator->execute(engine, *this, thisValue)) return false;
 		goto recover;
 	}
 
-	Frame* frame = csp->frame;
-	const Value* cp = frame->getFunctionDef()->getConstantsPointer();
-	Value* lp = frame->getLocalsPointer();
+	frame = csp->frame;
+	constants = frame->getFunctionDef()->getConstantsPointer();
+	locals = frame->getLocalsPointer();
 	Object* o;
 	Int32 offset;
 	
@@ -1005,14 +1016,14 @@ recover: // FIX : better term than recover
 		switch (*ip++) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
-			case CONST_OP:			push(cp[operand()]); break;
-			case READ_INDEXED_OP:	push(lp[operand()]); break;
-			case WRITE_INDEXED_OP:	lp[operand()] = vsp[0]; break;
-			case READ_NAMED_OP:		if (!frame->getProperty(engine, cp[operand()].getString(), ++vsp))
+			case CONST_OP:			push(constants[operand()]); break;
+			case READ_INDEXED_OP:	push(locals[operand()]); break;
+			case WRITE_INDEXED_OP:	locals[operand()] = vsp[0]; break;
+			case READ_NAMED_OP:		if (!frame->getProperty(engine, constants[operand()].getString(), ++vsp))
 										error(); // FIX : do we need to balance vsp on errors?
 									break;
 									
-			case WRITE_NAMED_OP:	if (!frame->setProperty(engine, cp[operand()].getString(), vsp[0]))
+			case WRITE_NAMED_OP:	if (!frame->setProperty(engine, constants[operand()].getString(), vsp[0]))
 										error(); // FIX: really?
 									break;
 									
@@ -1063,9 +1074,10 @@ recover: // FIX : better term than recover
 							ip += offset;
 							break;
 
-			case RETURN_OP:	--csp;
+			case RETURN_OP:	popCStack();
 							ip = csp->ip;
-							goto recover;
+							if (ip == 0) goto recover;
+							break;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand();
@@ -1076,14 +1088,14 @@ recover: // FIX : better term than recover
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = v.getFunction()->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n + 1;
-				goto recover;
+				break;
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobalThis()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
-				goto recover;
+				break;
 			}
 			case NEW_OP: {
 				Int32 n = operand();
@@ -1095,13 +1107,13 @@ recover: // FIX : better term than recover
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
 				vsp -= n - 1;
-				goto recover;
+				break;
 			}
 			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(Value(csp->thisValue)); break;
 			case VOID_OP: push(Value(Value::UNDEFINED_TYPE)); break;
 			case GEN_FUNC_OP: {
-				o = cp[operand()].asObject();
+				o = constants[operand()].asObject();
 				assert(o != 0);
 				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
 				break;
@@ -1113,24 +1125,17 @@ recover: // FIX : better term than recover
 				poppush(Value(o->deleteProperty(engine, vsp[0].toString(heap))));
 				break;
 			}
-			case POP_FRAME_OP: {
-				assert(csp != cstackStart);
-				--csp;
-				frame = csp->frame;
-				assert(cp == frame->getFunctionDef()->getConstantsPointer());
-				assert(lp == frame->getLocalsPointer());
-				break;
-			}
+			case POP_FRAME_OP: popCStack(); break;
 			case TRY_OP: {
 				offset = operand();
-				catchers.push_back(Catcher(csp, vsp, ip + offset));
+				catchers.push_back(Catcher(ip + offset, vsp, csp));
 				break;
 			}
 			case TRIED_OP: catchers.pop_back(); break;
 			case CATCH_FRAME_OP: {
 				csp->ip = ip;
 				++csp;
-				frame = csp->frame = heap.manage(new CatchFrame(frame, cp[operand()].getString(), vsp[0]));
+				frame = csp->frame = heap.manage(new CatchFrame(frame, constants[operand()].getString(), vsp[0]));
 				pop(1);
 				csp->thisValue = csp[-1].thisValue;
 				break;
@@ -1159,7 +1164,7 @@ recover: // FIX : better term than recover
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
-				frame->getProperty(engine, cp[operand()].getString(), &v);
+				frame->getProperty(engine, constants[operand()].getString(), &v);
 				push(Value(v.typeString()));
 				break;
 			}
