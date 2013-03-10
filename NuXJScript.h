@@ -9,11 +9,41 @@
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
 //		basic library (math, string, array ops)
-//		assignable globals this in processor
 //		true primitive <-> object conversions
 //		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
 //		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
 //		for in should also include properties in prototypes, I believe
+//		it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
+//		lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
+//			push them temporarily last on stack
+//		would be cleaner if we could pass a retValue pointer instead of taking a return value (but not nicer syntax for native calls returning tho, hmm, need to think)
+//			we want nice, quick, safe and clean syntax for:
+//				* calling synchronously <-- not prio
+//					script: running vm code until return with option to set max count before error)
+//					native: call directly
+//					syntax: either { ret = function->call } or { processor->call(function }
+//				* calling asynchronously  <-- prio
+//					script: enter call ("chain"), user runs { while (processor->run()) { } }, return value is either popped { processor->getReturnValue() } or stored into a predesignated pointer
+//					native: chain a native call, syntax should be the same as for script
+//				* calling script async or native sync
+//					script: enter call ("chain"), user is notified and have the option to "while (run)" or alt. wait for returned value later (via pointer?? nah, probably not)
+//					native: call directly, return value pushed?
+//				* implementing native functions
+//					prios: little overhead (quick), error safe (args and maybe even return values are automatically gc protected)
+//						so maybe argc is a bad idea, maybe we should have minimum fixed (which is also .length), like native functions
+//			alt 1: like today, native calls are direct and faster call sequence than script code (they access arguments directly on stack)
+//					pros:	fast
+//					cons:	wacky code to accomodate both synchronized native and asynchronized script function calls with little overhead
+//							harder to make safe
+//							can't form closures right?
+//			alt 2: native calls are "embedded" in script functions, they also get a frame, only difference is that they execute natively, probably via a dummy stub that calls the native code
+//					pros:	probably cleaner and easier to make safe (all args are protected by a frame object)
+//							an eval call could create a closure (but what would it access, I guess that would be up to the native function tho)
+//					cons:	slower, more garbage (frames)
+//			alt 1 is regarding functions in themselves to be either script or native
+//			alt 2 is regarding code to be either script or native
+//		arguments container
+//			
 //
 //	Compiler
 //
@@ -28,6 +58,8 @@
 //		object literals
 //
 //	GC
+//
+//		we ought to have a min and max-roof, min before gc'ing at all, over max = error
 //
 // --- LOW PRIO ---
 //
@@ -52,6 +84,7 @@
 // Other
 //
 //		included in tests should be to config the gc to sweep after every instruction
+//		tedious to have to create string globals for constants strings (e.g. for setting properties), is the only alternative to new them?
 //
 // --- OPTIMIZE ---
 //
@@ -119,7 +152,6 @@
 //		typeof operator
 //		we could reuse free variable indexes in safeKeep (by having a way to "return" them and a queue with free ones), but it kind of feels like sub-optimization
 //		for (in)
-//		arguments container
 //			we need to decide what should happen when deleting members still...
 //		prototype support
 //		new operator
@@ -130,6 +162,7 @@
 //			need easier API, shouldn't crash if missing push etc
 //			arguments are reversed on native calls, and will be gc'd as stack has already popped 
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
+//		assignable globals this in processor
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -141,7 +174,7 @@ typedef unsigned short Char;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
-typedef Int32 CodeWord;
+typedef Int32 CodeWord; // FIX : int or byte?
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
@@ -281,7 +314,7 @@ class Value {
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
-				const String* typeString() const;
+				const String* typeOfString() const;
 				bool toBool() const;
 				Int32 toInt() const; // FIX : ?
 				double toDouble() const;
@@ -317,7 +350,7 @@ class Object : public GCItem {
 				
 				virtual Function* asFunction(); // FIX : needed?
 				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
-				virtual const String* typeString() const;
+				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
@@ -391,7 +424,7 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				explicit String(const std::wstring& s);
 				explicit String(size_t length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
 				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				virtual const String* typeString() const;
+				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
@@ -484,7 +517,7 @@ class Function : public UserObject {
 
 				virtual Function* asFunction();
 				virtual Function* getFunction();
-				virtual const String* typeString() const;
+				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
@@ -653,6 +686,7 @@ class Processor : public GCItem {
 				virtual void gcMark(GCHeap& heap);
 				void chain(const CodeWord* stub);
 				void chain(Continuation* continuation, Object* thisValue);
+				void chain(Function* completion);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?

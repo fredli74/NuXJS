@@ -4,6 +4,7 @@ echo --- NuX ---
 echo
 export DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib
 build/Debug/NuXJScript -s goodTests.js | diff --strip-trailing-cr goodResults.txt -
+# build/Debug/NuXJScript -s -gc 1 goodTests.js | diff --strip-trailing-cr goodResults.txt -
 export DYLD_INSERT_LIBRARIES=
 if [[ -e $(which v8) ]]; then
 	echo

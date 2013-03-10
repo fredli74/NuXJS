@@ -211,7 +211,7 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 	std::copy(r.begin(), r.end(), e);
 }
 
-const String* String::typeString() const { return &STRING_STRING; }
+const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::className() const { return &S_TRING_STRING; }
 
 bool String::getProperty(Engine& engine, const String* name, Value* v) {
@@ -336,7 +336,7 @@ struct BadFunction : public Function { // FIX : .length?! and all the others?!
 
 Function* Object::asFunction() { return 0; }
 Function* Object::getFunction() { return &BAD_FUNCTION; }
-const String* Object::typeString() const { return &OBJECT_STRING; }
+const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::className() const { return &O_BJECT_STRING; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
@@ -483,7 +483,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 
 /* --- Value --- */
 
-const String* Value::typeString() const { return (type == OBJECT_TYPE ? o->typeString() : TYPE_STRINGS[static_cast<int>(type)]); }
+const String* Value::typeOfString() const { return (type == OBJECT_TYPE ? o->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]); }
 Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : o->getFunction()); }
 
 bool Value::toBool() const {
@@ -645,7 +645,7 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 	}
 	return Value(toDouble() + y.toDouble());
 }
-				
+
 void Value::markIn(GCHeap& heap) const {
 	switch (type) {
 		case STRING_TYPE: heap.mark(s); break;
@@ -653,6 +653,8 @@ void Value::markIn(GCHeap& heap) const {
 		default: break;
 	}
 }
+
+const Value UNDEFINED_VALUE(Value::UNDEFINED_TYPE);
 
 /* --- ScriptFunctionDef --- */
 
@@ -681,7 +683,7 @@ const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.
 
 Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
-const String* Function::typeString() const { return &FUNCTION_STRING; }
+const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
 
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -761,9 +763,9 @@ FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const V
 		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT_TYPE) {
 	localsPointer = locals.begin() + functionDef->varsCount;
-	std::fill(locals.begin(), localsPointer, Value(Value::UNDEFINED_TYPE)); // FIX : optimize
+	std::fill(locals.begin(), localsPointer, UNDEFINED_VALUE); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, localsPointer);
-	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), Value(Value::UNDEFINED_TYPE));
+	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), UNDEFINED_VALUE);
 }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
@@ -853,7 +855,10 @@ Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* csta
 
 void Processor::gcMark(GCHeap& heap) {
 	for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
-	for (CStackEntry* c = cstackStart; c != csp + 1; ++c) heap.mark(c->frame);
+	for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
+		heap.mark(c->frame);
+		heap.mark(c->thisValue);
+	}
 	super::gcMark(heap);
 }
 
@@ -895,6 +900,15 @@ void Processor::chain(Continuation* continuation, Object* thisValue) {
 	continuations.push_back(continuation);
 }
 
+void Processor::chain(Function* completion) {
+	// FIX : if we decide that CodeWord is int, we could have this array const
+	static CodeWord CHAIN_CALL_STUB[2 + OPERAND_SIZE] = { CALL_GLOBAL_OP };
+	*reinterpret_cast<Int32*>(&CHAIN_CALL_STUB[1]) = 1;
+	CHAIN_CALL_STUB[1 + OPERAND_SIZE] = RETURN_OP;
+	push(Value(completion));
+	chain(CHAIN_CALL_STUB);
+}
+
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
@@ -911,14 +925,15 @@ void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Object* o;
 	Function* f;
 	if (getProperty(engine, &TO_STRING_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ThrowIfObject : public Processor::Continuation {
-			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
-				if (processor.peek(0).asObject() != 0) processor.error();
-				return true;
+		static struct ThrowIfObject : public Function {
+			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+				if (argv[0].asObject() != 0) processor.error();
+				return argv[0];
 			}
 		} THROW_IF_OBJECT;
-		processor.chain(&THROW_IF_OBJECT, this);
+		processor.chain(&THROW_IF_OBJECT);
 		f->call(engine, processor, 0, 0, this);
+++processor.vsp;
 	} else {
 		processor.error();
 	}
@@ -929,17 +944,17 @@ void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
 	Object* o;
 	Function* f;
 	if (getProperty(engine, &VALUE_OF_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ToPrimitiveStringOrThrow : public Processor::Continuation {
-			virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) {
-				Object* o = processor.peek(0).asObject();
-				if (o == 0) return true;
-				processor.pop();
-				thisValue->toPrimitiveStringOrThrow(engine, processor);
-				return true;
+		static struct ToPrimitiveStringOrThrow : public Function {
+			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+				assert(argc == 1);
+				Object* o = argv[0].asObject();
+				if (o != 0) thisValue->toPrimitiveStringOrThrow(engine, processor);
+				return argv[0];
 			}
 		} TO_PRIMITIVE_STRING_OR_THROW;
-		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW, this);
+		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW);
 		f->call(engine, processor, 0, 0, this);
+++processor.vsp;
 	} else {
 		toPrimitiveStringOrThrow(engine, processor);
 	}
@@ -949,7 +964,7 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	Object* o = vsp->asObject();
 	if (o == 0) return false;
 	ip = rollbackIp;
-	--vsp;
+--vsp;
 	o->toPrimitiveNumber(engine, *this);
 	return true;
 }
@@ -995,7 +1010,7 @@ bool Processor::privateRun() {
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
 									if (!o->getProperty(engine, vsp[0].toString(heap), vsp - 1))
-										vsp[-1] = Value(Value::UNDEFINED_TYPE); // FIX : is this right?
+										vsp[-1] = UNDEFINED_VALUE; // FIX : is this right?
 									pop(1);
 									break;
 			
@@ -1084,7 +1099,7 @@ bool Processor::privateRun() {
 			}
 			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(Value(csp->thisValue)); break;
-			case VOID_OP: push(Value(Value::UNDEFINED_TYPE)); break;
+			case VOID_OP: push(UNDEFINED_VALUE); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject();
 				assert(o != 0);
@@ -1126,11 +1141,11 @@ bool Processor::privateRun() {
 				pop(1);
 				break;				
 			}
-			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeString()); break;
+			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED_TYPE);
 				frame->getProperty(engine, constants[operand()].getString(), &v);
-				push(Value(v.typeString()));
+				push(Value(v.typeOfString()));
 				break;
 			}
 			case GET_ENUMERATOR_OP: {
@@ -2458,8 +2473,15 @@ Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(glob
 					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						return Value(Value::UNDEFINED_TYPE);
+						return UNDEFINED_VALUE;
 					}
+	};
+	
+	struct GCFunction : public Function {
+		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+			size_t sweptCount = engine.getHeap().gc();
+			return Value(static_cast<Int32>(sweptCount));
+		}
 	};
 
 	struct ReturnToHost : public Processor::Continuation {
@@ -2475,7 +2497,10 @@ int main(int argc, const char* argv[]) {
 	heap.protect(&globals);
 	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
 	PrintFunction printFunction;
-	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction))); // FIX : should be able to not have to new this, just like strings, but then we need the GC to be able to probe objects without assigned heap
+	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction)));
+	GCFunction gcFunction;
+	const String GC_STRING("gc");
+	globals.setProperty(engine, &GC_STRING, Value(heap.protect(&gcFunction)));
 	String source(EMPTY_STRING);
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;
@@ -2522,7 +2547,7 @@ int main(int argc, const char* argv[]) {
 				heap.protect(&processor);
 				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 				processor.chain(RETURN_TO_HOST_STUB);
-//				processor.chain(&RETURN_TO_HOST, &globals);
+			//	processor.chain(&printFunction);
 				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, &globals);
 				bool done = false;
 				

@@ -160,6 +160,9 @@ print("nope" in o);
 print(o in o);
 print("o" in this);
 
+print.extended = "added to built-in";
+print(print.extended);
+
 print("*** types ***")
 
 print((function() { print(x); var x; print(x); x = void print("turn to void"); return x })());
@@ -450,6 +453,9 @@ new String("a") == "a" and "a" == new String("a")are both true.
 new String("a") == new String("a") is false.
  
 */
+
+o=new (function() { this.valueOf = function() { return 33 } } )
+print(+o)
 
 /*
 OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)

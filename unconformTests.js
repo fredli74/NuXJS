@@ -30,3 +30,7 @@ print('');
 f=function() { delete arguments.length; arguments.length = 'back'; for (var i in arguments) print(i) }; f('1', '2', '3', '4');
 print('');
 
+print("*** regression tests ***");
+ 
+// gc-protect temporary object during method call
+(new (function(){this.a=function() { gc(); print(this.b) }; this.b="yeah" })).a()
