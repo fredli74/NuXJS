@@ -565,15 +565,14 @@ class Arguments : public UserObject {
 // FIX : test with very short max sz length
 class Exception : public std::exception, public GCItem {
 	public:		Exception(GCHeap& heap, const Value& value) throw() : value(value) { // FIX : not inline
-					char* e = (strcpy(sz, "NuXJScript exception: "), sz + strlen(sz)); // FIX : is stpcpy standard?
+					strcpy(sz, "Unknown exception (failed conversion to string)");
 					heap.protect(this);
 					try {
 						const String* src = value.toString(heap);
-						size_t l = (sz + sizeof (sz) / sizeof (*sz) - 1 - e);
-						*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), e);
+						const size_t l = (sizeof (sz) / sizeof (*sz) - 1);
+						*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 					}
 					catch (...) {
-						strcat(sz, "unknown (failed conversion to string)");
 						assert(0);
 					}
 				}

@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F741BCD916EC2F3B004BE218</string>
+						<string>F741BCFB16EC303D004BE218</string>
 						<key>history</key>
 						<array>
 							<string>F741BCD716EC2F3B004BE218</string>
@@ -313,8 +313,8 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>1</integer>
-									<integer>0</integer>
+									<integer>7</integer>
+									<integer>6</integer>
 								</array>
 							</array>
 							<key>PBXSmartGroupTreeModuleOutlineStateVisibleRectKey</key>
@@ -355,7 +355,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>NuXJScript.h</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -363,11 +363,11 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>NuXJScript.h</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F741BCD416EC2F3B004BE218</string>
+										<string>F741BCFA16EC303D004BE218</string>
 										<key>history</key>
 										<array>
 											<string>F7E88F8A16E894970042DC89</string>
@@ -393,8 +393,8 @@
 											<string>F741B99C16EA8E9C004BE218</string>
 											<string>F741BA8216EA9D0F004BE218</string>
 											<string>F741BAE116EAB1F5004BE218</string>
+											<string>F741BCF416EC3033004BE218</string>
 											<string>F741BCD216EC2F3B004BE218</string>
-											<string>F741BCD316EC2F3B004BE218</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -406,14 +406,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 0}, {1226, 776}}</string>
+								<string>{{0, 0}, {1226, 537}}</string>
 								<key>RubberWindowFrame</key>
 								<string>4 56 1434 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
 							<key>Proportion</key>
-							<string>776pt</string>
+							<string>537pt</string>
 						</dict>
 						<dict>
 							<key>ContentConfiguration</key>
@@ -426,14 +426,14 @@
 							<key>GeometryConfiguration</key>
 							<dict>
 								<key>Frame</key>
-								<string>{{0, 781}, {1226, 0}}</string>
+								<string>{{0, 542}, {1226, 239}}</string>
 								<key>RubberWindowFrame</key>
 								<string>4 56 1434 822 0 0 1440 878 </string>
 							</dict>
 							<key>Module</key>
 							<string>XCDetailModule</string>
 							<key>Proportion</key>
-							<string>0pt</string>
+							<string>239pt</string>
 						</dict>
 					</array>
 					<key>Proportion</key>
@@ -592,14 +592,15 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
+		<string>F741BCF716EC3033004BE218</string>
 		<string>1C530D57069F1CE1000CFCEE</string>
 		<string>F741B96016EA577B004BE218</string>
 		<string>F741B96116EA577B004BE218</string>
-		<string>1CD10A99069EF8BA00B06720</string>
-		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
-		<string>F741BCD516EC2F3B004BE218</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
+		<string>1CD10A99069EF8BA00B06720</string>
+		<string>F741BCD516EC2F3B004BE218</string>
 		<string>1C78EAAD065D492600B07095</string>
+		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
 	<string>4 56 1434 822 0 0 1440 878 </string>
@@ -694,7 +695,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
