@@ -2458,7 +2458,7 @@ Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(glob
 					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						return Value();
+						return Value(Value::UNDEFINED_TYPE);
 					}
 	};
 
