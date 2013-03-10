@@ -331,19 +331,19 @@ const String* String::fromDouble(GCHeap& heap, double d) {
 
 /* --- GCItem --- */
 
-GCItem::GCItem() : _gcList(0), _gcPrev(this), _gcNext(this) { }
-GCItem::GCItem(const GCItem& copy) : _gcList(0), _gcPrev(0), _gcNext(0) { }
-GCItem& GCItem::operator=(const GCItem& copy) { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
+GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
+GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
+GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
 void GCItem::gcMark(GCHeap& heap) { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 /* --- GCList --- */
 
-GCList::GCList() : count(0) { }
+GCList::GCList() throw() : count(0) { }
 
 size_t GCList::size() const { return count; }
 
-void GCList::relinquish(GCItem* item) {
+void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
 	assert(count > 0);
 	count--;
@@ -351,7 +351,7 @@ void GCList::relinquish(GCItem* item) {
 	item->_gcNext->_gcPrev = item->_gcPrev;
 }
 
-void GCList::claim(GCItem* item) {
+void GCList::claim(GCItem* item) throw() {
 	if (item->_gcList != 0) item->_gcList->relinquish(item);
 	item->_gcPrev = this;
 	item->_gcNext = _gcNext;
@@ -979,16 +979,36 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	return true;
 }
 
-void Processor::popCStack() {
-	--csp;
-	assert(csp >= cstackStart);
+void Processor::updateInternals() {
 if (csp->ip == 0) return; // FIX : don't like, ugly
 	frame = csp->frame;
 	constants = frame->getFunctionDef()->getConstantsPointer();
 	locals = frame->getLocalsPointer();
 }
 
-bool Processor::run() {
+void Processor::popCStack() {
+	--csp;
+	assert(csp >= cstackStart);
+	updateInternals();
+}
+
+void Processor::throwVirtualException(const Value& exception) {
+	if (catchers.empty()) { // FIX
+		std::string s1("Unhandled exception: ");
+		std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
+		s1.append(s2.begin(), s2.end());
+		throw std::runtime_error(s1);
+	}
+	const Catcher& catcher = catchers.back();
+	ip = catcher.ip;
+	csp = catcher.csp;
+	vsp = catcher.vsp;
+	push(exception);
+	catchers.pop_back();
+	updateInternals();
+}
+
+bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
 
 recover: // FIX : better term than recover
@@ -1140,20 +1160,7 @@ recover: // FIX : better term than recover
 				csp->thisValue = csp[-1].thisValue;
 				break;
 			}
-			case THROW_OP: {
-				const Value& exception = vsp[0];
-				if (catchers.empty()) { // FIX
-					std::wcout << "Unhandled exception: " << (exception.toString(heap))->toStdString().c_str() << std::endl;
-					error();
-				}
-				const Catcher& catcher = catchers.back();
-				ip = catcher.ip;
-				csp = catcher.csp;
-				vsp = catcher.vsp;
-				push(exception);
-				catchers.pop_back();
-				goto recover;
-			}
+			case THROW_OP: throwVirtualException(vsp[0]); break;
 			case IN_OP: {
 				o = vsp[0].toObject(heap);
 				if (o == 0) error();
@@ -1189,6 +1196,16 @@ recover: // FIX : better term than recover
 		}
 	}
 	return true;
+}
+
+bool Processor::run() {
+	try {
+		return privateRun();
+	}
+	catch (const Exception& x) {
+		throwVirtualException(x.getValue());
+		return false;
+	}
 }
 
 // FIX : use accessCodeInt32
@@ -1367,6 +1384,15 @@ void Compiler::gcMark(GCHeap& heap) {
 	super::gcMark(heap);
 }
 
+void Compiler::syntaxError(const String& what) {
+	throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new String(what))));
+}
+
+void Compiler::syntaxError(const std::string& what) {
+	std::wstring ws(what.begin(), what.end());
+	syntaxError(String(ws));
+}
+
 void Compiler::emit(Processor::Opcode op) {
 	outputCode->push_back(op);
 }
@@ -1428,7 +1454,7 @@ void Compiler::eatWhite() {
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
 							p = std::search(p += 2, e, END_CHARS, END_CHARS + 2);
-							if (p == e) throw std::runtime_error("Missing */");
+							if (p == e) syntaxError("Missing */");
 							p += 2;
 							break;
 						}
@@ -1507,7 +1533,7 @@ void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FI
 
 void Compiler::makeAssignment(XValue& xv) {
 	switch (xv.t) {
-		default: throw std::runtime_error("Illegal l-value"); // FIX : ECMA like the word "reference"
+		default: syntaxError("Illegal l-value"); // FIX : ECMA like the word "reference"
 		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.toInt()); break;
 		case XValue::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xv.v); break;
 		case XValue::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
@@ -1526,7 +1552,7 @@ void Compiler::discard(XValue& xv) {
 }
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
-	if (!eatToken(token, eatLeadingWhite)) throw std::runtime_error(std::string("Expected '") + token + "'");
+	if (!eatToken(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
 }
 
 Compiler::XValue Compiler::parseOperand(const OperatorInfo& op) {
@@ -1546,7 +1572,7 @@ void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 	Int32 count = 0;
 	while (p != e && !eatToken(")", false)) {
 		if (count != 0) {
-			if (!eatToken(",", false)) throw std::runtime_error("Expected ',' or ')'");
+			if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
 			eatWhite();
 		}
 		parseExpression(v, COMMA_PREC);
@@ -1554,7 +1580,7 @@ void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 		eatWhite();
 		++count;
 	}
-	if (p == e) throw std::runtime_error("Expected ',' or ')'");
+	if (p == e) syntaxError("Expected ',' or ')'");
 	emitWithInt32(op, count);
 	v = XValue(XValue::PUSHED);
 }
@@ -1610,7 +1636,7 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			eatWhite();
 			const Char* b = p;
 			parseIdentifier(true);
-			if (p == b) throw std::runtime_error("Expected identifier");
+			if (p == b) syntaxError("Expected identifier");
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
 			v = XValue(XValue::PROPERTY);
 			break;
@@ -1767,7 +1793,7 @@ void Compiler::parseIdentifier(bool acceptReservedKeywords) {
 		const Char* b = p;
 		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
 		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
-			throw std::runtime_error("Illegal use of reserved keyword");
+			syntaxError("Illegal use of reserved keyword");
 	}
 }
 
@@ -1810,16 +1836,16 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					eatWhite();
 					while (p != e && !eatToken(")", false)) {
 						if (func->argumentsCount != 0) {
-							if (!eatToken(",", false)) throw std::runtime_error("Expected ',' or ')'");
+							if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
 							eatWhite();
 						}
 						const Char* b = p;
 						parseIdentifier(false);
-						if (p == b) throw std::runtime_error("Expected identifier");
+						if (p == b) syntaxError("Expected identifier");
 						func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
 						eatWhite();
 					}
-					if (p == e) throw std::runtime_error("Expected ',' or ')'");
+					if (p == e) syntaxError("Expected ',' or ')'");
 					expectToken("{", true);
 					{
 						Compiler funcCompiler(engine, func);
@@ -1843,7 +1869,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						UInt32 u;
 						const Char* b = p += 2;
 						p = parseHex(b, e, u);
-						if (p == b) throw std::runtime_error("Invalid number");
+						if (p == b) syntaxError("Invalid number");
 						v = XValue(XValue::CONSTANT, Value(u));
 						break;
 					}
@@ -1853,7 +1879,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					double d;
 					const Char* b = p;
 					p = parseDouble(p, e, d);
-					if (p == b) throw std::runtime_error("Invalid number");
+					if (p == b) syntaxError("Invalid number");
 					v = XValue(XValue::CONSTANT, Value(d));
 					break;
 				}
@@ -1895,7 +1921,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 }
 
 void Compiler::parseExpression(XValue& v, Precedence precedence) {
-	if (!parseOptionalExpression(v, precedence)) throw std::runtime_error("Expected expression");
+	if (!parseOptionalExpression(v, precedence)) syntaxError("Expected expression");
 }
 
 void Compiler::parseAndPopOptionalExpression() { // FIX : drop
@@ -1906,7 +1932,7 @@ void Compiler::parseAndPopOptionalExpression() { // FIX : drop
 Compiler::XValue Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
-	if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
+	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
 	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 	XValue lv;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
@@ -1998,7 +2024,7 @@ void Compiler::expectSemicolon() {
 	eatWhite();
 	if (p != e && *p != '}' && !eatToken(";", false) && std::find(b, p, '\n') == p) {
 		p = b;
-		throw std::runtime_error("Syntax error");
+		syntaxError("Syntax error");
 	}
 }
 
@@ -2035,7 +2061,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier(b, q);
 			for (Scope* s = firstScope; s != 0; s = s->next) {
-				if (!s->label.empty() && s->label.isEqualTo(identifier)) throw std::runtime_error("Duplicate label");
+				if (!s->label.empty() && s->label.isEqualTo(identifier)) syntaxError("Duplicate label");
 			}
 			Scope newLabelScope(identifier, firstScope);
 			parseStatement(&newLabelScope, scopeLabelsEnd);
@@ -2065,11 +2091,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					s = s->next;
 				}
 				if (s == 0) {
-					throw std::runtime_error(!identifier.empty() ? "Undefined label"
+					syntaxError(!identifier.empty() ? "Undefined label"
 							: (isBreak ? "Illegal break" : "Illegal continue"));
 				}
 				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
-					throw std::runtime_error("Illegal label for continue");
+					syntaxError("Illegal label for continue");
 				(isBreak ? s->breaks : s->continues).push_back(emitForwardBranch(Processor::JMP_OP));
 				expectSemicolon();
 				break;
@@ -2216,7 +2242,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					expectToken("(", true);
 					const Char* b = p;
 					parseIdentifier(false);
-					if (p == b) throw std::runtime_error("Expected identifier"); // FIX : add flag to parseIdentifier
+					if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
 					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
 					LocalNameMap& nameMap = function->localNames;
 					bool hadLocalIndex = false;
@@ -2255,7 +2281,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					parseStatementList(&finallyScope);
 					expectToken("}", false);
 				} else {
-					if (!gotCatch) throw std::runtime_error("Expected 'catch' or 'finally'");
+					if (!gotCatch) syntaxError("Expected 'catch' or 'finally'");
 				}
 				emit(Processor::RETURN_OP);
 				
@@ -2310,19 +2336,19 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						outputCode = &function->code;
 					} else if (eatToken("default", false)) {
 						expectToken(":", true);
-						if (defaultPoint != INVALID_CODE_POINT) throw std::runtime_error("More than one 'default:'");
+						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
 						defaultPoint = markBackwardBranch();
 					} else if (firstStatement) {
-						throw std::runtime_error("Expected 'case', 'default' or '}'");
+						syntaxError("Expected 'case', 'default' or '}'");
 					} else {
 						const Char* b = p;
 						parseStatement(&emptyLabelScope, &emptyLabelScope);
-						if (b == p) throw std::runtime_error("Expected '}'");
+						if (b == p) syntaxError("Expected '}'");
 					}
 					firstStatement = false;
 					eatWhite();
 				}
-				if (p == e) throw std::runtime_error("Expected '}'");
+				if (p == e) syntaxError("Expected '}'");
 				
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);

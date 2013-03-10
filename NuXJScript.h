@@ -187,13 +187,32 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 
 class GCList;
 class GCHeap;
+
+/*
+	GCItems normally belong to heaps*. You put them there by calling GCHeap::manage() or GCHeap::protect(). Every GCItem
+	class is responsible for "marking" all GCItems it has references to. If it fails to do this, items that are still in
+	use may get garbage collected (= programming error).
+	
+	GCItems should never refer to items in a different heap than its own, unless the items referred to in turn do not
+	refer to items in the first items heap. In other words, circular references between different heaps are not allowed.
+	
+	In rare circumstances it is ok to not place a GCItem into a heap at all. The item will in this case never be
+	a candidate for garbage collection, but it will also never mark any of its references. In other words, this item
+	must be a terminal leaf that has no further references.
+	
+	When a GCItem is destructed (regardless if it is from automatic garbage collection or not) it is removed from the
+	heap it belongs to. This enables heaps to contain a mixture of automatically garbage collected and manually
+	memory managed items.
+	
+	* They actually belong to particular lists inside heaps.
+*/
 class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:		GCItem();
-				GCItem(const GCItem& copy);
-				GCItem& operator=(const GCItem& copy);
+	public:		GCItem() throw();
+				GCItem(const GCItem& copy) throw();
+				GCItem& operator=(const GCItem& copy) throw();
 				virtual void gcMark(GCHeap& heap);
 				virtual ~GCItem();
 
@@ -202,19 +221,21 @@ class GCItem {
 				GCItem* _gcNext;
 };
 
+// FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
+// list (_gcList = 0). But in GCHeap, managed items ought to be deleted, right?
 class GCList : public GCItem {
-	public:		GCList();
+	public:		GCList() throw();
 				size_t size() const;
-				void claim(GCItem* item);
-				void relinquish(GCItem* item);
+				void claim(GCItem* item) throw();
+				void relinquish(GCItem* item) throw();
 
 	protected:	size_t count;
 };
 
 class GCHeap {
 	public:		GCHeap();
-				template<class T> T* manage(T* item) { currentList->claim(item); return item; }
-				template<class T> T* protect(T* item) { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
+				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
+				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
 				size_t size() const;
 				size_t gc();
 				void mark(const GCItem* item);
@@ -240,7 +261,7 @@ class Value {
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
-					, BAD_TYPE = 0xBAADBAAD
+					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				};
 			
 			#if !defined(NDEBUG)
@@ -248,7 +269,7 @@ class Value {
 			#else
 				Value() { }
 			#endif
-				explicit Value(Type type) : type(type) { }
+				explicit Value(Type type) throw()  : type(type) { }
 				explicit Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 				explicit Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 				explicit Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
@@ -345,6 +366,16 @@ class Table {
 				UInt32 loadCount; ///< Count of buckets with defined keys.
 };
 
+/*
+	Note that although the ECMAScript specification clearly separates string values from String objects, this
+	implementation regards both as Objects for efficiency (e.g. for quickly retrieving properties like the character
+	elements and "length").
+	
+	String is immutable, meaning that it will never contain any references to other objects. Therefore it is ok to not
+	place them in a heap. (See GCItem for more info.)
+	
+	The ECMAScript String object on the other hand is represented by a mutable UserObject.
+*/
 class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 	public:		typedef Object super;
 				typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
@@ -531,19 +562,44 @@ class Arguments : public UserObject {
 				QuickArray<Byte, 8> deletedArguments;
 };
 
+// FIX : test with very short max sz length
+class Exception : public std::exception, public GCItem {
+	public:		Exception(GCHeap& heap, const Value& value) throw() : value(value) { // FIX : not inline
+					char* e = (strcpy(sz, "NuXJScript exception: "), sz + strlen(sz)); // FIX : is stpcpy standard?
+					heap.protect(this);
+					try {
+						const String* src = value.toString(heap);
+						size_t l = (sz + sizeof (sz) / sizeof (*sz) - 1 - e);
+						*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), e);
+					}
+					catch (...) {
+						strcat(sz, "unknown (failed conversion to string)");
+						assert(0);
+					}
+				}
+				const Value& getValue() const { return value; }
+				virtual const char* what() const throw() { return sz; }													// what() is for compatibility only and has a length limitation. Use getValue() and convert to string to get the full length unicode exception string.
+				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
+
+	protected:	Value value;
+	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
+};
+
 class Processor : public GCItem {
 	public:		typedef GCItem super;
 
 	public:		struct Continuation {
 					public:		virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) = 0;
 				};
-
-				struct Context { // FIX : make Processor local
+	
+				// FIX : this could be a struct used by a member Processor too instead of separate ip, frame etc...
+				struct Context {
 					const CodeWord* ip;
 					Frame* frame; // doesn't change during function execution
 					Object* thisValue; // FIX : pointer instead? // doesn't change during function execution
 				};
 
+				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. Context?
 	protected:	struct Catcher {
 					Catcher(const CodeWord* ip, Value* vsp, Context* csp) : ip(ip), csp(csp), vsp(vsp) { }
 					const CodeWord* ip;
@@ -598,7 +654,6 @@ class Processor : public GCItem {
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void popCStack();
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);
@@ -608,8 +663,11 @@ void error(); // FIX
 				
 	protected:	void poppush(const Value& v);
 				Int32 operand();
-				void callStub(const CodeWord*& ip, const CodeWord* stub);
 				bool toPrimitiveTrap(const CodeWord* rollbackIp);
+				void updateInternals();
+				bool privateRun();
+				void throwVirtualException(const Value& exception);
+				void popCStack(); // FIX : drop?
 
 				Engine& engine;
 				Context* const cstackStart;
@@ -660,6 +718,8 @@ class Compiler : public GCItem {
 					std::vector<Int32> finallys; // source points for finally jsr's
 				};
 
+				void syntaxError(const String& what);
+				void syntaxError(const std::string& what); // FIX : try to get rid of?
 				void emit(Processor::Opcode op);
 				void emitWithInt32(Processor::Opcode op, Int32 i);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
