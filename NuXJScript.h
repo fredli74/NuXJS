@@ -746,6 +746,7 @@ class Compiler : public GCItem {
 				void expectToken(const char* t, bool eatLeadingWhite);
 				void eatWhite();
 				void eatToken();
+				Char* unescape(Char* buffer, const Char*& p, const Char* e);
 				void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
 				void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
 				void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.

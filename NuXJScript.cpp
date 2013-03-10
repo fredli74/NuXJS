@@ -136,44 +136,6 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 	return std::pair<Char*, Char*>(bp, ep);
 }
 
-const int ESCAPE_CODE_COUNT = 10;
-
-static size_t unescapedMaxLength(const Char* p, const Char* e) {
-	assert(p <= e && (*p == '"' || *p == '\''));
-	Char endChar = *p;
-	size_t l = 0;
-	while (++p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
-		if (*p == '\\' && p + 1 < e) ++p;
-		++l;
-	}
-	return l;
-}
-	
-static Char* unescape(Char* buffer, const Char*& p, const Char* e) {	
-	assert(p <= e && (*p == '"' || *p == '\''));
-	static const Char ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
-	static const Char ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
-	Char endChar = *p;
-	const Char* b = ++p;
-	Char* d = buffer;
-	while (p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
-		if (*p == '\\' && p + 1 < e) {
-			d = std::copy(b, p, d);
-			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
-			b = p;
-			UInt32 l;
-			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
-			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
-			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
-			if (p == b) throw std::runtime_error("Illegal escape character");
-			b = p;
-			*d++ = Char(l);
-		} else ++p;
-	}
-	if (p >= e || *p != endChar) throw std::runtime_error("Unterminated string");
-	return std::copy(b, p++, d);
-}
-
 /* --- String --- */
 
 const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
@@ -907,7 +869,8 @@ Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip +
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
-	throw std::runtime_error("error"); // FIX
+	static const String ERROR_STRING("runtime error");
+	throw Exception(engine.getHeap(), Value(&ERROR_STRING));
 }
 
 void Processor::chain(Continuation* continuation, Object* thisValue) {
@@ -1204,7 +1167,7 @@ bool Processor::run() {
 	}
 	catch (const Exception& x) {
 		throwVirtualException(x.getValue());
-		return false;
+		return true;
 	}
 }
 
@@ -1478,6 +1441,43 @@ bool Compiler::eatToken(const char* t, bool eatLeadingWhite) {
 
 void Compiler::eatToken() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
+}
+
+static size_t unescapedMaxLength(const Char* p, const Char* e) {
+	assert(p <= e && (*p == '"' || *p == '\''));
+	Char endChar = *p;
+	size_t l = 0;
+	while (++p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+		if (*p == '\\' && p + 1 < e) ++p;
+		++l;
+	}
+	return l;
+}
+	
+Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {	
+	assert(p <= e && (*p == '"' || *p == '\''));
+	static const Char ESCAPE_CHARS[] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
+	static const Char ESCAPE_CODES[] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
+	const int ESCAPE_CODE_COUNT = sizeof (ESCAPE_CHARS) / sizeof (*ESCAPE_CHARS);
+	Char endChar = *p;
+	const Char* b = ++p;
+	Char* d = buffer;
+	while (p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+		if (*p == '\\' && p + 1 < e) {
+			d = std::copy(b, p, d);
+			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
+			b = p;
+			UInt32 l;
+			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
+			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
+			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
+			if (p == b) syntaxError("Illegal escape character");
+			b = p;
+			*d++ = Char(l);
+		} else ++p;
+	}
+	if (p >= e || *p != endChar) syntaxError("Unterminated string");
+	return std::copy(b, p++, d);
 }
 
 void Compiler::makeRValue(XValue& xv) {
