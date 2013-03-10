@@ -592,18 +592,18 @@ class Processor : public GCItem {
 				};
 	
 				// FIX : this could be a struct used by a member Processor too instead of separate ip, frame etc...
-				struct Context {
-					const CodeWord* ip;
+				struct CStackEntry {
+					const CodeWord* returnIP;
 					Frame* frame; // doesn't change during function execution
 					Object* thisValue; // FIX : pointer instead? // doesn't change during function execution
 				};
 
-				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. Context?
+				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
 	protected:	struct Catcher {
-					Catcher(const CodeWord* ip, Value* vsp, Context* csp) : ip(ip), csp(csp), vsp(vsp) { }
+					Catcher(const CodeWord* ip, Value* vsp, CStackEntry* csp) : ip(ip), csp(csp), vsp(vsp) { }
 					const CodeWord* ip;
 					Value* vsp;
-					Context* csp;
+					CStackEntry* csp;
 				};
 				
 				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
@@ -633,6 +633,7 @@ class Processor : public GCItem {
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> return value, new object
 					, NEW_RESULT_OP									// stack: new object, return value -> new this value
 					, RETURN_OP
+					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const index, stack: -> function
@@ -648,8 +649,9 @@ class Processor : public GCItem {
 					, NEXT_PROPERTY_OP								// immediate: exit loop offset, stack: enumerator -> string
 				};
 
-	public:		Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd);
+	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				virtual void gcMark(GCHeap& heap);
+				void chain(const CodeWord* stub);
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
@@ -666,11 +668,10 @@ void error(); // FIX
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
-				void popCStack(); // FIX : drop?
 
 				Engine& engine;
-				Context* const cstackStart;
-				Context* const cstackEnd;
+				CStackEntry* const cstackStart;
+				CStackEntry* const cstackEnd;
 				Value* const vstackStart;
 				Value* const vstackEnd;
 
@@ -678,7 +679,7 @@ public: // FIX : not public, just for some asserts now I think
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
-				Context* csp;
+				CStackEntry* csp;
 				Frame* frame;
 				const Value* constants;
 				Value* locals;

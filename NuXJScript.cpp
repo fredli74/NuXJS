@@ -846,18 +846,14 @@ bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 
 /* --- Processor --- */
 
-Processor::Processor(Engine& engine, Context* cstackStart, Context* cstackEnd, Value* vstackStart, Value* vstackEnd)
+Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-	, csp(cstackStart), vsp(vstackStart - 1), ip(0), clockCyclesLeft(0x7FFFFFFF) {
-	// FIX : yuck
-	csp->frame = 0;
-	csp->ip = 0;
-	csp->thisValue = 0;
+	, csp(cstackStart - 1), vsp(vstackStart - 1), ip(0), clockCyclesLeft(0x7FFFFFFF) {
 }
 
 void Processor::gcMark(GCHeap& heap) {
 	for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
-	for (Context* c = cstackStart; c != csp + 1; ++c) heap.mark(c->frame);
+	for (CStackEntry* c = cstackStart; c != csp + 1; ++c) heap.mark(c->frame);
 	super::gcMark(heap);
 }
 
@@ -873,9 +869,26 @@ void Processor::error() {
 	throw Exception(engine.getHeap(), Value(&ERROR_STRING));
 }
 
-void Processor::chain(Continuation* continuation, Object* thisValue) {
-	csp->ip = ip;
+void Processor::updateInternals() {
+	frame = csp->frame;
+	if (frame != 0) { // FIX : use dummy frame?
+		constants = frame->getFunctionDef()->getConstantsPointer();
+		locals = frame->getLocalsPointer();
+	}
+}
+
+void Processor::chain(const CodeWord* stub) {
 	++csp; // FIX : overflow check
+	csp->returnIP = ip;
+	csp->frame = 0;
+	csp->thisValue = 0;
+	ip = stub;
+	updateInternals();
+}
+
+void Processor::chain(Continuation* continuation, Object* thisValue) {
+	++csp; // FIX : overflow check
+	csp->returnIP = ip;
 	csp->frame = 0;
 	csp->thisValue = thisValue;
 	ip = 0;
@@ -885,13 +898,12 @@ void Processor::chain(Continuation* continuation, Object* thisValue) {
 void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	ScriptFunctionDef* def = func->getDefinition();
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
-	csp->ip = ip;
 	++csp; // FIX : overflow check
+	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = thisValue;
 	ip = &def->code[0];
-	constants = frame->getFunctionDef()->getConstantsPointer();
-	locals = frame->getLocalsPointer();
+	updateInternals();
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -942,19 +954,6 @@ bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
 	return true;
 }
 
-void Processor::updateInternals() {
-if (csp->ip == 0) return; // FIX : don't like, ugly
-	frame = csp->frame;
-	constants = frame->getFunctionDef()->getConstantsPointer();
-	locals = frame->getLocalsPointer();
-}
-
-void Processor::popCStack() {
-	--csp;
-	assert(csp >= cstackStart);
-	updateInternals();
-}
-
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX
 		std::string s1("Unhandled exception: ");
@@ -973,24 +972,8 @@ void Processor::throwVirtualException(const Value& exception) {
 
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
-
-recover: // FIX : better term than recover
 	assert(csp >= cstackStart);
-
-	if (ip == 0) {
-		assert(!continuations.empty());
-		Continuation* continuator = continuations.back();
-		Object* thisValue = csp->thisValue;
-		popCStack();
-		ip = csp->ip;
-		continuations.pop_back();
-		if (!continuator->execute(engine, *this, thisValue)) return false;
-		goto recover;
-	}
-
-	frame = csp->frame;
-	constants = frame->getFunctionDef()->getConstantsPointer();
-	locals = frame->getLocalsPointer();
+	updateInternals();
 	Object* o;
 	Int32 offset;
 	
@@ -1050,17 +1033,24 @@ recover: // FIX : better term than recover
 			case JF_OP:		offset = operand(); ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
 
 			case JSR_OP:	offset = operand();
-							csp->ip = ip;
 							++csp; // FIX : bounds check? or reserve?
+							csp->returnIP = ip;
 							csp->frame = frame;
 							csp->thisValue = csp[-1].thisValue;
 							ip += offset;
 							break;
 
-			case RETURN_OP:	popCStack();
-							ip = csp->ip;
-							if (ip == 0) goto recover;
+			case RETURN_OP:	ip = (csp--)->returnIP;
+							assert(csp >= cstackStart);							
+							updateInternals();
 							break;
+
+			case RETURN_TO_HOST_OP:
+							ip = (csp--)->returnIP;
+							assert(csp >= cstackStart - 1);
+							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
+							// updateInternals();
+							return false;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand();
@@ -1108,7 +1098,12 @@ recover: // FIX : better term than recover
 				poppush(Value(o->deleteProperty(engine, vsp[0].toString(heap))));
 				break;
 			}
-			case POP_FRAME_OP: popCStack(); break;
+			case POP_FRAME_OP: {
+				--csp;
+				assert(csp >= cstackStart);
+				updateInternals();
+				break;
+			}
 			case TRY_OP: {
 				offset = operand();
 				catchers.push_back(Catcher(ip + offset, vsp, csp));
@@ -1116,8 +1111,8 @@ recover: // FIX : better term than recover
 			}
 			case TRIED_OP: catchers.pop_back(); break;
 			case CATCH_FRAME_OP: {
-				csp->ip = ip;
 				++csp;
+				csp->returnIP = 0;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, constants[operand()].getString(), vsp[0]));
 				pop(1);
 				csp->thisValue = csp[-1].thisValue;
@@ -1191,7 +1186,8 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
 		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
-		, "RETURN", "THIS", "VOID", "FRAME", "DELETE"
+		, "RETURN", "RETURN_TO_HOST"
+		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
 		, "IN", "TYPEOF", "TYPEOF_NAMED"
@@ -2521,10 +2517,12 @@ int main(int argc, const char* argv[]) {
 				}
 				
 				Value vstack[1024];
-				Processor::Context cstack[1024];
+				Processor::CStackEntry cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
-				processor.chain(&RETURN_TO_HOST, &globals);
+				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
+				processor.chain(RETURN_TO_HOST_STUB);
+//				processor.chain(&RETURN_TO_HOST, &globals);
 				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, &globals);
 				bool done = false;
 				
