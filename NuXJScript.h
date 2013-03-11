@@ -42,6 +42,7 @@
 //					cons:	slower, more garbage (frames)
 //			alt 1 is regarding functions in themselves to be either script or native
 //			alt 2 is regarding code to be either script or native
+//			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
 //		arguments container
 //			
 //
@@ -96,6 +97,7 @@
 //		quicker calls by using a frame stack for functions that do not create closures
 //			problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
 //			two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
+//				might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
@@ -272,6 +274,7 @@ class GCHeap {
 				size_t size() const;
 				size_t gc();
 				void mark(const GCItem* item);
+				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
 	protected:	GCList* currentList;
 				GCList* newList;
@@ -500,18 +503,6 @@ class UserObject : public Object {
 				Object* prototype;
 };
 
-class Engine {
-	friend class String;
-	
-	public:		Engine(GCHeap& heap, Object* globalThis);
-				GCHeap& getHeap() const { return gcHeap; }
-				Object* getGlobalThis() const { return globalThis; }
-
-	protected:	GCHeap& gcHeap;
-				UserObject stringPrototype;
-				Object* globalThis;
-};
-
 class Function : public UserObject {
 	public:		typedef UserObject super;
 
@@ -521,6 +512,23 @@ class Function : public UserObject {
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+};
+
+class EvalFunction : public Function {
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+};
+
+class Engine {
+	friend class String;
+	
+	public:		Engine(GCHeap& heap, Object* globals);
+				GCHeap& getHeap() const { return gcHeap; }
+				Object* getGlobals() const { return globals; }
+
+	protected:	GCHeap& gcHeap;
+				UserObject stringPrototype;
+				Object* globals;
+				EvalFunction evalDirectFunction;
 };
 
 // This is actually a closure, but ECMAScript calls them Function objects.
@@ -662,7 +670,8 @@ class Processor : public GCItem {
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, CALL_GLOBAL_OP								// operand: n, stack: function, n * args -> return value
-					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args,  -> return value
+					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return value
+					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return value, special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> return value, new object
 					, NEW_RESULT_OP									// stack: new object, return value -> new this value
 					, RETURN_OP
@@ -720,15 +729,15 @@ public: // FIX : not public, just for some asserts now I think
 };
 
 enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC
-	, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC
-	, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
+	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC
+	, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC
+	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
-				struct XValue; // FIX : rename to ExpressionResult
+				struct ExpressionResult;
 				
 				Compiler(Engine& engine, ScriptFunctionDef* function);
 				virtual void gcMark(GCHeap& heap);
@@ -763,16 +772,16 @@ class Compiler : public GCItem {
 				void emitBackwardBranch(Processor::Opcode op, Int32 point);
 				void completeContinues(const Scope* fromScope, const Scope* untilScope);
 				void completeBreaks(const Scope* scope);
-				XValue parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
+				ExpressionResult parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
 				void parseRValueOperand(const OperatorInfo& op);
-				void parseFunctionCall(XValue& v, Processor::Opcode op);
-				bool parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList);
-				void parseExpression(XValue& v, Precedence precedence);
-				bool parseOptionalExpression(XValue& v, Precedence precedence);
+				void parseFunctionCall(ExpressionResult& xr, Processor::Opcode op);
+				bool parseOperator(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
+				void parseExpression(ExpressionResult& xr, Precedence precedence);
+				bool parseOptionalExpression(ExpressionResult& xr, Precedence precedence);
 				void parseAndPopOptionalExpression();
-				Compiler::XValue parseVarDeclaration();
+				Compiler::ExpressionResult parseVarDeclaration();
 				void parseVarDeclarations();
-				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, XValue& iterXValue);
+				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, ExpressionResult& iterXR);
 				void parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
 				void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 				void parseStatementList(Scope* firstScope);
@@ -782,11 +791,11 @@ class Compiler : public GCItem {
 				void eatWhite();
 				void eatToken();
 				Char* unescape(Char* buffer, const Char*& p, const Char* e);
-				void safeKeep(XValue& xv); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
-				void returnSafeKept(XValue& xv, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
-				void makeRValue(XValue& xv); // Creates an r-value (i.e. pushed on value stack) out of a result.
-				void makeAssignment(XValue& xv); // Creates an assignment out of an l-value (throws if xv is not a valid l-value)
-				void discard(XValue& xv); // Discards result (e.g. popping it if it is on stack)
+				void safeKeep(ExpressionResult& xr); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+				void returnSafeKept(ExpressionResult& xr, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
+				void makeRValue(ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				void makeAssignment(ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
+				void discard(ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 				bool isLeadingIdentifierChar(Char c);
 				void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
 

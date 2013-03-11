@@ -1,7 +1,7 @@
-print("*** comments ***")
-
 // function print(x) { console.log(x) }
 // function time(f) { var start = Date.now(); f(); print("elapsed: " + (Date.now() - start)); }
+
+print("*** comments ***")
 
   var i = 0 /* comment */ ; print(i);  // more comment
  j = 1234.5 /* multi
@@ -479,6 +479,43 @@ print(a-(b-c));
 print(a+b*c);
 print(a*b+c);
 */
+
+print("*** eval ***");
+
+var y = -100;
+var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
+print(a());
+print(a());
+print(y);
+print("");
+
+var y = -100;
+var a=(function() { var z = 3; var y = 2; z = eval("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
+print(a());
+print(a());
+print(y);
+print("");
+
+var y = -100;
+var a=(function() { var z = 3; var y = 2; z = eval("y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
+print(a());
+print(a());
+print(y);
+print("");
+
+var y = -100;
+var a=(function() { var z = 3; var y = 2; var x = eval; z = x("y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
+print(a());
+print(a());
+print(y);
+print("");
+
+this.isGlobal = "yeah, is global";
+var o = new (function() { this.eval = eval; this.isGlobal = "no, is not global"; this.test1 = function() { this.eval("print(this.isGlobal)")
+		this.test2 = function() { eval("print(this.isGlobal)") } } });
+o.eval("print(this.isGlobal)"); // FIX : jsc doesn't like this
+o.test1(); // FIX : jsc doesn't like this
+o.test2();
 
 print("*** fun stuff ***");
 

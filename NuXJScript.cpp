@@ -175,7 +175,7 @@ struct QuickConstants {
 
 QuickConstants QUICK_CONSTANTS;
 
-// FIX : sort, merge to few lines
+// FIX : sort, merge to few lines, or maybe even do some smart array based construction?
 const String EMPTY_STRING("");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
@@ -199,6 +199,7 @@ const String A_RGUMENTS_STRING("Arguments");
 const String PROTOTYPE_STRING("prototype");
 const String VALUE_OF_STRING("valueOf");
 const String TO_STRING_STRING("toString");
+const String EVAL_STRING("eval");
 const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
@@ -1078,10 +1079,12 @@ bool Processor::privateRun() {
 				vsp -= n + 1;
 				break;
 			}
+			case CALL_EVAL_OP: {
+			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobalThis()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				break;
 			}
@@ -1200,7 +1203,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
-		, "CALL_GLOBAL", "CALL_METHOD", "NEW", "NEW_RESULT"
+		, "CALL_GLOBAL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
@@ -1227,6 +1230,7 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
 			case Processor::CALL_GLOBAL_OP:
 			case Processor::CALL_METHOD_OP:
+			case Processor::CALL_EVAL_OP:
 			case Processor::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
@@ -1340,10 +1344,10 @@ static int findStatementToken(int n /* string length */, const Char* s) {
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-struct Compiler::XValue {
+struct Compiler::ExpressionResult {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
-	XValue() : t(NONE), v(Value::UNDEFINED_TYPE) { }
-	XValue(Type type, const Value& value = Value(Value::NONEXISTENT_TYPE)) : t(type), v(value) { }
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED_TYPE) { }
+	ExpressionResult(Type type, const Value& value = Value(Value::NONEXISTENT_TYPE)) : t(type), v(value) { }
 	Type t;
 	Value v;
 };
@@ -1491,26 +1495,26 @@ Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-void Compiler::makeRValue(XValue& xv) {
-	switch (xv.t) {
+void Compiler::makeRValue(ExpressionResult& xr) {
+	switch (xr.t) {
 		default: assert(0);
-		case XValue::PUSHED: return;
-		case XValue::NONE: emit(Processor::VOID_OP); break;
-		case XValue::CONSTANT: emitWithConstant(Processor::CONST_OP, xv.v); break;
-		case XValue::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xv.v.toInt()); break;
-		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); break;
-		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
+		case ExpressionResult::PUSHED: return;
+		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
+		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 	}
-	xv = XValue(XValue::PUSHED);
+	xr = ExpressionResult(ExpressionResult::PUSHED);
 }
 
-void Compiler::safeKeep(XValue& xv) {
-	switch (xv.t) {
-		case XValue::PUSHED:
-		case XValue::INDEXED:
-		case XValue::NAMED:
-		case XValue::PROPERTY: {
-			makeRValue(xv);
+void Compiler::safeKeep(ExpressionResult& xr) {
+	switch (xr.t) {
+		case ExpressionResult::PUSHED:
+		case ExpressionResult::INDEXED:
+		case ExpressionResult::NAMED:
+		case ExpressionResult::PROPERTY: {
+			makeRValue(xr);
 			Int32 tempLocalIndex;
 			if (!freeSafeKeepingIndexes.empty()) {
 				tempLocalIndex = freeSafeKeepingIndexes.back();
@@ -1521,18 +1525,18 @@ void Compiler::safeKeep(XValue& xv) {
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
 			emit(Processor::POP_OP);
-			xv = XValue(XValue::INDEXED, Value(tempLocalIndex));
+			xr = ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 			break;
 		}
 		default: break;
 	}
 }
 
-void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FIX : <- wouldn't need makeRValue if all these weren't destructive
-	XValue xvCopy(xv); // FIX : this is beginning to feel silly
-	if (makeRValue) Compiler::makeRValue(xv);
-	if (xvCopy.t == XValue::INDEXED) {
-		Int32 index = xvCopy.v.toInt();
+void Compiler::returnSafeKept(ExpressionResult& xr, bool doReset, bool makeRValue) { // FIX : <- wouldn't need makeRValue if all these weren't destructive
+	ExpressionResult xrCopy(xr); // FIX : this is beginning to feel silly
+	if (makeRValue) Compiler::makeRValue(xr);
+	if (xrCopy.t == ExpressionResult::INDEXED) {
+		Int32 index = xrCopy.v.toInt();
 		if (doReset) {
 			emit(Processor::VOID_OP);
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
@@ -1542,43 +1546,43 @@ void Compiler::returnSafeKept(XValue& xv, bool doReset, bool makeRValue) { // FI
 	}
 }
 
-void Compiler::makeAssignment(XValue& xv) {
-	switch (xv.t) {
+void Compiler::makeAssignment(ExpressionResult& xr) {
+	switch (xr.t) {
 		default: syntaxError("Illegal l-value"); // FIX : ECMA like the word "reference"
-		case XValue::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xv.v.toInt()); break;
-		case XValue::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xv.v); break;
-		case XValue::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
-	xv = XValue(XValue::PUSHED);
+	xr = ExpressionResult(ExpressionResult::PUSHED);
 }
 
-void Compiler::discard(XValue& xv) {
-	switch (xv.t) {
-		case XValue::PUSHED: emit(Processor::POP_OP); break;
-		case XValue::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xv.v); emit(Processor::POP_OP); break;
-		case XValue::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
+void Compiler::discard(ExpressionResult& xr) {
+	switch (xr.t) {
+		case ExpressionResult::PUSHED: emit(Processor::POP_OP); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
 		default: break;
 	}
-	xv = XValue(XValue::NONE);
+	xr = ExpressionResult(ExpressionResult::NONE);
 }
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
 	if (!eatToken(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
 }
 
-Compiler::XValue Compiler::parseOperand(const OperatorInfo& op) {
-	XValue rv;
+Compiler::ExpressionResult Compiler::parseOperand(const OperatorInfo& op) {
+	ExpressionResult rv;
 	parseExpression(rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
 	if (op.closeToken != 0) expectToken(op.closeToken, true);
 	return rv;
 }
 
 void Compiler::parseRValueOperand(const OperatorInfo& op) {
-	XValue xv(parseOperand(op));
-	makeRValue(xv);
+	ExpressionResult xr(parseOperand(op));
+	makeRValue(xr);
 }
 
-void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
+void Compiler::parseFunctionCall(ExpressionResult& xr, Processor::Opcode op) {
 	eatWhite();
 	Int32 count = 0;
 	while (p != e && !eatToken(")", false)) {
@@ -1586,17 +1590,17 @@ void Compiler::parseFunctionCall(XValue& v, Processor::Opcode op) {
 			if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
 			eatWhite();
 		}
-		parseExpression(v, COMMA_PREC);
-		makeRValue(v);
+		parseExpression(xr, COMMA_PREC);
+		makeRValue(xr);
 		eatWhite();
 		++count;
 	}
 	if (p == e) syntaxError("Expected ',' or ')'");
 	emitWithInt32(op, count);
-	v = XValue(XValue::PUSHED);
+	xr = ExpressionResult(ExpressionResult::PUSHED);
 }
 
-bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, const OperatorInfo* opList) {
+bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
@@ -1610,18 +1614,18 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 	// FIX : sort
 	switch (op.type) {
 		case POST_INC_DEC: {
-			XValue lv(v);
+			ExpressionResult lv(xr);
 			makeRValue(lv);
 			emit(Processor::REPUSH_OP);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
-			makeAssignment(v);
+			makeAssignment(xr);
 			emit(Processor::POP_OP);
 			break;
 		}
 		
 		case LOGICAL_AND_OR: {
-			makeRValue(v);
+			makeRValue(xr);
 			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(Processor::POP_OP);
@@ -1631,33 +1635,34 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 		}
 		
 		case CONDITIONAL: {
-			makeRValue(v);
+			makeRValue(xr);
 			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 			parseRValueOperand(op);
 			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
-			parseExpression(v, op.prec);
-			makeRValue(v);
+			parseExpression(xr, op.prec);
+			makeRValue(xr);
 			completeForwardBranch(endPoint);
 			break;			
 		}
 		
 		case PROPERTY_DOT: {
-			makeRValue(v);
+			makeRValue(xr);
 			eatWhite();
 			const Char* b = p;
 			parseIdentifier(true);
 			if (p == b) syntaxError("Expected identifier");
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
-			v = XValue(XValue::PROPERTY);
+			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
 		
 		case FUNCTION_CALL: {
 			Processor::Opcode op = Processor::CALL_GLOBAL_OP;
-			if (v.t == XValue::PROPERTY) op = Processor::CALL_METHOD_OP;
-			else makeRValue(v);
-			parseFunctionCall(v, op);
+			if (xr.t == ExpressionResult::NAMED && xr.v.getString()->isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
+			if (xr.t == ExpressionResult::PROPERTY) op = Processor::CALL_METHOD_OP;
+			else makeRValue(xr);
+			parseFunctionCall(xr, op);
 			break;
 		}
 		
@@ -1665,85 +1670,85 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			parseRValueOperand(op);
 			if (!eatToken("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
-				v = XValue(XValue::PUSHED);
+				xr = ExpressionResult(ExpressionResult::PUSHED);
 			} else {
 				eatWhite();
-				parseFunctionCall(v, Processor::NEW_OP);
+				parseFunctionCall(xr, Processor::NEW_OP);
 			}
 			emit(Processor::NEW_RESULT_OP);
 			break;
 		}
 		
 		case COMMA: {
-			discard(v);
-			v = parseOperand(op);
-			makeRValue(v);
+			discard(xr);
+			xr = parseOperand(op);
+			makeRValue(xr);
 			break;
 		}
 		
 		case DELETE_OPERATOR: {
-			v = parseOperand(op);
-			switch (v.t) {
+			xr = parseOperand(op);
+			switch (xr.t) {
 				default: assert(0);
-				case XValue::PUSHED: emit(Processor::POP_OP); /* continue */
-				case XValue::NONE:
-				case XValue::CONSTANT: v = XValue(XValue::CONSTANT, Value(true)); break;
-				case XValue::INDEXED: v = XValue(XValue::CONSTANT, Value(false)); break;
-				case XValue::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, v.v);  /* continue */
-				case XValue::PROPERTY: emit(Processor::DELETE_OP); v = XValue(XValue::PUSHED); break;
+				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* continue */
+				case ExpressionResult::NONE:
+				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
+				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* continue */
+				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED); break;
 			}
 			break;
 		}
 		
 		case VOID_OPERATOR: {
-			v = parseOperand(op);
-			discard(v);
+			xr = parseOperand(op);
+			discard(xr);
 			break;
 		}
 		
 		case GROUP: {
-			v = parseOperand(op);
+			xr = parseOperand(op);
 			break;
 		}
 
 		case PRE_INC_DEC: {
-			v = parseOperand(op);
-			XValue lv(v);
+			xr = parseOperand(op);
+			ExpressionResult lv(xr);
 			makeRValue(lv);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
-			makeAssignment(v);
+			makeAssignment(xr);
 			break;
 		}
 		
 		case TYPE_OF: {
-			v = parseOperand(op);
-			if (v.t == XValue::NAMED) {
-				emitWithConstant(Processor::TYPEOF_NAMED_OP, v.v);
-				v = XValue(XValue::PUSHED);
+			xr = parseOperand(op);
+			if (xr.t == ExpressionResult::NAMED) {
+				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
+				xr = ExpressionResult(ExpressionResult::PUSHED);
 			} else {
-				makeRValue(v);
+				makeRValue(xr);
 				emit(op.vmOp);
 			}
 			break;
 		}
 			
 		case UNARY: {
-			v = parseOperand(op);
-			makeRValue(v);
+			xr = parseOperand(op);
+			makeRValue(xr);
 			emit(op.vmOp);
 			break;
 		}
 		
 		case BINARY: {
-			makeRValue(v);
+			makeRValue(xr);
 			parseRValueOperand(op);
 			emit(op.vmOp);
 			break;
 		}
 		
 		case ASSIGNMENT: {
-			XValue lv(v);
+			ExpressionResult lv(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
 				makeRValue(lv);
 				parseRValueOperand(op);
@@ -1751,14 +1756,14 @@ bool Compiler::parseOperator(XValue& v, Precedence precedence, int opCount, cons
 			} else {
 				parseRValueOperand(op);
 			}
-			makeAssignment(v);
+			makeAssignment(xr);
 			break;
 		}
 		
 		case PROPERTY_BRACKETS: {
-			makeRValue(v);
+			makeRValue(xr);
 			parseRValueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
-			v = XValue(XValue::PROPERTY);
+			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
 		
@@ -1823,21 +1828,21 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
+bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
-	if (!parseOperator(v, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
+	if (!parseOperator(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		const Char* b = p;
 		eatToken();
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
 			switch (static_cast<Literal>(i)) {
-				case NULL_LITERAL: v = XValue(XValue::CONSTANT, Value(Value::NULL_TYPE)); break;
-				case FALSE_LITERAL: v = XValue(XValue::CONSTANT, Value(false)); break;
-				case TRUE_LITERAL: v = XValue(XValue::CONSTANT, Value(true)); break;
+				case NULL_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(Value::NULL_TYPE)); break;
+				case FALSE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case TRUE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case THIS_LITERAL: {
 					emit(Processor::THIS_OP);
-					v = XValue(XValue::PUSHED); break;
+					xr = ExpressionResult(ExpressionResult::PUSHED); break;
 					break;
 				}
 				case FUNCTION_LITERAL: {
@@ -1866,7 +1871,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					}
 					expectToken("}", false);
 					emitWithConstant(Processor::GEN_FUNC_OP, Value(func)); 
-					v = XValue(XValue::PUSHED);
+					xr = ExpressionResult(ExpressionResult::PUSHED);
 					break;
 				}
 				default: assert(0);
@@ -1881,7 +1886,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 						const Char* b = p += 2;
 						p = parseHex(b, e, u);
 						if (p == b) syntaxError("Invalid number");
-						v = XValue(XValue::CONSTANT, Value(u));
+						xr = ExpressionResult(ExpressionResult::CONSTANT, Value(u));
 						break;
 					}
 					/* else continue */
@@ -1891,7 +1896,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					const Char* b = p;
 					p = parseDouble(p, e, d);
 					if (p == b) syntaxError("Invalid number");
-					v = XValue(XValue::CONSTANT, Value(d));
+					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(d));
 					break;
 				}
 				case '\'': case '"': {
@@ -1899,7 +1904,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					v = XValue(XValue::CONSTANT, Value(String::newHashedString(engine.getHeap(), buffer, unescapeEnd)));
+					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(String::newHashedString(engine.getHeap(), buffer, unescapeEnd)));
 					break;
 				}
 				default: {
@@ -1912,9 +1917,9 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 					LocalNameMap::const_iterator it = nameMap.find(identifier);
 					if (it != nameMap.end()) {
 						index = it->second;
-						v = XValue(XValue::INDEXED, Value(index));
+						xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 					} else {
-						v = XValue(XValue::NAMED, Value(identifier));
+						xr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
 					}
 					break;
 				}
@@ -1923,7 +1928,7 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
     }
 	const Char* b = p;
     eatWhite();
-    while (parseOperator(v, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
+    while (parseOperator(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
 		eatWhite();
 	}
@@ -1931,23 +1936,21 @@ bool Compiler::parseOptionalExpression(XValue& v, Precedence precedence) {
 	return true;
 }
 
-void Compiler::parseExpression(XValue& v, Precedence precedence) {
-	if (!parseOptionalExpression(v, precedence)) syntaxError("Expected expression");
+void Compiler::parseExpression(ExpressionResult& xr, Precedence precedence) {
+	if (!parseOptionalExpression(xr, precedence)) syntaxError("Expected expression");
 }
 
 void Compiler::parseAndPopOptionalExpression() { // FIX : drop
-	XValue xv;
-	if (parseOptionalExpression(xv, LOWEST_PREC)) discard(xv);
 }
 
-Compiler::XValue Compiler::parseVarDeclaration() {
+Compiler::ExpressionResult Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
 	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
 	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
-	XValue lv;
+	ExpressionResult lv;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
-		lv = XValue(XValue::NAMED, Value(identifier));
+		lv = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
 	} else {
 		Int32 index;
 		LocalNameMap& nameMap = function->localNames;
@@ -1957,14 +1960,14 @@ Compiler::XValue Compiler::parseVarDeclaration() {
 			index = -(++function->varsCount);
 			nameMap[identifier] = index;
 		}
-		lv = XValue(XValue::INDEXED, Value(index));
+		lv = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
 	
 	if (eatToken("=", true)) {
-		XValue rv;
+		ExpressionResult rv;
 		parseExpression(rv, COMMA_PREC); // FIX : SUB
 		makeRValue(rv);
-		XValue lvCopy(lv); // FIX : NOT AGAIN!!
+		ExpressionResult lvCopy(lv); // FIX : NOT AGAIN!!
 		makeAssignment(lvCopy);
 		emit(Processor::POP_OP);
 	}
@@ -1980,46 +1983,46 @@ void Compiler::parseVarDeclarations() {
 }
 
 void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
-		, XValue& iterXValue) {
-	XValue enumXValue; // FIX : sub
-	parseExpression(enumXValue, LOWEST_PREC); // FIX : SUB
-	makeRValue(enumXValue);
+		, ExpressionResult& iterXR) {
+	ExpressionResult enumXR; // FIX : sub
+	parseExpression(enumXR, LOWEST_PREC); // FIX : SUB
+	makeRValue(enumXR);
 	emit(Processor::GET_ENUMERATOR_OP);
-	safeKeep(enumXValue);
+	safeKeep(enumXR);
 	expectToken(")", true);
 	Int32 loopPoint = markBackwardBranch();
-	XValue xv(enumXValue); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
-	makeRValue(xv);
+	ExpressionResult xr(enumXR); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
+	makeRValue(xr);
 	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
-	xv = XValue(XValue::PUSHED);
+	xr = ExpressionResult(ExpressionResult::PUSHED);
 	if (!iterCode.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
-		safeKeep(xv);
+		safeKeep(xr);
 		outputCode->insert(outputCode->end(), iterCode.begin(), iterCode.end());
-		returnSafeKept(xv, true, true);
+		returnSafeKept(xr, true, true);
 	}
-	makeAssignment(iterXValue);
-	discard(iterXValue);
+	makeAssignment(iterXR);
+	discard(iterXR);
 	parseStatement(emptyLabelScope, emptyLabelScope);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
 	completeBreaks(emptyLabelScope);
-	returnSafeKept(enumXValue, true, false);
+	returnSafeKept(enumXR, true, false);
 }
 
 void Compiler::parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
 	expectToken(";", true);
 	Int32 loopPoint = markBackwardBranch();
 	Int32 exitLoopPoint = INVALID_CODE_POINT;
-	XValue xv;
-	if (parseOptionalExpression(xv, LOWEST_PREC)) {
-		makeRValue(xv);
+	ExpressionResult xr;
+	if (parseOptionalExpression(xr, LOWEST_PREC)) {
+		makeRValue(xr);
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
 	CodeVector incCode;
 	outputCode = &incCode;
-	parseAndPopOptionalExpression();
+	if (parseOptionalExpression(xr, LOWEST_PREC)) discard(xr);
 	expectToken(")", true);
 	outputCode = &function->code;
 	parseStatement(emptyLabelScope, emptyLabelScope);
@@ -2079,7 +2082,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			completeBreaks(&newLabelScope);
 		} else {
 			p = b;
-			parseAndPopOptionalExpression();
+			ExpressionResult xr;
+			if (parseOptionalExpression(xr, LOWEST_PREC)) discard(xr);
 			expectSemicolon();
 		}
 	} else {
@@ -2120,9 +2124,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case IF_STATEMENT: {
 				expectToken("(", false);
-				XValue xv; // FIX : sub
-				parseExpression(xv, LOWEST_PREC); // FIX : SUB
-				makeRValue(xv);
+				ExpressionResult xr; // FIX : sub
+				parseExpression(xr, LOWEST_PREC); // FIX : SUB
+				makeRValue(xr);
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(firstScope, firstScope);
@@ -2142,9 +2146,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
-				XValue xv; // FIX : sub
-				parseExpression(xv, LOWEST_PREC); // FIX : SUB
-				makeRValue(xv);
+				ExpressionResult xr; // FIX : sub
+				parseExpression(xr, LOWEST_PREC); // FIX : SUB
+				makeRValue(xr);
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(&emptyLabelScope, &emptyLabelScope);
@@ -2163,9 +2167,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				expectToken("while", true);
 				expectToken("(", true);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
-				XValue xv; // FIX : sub
-				parseExpression(xv, LOWEST_PREC); // FIX : SUB
-				makeRValue(xv);
+				ExpressionResult xr; // FIX : sub
+				parseExpression(xr, LOWEST_PREC); // FIX : SUB
+				makeRValue(xr);
 				expectToken(")", true);
 				emitBackwardBranch(Processor::JT_OP, loppPoint);
 				expectSemicolon();
@@ -2181,10 +2185,10 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (eatToken("var", true)) {
 					eatWhite();
 					acceptInOperator = false;
-					XValue iterXValue = parseVarDeclaration();
+					ExpressionResult iterXR = parseVarDeclaration();
 					acceptInOperator = true;
 					if (eatToken("in", true)) {
-						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
+						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
 						if (eatToken(",", true)) {
 							eatWhite();
@@ -2195,17 +2199,17 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				} else {
-					XValue iterXValue;
+					ExpressionResult iterXR;
 					outputCode = &initCode;
 					acceptInOperator = false;
-					bool gotExpression = parseOptionalExpression(iterXValue, LOWEST_PREC);
+					bool gotExpression = parseOptionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
 					outputCode = &function->code;
 					if (gotExpression && eatToken("in", true)) {
-						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXValue);
+						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
 						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
-						discard(iterXValue);
+						discard(iterXR);
 						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				}
@@ -2213,14 +2217,14 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 			
 			case RETURN_STATEMENT: {
-				XValue returnXValue;
-				parseOptionalExpression(returnXValue, LOWEST_PREC);
+				ExpressionResult returnXR;
+				parseOptionalExpression(returnXR, LOWEST_PREC);
 				Scope* s = firstScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
 						if (!safeKept) {
-							safeKeep(returnXValue);
+							safeKeep(returnXR);
 							safeKept = true;
 						}
 						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -2228,8 +2232,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
-				if (safeKept) returnSafeKept(returnXValue, false, true);
-				else makeRValue(returnXValue);
+				if (safeKept) returnSafeKept(returnXR, false, true);
+				else makeRValue(returnXR);
 				emit(Processor::RETURN_OP);
 				expectSemicolon();
 				break;
@@ -2299,10 +2303,10 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				// Re-thrower (could actually be eliminated if we only have catch and no finally)
 				
 				completeForwardBranch(catchPoint);
-				XValue thrownXValue(XValue::PUSHED);
-				safeKeep(thrownXValue);
+				ExpressionResult thrownXR(ExpressionResult::PUSHED);
+				safeKeep(thrownXR);
 				emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
-				returnSafeKept(thrownXValue, true, true);
+				returnSafeKept(thrownXR, true, true);
 				emit(Processor::THROW_OP);
 				completeForwardBranch(tryEndPoint);
 				if (catchEndPoint != INVALID_CODE_POINT) completeForwardBranch(catchEndPoint);
@@ -2310,9 +2314,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 			
 			case THROW_STATEMENT: {
-				XValue xv; // FIX : sub
-				parseExpression(xv, LOWEST_PREC); // FIX : SUB
-				makeRValue(xv);
+				ExpressionResult xr; // FIX : sub
+				parseExpression(xr, LOWEST_PREC); // FIX : SUB
+				makeRValue(xr);
 				emit(Processor::THROW_OP);
 				expectSemicolon();
 				break;
@@ -2320,9 +2324,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case SWITCH_STATEMENT: {
 				expectToken("(", true);
-				XValue controlXValue; // FIX : sub
-				parseExpression(controlXValue, LOWEST_PREC); // FIX : SUB
-				safeKeep(controlXValue);
+				ExpressionResult controlXR; // FIX : sub
+				parseExpression(controlXR, LOWEST_PREC); // FIX : SUB
+				safeKeep(controlXR);
 				expectToken(")", true);
 				expectToken("{", true);
 				Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
@@ -2336,11 +2340,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				while (p != e && !eatToken("}", false)) {
 					if (eatToken("case", false)) {
 						outputCode = &testsCode;
-						XValue xv(controlXValue); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
-						makeRValue(xv);
-						parseExpression(xv, LOWEST_PREC);
+						ExpressionResult xr(controlXR); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
+						makeRValue(xr);
+						parseExpression(xr, LOWEST_PREC);
 						expectToken(":", true);
-						makeRValue(xv);
+						makeRValue(xr);
 						emit(Processor::X_EQ_OP);
 						emitWithInt32(Processor::JT_OP, function->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
@@ -2369,7 +2373,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
 				completeBreaks(&emptyLabelScope);
-				returnSafeKept(controlXValue, true, false);
+				returnSafeKept(controlXR, true, false);
 				break;
 			}
 			
@@ -2457,12 +2461,18 @@ class FromCharCodeFunction : public Function { // FIX : .length?! and all the ot
 				}
 };
 
+Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc < 1) return UNDEFINED_VALUE;
+	return argv[0];
+}
+
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
-Engine::Engine(GCHeap& heap, Object* globalThis) : gcHeap(heap), globalThis(globalThis) {
-	gcHeap.protect(globalThis);
+Engine::Engine(GCHeap& heap, Object* globals) : gcHeap(heap), globals(globals) {
+	assert(heap.belongs(globals));
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
+	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalDirectFunction)));
 }
 
 #include <fstream>
@@ -2493,8 +2503,8 @@ int main(int argc, const char* argv[]) {
 	const String PRINT_STRING("print");
 	GCHeap heap;
 	UserObject globals;
-	Engine engine(heap, &globals);
 	heap.protect(&globals);
+	Engine engine(heap, &globals);
 	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction)));
