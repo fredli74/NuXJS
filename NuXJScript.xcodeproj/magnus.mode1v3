@@ -216,11 +216,11 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F78D2D4516EE9E3400B8FA3F</string>
+						<string>F78D2D5916EE9EA300B8FA3F</string>
 						<key>history</key>
 						<array>
-							<string>F78D2D3D16EE9E0A00B8FA3F</string>
-							<string>F78D2D3E16EE9E0A00B8FA3F</string>
+							<string>F78D2D5816EE9EA300B8FA3F</string>
+							<string>F78D2D5316EE9E9C00B8FA3F</string>
 						</array>
 					</dict>
 					<key>SplitCount</key>
@@ -257,7 +257,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F78D2D4616EE9E3400B8FA3F</string>
+						<string>F78D2D5A16EE9EA300B8FA3F</string>
 						<key>history</key>
 						<array>
 							<string>F78D2D0C16EE9C8E00B8FA3F</string>
@@ -298,7 +298,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F78D2D4716EE9E3400B8FA3F</string>
+						<string>F78D2D5B16EE9EA300B8FA3F</string>
 						<key>history</key>
 						<array>
 							<string>F78D2CD716EE9AA100B8FA3F</string>
@@ -449,7 +449,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F78D2D4416EE9E3400B8FA3F</string>
+										<string>F78D2D5716EE9EA300B8FA3F</string>
 										<key>history</key>
 										<array>
 											<string>F7E88F8A16E894970042DC89</string>
@@ -478,7 +478,7 @@
 											<string>F7101A4216ED4E4D005A8F8D</string>
 											<string>F78D2BA916EDF7A100B8FA3F</string>
 											<string>F78D2C7D16EE961900B8FA3F</string>
-											<string>F78D2C7E16EE961900B8FA3F</string>
+											<string>F78D2D5616EE9EA300B8FA3F</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -681,10 +681,10 @@
 		<string>F78D2BBB16EDF7A100B8FA3F</string>
 		<string>1C78EAAD065D492600B07095</string>
 		<string>1CD10A99069EF8BA00B06720</string>
-		<string>F74E7E0316D1A3E7003A6AB6</string>
-		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 		<string>F78D2C8016EE961900B8FA3F</string>
 		<string>F78D2CDD16EE9AA600B8FA3F</string>
+		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
+		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F78D2D0816EE9C8E00B8FA3F</string>
 	</array>
 	<key>WindowString</key>
@@ -709,7 +709,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CD0528F0623707200166675</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.h</string>
+								<string>NuXJScript.cpp</string>
 								<key>StatusBarVisibility</key>
 								<true/>
 							</dict>
@@ -780,7 +780,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>

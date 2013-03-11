@@ -780,20 +780,20 @@ class Compiler : public GCItem {
 				void completeContinues(const Scope* fromScope, const Scope* untilScope);
 				void completeBreaks(const Scope* scope);
 
-				ExpressionResult operand(const OperatorInfo& op); // FIX : drop parse from all these
+				ExpressionResult operand(const OperatorInfo& op);
 				ExpressionResult rvalueOperand(const OperatorInfo& op);
 				ExpressionResult functionCall(Processor::Opcode op);
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
-				bool parseOptionalExpression(ExpressionResult& xr, Precedence precedence);
-				ExpressionResult parseVarDeclaration();
-				void parseVarDeclarations();
-				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
+				ExpressionResult varDeclaration();
+				void varDeclarations();
+				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
 						, const ExpressionResult& iterXR);
-				void parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
-				void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
-				void parseStatementList(Scope* firstScope);
+				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
+				void statement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
+				void statementList(Scope* firstScope);
 				bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				void expectSemicolon();
 				void expectToken(const char* t, bool eatLeadingWhite);
@@ -801,7 +801,7 @@ class Compiler : public GCItem {
 				void eatToken();
 				Char* unescape(Char* buffer, const Char*& p, const Char* e);
 				bool isLeadingIdentifierChar(Char c);
-				void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
+				void identifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
 
 				Engine& engine; // FIX : necessary?
 				ScriptFunctionDef* const function;

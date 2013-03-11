@@ -1646,7 +1646,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			xr = makeRValue(xr);
 			eatWhite();
 			const Char* b = p;
-			parseIdentifier(true);
+			identifier(true);
 			if (p == b) syntaxError("Expected identifier");
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
@@ -1767,7 +1767,7 @@ static int findReservedKeyword(int n /* string length */, const Char* s) {
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-void Compiler::parseIdentifier(bool acceptReservedKeywords) {
+void Compiler::identifier(bool acceptReservedKeywords) {
 	if (p != e && isLeadingIdentifierChar(*p)) {
 		const Char* b = p;
 		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
@@ -1791,7 +1791,7 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence precedence) {
+bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
@@ -1819,7 +1819,7 @@ bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence preceden
 							eatWhite();
 						}
 						const Char* b = p;
-						parseIdentifier(false);
+						identifier(false);
 						if (p == b) syntaxError("Expected identifier");
 						func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
 						eatWhite();
@@ -1872,7 +1872,7 @@ bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence preceden
 				}
 				default: {
 					const Char* b = p;
-					parseIdentifier(false);
+					identifier(false);
 					if (p == b) return false; // fix : nicer way?
 					const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 					Int32 index;
@@ -1901,7 +1901,7 @@ bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence preceden
 
 Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	ExpressionResult xr;
-	if (!parseOptionalExpression(xr, precedence)) syntaxError("Expected expression");
+	if (!optionalExpression(xr, precedence)) syntaxError("Expected expression");
 	return xr;
 }
 
@@ -1909,10 +1909,10 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 	return makeRValue(expression(precedence));
 }
 
-Compiler::ExpressionResult Compiler::parseVarDeclaration() {
+Compiler::ExpressionResult Compiler::varDeclaration() {
 	const Char* b = p; // FIX : sub
-	parseIdentifier(false);
-	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
+	identifier(false);
+	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
 	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 	ExpressionResult lxr;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
@@ -1937,15 +1937,15 @@ Compiler::ExpressionResult Compiler::parseVarDeclaration() {
 	return lxr;
 }
 
-void Compiler::parseVarDeclarations() {
+void Compiler::varDeclarations() {
 	while (true) {
-		parseVarDeclaration();
+		varDeclaration();
 		if (!eatToken(",", true)) break;
 		eatWhite();
 	}
 }
 
-void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
 		, const ExpressionResult& iterXR) {
 	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
@@ -1962,7 +1962,7 @@ void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd
 		returnSafeKept(xr, true);
 	}
 	discard(makeAssignment(iterXR));
-	parseStatement(emptyLabelScope, emptyLabelScope);
+	statement(emptyLabelScope, emptyLabelScope);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
@@ -1970,22 +1970,22 @@ void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd
 	returnSafeKept(enumXR, true);
 }
 
-void Compiler::parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
+void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
 	expectToken(";", true);
 	Int32 loopPoint = markBackwardBranch();
 	Int32 exitLoopPoint = INVALID_CODE_POINT;
 	ExpressionResult xr;
-	if (parseOptionalExpression(xr, LOWEST_PREC)) {
+	if (optionalExpression(xr, LOWEST_PREC)) {
 		xr = makeRValue(xr);
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
 	CodeVector incCode;
 	outputCode = &incCode;
-	if (parseOptionalExpression(xr, LOWEST_PREC)) discard(xr);
+	if (optionalExpression(xr, LOWEST_PREC)) discard(xr);
 	expectToken(")", true);
 	outputCode = &function->code;
-	parseStatement(emptyLabelScope, emptyLabelScope);
+	statement(emptyLabelScope, emptyLabelScope);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
@@ -2016,11 +2016,11 @@ void Compiler::completeBreaks(const Scope* scope) {
 
 // FIX : make member functions of all the different statements
 
-void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
+void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	eatWhite();	
 		
 	if (eatToken("{", false)) {
-		parseStatementList(firstScope);
+		statementList(firstScope);
 		expectToken("}", false);
 		return;
 	}
@@ -2030,7 +2030,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	int statementTokenIndex = findStatementToken(p - b, &*b);
 	if (statementTokenIndex < 0) {
 		p = b;
-		parseIdentifier(true);
+		identifier(true);
 		const Char* q = p;
 		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier(b, q);
@@ -2038,12 +2038,12 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (!s->label.empty() && s->label.isEqualTo(identifier)) syntaxError("Duplicate label");
 			}
 			Scope newLabelScope(identifier, firstScope);
-			parseStatement(&newLabelScope, scopeLabelsEnd);
+			statement(&newLabelScope, scopeLabelsEnd);
 			completeBreaks(&newLabelScope);
 		} else {
 			p = b;
 			ExpressionResult xr;
-			if (parseOptionalExpression(xr, LOWEST_PREC)) discard(xr);
+			if (optionalExpression(xr, LOWEST_PREC)) discard(xr);
 			expectSemicolon();
 		}
 	} else {
@@ -2054,7 +2054,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				const Char* b = p;
 				Scope* s = firstScope;
-				parseIdentifier(false);
+				identifier(false);
 				// FIX : too complicated!! bone out...
 				String identifier(b, p);
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
@@ -2077,7 +2077,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 						
 			case VAR_STATEMENT: {
-				parseVarDeclarations();
+				varDeclarations();
 				expectSemicolon();
 				break;
 			}
@@ -2087,11 +2087,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-				parseStatement(firstScope, firstScope);
+				statement(firstScope, firstScope);
 				if (eatToken("else", true)) {
 					Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(falsePoint);
-					parseStatement(firstScope, firstScope);
+					statement(firstScope, firstScope);
 					completeForwardBranch(endPoint);
 				} else {
 					completeForwardBranch(falsePoint);
@@ -2107,7 +2107,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
-				parseStatement(&emptyLabelScope, &emptyLabelScope);
+				statement(&emptyLabelScope, &emptyLabelScope);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
 				completeForwardBranch(exitLoopPoint);
@@ -2119,7 +2119,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Int32 loppPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-				parseStatement(&emptyLabelScope, &emptyLabelScope);
+				statement(&emptyLabelScope, &emptyLabelScope);
 				expectToken("while", true);
 				expectToken("(", true);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -2139,32 +2139,32 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (eatToken("var", true)) {
 					eatWhite();
 					acceptInOperator = false;
-					ExpressionResult iterXR = parseVarDeclaration();
+					ExpressionResult iterXR = varDeclaration();
 					acceptInOperator = true;
 					if (eatToken("in", true)) {
-						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
 						if (eatToken(",", true)) {
 							eatWhite();
 							acceptInOperator = false;
-							parseVarDeclarations();
+							varDeclarations();
 							acceptInOperator = true;
 						}
-						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
+						forStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				} else {
 					ExpressionResult iterXR;
 					outputCode = &initCode;
 					acceptInOperator = false;
-					bool gotExpression = parseOptionalExpression(iterXR, LOWEST_PREC);
+					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
 					outputCode = &function->code;
 					if (gotExpression && eatToken("in", true)) {
-						parseForInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
 						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
 						discard(iterXR);
-						parseForStatement(&emptyLabelScope, scopeLabelsEnd);
+						forStatement(&emptyLabelScope, scopeLabelsEnd);
 					}
 				}
 				break;
@@ -2172,7 +2172,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case RETURN_STATEMENT: {
 				ExpressionResult returnXR;
-				parseOptionalExpression(returnXR, LOWEST_PREC);
+				optionalExpression(returnXR, LOWEST_PREC);
 				Scope* s = firstScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
@@ -2197,7 +2197,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope tryScope(Scope::TRY_TYPE, firstScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
-				parseStatementList(&tryScope);
+				statementList(&tryScope);
 				expectToken("}", false);
 				tryScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -2210,8 +2210,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					gotCatch = true;
 					expectToken("(", true);
 					const Char* b = p;
-					parseIdentifier(false);
-					if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
+					identifier(false);
+					if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
 					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
 					LocalNameMap& nameMap = function->localNames;
 					bool hadLocalIndex = false;
@@ -2228,7 +2228,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					expectToken(")", true);
 					Scope catchScope(Scope::CATCH_TYPE, firstScope);
 					expectToken("{", true); // FIX : sub
-					parseStatementList(&catchScope);
+					statementList(&catchScope);
 					expectToken("}", false);
 					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
 					catchScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -2247,7 +2247,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (eatToken("finally", true)) {
 					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
 					expectToken("{", true); // FIX : sub
-					parseStatementList(&finallyScope);
+					statementList(&finallyScope);
 					expectToken("}", false);
 				} else {
 					if (!gotCatch) syntaxError("Expected 'catch' or 'finally'");
@@ -2306,7 +2306,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						syntaxError("Expected 'case', 'default' or '}'");
 					} else {
 						const Char* b = p;
-						parseStatement(&emptyLabelScope, &emptyLabelScope);
+						statement(&emptyLabelScope, &emptyLabelScope);
 						if (b == p) syntaxError("Expected '}'");
 					}
 					firstStatement = false;
@@ -2331,11 +2331,11 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	}
 }
 
-void Compiler::parseStatementList(Scope* firstScope) {
+void Compiler::statementList(Scope* firstScope) {
 	const Char* b;
 	do {
 		b = p;
-		parseStatement(firstScope, firstScope);
+		statement(firstScope, firstScope);
 	} while (p != e && b != p);
 }
 
@@ -2346,7 +2346,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
-	parseStatementList(0);
+	statementList(0);
 	return p;
 }
 
