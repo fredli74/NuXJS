@@ -1,3 +1,13 @@
+testOne()
+{
+	if [[ -e $(which $2) ]]; then
+		echo
+		echo --- $1 ---
+		echo
+		$2 goodTests.js | diff --strip-trailing-cr goodResults.txt -
+	fi
+}
+
 echo "### GOOD TESTS ###"
 echo
 echo --- NuX ---
@@ -6,24 +16,9 @@ export DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib
 build/Debug/NuXJScript -s goodTests.js | diff --strip-trailing-cr goodResults.txt -
 # build/Debug/NuXJScript -s -gc 1 goodTests.js | diff --strip-trailing-cr goodResults.txt -
 export DYLD_INSERT_LIBRARIES=
-if [[ -e $(which v8) ]]; then
-	echo
-	echo --- V8 ---
-	echo
-	v8 goodTests.js | diff --strip-trailing-cr goodResults.txt -
-fi
-if [[ -e $(which jsc) ]]; then
-	echo
-	echo --- JSC ---
-	echo
-	jsc goodTests.js | diff --strip-trailing-cr goodResults.txt -
-fi
-if [[ -e $(which js) ]]; then
-	echo
-	echo --- SpiderMonkey ---
-	echo
-	js goodTests.js | diff --strip-trailing-cr goodResults.txt -
-fi
+#testOne V8 v8
+#testOne JavaScriptCore jsc
+#testOne SpiderMonkey js
 #
 # Seems like Rhino doesn't enumerate string characters according to standard: http://www.ecma-international.org/ecma-262/5.1/#sec-15.5.5.2
 #

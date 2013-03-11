@@ -1495,20 +1495,20 @@ Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-void Compiler::makeRValue(ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: assert(0);
-		case ExpressionResult::PUSHED: return;
+		case ExpressionResult::PUSHED: return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 	}
-	xr = ExpressionResult(ExpressionResult::PUSHED);
+	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
-void Compiler::safeKeep(ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED:
 		case ExpressionResult::INDEXED:
@@ -1525,18 +1525,15 @@ void Compiler::safeKeep(ExpressionResult& xr) {
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
 			emit(Processor::POP_OP);
-			xr = ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
-			break;
+			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 		}
-		default: break;
+		default: return xr;
 	}
 }
 
-void Compiler::returnSafeKept(ExpressionResult& xr, bool doReset, bool makeRValue) { // FIX : <- wouldn't need makeRValue if all these weren't destructive
-	ExpressionResult xrCopy(xr); // FIX : this is beginning to feel silly
-	if (makeRValue) Compiler::makeRValue(xr);
-	if (xrCopy.t == ExpressionResult::INDEXED) {
-		Int32 index = xrCopy.v.toInt();
+void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
+	if (xr.t == ExpressionResult::INDEXED) {
+		Int32 index = xr.v.toInt();
 		if (doReset) {
 			emit(Processor::VOID_OP);
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
@@ -1546,43 +1543,39 @@ void Compiler::returnSafeKept(ExpressionResult& xr, bool doReset, bool makeRValu
 	}
 }
 
-void Compiler::makeAssignment(ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: syntaxError("Illegal l-value"); // FIX : ECMA like the word "reference"
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
-	xr = ExpressionResult(ExpressionResult::PUSHED);
+	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
-void Compiler::discard(ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED: emit(Processor::POP_OP); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
 		default: break;
 	}
-	xr = ExpressionResult(ExpressionResult::NONE);
+	return ExpressionResult(ExpressionResult::NONE);
 }
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
 	if (!eatToken(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
 }
 
-Compiler::ExpressionResult Compiler::parseOperand(const OperatorInfo& op) {
-	ExpressionResult rr;
-	parseExpression(rr, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
+Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
+	ExpressionResult rr(expression(op.closeToken != 0 ? LOWEST_PREC : op.prec));
 	if (op.closeToken != 0) expectToken(op.closeToken, true);
 	return rr;
 }
 
-void Compiler::parseRValueOperand(const OperatorInfo& op) {
-	ExpressionResult xr(parseOperand(op));
-	makeRValue(xr);
-}
+Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { return makeRValue(operand(op)); }
 
-void Compiler::parseFunctionCall(ExpressionResult& xr, Processor::Opcode op) {
+Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	eatWhite();
 	Int32 count = 0;
 	while (p != e && !eatToken(")", false)) {
@@ -1590,17 +1583,16 @@ void Compiler::parseFunctionCall(ExpressionResult& xr, Processor::Opcode op) {
 			if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
 			eatWhite();
 		}
-		parseExpression(xr, COMMA_PREC);
-		makeRValue(xr);
+		ExpressionResult argXR(rvalueExpression(COMMA_PREC));
 		eatWhite();
 		++count;
 	}
 	if (p == e) syntaxError("Expected ',' or ')'");
 	emitWithInt32(op, count);
-	xr = ExpressionResult(ExpressionResult::PUSHED);
+	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
-bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
+bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
@@ -1613,41 +1605,45 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 	}
 	// FIX : sort
 	switch (op.type) {
+		case COMMA: discard(xr); xr = rvalueOperand(op); break;
+		case VOID_OPERATOR: xr = discard(operand(op)); break;
+		case GROUP: xr = operand(op); break;
+		case UNARY: xr = rvalueOperand(op); emit(op.vmOp); break;		
+		case BINARY: xr = makeRValue(xr); rvalueOperand(op); emit(op.vmOp); break;
+
 		case POST_INC_DEC: {
-			ExpressionResult lxr(xr);
-			makeRValue(lxr);
+			makeRValue(xr);
 			emit(Processor::REPUSH_OP);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
-			makeAssignment(xr);
+			xr = makeAssignment(xr);
 			emit(Processor::POP_OP);
 			break;
 		}
 		
 		case LOGICAL_AND_OR: {
-			makeRValue(xr);
+			xr = makeRValue(xr);
 			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(Processor::POP_OP);
-			parseRValueOperand(op);
+			rvalueOperand(op);
 			completeForwardBranch(point);
 			break;
 		}
 		
 		case CONDITIONAL: {
-			makeRValue(xr);
+			xr = makeRValue(xr);
 			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-			parseRValueOperand(op);
+			rvalueOperand(op);
 			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
-			parseExpression(xr, op.prec);
-			makeRValue(xr);
+			xr = rvalueExpression(op.prec);
 			completeForwardBranch(endPoint);
 			break;			
 		}
 		
 		case PROPERTY_DOT: {
-			makeRValue(xr);
+			xr = makeRValue(xr);
 			eatWhite();
 			const Char* b = p;
 			parseIdentifier(true);
@@ -1661,33 +1657,26 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 			Processor::Opcode op = Processor::CALL_GLOBAL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.getString()->isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
 			if (xr.t == ExpressionResult::PROPERTY) op = Processor::CALL_METHOD_OP;
-			else makeRValue(xr);
-			parseFunctionCall(xr, op);
+			else xr = makeRValue(xr);
+			xr = functionCall(op);
 			break;
 		}
 		
 		case NEW_OPERATOR: {
-			parseRValueOperand(op);
+			rvalueOperand(op);
 			if (!eatToken("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
 				xr = ExpressionResult(ExpressionResult::PUSHED);
 			} else {
 				eatWhite();
-				parseFunctionCall(xr, Processor::NEW_OP);
+				xr = functionCall(Processor::NEW_OP);
 			}
 			emit(Processor::NEW_RESULT_OP);
 			break;
 		}
-		
-		case COMMA: {
-			discard(xr);
-			xr = parseOperand(op);
-			makeRValue(xr);
-			break;
-		}
-		
+				
 		case DELETE_OPERATOR: {
-			xr = parseOperand(op);
+			xr = operand(op);
 			switch (xr.t) {
 				default: assert(0);
 				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* continue */
@@ -1700,69 +1689,43 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 			break;
 		}
 		
-		case VOID_OPERATOR: {
-			xr = parseOperand(op);
-			discard(xr);
-			break;
-		}
-		
-		case GROUP: {
-			xr = parseOperand(op);
-			break;
-		}
-
 		case PRE_INC_DEC: {
-			xr = parseOperand(op);
-			ExpressionResult lxr(xr);
-			makeRValue(lxr);
+			xr = operand(op);
+			makeRValue(xr);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
-			makeAssignment(xr);
+			xr = makeAssignment(xr);
 			break;
 		}
 		
 		case TYPE_OF: {
-			xr = parseOperand(op);
+			xr = operand(op);
 			if (xr.t == ExpressionResult::NAMED) {
 				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
 				xr = ExpressionResult(ExpressionResult::PUSHED);
 			} else {
-				makeRValue(xr);
+				xr = makeRValue(xr);
 				emit(op.vmOp);
 			}
-			break;
-		}
-			
-		case UNARY: {
-			xr = parseOperand(op);
-			makeRValue(xr);
-			emit(op.vmOp);
-			break;
-		}
-		
-		case BINARY: {
-			makeRValue(xr);
-			parseRValueOperand(op);
-			emit(op.vmOp);
 			break;
 		}
 		
 		case ASSIGNMENT: {
 			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
-				makeRValue(lxr);
-				parseRValueOperand(op);
+				lxr = makeRValue(lxr);
+				rvalueOperand(op);
 				emit(op.vmOp);
 			} else {
-				parseRValueOperand(op);
+				rvalueOperand(op);
 			}
-			makeAssignment(xr);
+			xr = makeAssignment(xr);
 			break;
 		}
 		
 		case PROPERTY_BRACKETS: {
-			makeRValue(xr);
-			parseRValueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			xr = makeRValue(xr);
+			rvalueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -1831,7 +1794,7 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence precedence) {
 	eatWhite();
 	if (p == e) return false;
-	if (!parseOperator(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
+	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		const Char* b = p;
 		eatToken();
 		int i = findLiteralToken(p - b, &*b);
@@ -1928,7 +1891,7 @@ bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence preceden
     }
 	const Char* b = p;
     eatWhite();
-    while (parseOperator(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
+    while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
 		eatWhite();
 	}
@@ -1936,8 +1899,14 @@ bool Compiler::parseOptionalExpression(ExpressionResult& xr, Precedence preceden
 	return true;
 }
 
-void Compiler::parseExpression(ExpressionResult& xr, Precedence precedence) {
+Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
+	ExpressionResult xr;
 	if (!parseOptionalExpression(xr, precedence)) syntaxError("Expected expression");
+	return xr;
+}
+
+Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
+	return makeRValue(expression(precedence));
 }
 
 Compiler::ExpressionResult Compiler::parseVarDeclaration() {
@@ -1961,11 +1930,8 @@ Compiler::ExpressionResult Compiler::parseVarDeclaration() {
 	}
 	
 	if (eatToken("=", true)) {
-		ExpressionResult rr;
-		parseExpression(rr, COMMA_PREC); // FIX : SUB
-		makeRValue(rr);
-		ExpressionResult lxrCopy(lxr); // FIX : NOT AGAIN!!
-		makeAssignment(lxrCopy);
+		ExpressionResult rr(rvalueExpression(COMMA_PREC));
+		makeAssignment(lxr);
 		emit(Processor::POP_OP);
 	}
 	return lxr;
@@ -1980,31 +1946,28 @@ void Compiler::parseVarDeclarations() {
 }
 
 void Compiler::parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
-		, ExpressionResult& iterXR) {
-	ExpressionResult enumXR; // FIX : sub
-	parseExpression(enumXR, LOWEST_PREC); // FIX : SUB
-	makeRValue(enumXR);
+		, const ExpressionResult& iterXR) {
+	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
-	safeKeep(enumXR);
+	enumXR = safeKeep(enumXR);
 	expectToken(")", true);
 	Int32 loopPoint = markBackwardBranch();
-	ExpressionResult xr(enumXR); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
-	makeRValue(xr);
+	makeRValue(enumXR);
 	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
-	xr = ExpressionResult(ExpressionResult::PUSHED);
+	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterCode.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
-		safeKeep(xr);
+		xr = safeKeep(xr);
 		outputCode->insert(outputCode->end(), iterCode.begin(), iterCode.end());
-		returnSafeKept(xr, true, true);
+		makeRValue(xr);
+		returnSafeKept(xr, true);
 	}
-	makeAssignment(iterXR);
-	discard(iterXR);
+	discard(makeAssignment(iterXR));
 	parseStatement(emptyLabelScope, emptyLabelScope);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
 	completeBreaks(emptyLabelScope);
-	returnSafeKept(enumXR, true, false);
+	returnSafeKept(enumXR, true);
 }
 
 void Compiler::parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
@@ -2013,7 +1976,7 @@ void Compiler::parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) 
 	Int32 exitLoopPoint = INVALID_CODE_POINT;
 	ExpressionResult xr;
 	if (parseOptionalExpression(xr, LOWEST_PREC)) {
-		makeRValue(xr);
+		xr = makeRValue(xr);
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
@@ -2121,9 +2084,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case IF_STATEMENT: {
 				expectToken("(", false);
-				ExpressionResult xr; // FIX : sub
-				parseExpression(xr, LOWEST_PREC); // FIX : SUB
-				makeRValue(xr);
+				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(firstScope, firstScope);
@@ -2143,9 +2104,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
-				ExpressionResult xr; // FIX : sub
-				parseExpression(xr, LOWEST_PREC); // FIX : SUB
-				makeRValue(xr);
+				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				parseStatement(&emptyLabelScope, &emptyLabelScope);
@@ -2164,9 +2123,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				expectToken("while", true);
 				expectToken("(", true);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
-				ExpressionResult xr; // FIX : sub
-				parseExpression(xr, LOWEST_PREC); // FIX : SUB
-				makeRValue(xr);
+				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				emitBackwardBranch(Processor::JT_OP, loppPoint);
 				expectSemicolon();
@@ -2221,7 +2178,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				while (s != 0) { // FIX : sub
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
 						if (!safeKept) {
-							safeKeep(returnXR);
+							returnXR = safeKeep(returnXR);
 							safeKept = true;
 						}
 						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -2229,8 +2186,8 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
-				if (safeKept) returnSafeKept(returnXR, false, true);
-				else makeRValue(returnXR);
+				makeRValue(returnXR);
+				if (safeKept) returnSafeKept(returnXR, false);
 				emit(Processor::RETURN_OP);
 				expectSemicolon();
 				break;
@@ -2301,9 +2258,10 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				
 				completeForwardBranch(catchPoint);
 				ExpressionResult thrownXR(ExpressionResult::PUSHED);
-				safeKeep(thrownXR);
+				thrownXR = safeKeep(thrownXR);
 				emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
-				returnSafeKept(thrownXR, true, true);
+				makeRValue(thrownXR);
+				returnSafeKept(thrownXR, true);
 				emit(Processor::THROW_OP);
 				completeForwardBranch(tryEndPoint);
 				if (catchEndPoint != INVALID_CODE_POINT) completeForwardBranch(catchEndPoint);
@@ -2311,9 +2269,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 			
 			case THROW_STATEMENT: {
-				ExpressionResult xr; // FIX : sub
-				parseExpression(xr, LOWEST_PREC); // FIX : SUB
-				makeRValue(xr);
+				ExpressionResult xr(rvalueExpression());
 				emit(Processor::THROW_OP);
 				expectSemicolon();
 				break;
@@ -2321,9 +2277,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			
 			case SWITCH_STATEMENT: {
 				expectToken("(", true);
-				ExpressionResult controlXR; // FIX : sub
-				parseExpression(controlXR, LOWEST_PREC); // FIX : SUB
-				safeKeep(controlXR);
+				ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
 				expectToken(")", true);
 				expectToken("{", true);
 				Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
@@ -2337,11 +2291,9 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				while (p != e && !eatToken("}", false)) {
 					if (eatToken("case", false)) {
 						outputCode = &testsCode;
-						ExpressionResult xr(controlXR); // copy so that makeRValue doesn't change it to pushed, FIX : is this good clean code?
-						makeRValue(xr);
-						parseExpression(xr, LOWEST_PREC);
+						makeRValue(controlXR);
+						ExpressionResult xr(rvalueExpression());
 						expectToken(":", true);
-						makeRValue(xr);
 						emit(Processor::X_EQ_OP);
 						emitWithInt32(Processor::JT_OP, function->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
@@ -2370,7 +2322,7 @@ void Compiler::parseStatement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
 				completeBreaks(&emptyLabelScope);
-				returnSafeKept(controlXR, true, false);
+				returnSafeKept(controlXR, true);
 				break;
 			}
 			

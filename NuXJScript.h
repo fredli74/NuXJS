@@ -770,17 +770,27 @@ class Compiler : public GCItem {
 				void completeForwardBranch(Int32 point);
 				Int32 markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode op, Int32 point);
+
+				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
+				ExpressionResult makeRValue(const ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
+				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
+
 				void completeContinues(const Scope* fromScope, const Scope* untilScope);
 				void completeBreaks(const Scope* scope);
-				ExpressionResult parseOperand(const OperatorInfo& op); // FIX : drop parse from all these
-				void parseRValueOperand(const OperatorInfo& op);
-				void parseFunctionCall(ExpressionResult& xr, Processor::Opcode op);
-				bool parseOperator(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
-				void parseExpression(ExpressionResult& xr, Precedence precedence);
+
+				ExpressionResult operand(const OperatorInfo& op); // FIX : drop parse from all these
+				ExpressionResult rvalueOperand(const OperatorInfo& op);
+				ExpressionResult functionCall(Processor::Opcode op);
+				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
+				ExpressionResult expression(Precedence precedence);
+				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
 				bool parseOptionalExpression(ExpressionResult& xr, Precedence precedence);
-				Compiler::ExpressionResult parseVarDeclaration();
+				ExpressionResult parseVarDeclaration();
 				void parseVarDeclarations();
-				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, ExpressionResult& iterXR);
+				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+						, const ExpressionResult& iterXR);
 				void parseForStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
 				void parseStatement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 				void parseStatementList(Scope* firstScope);
@@ -790,11 +800,6 @@ class Compiler : public GCItem {
 				void eatWhite();
 				void eatToken();
 				Char* unescape(Char* buffer, const Char*& p, const Char* e);
-				void safeKeep(ExpressionResult& xr); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
-				void returnSafeKept(ExpressionResult& xr, bool doReset, bool makeRValue); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED), if makeRValue == true, place the safe-kept value on stack
-				void makeRValue(ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
-				void makeAssignment(ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
-				void discard(ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 				bool isLeadingIdentifierChar(Char c);
 				void parseIdentifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
 
