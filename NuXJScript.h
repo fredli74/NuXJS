@@ -794,11 +794,11 @@ class Compiler : public GCItem {
 				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
 				void statement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
 				void statementList(Scope* firstScope);
-				bool eatToken(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
-				void expectSemicolon();
+				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
+				void semicolon();
 				void expectToken(const char* t, bool eatLeadingWhite);
-				void eatWhite();
-				void eatToken();
+				void white();
+				void token();
 				Char* unescape(Char* buffer, const Char*& p, const Char* e);
 				bool isLeadingIdentifierChar(Char c);
 				void identifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do

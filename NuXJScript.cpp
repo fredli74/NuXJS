@@ -1416,7 +1416,7 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
-void Compiler::eatWhite() {
+void Compiler::white() {
 	while (p != e) {
 		switch (*p) {
 			case ' ':
@@ -1441,10 +1441,10 @@ void Compiler::eatWhite() {
 	}
 }
 
-bool Compiler::eatToken(const char* t, bool eatLeadingWhite) {
+bool Compiler::token(const char* t, bool eatLeadingWhite) {
 	assert(*t != 0);
 	const Char* b = p;
-	if (eatLeadingWhite) eatWhite();
+	if (eatLeadingWhite) white();
 	while (*t != 0 && p != e && *p == *t) { ++p; ++t; }
 	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (p == e || !isLeadingIdentifierChar(*p)))) {
 		return true;
@@ -1454,7 +1454,7 @@ bool Compiler::eatToken(const char* t, bool eatLeadingWhite) {
 	}
 }
 
-void Compiler::eatToken() {
+void Compiler::token() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
 }
 
@@ -1564,7 +1564,7 @@ Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 }
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
-	if (!eatToken(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
+	if (!Compiler::token(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
 }
 
 Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
@@ -1576,15 +1576,15 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { return makeRValue(operand(op)); }
 
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
-	eatWhite();
+	white();
 	Int32 count = 0;
-	while (p != e && !eatToken(")", false)) {
+	while (p != e && !token(")", false)) {
 		if (count != 0) {
-			if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
-			eatWhite();
+			if (!token(",", false)) syntaxError("Expected ',' or ')'");
+			white();
 		}
 		ExpressionResult argXR(rvalueExpression(COMMA_PREC));
-		eatWhite();
+		white();
 		++count;
 	}
 	if (p == e) syntaxError("Expected ',' or ')'");
@@ -1596,7 +1596,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
-	while (i < opCount && !eatToken(opList[i].token, false)) ++i;
+	while (i < opCount && !token(opList[i].token, false)) ++i;
 	if (i >= opCount) return false;
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
@@ -1644,7 +1644,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case PROPERTY_DOT: {
 			xr = makeRValue(xr);
-			eatWhite();
+			white();
 			const Char* b = p;
 			identifier(true);
 			if (p == b) syntaxError("Expected identifier");
@@ -1664,11 +1664,11 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case NEW_OPERATOR: {
 			rvalueOperand(op);
-			if (!eatToken("(", true)) {
+			if (!token("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
 				xr = ExpressionResult(ExpressionResult::PUSHED);
 			} else {
-				eatWhite();
+				white();
 				xr = functionCall(Processor::NEW_OP);
 			}
 			emit(Processor::NEW_RESULT_OP);
@@ -1792,11 +1792,11 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 };
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
-	eatWhite();
+	white();
 	if (p == e) return false;
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		const Char* b = p;
-		eatToken();
+		token();
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
 			switch (static_cast<Literal>(i)) {
@@ -1812,17 +1812,17 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
 					expectToken("(", true);
-					eatWhite();
-					while (p != e && !eatToken(")", false)) {
+					white();
+					while (p != e && !token(")", false)) {
 						if (func->argumentsCount != 0) {
-							if (!eatToken(",", false)) syntaxError("Expected ',' or ')'");
-							eatWhite();
+							if (!token(",", false)) syntaxError("Expected ',' or ')'");
+							white();
 						}
 						const Char* b = p;
 						identifier(false);
 						if (p == b) syntaxError("Expected identifier");
 						func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
-						eatWhite();
+						white();
 					}
 					if (p == e) syntaxError("Expected ',' or ')'");
 					expectToken("{", true);
@@ -1890,10 +1890,10 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		}
     }
 	const Char* b = p;
-    eatWhite();
+    white();
     while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
-		eatWhite();
+		white();
 	}
 	p = b;
 	return true;
@@ -1929,7 +1929,7 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 		lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
 	
-	if (eatToken("=", true)) {
+	if (token("=", true)) {
 		ExpressionResult rr(rvalueExpression(COMMA_PREC));
 		makeAssignment(lxr);
 		emit(Processor::POP_OP);
@@ -1940,8 +1940,8 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 void Compiler::varDeclarations() {
 	while (true) {
 		varDeclaration();
-		if (!eatToken(",", true)) break;
-		eatWhite();
+		if (!token(",", true)) break;
+		white();
 	}
 }
 
@@ -1993,10 +1993,10 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
 	completeBreaks(emptyLabelScope);
 }
 
-void Compiler::expectSemicolon() {
+void Compiler::semicolon() {
 	const Char* b = p;
-	eatWhite();
-	if (p != e && *p != '}' && !eatToken(";", false) && std::find(b, p, '\n') == p) {
+	white();
+	if (p != e && *p != '}' && !token(";", false) && std::find(b, p, '\n') == p) {
 		p = b;
 		syntaxError("Syntax error");
 	}
@@ -2017,22 +2017,22 @@ void Compiler::completeBreaks(const Scope* scope) {
 // FIX : make member functions of all the different statements
 
 void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
-	eatWhite();	
+	white();	
 		
-	if (eatToken("{", false)) {
+	if (token("{", false)) {
 		statementList(firstScope);
 		expectToken("}", false);
 		return;
 	}
 	
 	const Char* b = p;
-	eatToken();
+	token();
 	int statementTokenIndex = findStatementToken(p - b, &*b);
 	if (statementTokenIndex < 0) {
 		p = b;
 		identifier(true);
 		const Char* q = p;
-		if (p != b && eatToken(":", true) && findReservedKeyword(q - b, b) < 0) {
+		if (p != b && token(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String identifier(b, q);
 			for (Scope* s = firstScope; s != 0; s = s->next) {
 				if (!s->label.empty() && s->label.isEqualTo(identifier)) syntaxError("Duplicate label");
@@ -2044,10 +2044,10 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			p = b;
 			ExpressionResult xr;
 			if (optionalExpression(xr, LOWEST_PREC)) discard(xr);
-			expectSemicolon();
+			semicolon();
 		}
 	} else {
-		eatWhite();
+		white();
 		switch (static_cast<Statement>(statementTokenIndex)) {
 			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
@@ -2072,13 +2072,13 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
 					syntaxError("Illegal label for continue");
 				(isBreak ? s->breaks : s->continues).push_back(emitForwardBranch(Processor::JMP_OP));
-				expectSemicolon();
+				semicolon();
 				break;
 			}
 						
 			case VAR_STATEMENT: {
 				varDeclarations();
-				expectSemicolon();
+				semicolon();
 				break;
 			}
 			
@@ -2088,7 +2088,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 				statement(firstScope, firstScope);
-				if (eatToken("else", true)) {
+				if (token("else", true)) {
 					Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(falsePoint);
 					statement(firstScope, firstScope);
@@ -2126,7 +2126,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				emitBackwardBranch(Processor::JT_OP, loppPoint);
-				expectSemicolon();
+				semicolon();
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
@@ -2136,16 +2136,16 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
 				CodeVector initCode;
-				if (eatToken("var", true)) {
-					eatWhite();
+				if (token("var", true)) {
+					white();
 					acceptInOperator = false;
 					ExpressionResult iterXR = varDeclaration();
 					acceptInOperator = true;
-					if (eatToken("in", true)) {
+					if (token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
-						if (eatToken(",", true)) {
-							eatWhite();
+						if (token(",", true)) {
+							white();
 							acceptInOperator = false;
 							varDeclarations();
 							acceptInOperator = true;
@@ -2159,7 +2159,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
 					outputCode = &function->code;
-					if (gotExpression && eatToken("in", true)) {
+					if (gotExpression && token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
 					} else {
 						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
@@ -2189,7 +2189,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				makeRValue(returnXR);
 				if (safeKept) returnSafeKept(returnXR, false);
 				emit(Processor::RETURN_OP);
-				expectSemicolon();
+				semicolon();
 				break;
 			}
 			
@@ -2206,7 +2206,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				// Catcher
 				
 				bool gotCatch = false;
-				if (eatToken("catch", true)) {
+				if (token("catch", true)) {
 					gotCatch = true;
 					expectToken("(", true);
 					const Char* b = p;
@@ -2244,7 +2244,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					completeForwardBranch(*it);
 				emit(Processor::TRIED_OP);
 				Int32 rethrowPoint = markBackwardBranch();
-				if (eatToken("finally", true)) {
+				if (token("finally", true)) {
 					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
 					expectToken("{", true); // FIX : sub
 					statementList(&finallyScope);
@@ -2271,7 +2271,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			case THROW_STATEMENT: {
 				ExpressionResult xr(rvalueExpression());
 				emit(Processor::THROW_OP);
-				expectSemicolon();
+				semicolon();
 				break;
 			}
 			
@@ -2287,9 +2287,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Int32 defaultPoint = INVALID_CODE_POINT;
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				bool firstStatement = true;
-				eatWhite();
-				while (p != e && !eatToken("}", false)) {
-					if (eatToken("case", false)) {
+				white();
+				while (p != e && !token("}", false)) {
+					if (token("case", false)) {
 						outputCode = &testsCode;
 						makeRValue(controlXR);
 						ExpressionResult xr(rvalueExpression());
@@ -2298,7 +2298,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						emitWithInt32(Processor::JT_OP, function->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
 						outputCode = &function->code;
-					} else if (eatToken("default", false)) {
+					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
 						defaultPoint = markBackwardBranch();
@@ -2310,7 +2310,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						if (b == p) syntaxError("Expected '}'");
 					}
 					firstStatement = false;
-					eatWhite();
+					white();
 				}
 				if (p == e) syntaxError("Expected '}'");
 				
