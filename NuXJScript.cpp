@@ -1571,10 +1571,10 @@ void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
 }
 
 Compiler::ExpressionResult Compiler::parseOperand(const OperatorInfo& op) {
-	ExpressionResult rv;
-	parseExpression(rv, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
+	ExpressionResult rr;
+	parseExpression(rr, (op.closeToken != 0 ? LOWEST_PREC : op.prec));
 	if (op.closeToken != 0) expectToken(op.closeToken, true);
-	return rv;
+	return rr;
 }
 
 void Compiler::parseRValueOperand(const OperatorInfo& op) {
@@ -1614,8 +1614,8 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 	// FIX : sort
 	switch (op.type) {
 		case POST_INC_DEC: {
-			ExpressionResult lv(xr);
-			makeRValue(lv);
+			ExpressionResult lxr(xr);
+			makeRValue(lxr);
 			emit(Processor::REPUSH_OP);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
@@ -1713,8 +1713,8 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 
 		case PRE_INC_DEC: {
 			xr = parseOperand(op);
-			ExpressionResult lv(xr);
-			makeRValue(lv);
+			ExpressionResult lxr(xr);
+			makeRValue(lxr);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
 			makeAssignment(xr);
@@ -1748,9 +1748,9 @@ bool Compiler::parseOperator(ExpressionResult& xr, Precedence precedence, int op
 		}
 		
 		case ASSIGNMENT: {
-			ExpressionResult lv(xr);
+			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
-				makeRValue(lv);
+				makeRValue(lxr);
 				parseRValueOperand(op);
 				emit(op.vmOp);
 			} else {
@@ -1940,17 +1940,14 @@ void Compiler::parseExpression(ExpressionResult& xr, Precedence precedence) {
 	if (!parseOptionalExpression(xr, precedence)) syntaxError("Expected expression");
 }
 
-void Compiler::parseAndPopOptionalExpression() { // FIX : drop
-}
-
 Compiler::ExpressionResult Compiler::parseVarDeclaration() {
 	const Char* b = p; // FIX : sub
 	parseIdentifier(false);
 	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to parseIdentifier
 	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
-	ExpressionResult lv;
+	ExpressionResult lxr;
 	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
-		lv = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
+		lxr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
 	} else {
 		Int32 index;
 		LocalNameMap& nameMap = function->localNames;
@@ -1960,18 +1957,18 @@ Compiler::ExpressionResult Compiler::parseVarDeclaration() {
 			index = -(++function->varsCount);
 			nameMap[identifier] = index;
 		}
-		lv = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+		lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
 	
 	if (eatToken("=", true)) {
-		ExpressionResult rv;
-		parseExpression(rv, COMMA_PREC); // FIX : SUB
-		makeRValue(rv);
-		ExpressionResult lvCopy(lv); // FIX : NOT AGAIN!!
-		makeAssignment(lvCopy);
+		ExpressionResult rr;
+		parseExpression(rr, COMMA_PREC); // FIX : SUB
+		makeRValue(rr);
+		ExpressionResult lxrCopy(lxr); // FIX : NOT AGAIN!!
+		makeAssignment(lxrCopy);
 		emit(Processor::POP_OP);
 	}
-	return lv;
+	return lxr;
 }
 
 void Compiler::parseVarDeclarations() {

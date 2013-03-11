@@ -778,7 +778,6 @@ class Compiler : public GCItem {
 				bool parseOperator(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				void parseExpression(ExpressionResult& xr, Precedence precedence);
 				bool parseOptionalExpression(ExpressionResult& xr, Precedence precedence);
-				void parseAndPopOptionalExpression();
 				Compiler::ExpressionResult parseVarDeclaration();
 				void parseVarDeclarations();
 				void parseForInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode, ExpressionResult& iterXR);
