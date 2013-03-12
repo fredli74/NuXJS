@@ -551,13 +551,13 @@ const Table::Bucket* Table::getNext(const Bucket* b) const {
 
 const Table::Bucket* Table::lookup(const String* key) {
 	const Bucket* b = find(key, key->calcHash());
-	return (b->key != 0 ? b : 0);
+	return (b->key != 0 && b->value.exists() ? b : 0);
 }
 
 void Table::assign(const String* key, const Value& value) { update(key, value); }
 void Table::erase(const String* key) { update(key, Value::NONEXISTENT); }
 
-void Table::mark(GCHeap& heap) {
+void Table::markIn(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		heap.mark(buckets[i].key);
@@ -624,10 +624,7 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 
 bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
 	const Table::Bucket* b = properties.lookup(name);
-	if (b != 0) {
-		*v = b->value;
-		return true;
-	}
+	if (b != 0) { *v = b->value; return true; }
 	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 }
 
@@ -644,7 +641,7 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 }
 
 void UserObject::gcMark(GCHeap& heap) {
-	properties.mark(heap);
+	properties.markIn(heap);
 	heap.mark(prototype);
 	super::gcMark(heap);
 }
@@ -682,8 +679,6 @@ void ScriptFunctionDef::gcMark(GCHeap& heap) {
 		heap.mark(it->first);
 	super::gcMark(heap);
 }
-
-const Value* ScriptFunctionDef::getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 
 /* --- Function --- */
 
@@ -764,10 +759,35 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 
 /* --- FunctionFrame --- */
 
+struct EvalVarsObject : public Object { // FIX : can we reuse something here? UserObject (with prototype)? FunctionFrame?
+	typedef Object super;
+	EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
+	bool setProperty(Engine& engine, const String* name, const Value& v) {
+		if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
+		return parent->setProperty(engine, name, v);
+	}
+	bool getProperty(Engine& engine, const String* name, Value* v) {
+		const Table::Bucket* b = vars.lookup(name);
+		if (b != 0) { *v = b->value; return true; }
+		return parent->getProperty(engine, name, v);
+	}
+	bool deleteProperty(Engine& engine, const String* name) {
+		if (vars.lookup(name) != 0) { vars.erase(name); return true; } 		// FIX : we need a better way to lookup & update in one
+		return parent->deleteProperty(engine, name);
+	}
+	void gcMark(GCHeap& heap) {
+		vars.markIn(heap);
+		heap.mark(parent);
+		super::gcMark(heap);
+	}
+	Object* parent;
+	Table vars;
+};
+
 FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), environment(function->getEnvironment()), passedArgumentsCount(argc)
 		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
-		, argumentsValue(Value::NONEXISTENT) {
+		, argumentsValue(Value::NONEXISTENT), evalVars(0) {
 	localsPointer = locals.begin() + functionDef->varsCount;
 	std::fill(locals.begin(), localsPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, localsPointer);
@@ -816,11 +836,32 @@ bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 void FunctionFrame::gcMark(GCHeap& heap) {
 	heap.mark(functionDef);
 	heap.mark(environment);
+	heap.mark(evalVars);
 	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].markIn(heap);
 	argumentsValue.markIn(heap);
 	super::gcMark(heap);
 }
+
+void FunctionFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) {
+	if (evalVars == 0) {
+		evalVars = heap.manage(new EvalVarsObject(environment));
+		environment = evalVars;
+	}
+	for (LocalNameMap::const_iterator it = evalFunctionDef->localNames.begin(), e = evalFunctionDef->localNames.end(); it != e; ++it)
+		if (evalVars->vars.lookup(it->first) == 0) evalVars->vars.assign(it->first, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+}
+
+/* --- EvalFrame --- */
+
+EvalFrame::EvalFrame(const ScriptFunctionDef* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
+	localsPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
+}
+void EvalFrame::gcMark(GCHeap& heap) { heap.mark(parentFrame); super::gcMark(heap); }
+bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
+bool EvalFrame::setProperty(Engine& engine, const String* name, const Value& v) { return parentFrame->setProperty(engine, name, v); }
+bool EvalFrame::deleteProperty(Engine& engine, const String* name) { return parentFrame->deleteProperty(engine, name); }
+void EvalFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) { parentFrame->mergeEvalVars(heap, evalFunctionDef); }
 
 /* --- CatchFrame --- */
 
@@ -850,6 +891,10 @@ bool CatchFrame::setProperty(Engine& engine, const String* name, const Value& v)
 bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 	if (name->isEqualTo(*exceptionName)) return false;
 	else return parentFrame->deleteProperty(engine, name);
+}
+
+void CatchFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) {
+	parentFrame->mergeEvalVars(heap, evalFunctionDef);
 }
 
 /* --- Processor --- */
@@ -922,14 +967,24 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Objec
 	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = thisValue;
-	ip = &def->code[0];
+	ip = def->getCodePointer();
 	updateInternals();
 }
 
 void Processor::chain(ScriptFunctionDef* funcDef) {
 --vsp;
+/* FIX : this is what it could look like if we had a non-strict mode
 	ScriptFunction* func = engine.getHeap().manage(new ScriptFunction(funcDef, frame));
 	chain(func, 0, 0, csp->thisValue);
+*/
+	frame->mergeEvalVars(engine.getHeap(), funcDef);
+	frame = engine.getHeap().manage(new EvalFrame(funcDef, frame));
+	++csp; // FIX : overflow check
+	csp->returnIP = ip;
+	csp->frame = frame;
+	csp->thisValue = csp[-1].thisValue;
+	ip = funcDef->getCodePointer();
+	updateInternals();
 }
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
@@ -1115,7 +1170,7 @@ bool Processor::privateRun() {
 			case THIS_OP: push(Value(csp->thisValue)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
-				o = constants[operand()].asObject();
+				o = constants[operand()].asObject(); // FIX : .getObject?
 				assert(o != 0);
 				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
@@ -1168,7 +1223,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case NEXT_PROPERTY_OP: {
-				o = vsp[0].asObject();
+				o = vsp[0].asObject(); // FIX : .getObject?
 				assert(o != 0);
 				Int32 offset = operand();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
@@ -1363,11 +1418,11 @@ struct Compiler::ExpressionResult {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* function, bool forEval) : engine(engine), function(function)
-		, compilingForEval(forEval), outputCode(&function->code), safeKeptIndexCount(0), acceptInOperator(true) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* funcDef, bool forEval) : engine(engine), funcDef(funcDef)
+		, compilingForEval(forEval), outputCode(&funcDef->code), safeKeptIndexCount(0), acceptInOperator(true) { }
 
 void Compiler::gcMark(GCHeap& heap) {
-	heap.mark(function);
+	heap.mark(funcDef);
 	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
 		it->first.markIn(heap);
 	super::gcMark(heap);
@@ -1414,7 +1469,7 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
-		std::vector<Value>& constants = function->constants;
+		std::vector<Value>& constants = funcDef->constants;
 		constants.push_back(constant);
 		definedConstants[constant] = constants.size() - 1;
 		emitWithInt32(op, constants.size() - 1);
@@ -1531,7 +1586,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				tempLocalIndex = freeSafeKeepingIndexes.back();
 				freeSafeKeepingIndexes.pop_back();
 			} else {
-				tempLocalIndex = -(++function->varsCount);
+				tempLocalIndex = -(++funcDef->varsCount);
 				safeKeptIndexCount++;
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
@@ -1896,14 +1951,15 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					if (p == b) return false; // fix : nicer way?
 					discard(xr);
 					const String* identifier = String::newHashedString(engine.getHeap(), b, p);
-					Int32 index;
-					LocalNameMap& nameMap = function->localNames;
-					LocalNameMap::const_iterator it = nameMap.find(identifier);
-					if (it != nameMap.end()) {
-						index = it->second;
-						xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
-					} else {
-						xr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
+					xr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
+					if (!compilingForEval) { // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
+						Int32 index;
+						LocalNameMap& nameMap = funcDef->localNames;
+						LocalNameMap::const_iterator it = nameMap.find(identifier);
+						if (it != nameMap.end()) {
+							index = it->second;
+							xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+						}
 					}
 					break;
 				}
@@ -1936,18 +1992,18 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
 	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 	ExpressionResult lxr;
-	if (identifier->isEqualTo(ARGUMENTS_STRING)) {
-		lxr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
-	} else {
+	lxr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
+	if (!identifier->isEqualTo(ARGUMENTS_STRING)) {
 		Int32 index;
-		LocalNameMap& nameMap = function->localNames;
+		LocalNameMap& nameMap = funcDef->localNames;
 		LocalNameMap::const_iterator it = nameMap.find(identifier);
 		if (it != nameMap.end()) index = it->second;
 		else {
-			index = -(++function->varsCount);
+			index = -(++funcDef->varsCount);
 			nameMap[identifier] = index;
 		}
-		lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+		 // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
+		if (!compilingForEval) lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
 	
 	if (token("=", true)) {
@@ -2006,7 +2062,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	ExpressionResult incXR;
 	if (optionalExpression(incXR, LOWEST_PREC)) discard(incXR);
 	expectToken(")", true);
-	outputCode = &function->code;
+	outputCode = &funcDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
@@ -2185,7 +2241,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					ExpressionResult iterXR;
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
-					outputCode = &function->code;
+					outputCode = &funcDef->code;
 					if (gotExpression && token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
@@ -2241,7 +2297,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					identifier(false);
 					if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
 					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
-					LocalNameMap& nameMap = function->localNames;
+					LocalNameMap& nameMap = funcDef->localNames;
 					bool hadLocalIndex = false;
 					Int32 localIndex = -1;
 					LocalNameMap::iterator it = nameMap.find(exceptionVarName);
@@ -2323,9 +2379,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						ExpressionResult xr(rvalueExpression());
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
-						emitWithInt32(Processor::JT_OP, function->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
+						emitWithInt32(Processor::JT_OP, funcDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
-						outputCode = &function->code;
+						outputCode = &funcDef->code;
 					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
@@ -2369,7 +2425,7 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : only accept one compile? or opposite? create many different functions?
-	outputCode = &function->code;
+	outputCode = &funcDef->code;
 	freeSafeKeepingIndexes.clear();
 	safeKeptIndexCount = 0;
 	p = b;
@@ -2383,12 +2439,14 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 freeSafeKeepingIndexes.clear();
-	assert(outputCode == &function->code);
+	assert(outputCode == &funcDef->code);
 if (!supressStdErr) {
-	disassemble(engine.getHeap(), *outputCode, function->constants);
+	disassemble(engine.getHeap(), *outputCode, funcDef->constants);
+	std::cerr << "\tCode: " << funcDef->code.size() << std::endl;
+	std::cerr << "\tConstants: " << funcDef->constants.size() << std::endl;
 	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
-	std::cerr << "\tVars: " << function->varsCount << std::endl;
-	std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
+	std::cerr << "\tVars: " << funcDef->varsCount << std::endl;
+	std::cerr << "\tArguments: " << funcDef->argumentsCount << std::endl;
 }
 	return p;
 }
@@ -2444,14 +2502,31 @@ class FromCharCodeFunction : public Function { // FIX : .length?! and all the ot
 
 Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	if (argc < 1) return Value::UNDEFINED;
-	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving InternalType?
+	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
+
 	GCHeap& heap = engine.getHeap();
-	ScriptFunctionDef* functionDef = heap.manage(new ScriptFunctionDef());
-	Compiler compiler(engine, functionDef, true);
-	heap.protect(&compiler);
-	compiler.compile(*argv[0].toString(heap));
+	const String* sourceCode = argv[0].toString(heap);
+	ScriptFunctionDef* functionDef;
+	
+	const Table::Bucket* b = functionDefCache.lookup(sourceCode);
+	 // FIX : .getObject?
+	if (b != 0) {
+		functionDef = reinterpret_cast<ScriptFunctionDef*>(b->value.asObject());
+	} else {
+		functionDef = heap.manage(new ScriptFunctionDef());
+		Compiler compiler(engine, functionDef, true);
+		heap.protect(&compiler);
+		compiler.compile(*sourceCode);
+		functionDefCache.assign(sourceCode, Value(functionDef));
+	}
 	processor.chain(functionDef);
 	return Value();
+}
+
+void EvalFunction::gcMark(GCHeap& heap) {
+	functionDefCache = Table(); // Yeah we just empty everything on each gc sweep
+	functionDefCache.markIn(heap);
+	super::gcMark(heap);
 }
 
 const String FROM_CHAR_CODE_STRING("fromCharCode");
@@ -2468,7 +2543,6 @@ Engine::Engine(GCHeap& heap, Object* globals) : gcHeap(heap), globals(globals) {
 	class PrintFunction : public Function {
 		public:		typedef Function super;
 					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						return Value::UNDEFINED;
@@ -2532,11 +2606,6 @@ int main(int argc, const char* argv[]) {
 				Compiler compiler(engine, &functionDef, false);
 				heap.protect(&compiler);
 				compiler.compile(source);
-				
-				if (!supressStdErr) {
-					std::cerr << "\tCode: " << functionDef.code.size() << std::endl;
-					std::cerr << "\tConstants: " << functionDef.constants.size() << std::endl;
-				}
 				
 				Value vstack[1024];
 				Processor::CStackEntry cstack[1024];

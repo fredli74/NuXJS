@@ -4,7 +4,7 @@ else
 	EXE=$1
 fi
 
-for f in perftest*.js; do
+for f in benchmarks/*.js; do
 	echo
 	echo $f
 	time $EXE $f

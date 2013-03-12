@@ -283,7 +283,9 @@ print(function() { return delete f.z }())
 print(function() { return delete "i"[0] }())
 print(function() { var z=3; return delete z }())
 print(function() { var z=3; var g=function() {  return delete z; } ; return g; }()())
-print(delete "constant is always ok")
+print(delete "constant is always ok");
+
+(function() { var x=new(function(){}); x.a="a"; var b=function(){}; b.prototype=x; var c=new b; c.a="b"; print(c.a); delete c.a; print(c.a) })();
 
 print("*** break & continue ***")
 
@@ -539,12 +541,26 @@ print(eval("var i = 0; 234; while (++i < 10) { 23; continue }"))
 
 print(eval("var i = 3; 234; while (++i < 10) { j = 5; while (++j < i) j * 3 }"))
 
-var y = -100;
-var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
-print(a());
-print(a());
-print(y);
+print((function() { var x = 33; eval("x = 55"); return x })());
+
+print((function() { var x = 33; eval("var x = 55"); return x })());
+
+print((function() { eval("if (false) var x = 23"); return x })());
+
+(function() { var x = 88; try { throw "k" } catch (x) { eval("print(x); var x = 5"); print(x) }; print(x) })();
+
+(function() { var x = 88; try { throw "k" } catch (x) { eval("print(x); x = 5"); print(x) }; print(x) })();
+
+aGlobal = "ok"; (function() { eval("var aGlobal = 5"); print(delete aGlobal); print(aGlobal) })(); print("aGlobal" in this);
 print("");
+
+aGlobal = "ok"; (function() { eval("var aGlobal = 5"); print(delete aGlobal); print(delete aGlobal); })(); print("aGlobal" in this);
+print("");
+
+(function() { var x = 77; eval("var x = 5"); print(delete x); print(x) })();
+print("");
+
+var y = -100; var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })(); print(a()); print(a()); print(y); print("");
 
 var y = -100;
 var a=(function() { var z = 3; var y = 2; z = eval("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();
@@ -570,9 +586,9 @@ print("");
 this.isGlobal = "yeah, is global";
 var o = new (function() { this.eval = eval; this.isGlobal = "no, is not global"; this.test1 = function() { this.eval("print(this.isGlobal)")
 		this.test2 = function() { eval("print(this.isGlobal)") } } });
-o.eval("print(this.isGlobal)"); // FIX : jsc doesn't like this
-o.test1(); // FIX : jsc doesn't like this
-o.test2();
+// o.eval("print(this.isGlobal)"); // FIX : jsc doesn't like this
+// o.test1(); // FIX : jsc doesn't like this
+// o.test2();
 
 print("*** fun stuff ***");
 

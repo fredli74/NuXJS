@@ -58,12 +58,6 @@
             ReferencedContainer = "container:NuXJScript.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-         <CommandLineArgument
-            argument = "goodtests.js"
-            isEnabled = "YES">
-         </CommandLineArgument>
-      </CommandLineArguments>
       <AdditionalOptions>
          <AdditionalOption
             key = "MallocScribble"
@@ -105,7 +99,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "perftest8.js"
+            argument = "-s benchmarks/evalbm2.js"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -187,6 +187,8 @@ false
 false
 false
 true
+b
+a
 *** break & continue ***
 before 1
 after 1
@@ -605,14 +607,34 @@ undefined
 234
 23
 24
-2
+55
+55
+undefined
+k
+5
+88
+k
+5
+88
+true
+ok
+true
+
+true
+true
+false
+
+false
+5
+
+100
 tick 101
 101
 tick 102
 102
 -100
 
-2
+100
 tick 101
 101
 tick 102
@@ -633,7 +655,6 @@ tick 102
 102
 -100
 
-Exception: Unhandled exception: Expected ',' or ')'
 *** fun stuff ***
          !!!!!!!!"""""""""""""""""""""""""""##########$$$$%%&(.)(*2%$#######""""""""!!!!!!!!!!!!!!!!
         !!!!!!!"""""""""""""""""""""""""""###########$$$$%%&'(*0+('&%$$#######""""""""!!!!!!!!!!!!!!

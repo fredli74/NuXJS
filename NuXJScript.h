@@ -390,10 +390,11 @@ class Table {
 				UInt32 getLoadCount() const;
 				const Bucket* getFirst() const;
 				const Bucket* getNext(const Bucket* b) const;
-				const Bucket* lookup(const String* key);
-				void assign(const String* key, const Value& value);
-				void erase(const String* key);
-				void mark(GCHeap& heap);
+				// FIX : we need a better way to lookup & update in one, right now it needs separate lookup and assign (see EvalVarsObject)
+				const Bucket* lookup(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				void assign(const String* key, const Value& value); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				void erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				void markIn(GCHeap& heap);
 
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
 				static UInt32 suggestN(UInt32 count); // FIX : keep?
@@ -450,17 +451,20 @@ struct StringObjectCompare {
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 typedef std::vector<CodeWord> CodeVector; // FIX : use QArray in all these places
 
-// This is an Object so that we can store it as a constant
-class ScriptFunctionDef : public Object {	
+// This is an Object so that we can store it as a constant and also in Table
+class ScriptFunctionDef : public Object {
+	friend class FunctionFrame;
+	friend class Compiler; // FIX : maybe not one day?
+	
 	public:		typedef Object super;
 				
 				ScriptFunctionDef();
 				virtual void gcMark(GCHeap& heap);
 				bool lookupLocalName(const String* name, Int32& index) const;
-				const Value* getConstantsPointer() const;
+				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
+				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
 
-// FIX : protectize
-	public:		const String* source;
+	protected:	const String* source;
 				CodeVector code;
 				std::vector<Value> constants;
 				Int32 argumentsCount;
@@ -520,10 +524,12 @@ class Function : public UserObject {
 
 class EvalFunction : public Function {
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual void gcMark(GCHeap& heap);
+	protected:	Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 };
 
 class Engine {
-	friend class String;
+	friend class String; // FIX : to access stringPrototype only
 	
 	public:		Engine(GCHeap& heap, Object* globals);
 				GCHeap& getHeap() const { return gcHeap; }
@@ -554,12 +560,14 @@ class Frame : public Object {
 				Frame(const ScriptFunctionDef* functionDef) : functionDef(functionDef) { }
 				const ScriptFunctionDef* getFunctionDef() const { return functionDef; }
 				Value* getLocalsPointer() const { return localsPointer; }
+				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) = 0;
 				
 	protected:	const ScriptFunctionDef* const functionDef;
-				Value* localsPointer;
+				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 };
 
 class Arguments;
+class EvalVarsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
@@ -568,13 +576,34 @@ class FunctionFrame : public Frame {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
 
-	protected:	Object* const environment;
+	protected:	Object* environment;
 				const Int32 passedArgumentsCount;
-				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals;
+				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals; // Includes variables and arguments.
 				Value argumentsValue;
+				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.
 };
 
+// FIX : if CStackEntry included a functionDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different functionDef really.
+class EvalFrame : public Frame {
+	public:		typedef Frame super;
+
+				EvalFrame(const ScriptFunctionDef* evalFunctionDef, Frame* parentFrame);
+				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
+
+	protected:	Frame* parentFrame;
+};
+
+/*
+	The CatchFrame is necessary because within a catch block there is a single extra variable that is local to the
+	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
+	exit point.
+*/
 class CatchFrame : public Frame {
 	public:		typedef Frame super;
 
@@ -583,6 +612,7 @@ class CatchFrame : public Frame {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -640,7 +670,7 @@ class Processor : public GCItem {
 				struct CStackEntry {
 					const CodeWord* returnIP;
 					Frame* frame; // doesn't change during function execution
-					Object* thisValue; // FIX : pointer instead? // doesn't change during function execution
+					Object* thisValue; // doesn't change during function execution
 				};
 
 				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
@@ -744,7 +774,7 @@ class Compiler : public GCItem {
 	public:		typedef GCItem super;
 				struct ExpressionResult;
 				
-				Compiler(Engine& engine, ScriptFunctionDef* function, bool forEval);
+				Compiler(Engine& engine, ScriptFunctionDef* funcDef, bool forEval);
 				virtual void gcMark(GCHeap& heap);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
@@ -808,7 +838,7 @@ class Compiler : public GCItem {
 				void identifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
 
 				Engine& engine; // FIX : necessary?
-				ScriptFunctionDef* const function;
+				ScriptFunctionDef* const funcDef;
 				const bool compilingForEval;
 				std::map<Value, Int32> definedConstants;
 				const Char* p;
