@@ -289,23 +289,11 @@ class String;
 class Object;
 class Function;
 class Value {
-	public:		enum Type {
-					NONEXISTENT_TYPE = 0		// Used in tables for deleted entries. Never seen by script-code.
-					, UNDEFINED_TYPE
-					, NULL_TYPE
-					, BOOLEAN_TYPE
-					, NUMBER_TYPE
-					, STRING_TYPE
-					, OBJECT_TYPE
-					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
-				};
-			
-			#if !defined(NDEBUG)
-				Value()	: type(BAD_TYPE) { }
-			#else
-				Value() { }
-			#endif
-				explicit Value(Type type) throw()  : type(type) { }
+	public:		Value()
+				#if !defined(NDEBUG)
+						: type(BAD_TYPE)
+				#endif
+						{ }
 				explicit Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
 				explicit Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
 				explicit Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
@@ -332,15 +320,31 @@ class Value {
 				Value add(GCHeap& heap, const Value& y) const;
 				void markIn(GCHeap& heap) const;
 
-	protected:	bool compareStrictly(const Value& y) const;
-				Type type;
+				static const Value NONEXISTENT;		// Used in tables for deleted entries. Never seen by script-code.
+				static const Value UNDEFINED;
+				static const Value NUL; // Sorry, NULL is a sensitive word, e.g. macro in Windows
+
+	protected:	enum InternalType {
+					NONEXISTENT_TYPE = 0
+					, UNDEFINED_TYPE
+					, NULL_TYPE
+					, BOOLEAN_TYPE
+					, NUMBER_TYPE
+					, STRING_TYPE
+					, OBJECT_TYPE
+					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
+				};
+				explicit Value(InternalType type) throw()  : type(type) { }
+				bool compareStrictly(const Value& y) const;
+				InternalType type;
 				union {
 					bool b;
 					double d;
 					const String* s;
 					Object* o;
 				};
-
+				static const String* TYPE_STRINGS[7];
+	
 	private:	explicit Value(void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
@@ -373,11 +377,11 @@ class Enumerator : public Object {
 };
 
 class Table {
-	public:		typedef UInt32 HashType;
+	public:		typedef UInt32 KeyHash;
 				
 				struct Bucket {
 					Bucket();
-					HashType hash;
+					KeyHash hash;
 					const String* key;
 					Value value;
 				};
@@ -394,7 +398,7 @@ class Table {
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
 				static UInt32 suggestN(UInt32 count); // FIX : keep?
 				void update(const String* key, const Value& value);
-				Bucket* find(const String* key, HashType hash) const;
+				Bucket* find(const String* key, KeyHash hash) const;
 				UInt32 rebuild(UInt32 newN);
 				
 				UInt32 n; ///< Size of member table is two to the power of n.
@@ -431,7 +435,7 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
-				Table::HashType calcHash() const;
+				Table::KeyHash calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;

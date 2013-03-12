@@ -136,44 +136,7 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 	return std::pair<Char*, Char*>(bp, ep);
 }
 
-/* --- String --- */
-
-const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
-struct QuickConstants {
-	QuickConstants() {
-		try {
-			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
-			for (int i = 0; i < 127; ++i) {
-				Char buf[1] = { i };
-				ascii[i] = Value(new String(buf, buf + 1));
-			}
-			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
-				Char buffer[32];
-				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32);
-				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]->calcHash();
-			}
-		}
-		catch (...) {
-			cleanup();
-			throw;
-		}
-	}
-	void cleanup() {
-		for (int i = 0; i < 127; ++i) {
-			delete ascii[i].getString();
-			ascii[i] = Value(Value::NONEXISTENT_TYPE);
-		}
-		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
-			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
-			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = 0;
-		}
-	}
-	~QuickConstants() { cleanup(); }
-	Value ascii[127];
-	String* integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
-};
-
-QuickConstants QUICK_CONSTANTS;
+/* --- String constants --- */
 
 // FIX : sort, merge to few lines, or maybe even do some smart array based construction?
 const String EMPTY_STRING("");
@@ -200,289 +163,17 @@ const String PROTOTYPE_STRING("prototype");
 const String VALUE_OF_STRING("valueOf");
 const String TO_STRING_STRING("toString");
 const String EVAL_STRING("eval");
-const String* TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
-String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
-String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
-String::String(const String& o) : QArray(o), hash(o.hash) { }
-String::String(const std::wstring& s) : QArray(s.size()), hash(0) { std::copy(s.begin(), s.end(), begin()); }
+/* --- Value --- */
 
-String::String(const String& l, const String& r) : QArray(l.size() + r.size()), hash(0) {
-	Char* e = std::copy(l.begin(), l.end(), begin());
-	std::copy(r.begin(), r.end(), e);
-}
-
-const String* String::typeOfString() const { return &STRING_STRING; }
-const String* String::className() const { return &S_TRING_STRING; }
-
-bool String::getProperty(Engine& engine, const String* name, Value* v) {
-	if (name->isEqualTo(LENGTH_STRING)) {
-		*v = Value(static_cast<Int32>(size()));
-		return true;
-	}
-	UInt32 i;
-	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
-	if (q == name->end() && i < size()) {
-		const Char* p = begin() + i;
-		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
-		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
-		return true;
-	} else return engine.stringPrototype.getProperty(engine, name, v);
-}
-
-// FIX : speed up by skipping when string is really long
-// FNV Hash
-Table::HashType String::calcHash() const {
-	if (hash == 0) {
-		size_t l = size();
-		UInt32 x = 2166136261U;
-		const Char* p = begin();
-		for (size_t i = 0; i < l; ++i) {
-			x *= 16777619;
-			x += p[i];
-		}
-		hash = (x == 0 ? x + 1 : x);
-	}
-	return hash;
-}
-
-bool String::isEqualTo(const String& o) const {
-	if (this == &o) return true;
-	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
-	size_t l = size();
-	if (l != o.size()) return false;
-	return std::equal(begin(), end(), o.begin());
-}
-
-bool String::isLessThan(const String& o) const {
-	if (this == &o) return false;
-	size_t l = std::min(size(), o.size());
-	const Char* a = begin();
-	const Char* b = o.begin();
-	for (int i = 0; i < l; ++i) if (a[i] != b[i]) return (a[i] < b[i]);
-	return size() < o.size();
-}
-
-std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
-
-Enumerator* String::getEnumerator(Engine& engine) { return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size())); }
-
-const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
-	String* o = heap.manage(new String(b, e));
-	o->calcHash();
-	return o;
-}
-
-const String* String::fromInt(GCHeap& heap, Int32 i) {
-	Char buffer[32];
-	return (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
-		 ? QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
-		 : heap.manage(new String(intToString(buffer, i), buffer + 32));
-}
-
-const String* String::fromDouble(GCHeap& heap, double d) {
-	Int32 i = static_cast<Int32>(d);
-	if (i == d) return fromInt(heap, i);
-	if (isNaN(d)) return &NAN_STRING;
-	double x = fabs(d);
-	if (x <= EPSILON) return &ZERO_STRING;
-	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
-	Char buffer[32];
-	std::pair<Char*, Char*> r = doubleToString(buffer, d);
-	return heap.manage(new String(r.first, r.second));
-}
-
-/* --- GCItem --- */
-
-GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
-GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
-GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
-void GCItem::gcMark(GCHeap& heap) { }
-GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
-
-/* --- GCList --- */
-
-GCList::GCList() throw() : count(0) { }
-
-size_t GCList::size() const { return count; }
-
-void GCList::relinquish(GCItem* item) throw() {
-	assert(item->_gcList == this);
-	assert(count > 0);
-	count--;
-	item->_gcPrev->_gcNext = item->_gcNext;
-	item->_gcNext->_gcPrev = item->_gcPrev;
-}
-
-void GCList::claim(GCItem* item) throw() {
-	if (item->_gcList != 0) item->_gcList->relinquish(item);
-	item->_gcPrev = this;
-	item->_gcNext = _gcNext;
-	_gcNext->_gcPrev = item;
-	_gcNext = item;
-	item->_gcList = this;
-	++count;
-}
-
-/* --- Object --- */
-
-struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
-
-struct BadFunction : public Function { // FIX : .length?! and all the others?!
+static struct BadFunction : public Function { // FIX : .length?! and all the others?!
 	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 		processor.error(); // FIX : error string, type should be TypeError
 		return Value();
 	}
 } BAD_FUNCTION;
 
-Function* Object::asFunction() { return 0; }
-Function* Object::getFunction() { return &BAD_FUNCTION; }
-const String* Object::typeOfString() const { return &OBJECT_STRING; }
-const String* Object::className() const { return &O_BJECT_STRING; }
-bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
-bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
-bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
-bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
-Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
-
-/* --- Table --- */
-
-Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT_TYPE) { }
-
-UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
-
-UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
-	UInt32 n = 0;
-	while (count >= calcMaxLoad(1U << n)) ++n;
-	return n;
-}
-
-Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
-
-UInt32 Table::getLoadCount() const { return loadCount; }
-const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
-
-const Table::Bucket* Table::getNext(const Bucket* b) const {
-	assert(b != 0);
-	const Bucket* e = &buckets[buckets.size()];
-	while (++b != e && (b->key == 0 || !b->value.exists())) { }
-	return (b == e ? 0 : b);
-}
-
-const Table::Bucket* Table::lookup(const String* key) {
-	const Bucket* b = find(key, key->calcHash());
-	return (b->key != 0 ? b : 0);
-}
-
-void Table::assign(const String* key, const Value& value) { update(key, value); }
-void Table::erase(const String* key) { update(key, Value(Value::NONEXISTENT_TYPE)); }
-
-void Table::mark(GCHeap& heap) {
-	UInt32 rebuildLoadCount = 0;
-	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		heap.mark(buckets[i].key);
-		buckets[i].value.markIn(heap);
-		if (buckets[i].key != 0 && buckets[i].value.exists()) rebuildLoadCount++;
-	}
-	if (rebuildLoadCount != loadCount) {
-		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
-		(void)check;
-		assert(check == rebuildLoadCount);
-	}
-}
-
-void Table::update(const String* key, const Value& value) {
-	HashType hash = key->calcHash();
-	Bucket* b = find(key, hash);
-	if (b->key == 0) {
-		if (loadCount >= calcMaxLoad(buckets.size())) {
-			rebuild(n + 2);
-			assert(loadCount < calcMaxLoad(buckets.size()));
-			b = find(key, hash);
-			assert(b->key == 0);
-		}
-		++loadCount;
-		b->hash = hash;
-		b->key = key;
-	}
-	b->value = value;
-}
-
-Table::Bucket* Table::find(const String* key, HashType hash) const {
-	UInt32 mask = (buckets.size() - 1);
-	UInt32 i = hash & mask;
-	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(*key))) i = (i + 1) & mask;
-	return &buckets[i];
-}
-
-UInt32 Table::rebuild(UInt32 newN) {
-	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> newBuckets(1U << newN);
-	UInt32 newLoadCount = 0;
-	UInt32 mask = (1U << newN) - 1;
-	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].key != 0 && buckets[i].value.exists()) {
-			UInt32 j = buckets[i].key->calcHash() & mask;
-			while (newBuckets[j].key != 0) j = (j + 1) & mask;
-			newBuckets[j] = buckets[i];
-			++newLoadCount;
-		}
-	}
-	buckets.swap(newBuckets);
-	n = newN;
-	loadCount = newLoadCount;
-	return newLoadCount;
-}
-
-/* --- UserObject --- */
-
-UserObject::UserObject(Object* prototype) : prototype(prototype) { }
-
-bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
-	properties.assign(name, v);
-	return true;
-}
-
-bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
-	const Table::Bucket* b = properties.lookup(name);
-	if (b != 0) {
-		*v = b->value;
-		return true;
-	}
-	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
-}
-
-bool UserObject::deleteProperty(Engine& engine, const String* name) {
-	properties.erase(name);
-	return true;
-}
-
-Enumerator* UserObject::getEnumerator(Engine& engine) {
-	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
-	// list->sort(); // FIX : bad idea?
-	return list;
-}
-
-void UserObject::gcMark(GCHeap& heap) {
-	properties.mark(heap);
-	heap.mark(prototype);
-	super::gcMark(heap);
-}
-
-/* --- RangeEnumerator --- */
-
-RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
-const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : String::fromInt(heap, index++)); }
-
-/* --- StringListEnumerator --- */
-
-StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
-void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-void StringListEnumerator::sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
-void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
-const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
-
-/* --- Value --- */
+const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 const String* Value::typeOfString() const { return (type == OBJECT_TYPE ? o->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]); }
 Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : o->getFunction()); }
@@ -655,7 +346,321 @@ void Value::markIn(GCHeap& heap) const {
 	}
 }
 
-const Value UNDEFINED_VALUE(Value::UNDEFINED_TYPE);
+const Value Value::NONEXISTENT(Value::NONEXISTENT_TYPE);
+const Value Value::UNDEFINED(Value::UNDEFINED_TYPE);
+const Value Value::NUL(Value::NULL_TYPE);
+
+/* --- String --- */
+
+const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
+struct QuickConstants {
+	QuickConstants() {
+		try {
+			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
+			for (int i = 0; i < 127; ++i) {
+				Char buf[1] = { i };
+				ascii[i] = Value(new String(buf, buf + 1));
+			}
+			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
+				Char buffer[32];
+				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32);
+				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]->calcHash();
+			}
+		}
+		catch (...) {
+			cleanup();
+			throw;
+		}
+	}
+	void cleanup() {
+		for (int i = 0; i < 127; ++i) {
+			delete ascii[i].getString();
+			ascii[i] = Value::NONEXISTENT;
+		}
+		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
+			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = 0;
+		}
+	}
+	~QuickConstants() { cleanup(); }
+	Value ascii[127];
+	String* integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
+};
+
+QuickConstants QUICK_CONSTANTS;
+
+String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
+String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
+String::String(const String& o) : QArray(o), hash(o.hash) { }
+String::String(const std::wstring& s) : QArray(s.size()), hash(0) { std::copy(s.begin(), s.end(), begin()); }
+
+String::String(const String& l, const String& r) : QArray(l.size() + r.size()), hash(0) {
+	Char* e = std::copy(l.begin(), l.end(), begin());
+	std::copy(r.begin(), r.end(), e);
+}
+
+const String* String::typeOfString() const { return &STRING_STRING; }
+const String* String::className() const { return &S_TRING_STRING; }
+
+bool String::getProperty(Engine& engine, const String* name, Value* v) {
+	if (name->isEqualTo(LENGTH_STRING)) {
+		*v = Value(static_cast<Int32>(size()));
+		return true;
+	}
+	UInt32 i;
+	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
+	if (q == name->end() && i < size()) {
+		const Char* p = begin() + i;
+		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
+		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
+		return true;
+	} else return engine.stringPrototype.getProperty(engine, name, v);
+}
+
+// FIX : speed up by skipping when string is really long
+// FNV Hash
+Table::KeyHash String::calcHash() const {
+	if (hash == 0) {
+		size_t l = size();
+		UInt32 x = 2166136261U;
+		const Char* p = begin();
+		for (size_t i = 0; i < l; ++i) {
+			x *= 16777619;
+			x += p[i];
+		}
+		hash = (x == 0 ? x + 1 : x);
+	}
+	return hash;
+}
+
+bool String::isEqualTo(const String& o) const {
+	if (this == &o) return true;
+	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
+	size_t l = size();
+	if (l != o.size()) return false;
+	return std::equal(begin(), end(), o.begin());
+}
+
+bool String::isLessThan(const String& o) const {
+	if (this == &o) return false;
+	size_t l = std::min(size(), o.size());
+	const Char* a = begin();
+	const Char* b = o.begin();
+	for (int i = 0; i < l; ++i) if (a[i] != b[i]) return (a[i] < b[i]);
+	return size() < o.size();
+}
+
+std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
+
+Enumerator* String::getEnumerator(Engine& engine) { return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size())); }
+
+const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
+	String* o = heap.manage(new String(b, e));
+	o->calcHash();
+	return o;
+}
+
+const String* String::fromInt(GCHeap& heap, Int32 i) {
+	Char buffer[32];
+	return (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
+		 ? QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
+		 : heap.manage(new String(intToString(buffer, i), buffer + 32));
+}
+
+const String* String::fromDouble(GCHeap& heap, double d) {
+	Int32 i = static_cast<Int32>(d);
+	if (i == d) return fromInt(heap, i);
+	if (isNaN(d)) return &NAN_STRING;
+	double x = fabs(d);
+	if (x <= EPSILON) return &ZERO_STRING;
+	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
+	Char buffer[32];
+	std::pair<Char*, Char*> r = doubleToString(buffer, d);
+	return heap.manage(new String(r.first, r.second));
+}
+
+/* --- GCItem --- */
+
+GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
+GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
+GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
+void GCItem::gcMark(GCHeap& heap) { }
+GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
+
+/* --- GCList --- */
+
+GCList::GCList() throw() : count(0) { }
+
+size_t GCList::size() const { return count; }
+
+void GCList::relinquish(GCItem* item) throw() {
+	assert(item->_gcList == this);
+	assert(count > 0);
+	count--;
+	item->_gcPrev->_gcNext = item->_gcNext;
+	item->_gcNext->_gcPrev = item->_gcPrev;
+}
+
+void GCList::claim(GCItem* item) throw() {
+	if (item->_gcList != 0) item->_gcList->relinquish(item);
+	item->_gcPrev = this;
+	item->_gcNext = _gcNext;
+	_gcNext->_gcPrev = item;
+	_gcNext = item;
+	item->_gcList = this;
+	++count;
+}
+
+/* --- Object --- */
+
+static struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
+
+Function* Object::asFunction() { return 0; }
+Function* Object::getFunction() { return &BAD_FUNCTION; }
+const String* Object::typeOfString() const { return &OBJECT_STRING; }
+const String* Object::className() const { return &O_BJECT_STRING; }
+bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
+bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
+bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
+bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
+Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
+
+/* --- Table --- */
+
+Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT) { }
+
+UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
+
+UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
+	UInt32 n = 0;
+	while (count >= calcMaxLoad(1U << n)) ++n;
+	return n;
+}
+
+Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
+
+UInt32 Table::getLoadCount() const { return loadCount; }
+const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
+
+const Table::Bucket* Table::getNext(const Bucket* b) const {
+	assert(b != 0);
+	const Bucket* e = &buckets[buckets.size()];
+	while (++b != e && (b->key == 0 || !b->value.exists())) { }
+	return (b == e ? 0 : b);
+}
+
+const Table::Bucket* Table::lookup(const String* key) {
+	const Bucket* b = find(key, key->calcHash());
+	return (b->key != 0 ? b : 0);
+}
+
+void Table::assign(const String* key, const Value& value) { update(key, value); }
+void Table::erase(const String* key) { update(key, Value::NONEXISTENT); }
+
+void Table::mark(GCHeap& heap) {
+	UInt32 rebuildLoadCount = 0;
+	for (UInt32 i = 0; i < buckets.size(); ++i) {
+		heap.mark(buckets[i].key);
+		buckets[i].value.markIn(heap);
+		if (buckets[i].key != 0 && buckets[i].value.exists()) rebuildLoadCount++;
+	}
+	if (rebuildLoadCount != loadCount) {
+		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
+		(void)check;
+		assert(check == rebuildLoadCount);
+	}
+}
+
+void Table::update(const String* key, const Value& value) {
+	KeyHash hash = key->calcHash();
+	Bucket* b = find(key, hash);
+	if (b->key == 0) {
+		if (loadCount >= calcMaxLoad(buckets.size())) {
+			rebuild(n + 2);
+			assert(loadCount < calcMaxLoad(buckets.size()));
+			b = find(key, hash);
+			assert(b->key == 0);
+		}
+		++loadCount;
+		b->hash = hash;
+		b->key = key;
+	}
+	b->value = value;
+}
+
+Table::Bucket* Table::find(const String* key, KeyHash hash) const {
+	UInt32 mask = (buckets.size() - 1);
+	UInt32 i = hash & mask;
+	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(*key))) i = (i + 1) & mask;
+	return &buckets[i];
+}
+
+UInt32 Table::rebuild(UInt32 newN) {
+	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> newBuckets(1U << newN);
+	UInt32 newLoadCount = 0;
+	UInt32 mask = (1U << newN) - 1;
+	for (UInt32 i = 0; i < buckets.size(); ++i) {
+		if (buckets[i].key != 0 && buckets[i].value.exists()) {
+			UInt32 j = buckets[i].key->calcHash() & mask;
+			while (newBuckets[j].key != 0) j = (j + 1) & mask;
+			newBuckets[j] = buckets[i];
+			++newLoadCount;
+		}
+	}
+	buckets.swap(newBuckets);
+	n = newN;
+	loadCount = newLoadCount;
+	return newLoadCount;
+}
+
+/* --- UserObject --- */
+
+UserObject::UserObject(Object* prototype) : prototype(prototype) { }
+
+bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
+	properties.assign(name, v);
+	return true;
+}
+
+bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
+	const Table::Bucket* b = properties.lookup(name);
+	if (b != 0) {
+		*v = b->value;
+		return true;
+	}
+	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
+}
+
+bool UserObject::deleteProperty(Engine& engine, const String* name) {
+	properties.erase(name);
+	return true;
+}
+
+Enumerator* UserObject::getEnumerator(Engine& engine) {
+	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
+	// list->sort(); // FIX : bad idea?
+	return list;
+}
+
+void UserObject::gcMark(GCHeap& heap) {
+	properties.mark(heap);
+	heap.mark(prototype);
+	super::gcMark(heap);
+}
+
+/* --- RangeEnumerator --- */
+
+RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
+const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : String::fromInt(heap, index++)); }
+
+/* --- StringListEnumerator --- */
+
+StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
+void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
+void StringListEnumerator::sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
+void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
+const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 
 /* --- ScriptFunctionDef --- */
 
@@ -762,11 +767,11 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), environment(function->getEnvironment()), passedArgumentsCount(argc)
 		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
-		, argumentsValue(Value::NONEXISTENT_TYPE) {
+		, argumentsValue(Value::NONEXISTENT) {
 	localsPointer = locals.begin() + functionDef->varsCount;
-	std::fill(locals.begin(), localsPointer, UNDEFINED_VALUE); // FIX : optimize
+	std::fill(locals.begin(), localsPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, localsPointer);
-	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), UNDEFINED_VALUE);
+	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), Value::UNDEFINED);
 }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
@@ -1011,7 +1016,7 @@ bool Processor::privateRun() {
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
 									if (!o->getProperty(engine, vsp[0].toString(heap), vsp - 1))
-										vsp[-1] = UNDEFINED_VALUE; // FIX : is this right?
+										vsp[-1] = Value::UNDEFINED; // FIX : is this right?
 									pop(1);
 									break;
 			
@@ -1072,7 +1077,7 @@ bool Processor::privateRun() {
 				Int32 n = operand();
 				Object* thisObject = vsp[-n - 1].toObject(heap);
 				if (thisObject == 0) error();
-				Value v(Value::NONEXISTENT_TYPE);
+				Value v(Value::NONEXISTENT);
 				thisObject->getProperty(engine, vsp[-n].toString(heap), &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = v.getFunction()->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
@@ -1091,7 +1096,7 @@ bool Processor::privateRun() {
 			case NEW_OP: {
 				Int32 n = operand();
 				Function* f = vsp[-n].getFunction();
-				Value v(Value::NONEXISTENT_TYPE);
+				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v); // FIX : standard object prototype if v.asObject() == 0 ?
 				Object* newObject = engine.getHeap().manage(new UserObject(v.asObject()));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
@@ -1102,7 +1107,7 @@ bool Processor::privateRun() {
 			}
 			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
 			case THIS_OP: push(Value(csp->thisValue)); break;
-			case VOID_OP: push(UNDEFINED_VALUE); break;
+			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject();
 				assert(o != 0);
@@ -1146,7 +1151,7 @@ bool Processor::privateRun() {
 			}
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
-				Value v(Value::UNDEFINED_TYPE);
+				Value v(Value::UNDEFINED);
 				frame->getProperty(engine, constants[operand()].getString(), &v);
 				push(Value(v.typeOfString()));
 				break;
@@ -1346,8 +1351,8 @@ static int findStatementToken(int n /* string length */, const Char* s) {
 
 struct Compiler::ExpressionResult {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
-	ExpressionResult() : t(NONE), v(Value::UNDEFINED_TYPE) { }
-	ExpressionResult(Type type, const Value& value = Value(Value::NONEXISTENT_TYPE)) : t(type), v(value) { }
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
+	ExpressionResult(Type type, const Value& value = Value::NONEXISTENT) : t(type), v(value) { }
 	Type t;
 	Value v;
 };
@@ -1482,7 +1487,7 @@ Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {
 			d = std::copy(b, p, d);
 			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
 			b = p;
-			UInt32 l;
+			UInt32 l = 0;
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
 			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
 			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
@@ -1805,7 +1810,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
 			switch (static_cast<Literal>(i)) {
-				case NULL_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(Value::NULL_TYPE)); break;
+				case NULL_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value::NUL); break;
 				case FALSE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
 				case TRUE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case THIS_LITERAL: {
@@ -2428,7 +2433,9 @@ class FromCharCodeFunction : public Function { // FIX : .length?! and all the ot
 };
 
 Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc < 1) return UNDEFINED_VALUE;
+	if (argc < 1) return Value::UNDEFINED;
+	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving InternalType?
+	
 	return argv[0];
 }
 
@@ -2449,7 +2456,7 @@ Engine::Engine(GCHeap& heap, Object* globals) : gcHeap(heap), globals(globals) {
 					//	engine.getHeap().gc();
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
-						return UNDEFINED_VALUE;
+						return Value::UNDEFINED;
 					}
 	};
 	
