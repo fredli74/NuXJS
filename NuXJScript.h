@@ -739,11 +739,10 @@ class Compiler : public GCItem {
 	public:		typedef GCItem super;
 				struct ExpressionResult;
 				
-				Compiler(Engine& engine, ScriptFunctionDef* function);
+				Compiler(Engine& engine, ScriptFunctionDef* function, bool forEval);
 				virtual void gcMark(GCHeap& heap);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
-				void finish();
 
 	protected:	struct Scope { // FIX : .cpp local
 					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
@@ -790,10 +789,10 @@ class Compiler : public GCItem {
 				ExpressionResult varDeclaration();
 				void varDeclarations();
 				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
-						, const ExpressionResult& iterXR);
-				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd);
-				void statement(Scope* firstScope, Scope* scopeLabelsEnd); // FIX : return false if b == p?
-				void statementList(Scope* firstScope);
+						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
+				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void statementList(Scope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				void semicolon();
 				void expectToken(const char* t, bool eatLeadingWhite);
@@ -805,6 +804,7 @@ class Compiler : public GCItem {
 
 				Engine& engine; // FIX : necessary?
 				ScriptFunctionDef* const function;
+				const bool compilingForEval;
 				std::map<Value, Int32> definedConstants;
 				const Char* p;
 				const Char* e;

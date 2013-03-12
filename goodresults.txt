@@ -1,6 +1,7 @@
 *** comments ***
 0
 1234.5
+*** statements results ***
 *** numbers ***
 true
 true
@@ -89,7 +90,7 @@ true
 true
 NaN
 true
-2001, -250015.5
+2001, -251241
 2001, -250015.5
 *** special numbers ***
 NaN
@@ -576,6 +577,15 @@ b
 
 *** value conversion ***
 33
+*** eval ***
+2
+Exception: Unhandled exception: runtime error
+2
+Exception: Unhandled exception: runtime error
+2
+Exception: Unhandled exception: runtime error
+2
+Exception: Unhandled exception: runtime error
 *** fun stuff ***
          !!!!!!!!"""""""""""""""""""""""""""##########$$$$%%&(.)(*2%$#######""""""""!!!!!!!!!!!!!!!!
         !!!!!!!"""""""""""""""""""""""""""###########$$$$%%&'(*0+('&%$$#######""""""""!!!!!!!!!!!!!!

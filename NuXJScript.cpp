@@ -1352,8 +1352,8 @@ struct Compiler::ExpressionResult {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* function) : engine(engine), function(function)
-		, outputCode(&function->code), safeKeptIndexCount(0), acceptInOperator(true) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* function, bool forEval) : engine(engine), function(function)
+		, compilingForEval(forEval), outputCode(&function->code), safeKeptIndexCount(0), acceptInOperator(true) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(function);
@@ -1592,6 +1592,7 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
+// FIX : split into pre and post operators anyhow, all pre discards xr now
 bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
 	// FIX : use a quick hash solution
@@ -1606,9 +1607,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	// FIX : sort
 	switch (op.type) {
 		case COMMA: discard(xr); xr = rvalueOperand(op); break;
-		case VOID_OPERATOR: xr = discard(operand(op)); break;
-		case GROUP: xr = operand(op); break;
-		case UNARY: xr = rvalueOperand(op); emit(op.vmOp); break;		
+		case VOID_OPERATOR: discard(xr); xr = discard(operand(op)); break;
+		case GROUP: discard(xr); xr = operand(op); break;
+		case UNARY: discard(xr); xr = rvalueOperand(op); emit(op.vmOp); break;		
 		case BINARY: xr = makeRValue(xr); rvalueOperand(op); emit(op.vmOp); break;
 
 		case POST_INC_DEC: {
@@ -1663,6 +1664,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case NEW_OPERATOR: {
+			discard(xr);
 			rvalueOperand(op);
 			if (!token("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
@@ -1676,6 +1678,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 				
 		case DELETE_OPERATOR: {
+			discard(xr);
 			xr = operand(op);
 			switch (xr.t) {
 				default: assert(0);
@@ -1690,6 +1693,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case PRE_INC_DEC: {
+			discard(xr);
 			xr = operand(op);
 			makeRValue(xr);
 			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
@@ -1699,6 +1703,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case TYPE_OF: {
+			discard(xr);
 			xr = operand(op);
 			if (xr.t == ExpressionResult::NAMED) {
 				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
@@ -1800,15 +1805,17 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
 			switch (static_cast<Literal>(i)) {
-				case NULL_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(Value::NULL_TYPE)); break;
-				case FALSE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case TRUE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
+				case NULL_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(Value::NULL_TYPE)); break;
+				case FALSE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case TRUE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case THIS_LITERAL: {
+					discard(xr);
 					emit(Processor::THIS_OP);
 					xr = ExpressionResult(ExpressionResult::PUSHED); break;
 					break;
 				}
 				case FUNCTION_LITERAL: {
+					discard(xr);
 					ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
 					expectToken("(", true);
@@ -1827,10 +1834,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					if (p == e) syntaxError("Expected ',' or ')'");
 					expectToken("{", true);
 					{
-						Compiler funcCompiler(engine, func);
+						Compiler funcCompiler(engine, func, false);
 						engine.getHeap().protect(&funcCompiler);
 						p = funcCompiler.compile(p, e);
-						funcCompiler.finish();
 					}
 					expectToken("}", false);
 					emitWithConstant(Processor::GEN_FUNC_OP, Value(func)); 
@@ -1845,6 +1851,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 			switch (*p) {
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
+						discard(xr);
 						UInt32 u;
 						const Char* b = p += 2;
 						p = parseHex(b, e, u);
@@ -1855,6 +1862,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					/* else continue */
 				}
 				case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
+					discard(xr);
 					double d;
 					const Char* b = p;
 					p = parseDouble(p, e, d);
@@ -1863,6 +1871,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					break;
 				}
 				case '\'': case '"': {
+					discard(xr);
 					size_t maxLength = unescapedMaxLength(p, e);
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
@@ -1874,6 +1883,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					const Char* b = p;
 					identifier(false);
 					if (p == b) return false; // fix : nicer way?
+					discard(xr);
 					const String* identifier = String::newHashedString(engine.getHeap(), b, p);
 					Int32 index;
 					LocalNameMap& nameMap = function->localNames;
@@ -1946,7 +1956,7 @@ void Compiler::varDeclarations() {
 }
 
 void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
-		, const ExpressionResult& iterXR) {
+		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
 	enumXR = safeKeep(enumXR);
@@ -1962,7 +1972,7 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 		returnSafeKept(xr, true);
 	}
 	discard(makeAssignment(iterXR));
-	statement(emptyLabelScope, emptyLabelScope);
+	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
@@ -1970,22 +1980,23 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 	returnSafeKept(enumXR, true);
 }
 
-void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd) {
+void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	expectToken(";", true);
 	Int32 loopPoint = markBackwardBranch();
 	Int32 exitLoopPoint = INVALID_CODE_POINT;
-	ExpressionResult xr;
-	if (optionalExpression(xr, LOWEST_PREC)) {
-		xr = makeRValue(xr);
+	ExpressionResult testXR;
+	if (optionalExpression(testXR, LOWEST_PREC)) {
+		testXR = makeRValue(testXR);
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
 	CodeVector incCode;
 	outputCode = &incCode;
-	if (optionalExpression(xr, LOWEST_PREC)) discard(xr);
+	ExpressionResult incXR;
+	if (optionalExpression(incXR, LOWEST_PREC)) discard(incXR);
 	expectToken(")", true);
 	outputCode = &function->code;
-	statement(emptyLabelScope, emptyLabelScope);
+	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
@@ -2016,11 +2027,11 @@ void Compiler::completeBreaks(const Scope* scope) {
 
 // FIX : make member functions of all the different statements
 
-void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
+void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	white();	
 		
 	if (token("{", false)) {
-		statementList(firstScope);
+		statementList(firstScope, evalXR);
 		expectToken("}", false);
 		return;
 	}
@@ -2038,12 +2049,12 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (!s->label.empty() && s->label.isEqualTo(identifier)) syntaxError("Duplicate label");
 			}
 			Scope newLabelScope(identifier, firstScope);
-			statement(&newLabelScope, scopeLabelsEnd);
+			statement(&newLabelScope, scopeLabelsEnd, evalXR);
 			completeBreaks(&newLabelScope);
 		} else {
 			p = b;
-			ExpressionResult xr;
-			if (optionalExpression(xr, LOWEST_PREC)) discard(xr);
+			optionalExpression(evalXR, LOWEST_PREC);
+			if (!compilingForEval) evalXR = discard(evalXR);
 			semicolon();
 		}
 	} else {
@@ -2051,6 +2062,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 		switch (static_cast<Statement>(statementTokenIndex)) {
 			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
+				if (compilingForEval) evalXR = makeRValue(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				const Char* b = p;
 				Scope* s = firstScope;
@@ -2083,23 +2095,26 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 			}
 			
 			case IF_STATEMENT: {
+				if (compilingForEval) evalXR = makeRValue(evalXR);
 				expectToken("(", false);
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-				statement(firstScope, firstScope);
+				statement(firstScope, firstScope, evalXR);
 				if (token("else", true)) {
 					Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(falsePoint);
-					statement(firstScope, firstScope);
+					statement(firstScope, firstScope, evalXR);
 					completeForwardBranch(endPoint);
 				} else {
+					if (compilingForEval) evalXR = makeRValue(evalXR);
 					completeForwardBranch(falsePoint);
 				}				
 				break;
 			}
 
 			case WHILE_STATEMENT: {
+				if (compilingForEval) evalXR = makeRValue(evalXR);
 				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
@@ -2107,7 +2122,8 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
-				statement(&emptyLabelScope, &emptyLabelScope);
+				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
+				if (compilingForEval) evalXR = makeRValue(evalXR);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
 				completeForwardBranch(exitLoopPoint);
@@ -2119,7 +2135,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Int32 loppPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-				statement(&emptyLabelScope, &emptyLabelScope);
+				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
 				expectToken("while", true);
 				expectToken("(", true);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -2142,7 +2158,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					ExpressionResult iterXR = varDeclaration();
 					acceptInOperator = true;
 					if (token("in", true)) {
-						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
 						if (token(",", true)) {
 							white();
@@ -2150,27 +2166,28 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 							varDeclarations();
 							acceptInOperator = true;
 						}
-						forStatement(&emptyLabelScope, scopeLabelsEnd);
+						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				} else {
-					ExpressionResult iterXR;
 					outputCode = &initCode;
 					acceptInOperator = false;
+					ExpressionResult iterXR;
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
 					outputCode = &function->code;
 					if (gotExpression && token("in", true)) {
-						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
 						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
 						discard(iterXR);
-						forStatement(&emptyLabelScope, scopeLabelsEnd);
+						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				}
 				break;
 			}
 			
 			case RETURN_STATEMENT: {
+				if (compilingForEval) syntaxError("Illegal return");
 				ExpressionResult returnXR;
 				optionalExpression(returnXR, LOWEST_PREC);
 				Scope* s = firstScope;
@@ -2197,7 +2214,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				Scope tryScope(Scope::TRY_TYPE, firstScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
-				statementList(&tryScope);
+				statementList(&tryScope, evalXR);
 				expectToken("}", false);
 				tryScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -2228,7 +2245,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 					expectToken(")", true);
 					Scope catchScope(Scope::CATCH_TYPE, firstScope);
 					expectToken("{", true); // FIX : sub
-					statementList(&catchScope);
+					statementList(&catchScope, evalXR);
 					expectToken("}", false);
 					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
 					catchScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
@@ -2247,7 +2264,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 				if (token("finally", true)) {
 					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
 					expectToken("{", true); // FIX : sub
-					statementList(&finallyScope);
+					statementList(&finallyScope, evalXR);
 					expectToken("}", false);
 				} else {
 					if (!gotCatch) syntaxError("Expected 'catch' or 'finally'");
@@ -2306,7 +2323,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 						syntaxError("Expected 'case', 'default' or '}'");
 					} else {
 						const Char* b = p;
-						statement(&emptyLabelScope, &emptyLabelScope);
+						statement(&emptyLabelScope, &emptyLabelScope, evalXR);
 						if (b == p) syntaxError("Expected '}'");
 					}
 					firstStatement = false;
@@ -2331,29 +2348,26 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd) {
 	}
 }
 
-void Compiler::statementList(Scope* firstScope) {
+void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 	const Char* b;
 	do {
 		b = p;
-		statement(firstScope, firstScope);
+		statement(firstScope, firstScope, evalXR);
 	} while (p != e && b != p);
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
+	// FIX : only accept one compile? or opposite? create many different functions?
 	outputCode = &function->code;
 	freeSafeKeepingIndexes.clear();
 	safeKeptIndexCount = 0;
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
-	statementList(0);
-	return p;
-}
-
-void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
-
-void Compiler::finish() {
-	emit(Processor::VOID_OP);
+	ExpressionResult evalXR;
+	statementList(0, evalXR);
+	if (!compilingForEval) evalXR = discard(evalXR);
+	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
@@ -2365,7 +2379,10 @@ if (!supressStdErr) {
 	std::cerr << "\tVars: " << function->varsCount << std::endl;
 	std::cerr << "\tArguments: " << function->argumentsCount << std::endl;
 }
+	return p;
 }
+
+void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
@@ -2490,10 +2507,9 @@ int main(int argc, const char* argv[]) {
 			} else {
 				ScriptFunctionDef functionDef;
 				heap.protect(&functionDef);
-				Compiler compiler(engine, &functionDef);
+				Compiler compiler(engine, &functionDef, false);
 				heap.protect(&compiler);
 				compiler.compile(source);
-				compiler.finish();
 				
 				if (!supressStdErr) {
 					std::cerr << "\tCode: " << functionDef.code.size() << std::endl;
