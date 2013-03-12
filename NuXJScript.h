@@ -3,6 +3,8 @@
 //	Run-time
 //
 //		eval support
+//			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
+//			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
 //		count (and run-time check) necessary value stack depth for functions
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
@@ -44,7 +46,7 @@
 //			alt 2 is regarding code to be either script or native
 //			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
 //		arguments container
-//			
+//			missing callee or whatever
 //
 //	Compiler
 //

@@ -857,7 +857,7 @@ void FunctionFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionD
 EvalFrame::EvalFrame(const ScriptFunctionDef* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
 	localsPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
 }
-void EvalFrame::gcMark(GCHeap& heap) { heap.mark(parentFrame); super::gcMark(heap); }
+void EvalFrame::gcMark(GCHeap& heap) { heap.mark(functionDef); heap.mark(parentFrame); super::gcMark(heap); }
 bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
 bool EvalFrame::setProperty(Engine& engine, const String* name, const Value& v) { return parentFrame->setProperty(engine, name, v); }
 bool EvalFrame::deleteProperty(Engine& engine, const String* name) { return parentFrame->deleteProperty(engine, name); }
