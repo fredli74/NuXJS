@@ -701,6 +701,7 @@ class Processor : public GCItem {
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
+				void chain(ScriptFunctionDef* funcDef);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);

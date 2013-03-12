@@ -926,6 +926,12 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Objec
 	updateInternals();
 }
 
+void Processor::chain(ScriptFunctionDef* funcDef) {
+--vsp;
+	ScriptFunction* func = engine.getHeap().manage(new ScriptFunction(funcDef, frame));
+	chain(func, 0, 0, csp->thisValue);
+}
+
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Value v;
 	Object* o;
@@ -1111,7 +1117,7 @@ bool Processor::privateRun() {
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject();
 				assert(o != 0);
-				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame))));
+				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case FRAME_OP: push(Value(frame)); break;
@@ -1165,7 +1171,7 @@ bool Processor::privateRun() {
 				o = vsp[0].asObject();
 				assert(o != 0);
 				Int32 offset = operand();
-				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName();
+				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
 				if (name != 0) vsp[0] = Value(name);
 				else {
 					ip += offset;
@@ -2387,7 +2393,11 @@ if (!supressStdErr) {
 	return p;
 }
 
-void Compiler::compile(const String& source) { compile(source.begin(), source.end()); }
+void Compiler::compile(const String& source) {
+	const Char* e = source.end();
+	const Char* p = compile(source.begin(), e);
+	if (p != e) syntaxError("Syntax error"); // FIX : better error?
+}
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
@@ -2435,8 +2445,13 @@ class FromCharCodeFunction : public Function { // FIX : .length?! and all the ot
 Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving InternalType?
-	
-	return argv[0];
+	GCHeap& heap = engine.getHeap();
+	ScriptFunctionDef* functionDef = heap.manage(new ScriptFunctionDef());
+	Compiler compiler(engine, functionDef, true);
+	heap.protect(&compiler);
+	compiler.compile(*argv[0].toString(heap));
+	processor.chain(functionDef);
+	return Value();
 }
 
 const String FROM_CHAR_CODE_STRING("fromCharCode");

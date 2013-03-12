@@ -1,7 +1,6 @@
 *** comments ***
 0
 1234.5
-*** statements results ***
 *** numbers ***
 true
 true
@@ -90,7 +89,7 @@ true
 true
 NaN
 true
-2001, -251241
+2001, -250015.5
 2001, -250015.5
 *** special numbers ***
 NaN
@@ -578,14 +577,63 @@ b
 *** value conversion ***
 33
 *** eval ***
+3
+6
+6
+6
+6
+1
+1
+<object>
+a string
+3
+undefined
+6
+undefined
+6
+0
+<object>
+1
+1
+3
+123
+3
+3
+5
+3
+100
+234
+23
+24
 2
-Exception: Unhandled exception: runtime error
+tick 101
+101
+tick 102
+102
+-100
+
 2
-Exception: Unhandled exception: runtime error
-2
-Exception: Unhandled exception: runtime error
-2
-Exception: Unhandled exception: runtime error
+tick 101
+101
+tick 102
+102
+-100
+
+100
+tick 101
+101
+tick 102
+102
+-100
+
+100
+tick 101
+101
+tick 102
+102
+-100
+
+Exception: Unhandled exception: Expected ',' or ')'
 *** fun stuff ***
          !!!!!!!!"""""""""""""""""""""""""""##########$$$$%%&(.)(*2%$#######""""""""!!!!!!!!!!!!!!!!
         !!!!!!!"""""""""""""""""""""""""""###########$$$$%%&'(*0+('&%$$#######""""""""!!!!!!!!!!!!!!

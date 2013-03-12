@@ -3,71 +3,14 @@
 
 print("*** comments ***")
 
-  var i = 0 /* comment */ ; print(i);  // more comment
+  var           
+      i = 0 /* comment */ ; print(i);  // more comment
  j = 1234.5 /* multi
  line
  comment
  */
 
 print(j);
-
-print("*** statements results ***")
-
-3
-
-3+3
-
-3+3;;;;
-
-3+3;;;{}
-
-;;{3+3};;
-
-aGlobal=1
-
-aGlobal
-
-aGlobal=new (function(){this.a="a string"})
-
-aGlobal.a
-
-if (true) 3
-
-if (false) 3
-
-if (true) 3+3
-
-if (false) 3+3
-
-if (true) 3+3; else 6-6
-
-if (false) 3+3; else 6-6
-
-aGlobal; if (false) 3
-
-b: { 1; break b }
-
-b: if (true) { 1; break b; 2 }
-
-3; b: if (false) { 123; if (false) { 1; break b; 2 }}
-
-3; b: if (true) { 123; if (false) { 1; break b; 2 }}
-
-3; b: if (false) { 123; if (true) { 1; break b; 2 }}
-
-3; b: if (false) { 123; if (false) { 1; break b; 2 }}
-
-5; while (false) 7;
-
-5; while (true) { 3; break }
-
-var i = 0; 234; while (i++ == 0) i * 100
-
-var i = 0; 234; while (i++ == 0) { if (i == 1) continue; i * 100 }
-
-var i = 0; 234; while (++i < 10) { 23; continue }
-
-var i = 3; 234; while (++i < 10) { j = 5; while (++j < i) j * 3 }
 
 print("*** numbers ***")
 
@@ -539,6 +482,62 @@ print(a*b+c);
 */
 
 print("*** eval ***");
+
+print(eval("3"))
+
+print(eval("3+3"))
+
+print(eval("3+3;;;;"))
+
+print(eval("3+3;;;{}"))
+
+print(eval(";;{3+3};;"))
+
+print(eval("aGlobal=1"))
+
+print(eval("aGlobal"))
+
+print(eval("aGlobal=new (function(){this.a='a string'})"))
+
+print(eval("aGlobal.a"))
+
+print(eval("if (true) 3"))
+
+print(eval("if (false) 3"))
+
+print(eval("if (true) 3+3"))
+
+print(eval("if (false) 3+3"))
+
+print(eval("if (true) 3+3; else 6-6"))
+
+print(eval("if (false) 3+3; else 6-6"))
+
+print(eval("aGlobal; if (false) 3"))
+
+print(eval("b: { 1; break b }"))
+
+print(eval("b: if (true) { 1; break b; 2 }"))
+
+print(eval("3; b: if (false) { 123; if (false) { 1; break b; 2 }}"))
+
+print(eval("3; b: if (true) { 123; if (false) { 1; break b; 2 }}"))
+
+print(eval("3; b: if (false) { 123; if (true) { 1; break b; 2 }}"))
+
+print(eval("3; b: if (false) { 123; if (false) { 1; break b; 2 }}"))
+
+print(eval("5; while (false) 7;"))
+
+print(eval("5; while (true) { 3; break }"))
+
+print(eval("var i = 0; 234; while (i++ == 0) i * 100"))
+
+print(eval("var i = 0; 234; while (i++ == 0) { if (i == 1) continue; i * 100 }"))
+
+print(eval("var i = 0; 234; while (++i < 10) { 23; continue }"))
+
+print(eval("var i = 3; 234; while (++i < 10) { j = 5; while (++j < i) j * 3 }"))
 
 var y = -100;
 var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })();

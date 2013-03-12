@@ -216,11 +216,11 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F71F383116EF279800D2A3AB</string>
+						<string>F71F384616EF2AC600D2A3AB</string>
 						<key>history</key>
 						<array>
-							<string>F71F382816EF278100D2A3AB</string>
-							<string>F71F382216EF277600D2A3AB</string>
+							<string>F71F384416EF2AC600D2A3AB</string>
+							<string>F71F384516EF2AC600D2A3AB</string>
 						</array>
 					</dict>
 					<key>SplitCount</key>
@@ -257,7 +257,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F71F383216EF279800D2A3AB</string>
+						<string>F71F384716EF2AC600D2A3AB</string>
 						<key>history</key>
 						<array>
 							<string>F71F37F816EF259700D2A3AB</string>
@@ -298,7 +298,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F71F383316EF279800D2A3AB</string>
+						<string>F71F384816EF2AC600D2A3AB</string>
 						<key>history</key>
 						<array>
 							<string>F71F382B16EF278100D2A3AB</string>
@@ -449,11 +449,11 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F71F383016EF279800D2A3AB</string>
+										<string>F71F384316EF2AC600D2A3AB</string>
 										<key>history</key>
 										<array>
-											<string>F71F37EE16EF259700D2A3AB</string>
-											<string>F71F37EF16EF259700D2A3AB</string>
+											<string>F71F384116EF2AC600D2A3AB</string>
+											<string>F71F384216EF2AC600D2A3AB</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -651,9 +651,10 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 		<string>F71F37F316EF259700D2A3AB</string>
 		<string>F71F37F616EF259700D2A3AB</string>
+		<string>1C78EAAD065D492600B07095</string>
+		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F71F37FB16EF259700D2A3AB</string>
 	</array>
@@ -1021,7 +1022,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C78EAAD065D492600B07095</string>
-				<string>F78D2BB916EDF7A100B8FA3F</string>
+				<string>F71F384916EF2AC600D2A3AB</string>
 				<string>1C78EAAC065D492600B07095</string>
 			</array>
 			<key>ToolbarConfiguration</key>
