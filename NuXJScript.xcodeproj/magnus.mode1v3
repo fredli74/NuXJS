@@ -271,7 +271,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>1</integer>
+									<integer>2</integer>
 									<integer>0</integer>
 								</array>
 							</array>
@@ -313,7 +313,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>NuXJScript.cpp</string>
+								<string>goodTests.js</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -321,23 +321,24 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>NuXJScript.cpp</string>
+										<string>goodTests.js</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F77BB51516EF736600647D86</string>
+										<string>F77BB59D16EFFFBD00647D86</string>
 										<key>history</key>
 										<array>
 											<string>F71F38C816EF422E00D2A3AB</string>
 											<string>F77BB4AB16EF5E9200647D86</string>
 											<string>F77BB4BA16EF5F4E00647D86</string>
 											<string>F77BB4DF16EF627500647D86</string>
-											<string>F77BB4F516EF65F300647D86</string>
 											<string>F77BB4F616EF65F300647D86</string>
-											<string>F77BB4F716EF65F300647D86</string>
 											<string>F77BB50B16EF730E00647D86</string>
-											<string>F77BB50D16EF730E00647D86</string>
-											<string>F77BB50E16EF730E00647D86</string>
+											<string>F77BB52B16EFF15B00647D86</string>
+											<string>F77BB55216EFF8FC00647D86</string>
+											<string>F77BB59216EFFED300647D86</string>
+											<string>F77BB59716EFFF1100647D86</string>
+											<string>F77BB59116EFFED300647D86</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -535,8 +536,7 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F77BB51016EF730E00647D86</string>
-		<string>F77BB4FB16EF65F300647D86</string>
+		<string>F77BB59916EFFF1100647D86</string>
 		<string>1C530D57069F1CE1000CFCEE</string>
 		<string>F77BB3C716EF467400647D86</string>
 		<string>1CD10A99069EF8BA00B06720</string>

@@ -6,6 +6,8 @@
 
 3 = 3 // illegal l-value
 
+5+5 }
+
 /* unterminated
 
 " unterminated

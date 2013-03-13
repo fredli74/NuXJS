@@ -150,6 +150,19 @@ a:first, b:2, c:true
 undefined
 undefined
 9
+3
+3
+0
+hej
+function
+function
+function
+number
+4
+del: true
+qwerty
+del: false
+hasg: false
 *** for statement ***
 0,1,2,3,4,5,6,7,8,9,
 10,11,12,13,14,15,16,17,18,19,
@@ -576,6 +589,8 @@ b
 2
 3
 
+function
+4
 *** value conversion ***
 33
 *** eval ***
@@ -627,6 +642,8 @@ false
 false
 5
 
+false
+false
 100
 tick 101
 101

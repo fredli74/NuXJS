@@ -697,6 +697,11 @@ ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environmen
 ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
 Object* ScriptFunction::getEnvironment() const { return environment; }
 
+bool ScriptFunction::getProperty(Engine& engine, const String* name, Value* v) {
+	if (name->isEqualTo(LENGTH_STRING)) { *v = Value(definition->getArgumentsCount()); return true; }
+	else return super::getProperty(engine, name, v);
+}
+
 Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
@@ -837,7 +842,6 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 	heap.mark(functionDef);
 	heap.mark(environment);
 	heap.mark(evalVars);
-	// FIX : subs
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].markIn(heap);
 	argumentsValue.markIn(heap);
 	super::gcMark(heap);
@@ -971,12 +975,8 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Objec
 	updateInternals();
 }
 
-void Processor::chain(ScriptFunctionDef* funcDef) {
+void Processor::enterEval(ScriptFunctionDef* funcDef) {
 --vsp;
-/* FIX : this is what it could look like if we had a non-strict mode
-	ScriptFunction* func = engine.getHeap().manage(new ScriptFunction(funcDef, frame));
-	chain(func, 0, 0, csp->thisValue);
-*/
 	frame->mergeEvalVars(engine.getHeap(), funcDef);
 	frame = engine.getHeap().manage(new EvalFrame(funcDef, frame));
 	++csp; // FIX : overflow check
@@ -1159,7 +1159,7 @@ bool Processor::privateRun() {
 				Function* f = vsp[-n].getFunction();
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v); // FIX : standard object prototype if v.asObject() == 0 ?
-				Object* newObject = engine.getHeap().manage(new UserObject(v.asObject()));
+				Object* newObject = heap.manage(new UserObject(v.asObject()));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
@@ -1393,22 +1393,68 @@ const OperatorInfo POST_OPS[] = {
 // FIX : sort
 enum Statement {
 	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
-	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT, THROW_STATEMENT, SWITCH_STATEMENT
+	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT, THROW_STATEMENT, SWITCH_STATEMENT, FUNCTION_STATEMENT
 };
+enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
+
 /* Built with QuickHashMaker.pika */
 static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[11] = {
+	static const char* STRINGS[12] = {
 		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
-		"throw", "switch"
+		"throw", "switch", "function"
 	};
 	static const int QUICK_HASH_TABLE[32] = {
-		-1, -1, -1, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
+		-1, -1, 11, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
 		-1, 9, -1, 10, 5, -1, -1, -1, -1, 1, -1, -1, -1, 4, 3, -1
 	};
 	if (n < 2 || n > 8) return -1;
 	int stringIndex = QUICK_HASH_TABLE[(n - s[0]) & 31];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
+/* Built with QuickHashMaker.pika */
+static int findReservedKeyword(int n /* string length */, const Char* s) {
+	static const char* STRINGS[36] = {
+		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
+		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
+		"return", "switch", "this", "throw", "try", "typeof", "var", "void", "while", 
+		"with", "class", "const", "enum", "export", "extends", "import", "super", 
+		"null", "false", "true"
+	};
+	static const int QUICK_HASH_TABLE[256] = {
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 33, -1, -1, -1, -1, -1, -1, 2, 1, -1, -1, -1, 
+		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1, -1, -1, 35, 20, -1, -1, 
+		-1, -1, -1, 34, -1, -1, -1, -1, -1, -1, -1, 32, -1, -1, -1, -1, 
+		4, 5, 6, -1, -1, -1, -1, -1, -1, -1, 17, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, 9, -1, 26, -1, -1, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 8, -1, -1, -1, 3, -1, -1, 27, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 28, 15, 7, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, 10, -1, -1, -1, -1, 31, -1, -1, -1, 14, -1, 
+		-1, -1, 16, -1, -1, 22, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, 18, -1, -1, -1, 
+		-1, 30, 29, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
+	};
+	if (n < 2 || n > 10) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+/* Built with QuickHashMaker.pika */
+static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
+	static const char* STRINGS[5] = {
+		"null", "false", "true", "function", "this"
+	};
+	static const int QUICK_HASH_TABLE[8] = {
+		0, 2, -1, 3, -1, -1, 1, 4
+	};
+	if (n < 4 || n > 8) return -1;
+	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+
 
 struct Compiler::ExpressionResult {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
@@ -1522,6 +1568,17 @@ bool Compiler::token(const char* t, bool eatLeadingWhite) {
 
 void Compiler::token() {
 	while (p != e && *p >= 'a' && *p <= 'z') ++p;
+}
+
+const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
+	const Char* b = p;
+	if (p != e && isLeadingIdentifierChar(*p)) {
+		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
+		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
+			syntaxError("Illegal use of reserved keyword");
+	}
+	if (required && p == b) syntaxError("Expected identifier");
+	return b;
 }
 
 static size_t unescapedMaxLength(const Char* p, const Char* e) {
@@ -1712,9 +1769,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PROPERTY_DOT: {
 			xr = makeRValue(xr);
 			white();
-			const Char* b = p;
-			identifier(true);
-			if (p == b) syntaxError("Expected identifier");
+			const Char* b = identifier(true, true);
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
@@ -1806,61 +1861,29 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	return true;
 }
 
-/* Built with QuickHashMaker.pika */
-static int findReservedKeyword(int n /* string length */, const Char* s) {
-	static const char* STRINGS[36] = {
-		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
-		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
-		"return", "switch", "this", "throw", "try", "typeof", "var", "void", "while", 
-		"with", "class", "const", "enum", "export", "extends", "import", "super", 
-		"null", "false", "true"
-	};
-	static const int QUICK_HASH_TABLE[256] = {
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 33, -1, -1, -1, -1, -1, -1, 2, 1, -1, -1, -1, 
-		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1, -1, -1, 35, 20, -1, -1, 
-		-1, -1, -1, 34, -1, -1, -1, -1, -1, -1, -1, 32, -1, -1, -1, -1, 
-		4, 5, 6, -1, -1, -1, -1, -1, -1, -1, 17, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, 9, -1, 26, -1, -1, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 8, -1, -1, -1, 3, -1, -1, 27, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 28, 15, 7, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, 10, -1, -1, -1, -1, 31, -1, -1, -1, 14, -1, 
-		-1, -1, 16, -1, -1, 22, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, 18, -1, -1, -1, 
-		-1, 30, 29, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
-	};
-	if (n < 2 || n > 10) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
-	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
-
-void Compiler::identifier(bool acceptReservedKeywords) {
-	if (p != e && isLeadingIdentifierChar(*p)) {
-		const Char* b = p;
-		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
-		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
-			syntaxError("Illegal use of reserved keyword");
+ScriptFunctionDef* Compiler::functionDefinition() {
+	ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
+	expectToken("(", true);
+	white();
+	while (p != e && !token(")", false)) {
+		if (func->argumentsCount != 0) {
+			if (!token(",", false)) syntaxError("Expected ',' or ')'");
+			white();
+		}
+		const Char* b = identifier(true, false);
+		func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
+		white();
 	}
+	if (p == e) syntaxError("Expected ',' or ')'");
+	expectToken("{", true);
+	{
+		Compiler funcCompiler(engine, func, false);
+		engine.getHeap().protect(&funcCompiler);
+		p = funcCompiler.compile(p, e);
+	}
+	expectToken("}", false);
+	return func;
 }
-
-enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
-
-/* Built with QuickHashMaker.pika */
-static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
-	static const char* STRINGS[5] = {
-		"null", "false", "true", "function", "this"
-	};
-	static const int QUICK_HASH_TABLE[8] = {
-		0, 2, -1, 3, -1, -1, 1, 4
-	};
-	if (n < 4 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
-	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	white();
@@ -1882,30 +1905,8 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 				}
 				case FUNCTION_LITERAL: {
 					discard(xr);
-					ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
 					// FIX : the optional function identifier
-					expectToken("(", true);
-					white();
-					while (p != e && !token(")", false)) {
-						if (func->argumentsCount != 0) {
-							if (!token(",", false)) syntaxError("Expected ',' or ')'");
-							white();
-						}
-						const Char* b = p;
-						identifier(false);
-						if (p == b) syntaxError("Expected identifier");
-						func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
-						white();
-					}
-					if (p == e) syntaxError("Expected ',' or ')'");
-					expectToken("{", true);
-					{
-						Compiler funcCompiler(engine, func, false);
-						engine.getHeap().protect(&funcCompiler);
-						p = funcCompiler.compile(p, e);
-					}
-					expectToken("}", false);
-					emitWithConstant(Processor::GEN_FUNC_OP, Value(func)); 
+					emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition()));
 					xr = ExpressionResult(ExpressionResult::PUSHED);
 					break;
 				}
@@ -1946,16 +1947,15 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					break;
 				}
 				default: {
-					const Char* b = p;
-					identifier(false);
+					const Char* b = identifier(false, false);
 					if (p == b) return false; // fix : nicer way?
 					discard(xr);
-					const String* identifier = String::newHashedString(engine.getHeap(), b, p);
-					xr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
+					const String* name = String::newHashedString(engine.getHeap(), b, p);
+					xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 					if (!compilingForEval) { // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
 						Int32 index;
 						LocalNameMap& nameMap = funcDef->localNames;
-						LocalNameMap::const_iterator it = nameMap.find(identifier);
+						LocalNameMap::const_iterator it = nameMap.find(name);
 						if (it != nameMap.end()) {
 							index = it->second;
 							xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
@@ -1986,26 +1986,27 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 	return makeRValue(expression(precedence));
 }
 
-Compiler::ExpressionResult Compiler::varDeclaration() {
-	const Char* b = p; // FIX : sub
-	identifier(false);
-	if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
-	const String* identifier = String::newHashedString(engine.getHeap(), b, p);
-	ExpressionResult lxr;
-	lxr = ExpressionResult(ExpressionResult::NAMED, Value(identifier));
-	if (!identifier->isEqualTo(ARGUMENTS_STRING)) {
+Compiler::ExpressionResult Compiler::declareIdentifier() {
+	const Char* b = identifier(true, false);
+	const String* name = String::newHashedString(engine.getHeap(), b, p);
+	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
+	if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Int32 index;
 		LocalNameMap& nameMap = funcDef->localNames;
-		LocalNameMap::const_iterator it = nameMap.find(identifier);
+		LocalNameMap::const_iterator it = nameMap.find(name);
 		if (it != nameMap.end()) index = it->second;
 		else {
 			index = -(++funcDef->varsCount);
-			nameMap[identifier] = index;
+			nameMap[name] = index;
 		}
 		 // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
 		if (!compilingForEval) lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
-	
+	return lxr;
+}
+
+Compiler::ExpressionResult Compiler::varDeclaration() {
+	ExpressionResult lxr(declareIdentifier());
 	if (token("=", true)) {
 		ExpressionResult rr(rvalueExpression(COMMA_PREC));
 		makeAssignment(lxr);
@@ -2094,6 +2095,15 @@ void Compiler::completeBreaks(const Scope* scope) {
 
 // FIX : make member functions of all the different statements
 
+void Compiler::functionStatement() {
+	outputCode = &funcInitCode;
+	ExpressionResult lxr(declareIdentifier());
+	emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition()));
+	makeAssignment(lxr);
+	emit(Processor::POP_OP);
+	outputCode = &funcDef->code;
+}
+
 void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	white();	
 		
@@ -2108,14 +2118,14 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 	int statementTokenIndex = findStatementToken(p - b, &*b);
 	if (statementTokenIndex < 0) {
 		p = b;
-		identifier(true);
+		identifier(false, true);
 		const Char* q = p;
 		if (p != b && token(":", true) && findReservedKeyword(q - b, b) < 0) {
-			String identifier(b, q);
+			String label(b, q);
 			for (Scope* s = firstScope; s != 0; s = s->next) {
-				if (!s->label.empty() && s->label.isEqualTo(identifier)) syntaxError("Duplicate label");
+				if (!s->label.empty() && s->label.isEqualTo(label)) syntaxError("Duplicate label");
 			}
-			Scope newLabelScope(identifier, firstScope);
+			Scope newLabelScope(label, firstScope);
 			statement(&newLabelScope, scopeLabelsEnd, evalXR);
 			completeBreaks(&newLabelScope);
 		} else {
@@ -2131,21 +2141,20 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			case CONTINUE_STATEMENT: {
 				if (compilingForEval) evalXR = makeRValue(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
-				const Char* b = p;
 				Scope* s = firstScope;
-				identifier(false);
+				const Char* b = identifier(false, false);
 				// FIX : too complicated!! bone out...
-				String identifier(b, p);
+				String label(b, p);
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
-						|| ((isBreak || !identifier.empty()) && s->type == Scope::LABEL_TYPE))
-						&& s->label.isEqualTo(identifier))) {
+						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
+						&& s->label.isEqualTo(label))) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
 						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
 				if (s == 0) {
-					syntaxError(!identifier.empty() ? "Undefined label"
+					syntaxError(!label.empty() ? "Undefined label"
 							: (isBreak ? "Illegal break" : "Illegal continue"));
 				}
 				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
@@ -2293,9 +2302,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				if (token("catch", true)) {
 					gotCatch = true;
 					expectToken("(", true);
-					const Char* b = p;
-					identifier(false);
-					if (p == b) syntaxError("Expected identifier"); // FIX : add flag to identifier
+					const Char* b = identifier(true, false);
 					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
 					LocalNameMap& nameMap = funcDef->localNames;
 					bool hadLocalIndex = false;
@@ -2410,6 +2417,8 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				break;
 			}
 			
+			case FUNCTION_STATEMENT: functionStatement(); break;
+			
 			default: assert(0);
 		}
 	}
@@ -2436,6 +2445,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	if (!compilingForEval) evalXR = discard(evalXR);
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
+	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 freeSafeKeepingIndexes.clear();
@@ -2504,8 +2514,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
-	GCHeap& heap = engine.getHeap();
-	const String* sourceCode = argv[0].toString(heap);
+	const String* sourceCode = argv[0].toString(engine.getHeap());
 	ScriptFunctionDef* functionDef;
 	
 	const Table::Bucket* b = functionDefCache.lookup(sourceCode);
@@ -2513,13 +2522,13 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	if (b != 0) {
 		functionDef = reinterpret_cast<ScriptFunctionDef*>(b->value.asObject());
 	} else {
-		functionDef = heap.manage(new ScriptFunctionDef());
+		functionDef = engine.getHeap().manage(new ScriptFunctionDef());
 		Compiler compiler(engine, functionDef, true);
-		heap.protect(&compiler);
+		engine.getHeap().protect(&compiler);
 		compiler.compile(*sourceCode);
 		functionDefCache.assign(sourceCode, Value(functionDef));
 	}
-	processor.chain(functionDef);
+	processor.enterEval(functionDef);
 	return Value();
 }
 

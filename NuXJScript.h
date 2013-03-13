@@ -5,6 +5,7 @@
 //		eval support
 //			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
 //			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
+//			global eval support (sets all var and function declarations in global this)
 //		count (and run-time check) necessary value stack depth for functions
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
@@ -260,6 +261,7 @@ class GCItem {
 
 // FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
 // list (_gcList = 0). But in GCHeap, managed items ought to be deleted, right?
+// These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
 	public:		GCList() throw();
 				size_t size() const;
@@ -274,7 +276,7 @@ class GCHeap {
 				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
 				size_t size() const;
-				size_t gc();
+				size_t gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
@@ -453,27 +455,6 @@ struct StringObjectCompare {
 typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 typedef std::vector<CodeWord> CodeVector; // FIX : use QArray in all these places
 
-// This is an Object so that we can store it as a constant and also in Table
-class ScriptFunctionDef : public Object {
-	friend class FunctionFrame;
-	friend class Compiler; // FIX : maybe not one day?
-	
-	public:		typedef Object super;
-				
-				ScriptFunctionDef();
-				virtual void gcMark(GCHeap& heap);
-				bool lookupLocalName(const String* name, Int32& index) const;
-				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
-				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
-
-	protected:	const String* source;
-				CodeVector code;
-				std::vector<Value> constants;
-				Int32 argumentsCount;
-				Int32 varsCount; // not including arguments
-				LocalNameMap localNames;
-};
-
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
 				RangeEnumerator(GCHeap& heap, Int32 from, Int32 count);
@@ -543,12 +524,35 @@ class Engine {
 				EvalFunction evalDirectFunction;
 };
 
+// This is an Object so that we can store it as a constant and also in Table
+class ScriptFunctionDef : public Object {
+	friend class FunctionFrame;
+	friend class Compiler; // FIX : maybe not one day?
+	
+	public:		typedef Object super;
+				
+				ScriptFunctionDef();
+				virtual void gcMark(GCHeap& heap);
+				bool lookupLocalName(const String* name, Int32& index) const;
+				Int32 getArgumentsCount() const { return argumentsCount; }
+				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
+				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
+
+	protected:	const String* source;
+				CodeVector code;
+				std::vector<Value> constants;
+				Int32 argumentsCount;
+				Int32 varsCount; // not including arguments
+				LocalNameMap localNames;
+};
+
 // This is actually a closure, but ECMAScript calls them Function objects.
 class ScriptFunction : public Function {
 	public:		typedef Function super;
 				
 				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
 				virtual void gcMark(GCHeap& heap);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				ScriptFunctionDef* getDefinition() const;
 				Object* getEnvironment() const;
@@ -588,6 +592,10 @@ class FunctionFrame : public Frame {
 };
 
 // FIX : if CStackEntry included a functionDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different functionDef really.
+/*
+	This is the direct frame of an eval(), it only bridges all virtuals to the parent FunctionFrame, but has a different
+	functionDef pointer (for constants etc).
+*/
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
@@ -733,7 +741,7 @@ class Processor : public GCItem {
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
 				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void chain(ScriptFunctionDef* funcDef);
+				void enterEval(ScriptFunctionDef* funcDef);
 	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);
@@ -822,12 +830,15 @@ class Compiler : public GCItem {
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
+				ScriptFunctionDef* functionDefinition();
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
+				ExpressionResult declareIdentifier();
 				ExpressionResult varDeclaration();
 				void varDeclarations();
 				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
 				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void functionStatement();
 				void statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void statementList(Scope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
@@ -837,12 +848,13 @@ class Compiler : public GCItem {
 				void token();
 				Char* unescape(Char* buffer, const Char*& p, const Char* e);
 				bool isLeadingIdentifierChar(Char c);
-				void identifier(bool acceptReservedKeywords); // FIX : return begin pointer as this is what we always do
+				const Char* identifier(bool required, bool acceptReservedKeywords);
 
 				Engine& engine; // FIX : necessary?
 				ScriptFunctionDef* const funcDef;
 				const bool compilingForEval;
 				std::map<Value, Int32> definedConstants;
+				CodeVector funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
 				CodeVector* outputCode;

@@ -2,6 +2,7 @@ Exception: Expected expression
 Exception: Syntax error
 Exception: Syntax error
 Exception: Illegal l-value
+Exception: Syntax error
 Exception: Missing */
 Exception: Unterminated string
 Exception: Unterminated string

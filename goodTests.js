@@ -203,7 +203,45 @@ print(f[999])
 print(f[1000])
 print(f[-1])
 
-x=9;(function() { var y=3,x=5 })(); print(x)
+x=9;(function() { var y=3,x=5 })(); print(x);
+
+f = function(a,b,c) { }
+print(f.length)
+f.length = 0
+print(f.length);
+
+f = function() { }
+print(f.length);
+
+(function() { function  f (  )  {  print (  "hej"  ) }; f() })();
+(function() { print(typeof g); function g() { } })(); // function
+(function() { var g; print(typeof g); function g() { } })(); // function
+(function() { print(typeof g); var g = 23; print(typeof g); function g() { } })(); // function, number
+(function() { print(g.length); function g(a,b) { }; function g(a,b,c,d) { } })(); // 4
+// FIX : js doesn't like -> (function() { print(g.length); if (false) function g(a,b) { }; if (false) function g(a,b,c,d) { } })(); // 4
+print("del: " + delete g);
+(function() { g = "qwerty"; function g(a,b,c,d) { }; print(g); print("del: " + delete g); })(); // qwerty, del: false
+print("hasg: " + ("g" in this));
+
+/*print("del: " + delete f); // true
+print("hasf: " + ("f" in this)); // hasf: false
+(function f() { f=3; print(typeof f); })(); // function
+print("hasf: " + ("f" in this)); // hasf: false
+(function() { f=3; print(typeof f); })(); // number
+print("hasf: " + ("f" in this)); // hasf: true
+print("del: " + delete f); // true
+(function f() { print(typeof f); var f=3; print(typeof f); })(); // undefined, number
+(function f() { print("del: " + delete f); print(typeof f); })(); // del: false, function
+(function f() { print("del: " + delete f); var f = 27; print("del: " + delete f); print(typeof f); })(); // del: false, del: false, number
+(function f() { print("del: " + delete f); f = 27; print("del: " + delete f); print(typeof f); })(); // del: false, del: false, function
+print("hasf: " + ("f" in this)); // hasf: false
+(function f() { function f(a,b) { }; print(f.length); })(); // 2
+(function f() { function f(a,b) { }; print("del: " + delete f); print(f.length); })(); // del: false, 2
+(function f() { print("del: " + delete f); f = 27; print("del: " + delete f); function f(a,b) { }; print(f.length); })(); // del: false, del: false, undefined
+print("hasf: " + ("f" in this)); // hasf: false
+(function f() { print("del: " + delete f); f = 27; print("del: " + delete f); function f(a,b) { }; print(typeof f); })(); // del: false, del: false, number
+print("hasf: " + ("f" in this)); // hasf: false
+(function f() { print(f.length); function f(a,b,c,d) { }; print(f.length); })(); // 4, 4*/
 
 print("*** for statement ***")
 
@@ -369,7 +407,7 @@ print("*** switch ***")
 
 for(var x=-3;x<=3;++x)switch(x+3){case 1:case 2:case 1+2:print(x)}
 
-var f = function(n) { print('test:' + n); };
+f = function(n) { print('test:' + n); };
 for (var x = -3; x <= 3; ++x) switch (  x + 3  )   { case 1  : case 2  : case f ( x )   , 1 + 3  : print(x) }
 
 switch (3) { case 2: print("NO"); default: print("HEJ"); case 3: print("3") }
@@ -441,6 +479,8 @@ print('');
 
 f = function() { for (var arguments = 3 in "abcd") print(arguments); }; f();
 print('');
+
+(function() { print(typeof arguments); function arguments(a,b,c,d) { }; print(arguments.length) })();
 
 print("*** value conversion ***");
 /*
@@ -559,6 +599,10 @@ print("");
 
 (function() { var x = 77; eval("var x = 5"); print(delete x); print(x) })();
 print("");
+
+print("anotherGlobal" in this);
+eval("if (false) var anotherGlobal = 'this creates a global'");
+print("anotherGlobal" in this);
 
 var y = -100; var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })(); print(a()); print(a()); print(y); print("");
 
