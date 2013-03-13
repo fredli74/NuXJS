@@ -46,3 +46,4 @@ Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
+Exception: Illegal return

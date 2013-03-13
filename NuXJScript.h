@@ -55,6 +55,7 @@
 //
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		global environment compiler (don't accept return etc)
+//			global is really a function frame too, with vars that you can't delete etc...
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
@@ -213,6 +214,14 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 					return *this;
 				}
 				
+				void resize(size_t newSize) {
+					if (newSize != n) {
+						QuickArray<T, BUILT_IN_COUNT> na(newSize);
+						std::copy(p, p + std::min(n, newSize), na.p);
+						swap(na);
+					}
+				}
+				
 				bool empty() const { return n == 0; }
 				size_t size() const { return n; }
 				operator T*() const { return p; }
@@ -313,7 +322,7 @@ class Value {
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
 				const String* typeOfString() const;
 				bool toBool() const;
-				Int32 toInt() const; // FIX : ?
+				Int32 toInt() const;
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
 				Object* toObject(GCHeap& heap) const;
@@ -397,7 +406,7 @@ class Table {
 				const Bucket* getFirst() const;
 				const Bucket* getNext(const Bucket* b) const;
 				// FIX : we need a better way to lookup & update in one, right now it needs separate lookup and assign (see EvalVarsObject)
-				const Bucket* lookup(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				const Bucket* lookup(const String* key) const; // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void assign(const String* key, const Value& value); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void markIn(GCHeap& heap);
@@ -454,7 +463,6 @@ struct StringObjectCompare {
 	bool operator() (const String* a, const String* b) const { return (a != b && a->isLessThan(*b)); }
 };
 
-typedef std::map<const String*, Int32, StringObjectCompare> LocalNameMap; // FIX : use table
 typedef std::vector<CodeWord> CodeVector; // FIX : use QArray in all these places
 
 class RangeEnumerator : public Enumerator {
@@ -527,15 +535,15 @@ class Engine {
 };
 
 // This is an Object so that we can store it as a constant and also in Table
-class ScriptFunctionDef : public Object {
+class CodeDefinition : public Object {
 	friend class FunctionFrame;
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
 				
-				ScriptFunctionDef();
+				CodeDefinition();
 				virtual void gcMark(GCHeap& heap);
-				bool lookupLocalName(const String* name, Int32& index) const;
+				bool lookupNameIndex(const String* name, Int32& index) const;
 				Int32 getArgumentsCount() const { return argumentsCount; }
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
@@ -544,34 +552,33 @@ class ScriptFunctionDef : public Object {
 				std::vector<Value> constants;
 				Int32 argumentsCount;
 				Int32 varsCount; // not including arguments
-				LocalNameMap localNames;
+				Table nameIndexes;
 				const String* source;
 				const String* selfName;				
 };
 
-// This is actually a closure, but ECMAScript calls them Function objects.
-class ScriptFunction : public Function {
+class Closure : public Function {
 	public:		typedef Function super;
 				
-				ScriptFunction(ScriptFunctionDef* definition, Object* environment);
+				Closure(CodeDefinition* codeDef, Object* environment);
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				ScriptFunctionDef* getDefinition() const;
+				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 
-	protected:	ScriptFunctionDef* const definition;
+	protected:	CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 };
 
 class Frame : public Object {
 	public:		typedef Object super;
-				Frame(const ScriptFunctionDef* functionDef) : functionDef(functionDef) { }
-				const ScriptFunctionDef* getFunctionDef() const { return functionDef; }
+				Frame(const CodeDefinition* codeDef) : codeDef(codeDef) { }
+				const CodeDefinition* getFunctionDef() const { return codeDef; }
 				Value* getLocalsPointer() const { return localsPointer; }
-				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) = 0;
+				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* def) = 0;
 				
-	protected:	const ScriptFunctionDef* const functionDef;
+	protected:	const CodeDefinition* const codeDef;
 				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 };
 
@@ -580,36 +587,36 @@ class EvalVarsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
-				FunctionFrame(ScriptFunction* function, Int32 argc, const Value* argv);
+				FunctionFrame(Closure* function, Int32 argc, const Value* argv);
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
+				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
-	protected:	ScriptFunction* const selfFunction; // FIX : we have functionDef too in Frame, not *really* necessary, we should also contemplate adding functionDef pointer to CStackEntry directly (see below)
+	protected:	Closure* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals; // Includes variables and arguments.
-				Value argumentsValue;
+				Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
 				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
 };
 
-// FIX : if CStackEntry included a functionDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different functionDef really.
+// FIX : if CStackEntry included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
 	This is the direct frame of an eval(), it only bridges all virtuals to the parent FunctionFrame, but has a different
-	functionDef pointer (for constants etc).
+	codeDef pointer (for constants etc).
 */
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
-				EvalFrame(const ScriptFunctionDef* evalFunctionDef, Frame* parentFrame);
+				EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame);
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
+				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
 };
@@ -627,7 +634,7 @@ class CatchFrame : public Frame {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
+				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -745,9 +752,9 @@ class Processor : public GCItem {
 				void chain(const CodeWord* stub);
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
-				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void enterEval(ScriptFunctionDef* funcDef);
-	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue);
+				void chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
+				void enterEval(CodeDefinition* codeDef);
+	// FIX :			void call(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);
@@ -790,7 +797,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(Engine& engine, ScriptFunctionDef* funcDef, Target compileFor);
+				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				virtual void gcMark(GCHeap& heap);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
@@ -823,7 +830,7 @@ class Compiler : public GCItem {
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
-				ScriptFunctionDef* functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd);
+				CodeDefinition* functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd);
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier();
 				ExpressionResult varDeclaration();
@@ -843,8 +850,8 @@ class Compiler : public GCItem {
 				bool isLeadingIdentifierChar(Char c);
 				const Char* identifier(bool required, bool acceptReservedKeywords);
 
-				Engine& engine; // FIX : necessary?
-				ScriptFunctionDef* const funcDef;
+				GCHeap& heap; // FIX : necessary?
+				CodeDefinition* const codeDef;
 				const Target compilingFor;
 				std::map<Value, Int32> definedConstants;
 				CodeVector funcInitCode; // function declarations, inserted at top of function when finalizing

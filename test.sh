@@ -27,7 +27,7 @@ else
 	export -n DYLD_INSERT_LIBRARIES
 	echo "### UNCONFORMING TESTS ###"
 	echo
-	build/Debug/NuXJScript <unconformTests.js 2>/dev/null | diff --strip-trailing-cr unconformResults.txt -
+	build/Debug/NuXJScript unconformTests.js 2>/dev/null | diff --strip-trailing-cr unconformResults.txt -
 	echo
 	echo "### BAD TESTS ###"
 	echo

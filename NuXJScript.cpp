@@ -266,10 +266,11 @@ double Value::toDouble() const {
 }
 
 Int32 Value::toInt() const {
-	int i = static_cast<Int32>(d);
-	if (i == d) return i;
-	if (isNaN(d) || fabs(d) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
-	return (d >= 0) ? static_cast<UInt32>(fmod(d, 4294967296.0)) : -static_cast<UInt32>(fmod(-d, 4294967296.0));
+	double v = toDouble();
+	int i = static_cast<Int32>(v);
+	if (i == v) return i;
+	if (isNaN(v) || fabs(v) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
+	return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
 }
 
 const String* Value::toString(GCHeap& heap) const {
@@ -606,7 +607,7 @@ const Table::Bucket* Table::getNext(const Bucket* b) const {
 	return (b == e ? 0 : b);
 }
 
-const Table::Bucket* Table::lookup(const String* key) {
+const Table::Bucket* Table::lookup(const String* key) const {
 	const Bucket* b = find(key, key->calcHash());
 	return (b->key != 0 && b->value.exists() ? b : 0);
 }
@@ -716,24 +717,22 @@ void StringListEnumerator::sort() { std::sort(list.begin(), list.begin() + actua
 void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 
-/* --- ScriptFunctionDef --- */
+/* --- CodeDef --- */
 
-ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), varsCount(0), selfName(0) { }
+CodeDefinition::CodeDefinition() : source(0), argumentsCount(0), varsCount(0), selfName(0) { }
 
-bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const {
-	LocalNameMap::const_iterator it = localNames.find(name);
-	if (it == localNames.end()) return false;
-	index = it->second;
+bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
+	const Table::Bucket* b = nameIndexes.lookup(name);
+	if (b == 0) return false;
+	index = b->value.toInt();
 	return true;
 }
 
-void ScriptFunctionDef::gcMark(GCHeap& heap) {
+void CodeDefinition::gcMark(GCHeap& heap) {
 	heap.mark(source);
-	// FIX : subs
 	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it)
 		it->markIn(heap);
-	for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it)
-		heap.mark(it->first);
+	nameIndexes.markIn(heap);
 	heap.mark(selfName);
 	super::gcMark(heap);
 }
@@ -749,25 +748,25 @@ Value Function::construct(Engine& engine, Processor& processor, Int32 argc, cons
 	return call(engine, processor, argc, argv, thisValue);
 }
 
-/* --- ScriptFunction --- */
+/* --- Closure --- */
 
-ScriptFunction::ScriptFunction(ScriptFunctionDef* definition, Object* environment) : definition(definition), environment(environment) { }
-ScriptFunctionDef* ScriptFunction::getDefinition() const { return definition; }
-Object* ScriptFunction::getEnvironment() const { return environment; }
+Closure::Closure(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
+CodeDefinition* Closure::getDefinition() const { return codeDef; }
+Object* Closure::getEnvironment() const { return environment; }
 
-bool ScriptFunction::getProperty(Engine& engine, const String* name, Value* v) {
-	if (name->isEqualTo(LENGTH_STRING)) { *v = Value(definition->getArgumentsCount()); return true; }
+bool Closure::getProperty(Engine& engine, const String* name, Value* v) {
+	if (name->isEqualTo(LENGTH_STRING)) { *v = Value(codeDef->getArgumentsCount()); return true; }
 	else return super::getProperty(engine, name, v);
 }
 
-Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 	return Value();
 }
 
-void ScriptFunction::gcMark(GCHeap& heap) {
-	heap.mark(definition);
+void Closure::gcMark(GCHeap& heap) {
+	heap.mark(codeDef);
 	heap.mark(environment);
 	super::gcMark(heap);
 }
@@ -847,21 +846,21 @@ struct EvalVarsObject : public Object { // FIX : can we reuse something here? Us
 	Table vars;
 };
 
-FunctionFrame::FunctionFrame(ScriptFunction* function, Int32 argc, const Value* argv)
+FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
-		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
+		, locals(codeDef->varsCount + std::max(codeDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
-	localsPointer = locals.begin() + functionDef->varsCount;
+	localsPointer = locals.begin() + codeDef->varsCount;
 	std::fill(locals.begin(), localsPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, localsPointer);
-	if (functionDef->argumentsCount > argc) std::fill(e, locals.end(), Value::UNDEFINED);
+	if (codeDef->argumentsCount > argc) std::fill(e, locals.end(), Value::UNDEFINED);
 }
 
 // TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
 
 bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 	Int32 index;
-	if (functionDef->lookupLocalName(name, index)) {
+	if (codeDef->lookupNameIndex(name, index)) {
 		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 		*v = localsPointer[index];
 		return true;
@@ -872,7 +871,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 		}
 		*v = argumentsValue;
 		return true;
-	} else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) {
+	} else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		*v = Value(selfFunction);
 		return true;
 	} else if (environment->getProperty(engine, name, v)) return true; // FIX: can we do a looping non-recursive solution? faster
@@ -881,14 +880,14 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 
 bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
 	Int32 index;
-	if (functionDef->lookupLocalName(name, index)) {
+	if (codeDef->lookupNameIndex(name, index)) {
 		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 		localsPointer[index] = v;
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		argumentsValue = v;
 		return true;
-	} else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) {
+	} else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	} else {
 		return environment->setProperty(engine, name, v);
@@ -897,13 +896,13 @@ bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value&
 
 bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 	Int32 index;
-	if (functionDef->lookupLocalName(name, index)) return false;
-	else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) return false;
+	if (codeDef->lookupNameIndex(name, index)) return false;
+	else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) return false;
 	else return environment->deleteProperty(engine, name);
 }
 
 void FunctionFrame::gcMark(GCHeap& heap) {
-	heap.mark(functionDef);
+	heap.mark(codeDef);
 	heap.mark(environment);
 	heap.mark(evalVars);
 	for (Int32 i = 0; i < locals.size(); ++i) locals[i].markIn(heap);
@@ -911,25 +910,25 @@ void FunctionFrame::gcMark(GCHeap& heap) {
 	super::gcMark(heap);
 }
 
-void FunctionFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) {
+void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 	if (evalVars == 0) {
 		evalVars = heap.manage(new EvalVarsObject(environment));
 		environment = evalVars;
 	}
-	for (LocalNameMap::const_iterator it = evalFunctionDef->localNames.begin(), e = evalFunctionDef->localNames.end(); it != e; ++it)
-		if (evalVars->vars.lookup(it->first) == 0) evalVars->vars.assign(it->first, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+	for (const Table::Bucket* b = def->nameIndexes.getFirst(); b != 0; b = def->nameIndexes.getNext(b))
+		if (evalVars->vars.lookup(b->key) == 0) evalVars->vars.assign(b->key, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
 }
 
 /* --- EvalFrame --- */
 
-EvalFrame::EvalFrame(const ScriptFunctionDef* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
+EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
 	localsPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
 }
-void EvalFrame::gcMark(GCHeap& heap) { heap.mark(functionDef); heap.mark(parentFrame); super::gcMark(heap); }
+void EvalFrame::gcMark(GCHeap& heap) { heap.mark(codeDef); heap.mark(parentFrame); super::gcMark(heap); }
 bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
 bool EvalFrame::setProperty(Engine& engine, const String* name, const Value& v) { return parentFrame->setProperty(engine, name, v); }
 bool EvalFrame::deleteProperty(Engine& engine, const String* name) { return parentFrame->deleteProperty(engine, name); }
-void EvalFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) { parentFrame->mergeEvalVars(heap, evalFunctionDef); }
+void EvalFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(heap, evalFunctionDef); }
 
 /* --- CatchFrame --- */
 
@@ -961,7 +960,7 @@ bool CatchFrame::deleteProperty(Engine& engine, const String* name) {
 	else return parentFrame->deleteProperty(engine, name);
 }
 
-void CatchFrame::mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef) {
+void CatchFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) {
 	parentFrame->mergeEvalVars(heap, evalFunctionDef);
 }
 
@@ -1028,8 +1027,8 @@ void Processor::chain(Function* completion) {
 	chain(CHAIN_CALL_STUB);
 }
 
-void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
-	ScriptFunctionDef* def = func->getDefinition();
+void Processor::chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue) {
+	CodeDefinition* def = func->getDefinition();
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	csp->returnIP = ip;
@@ -1039,15 +1038,15 @@ void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Objec
 	updateInternals();
 }
 
-void Processor::enterEval(ScriptFunctionDef* funcDef) {
+void Processor::enterEval(CodeDefinition* codeDef) {
 --vsp;
-	frame->mergeEvalVars(engine.getHeap(), funcDef);
-	frame = engine.getHeap().manage(new EvalFrame(funcDef, frame));
+	frame->mergeEvalVars(engine.getHeap(), codeDef);
+	frame = engine.getHeap().manage(new EvalFrame(codeDef, frame));
 	++csp; // FIX : overflow check
 	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = csp[-1].thisValue;
-	ip = funcDef->getCodePointer();
+	ip = codeDef->getCodePointer();
 	updateInternals();
 }
 
@@ -1235,7 +1234,7 @@ bool Processor::privateRun() {
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject(); // FIX : .getObject?
 				assert(o != 0);
-				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<ScriptFunctionDef*>(o), frame)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.manage(new Closure(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case FRAME_OP: push(Value(frame)); break;
@@ -1484,18 +1483,18 @@ struct Compiler::ExpressionResult {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* funcDef, Target compileFor) : engine(engine), funcDef(funcDef)
-		, compilingFor(compileFor), safeKeptIndexCount(0), outputCode(&funcDef->code), acceptInOperator(true) { }
+Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
+		, compilingFor(compileFor), safeKeptIndexCount(0), outputCode(&codeDef->code), acceptInOperator(true) { }
 
 void Compiler::gcMark(GCHeap& heap) {
-	heap.mark(funcDef);
+	heap.mark(codeDef);
 	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
 		it->first.markIn(heap);
 	super::gcMark(heap);
 }
 
 void Compiler::syntaxError(const String& what) {
-	throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new String(what))));
+	throw Exception(heap, Value(heap.manage(new String(what))));
 }
 
 void Compiler::syntaxError(const std::string& what) {
@@ -1535,7 +1534,7 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
-		std::vector<Value>& constants = funcDef->constants;
+		std::vector<Value>& constants = codeDef->constants;
 		constants.push_back(constant);
 		definedConstants[constant] = constants.size() - 1;
 		emitWithInt32(op, constants.size() - 1);
@@ -1663,7 +1662,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				tempLocalIndex = freeSafeKeepingIndexes.back();
 				freeSafeKeepingIndexes.pop_back();
 			} else {
-				tempLocalIndex = -(++funcDef->varsCount);
+				tempLocalIndex = -(++codeDef->varsCount);
 				safeKeptIndexCount++;
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
@@ -1790,7 +1789,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			xr = makeRValue(xr);
 			white();
 			const Char* b = identifier(true, true);
-			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(engine.getHeap(), b, p)));
+			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(heap, b, p)));
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -1881,10 +1880,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	return true;
 }
 
-ScriptFunctionDef* Compiler::functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd) {
-	ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
+CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd) {
+	CodeDefinition* func = heap.manage(new CodeDefinition());
 	if (selfNameBegin != selfNameEnd)
-		func->selfName = String::newHashedString(engine.getHeap(), selfNameBegin, selfNameEnd);
+		func->selfName = String::newHashedString(heap, selfNameBegin, selfNameEnd);
 	expectToken("(", true);
 	white();
 	while (p != e && !token(")", false)) {
@@ -1893,14 +1892,14 @@ ScriptFunctionDef* Compiler::functionDefinition(const Char* selfNameBegin, const
 			white();
 		}
 		const Char* b = identifier(true, false);
-		func->localNames[String::newHashedString(engine.getHeap(), b, p)] = func->argumentsCount++;
+		func->nameIndexes.assign(String::newHashedString(heap, b, p), Value(func->argumentsCount++));
 		white();
 	}
 	if (p == e) syntaxError("Expected ',' or ')'");
 	expectToken("{", true);
 	{
-		Compiler funcCompiler(engine, func, Compiler::FOR_FUNCTION);
-		engine.getHeap().protect(&funcCompiler);
+		Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
+		heap.protect(&funcCompiler);
 		p = funcCompiler.compile(p, e);
 	}
 	expectToken("}", false);
@@ -1966,23 +1965,18 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					QuickArray<Char, 64> buffer(maxLength);
 					Char* unescapeEnd = unescape(buffer, p, e);
 					assert(unescapeEnd <= buffer + maxLength);
-					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(String::newHashedString(engine.getHeap(), buffer, unescapeEnd)));
+					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(String::newHashedString(heap, buffer, unescapeEnd)));
 					break;
 				}
 				default: {
 					const Char* b = identifier(false, false);
 					if (p == b) return false; // fix : nicer way?
 					discard(xr);
-					const String* name = String::newHashedString(engine.getHeap(), b, p);
+					const String* name = String::newHashedString(heap, b, p);
 					xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 					if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-						Int32 index;
-						LocalNameMap& nameMap = funcDef->localNames;
-						LocalNameMap::const_iterator it = nameMap.find(name);
-						if (it != nameMap.end()) {
-							index = it->second;
-							xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
-						}
+						const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
+						if (b != 0) xr = ExpressionResult(ExpressionResult::INDEXED, b->value);
 					}
 					break;
 				}
@@ -2011,19 +2005,18 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 
 Compiler::ExpressionResult Compiler::declareIdentifier() {
 	const Char* b = identifier(true, false);
-	const String* name = String::newHashedString(engine.getHeap(), b, p);
+	const String* name = String::newHashedString(heap, b, p);
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
-		Int32 index;
-		LocalNameMap& nameMap = funcDef->localNames;
-		LocalNameMap::const_iterator it = nameMap.find(name);
-		if (it != nameMap.end()) index = it->second;
+		Value index;
+		const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
+		if (b != 0) index = b->value;
 		else {
-			index = -(++funcDef->varsCount);
-			nameMap[name] = index;
+			index = Value(-(++codeDef->varsCount));
+			codeDef->nameIndexes.assign(name, index);
 		}
 		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-		if (compilingFor != FOR_EVAL) lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+		if (compilingFor != FOR_EVAL) lxr = ExpressionResult(ExpressionResult::INDEXED, index);
 	}
 	return lxr;
 }
@@ -2086,7 +2079,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	ExpressionResult incXR;
 	if (optionalExpression(incXR, LOWEST_PREC)) discard(incXR);
 	expectToken(")", true);
-	outputCode = &funcDef->code;
+	outputCode = &codeDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
@@ -2124,7 +2117,7 @@ void Compiler::functionStatement() {
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(p, p)));
 	makeAssignment(lxr);
 	emit(Processor::POP_OP);
-	outputCode = &funcDef->code;
+	outputCode = &codeDef->code;
 }
 
 void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
@@ -2273,7 +2266,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					ExpressionResult iterXR;
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
-					outputCode = &funcDef->code;
+					outputCode = &codeDef->code;
 					if (gotExpression && token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
@@ -2327,15 +2320,12 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					expectToken("(", true);
 					white();
 					const Char* b = identifier(true, false);
-					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
-					LocalNameMap& nameMap = funcDef->localNames;
-					bool hadLocalIndex = false;
-					Int32 localIndex = -1;
-					LocalNameMap::iterator it = nameMap.find(exceptionVarName);
-					if (it != nameMap.end()) {
-						hadLocalIndex = true;
-						localIndex = it->second;
-						nameMap.erase(it);
+					const String* exceptionVarName = String::newHashedString(heap, b, p);
+					Value localIndex = Value::NONEXISTENT;
+					const Table::Bucket* bucket = codeDef->nameIndexes.lookup(exceptionVarName);
+					if (bucket != 0) {
+						localIndex = bucket->value;
+						codeDef->nameIndexes.erase(exceptionVarName);
 					}
 					completeForwardBranch(catchPoint);
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
@@ -2350,7 +2340,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 					for (std::vector<Int32>::const_iterator it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
 						completeForwardBranch(*it);
-					if (hadLocalIndex) nameMap[exceptionVarName] = localIndex;
+					if (localIndex.exists()) codeDef->nameIndexes.assign(exceptionVarName, localIndex);
 				}
 				
 				// Finally
@@ -2410,9 +2400,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						ExpressionResult xr(rvalueExpression());
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
-						emitWithInt32(Processor::JT_OP, funcDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
+						emitWithInt32(Processor::JT_OP, codeDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
-						outputCode = &funcDef->code;
+						outputCode = &codeDef->code;
 					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
@@ -2458,7 +2448,7 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : only accept one compile? or opposite? create many different functions?
-	outputCode = &funcDef->code;
+	outputCode = &codeDef->code;
 	freeSafeKeepingIndexes.clear();
 	safeKeptIndexCount = 0;
 	p = b;
@@ -2473,14 +2463,14 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 freeSafeKeepingIndexes.clear();
-	assert(outputCode == &funcDef->code);
+	assert(outputCode == &codeDef->code);
 if (!supressStdErr) {
-	disassemble(engine.getHeap(), *outputCode, funcDef->constants);
-	std::cerr << "\tCode: " << funcDef->code.size() << std::endl;
-	std::cerr << "\tConstants: " << funcDef->constants.size() << std::endl;
+	disassemble(heap, *outputCode, codeDef->constants);
+	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
+	std::cerr << "\tConstants: " << codeDef->constants.size() << std::endl;
 	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
-	std::cerr << "\tVars: " << funcDef->varsCount << std::endl;
-	std::cerr << "\tArguments: " << funcDef->argumentsCount << std::endl;
+	std::cerr << "\tVars: " << codeDef->varsCount << std::endl;
+	std::cerr << "\tArguments: " << codeDef->argumentsCount << std::endl;
 }
 	return p;
 }
@@ -2539,20 +2529,20 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
 	const String* sourceCode = argv[0].toString(engine.getHeap());
-	ScriptFunctionDef* functionDef;
+	CodeDefinition* codeDef;
 	
 	const Table::Bucket* b = functionDefCache.lookup(sourceCode);
 	 // FIX : .getObject?
 	if (b != 0) {
-		functionDef = reinterpret_cast<ScriptFunctionDef*>(b->value.asObject());
+		codeDef = reinterpret_cast<CodeDefinition*>(b->value.asObject());
 	} else {
-		functionDef = engine.getHeap().manage(new ScriptFunctionDef());
-		Compiler compiler(engine, functionDef, Compiler::FOR_EVAL);
+		codeDef = engine.getHeap().manage(new CodeDefinition());
+		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);
 		engine.getHeap().protect(&compiler);
 		compiler.compile(*sourceCode);
-		functionDefCache.assign(sourceCode, Value(functionDef));
+		functionDefCache.assign(sourceCode, Value(codeDef));
 	}
-	processor.enterEval(functionDef);
+	processor.enterEval(codeDef);
 	return Value();
 }
 
@@ -2612,6 +2602,7 @@ int main(int argc, const char* argv[]) {
 	bool doTime = false;
 	long gcRate = 20000000;
 	bool pauseBeforeQuit = false;
+	bool interactive = true;
 	for (int argi = 1; argi < argc; ++argi) {
 		if (strcmp(argv[argi], "-t") == 0) doTime = true;
 		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
@@ -2620,6 +2611,7 @@ int main(int argc, const char* argv[]) {
 		else if (inputFileStream.get() == 0) {
 			inputFileStream.reset(new std::wifstream(argv[argi]));
 			inStream = inputFileStream.get();
+			interactive = false;
 		} else {
 			std::cout << "Too many arguments" << std::endl;
 			return 1;
@@ -2627,16 +2619,27 @@ int main(int argc, const char* argv[]) {
 	}
 	while (inStream->good()) {
 		try {
+			bool execute = false;
 			std::wstring s;
-			std::getline(*inStream, s);
-			if (!s.empty()) {
-				String line(s);
-				source = String(source, line);
-				source = String(source, LF_STRING);
+			if (interactive) {
+				std::getline(*inStream, s);
+				if (!s.empty()) {
+					String line(s);
+					source = String(source, line);
+					source = String(source, LF_STRING);
+				} else {
+					execute = true;
+				}
 			} else {
-				ScriptFunctionDef functionDef;
-				heap.protect(&functionDef);
-				Compiler compiler(engine, &functionDef, Compiler::FOR_GLOBAL);
+				source = String(std::wstring(std::istreambuf_iterator<wchar_t>(*inStream), std::istreambuf_iterator<wchar_t>()));
+				inStream->get(); // FIX : weird, seems necessary to force !inStream->good
+				execute = true;
+			}
+			
+			if (execute) {
+				CodeDefinition codeDef;
+				heap.protect(&codeDef);
+				Compiler compiler(heap, &codeDef, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
 				heap.protect(&compiler);
 				compiler.compile(source);
 				
@@ -2647,7 +2650,7 @@ int main(int argc, const char* argv[]) {
 				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 				processor.chain(RETURN_TO_HOST_STUB);
 			//	processor.chain(&printFunction);
-				processor.chain(heap.manage(new ScriptFunction(&functionDef, &globals)), 0, 0, &globals);
+				processor.chain(heap.manage(new Closure(&codeDef, &globals)), 0, 0, &globals);
 				bool done = false;
 				
 				clock_t start = ::clock();	
