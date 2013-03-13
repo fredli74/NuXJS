@@ -484,6 +484,8 @@ print('');
 
 (function() { print(typeof arguments); function arguments(a,b,c,d) { }; print(arguments.length) })();
 
+(function() { print(typeof arguments); eval("function arguments(a,b,c,d) { }"); print(arguments.length) })();
+
 print("*** value conversion ***");
 /*
 String comparison can be forced by: "" + a == "" + b.
@@ -597,6 +599,9 @@ aGlobal = "ok"; (function() { eval("var aGlobal = 5"); print(delete aGlobal); pr
 print("");
 
 aGlobal = "ok"; (function() { eval("var aGlobal = 5"); print(delete aGlobal); print(delete aGlobal); })(); print("aGlobal" in this);
+print("");
+
+(function() { eval("var x = 5"); print(delete x); })();
 print("");
 
 (function() { var x = 77; eval("var x = 5"); print(delete x); print(x) })();

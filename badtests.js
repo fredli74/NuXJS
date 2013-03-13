@@ -100,3 +100,5 @@ andAgain = new s
 
 andAgain = new o
 
+return "a" // is not acceptable in global scope
+

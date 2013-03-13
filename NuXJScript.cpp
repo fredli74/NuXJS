@@ -18,6 +18,63 @@ static int strncmp(const Char* a, const char* b, size_t n) {
 	while (i < n && a[i] == b[i] && a[i] != 0 && b[i] != 0) ++i;
 	return (i == n ? 0 : a[i] - b[i]);
 }
+/* Built with QuickHashMaker.pika */
+static int findStatementToken(int n /* string length */, const Char* s) {
+	static const char* STRINGS[12] = {
+		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
+		"throw", "switch", "function"
+	};
+	static const int QUICK_HASH_TABLE[32] = {
+		-1, -1, 11, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
+		-1, 9, -1, 10, 5, -1, -1, -1, -1, 1, -1, -1, -1, 4, 3, -1
+	};
+	if (n < 2 || n > 8) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(n - s[0]) & 31];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+/* Built with QuickHashMaker.pika */
+static int findReservedKeyword(int n /* string length */, const Char* s) {
+	static const char* STRINGS[36] = {
+		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
+		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
+		"return", "switch", "this", "throw", "try", "typeof", "var", "void", "while", 
+		"with", "class", "const", "enum", "export", "extends", "import", "super", 
+		"null", "false", "true"
+	};
+	static const int QUICK_HASH_TABLE[256] = {
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 33, -1, -1, -1, -1, -1, -1, 2, 1, -1, -1, -1, 
+		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1, -1, -1, 35, 20, -1, -1, 
+		-1, -1, -1, 34, -1, -1, -1, -1, -1, -1, -1, 32, -1, -1, -1, -1, 
+		4, 5, 6, -1, -1, -1, -1, -1, -1, -1, 17, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, 9, -1, 26, -1, -1, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 8, -1, -1, -1, 3, -1, -1, 27, -1, -1, -1, -1, 
+		-1, -1, -1, -1, 28, 15, 7, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, 10, -1, -1, -1, -1, 31, -1, -1, -1, 14, -1, 
+		-1, -1, 16, -1, -1, 22, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, 18, -1, -1, -1, 
+		-1, 30, 29, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
+	};
+	if (n < 2 || n > 10) return -1;
+	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
+/* Built with QuickHashMaker.pika */
+static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
+	static const char* STRINGS[5] = {
+		"null", "false", "true", "function", "this"
+	};
+	static const int QUICK_HASH_TABLE[8] = {
+		0, 2, -1, 3, -1, -1, 1, 4
+	};
+	if (n < 4 || n > 8) return -1;
+	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
+	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+};
 
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 static bool isNaN(double d) { return d != d; }
@@ -1403,65 +1460,22 @@ enum Statement {
 };
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
-/* Built with QuickHashMaker.pika */
-static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[12] = {
-		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
-		"throw", "switch", "function"
-	};
-	static const int QUICK_HASH_TABLE[32] = {
-		-1, -1, 11, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
-		-1, 9, -1, 10, 5, -1, -1, -1, -1, 1, -1, -1, -1, 4, 3, -1
-	};
-	if (n < 2 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(n - s[0]) & 31];
-	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
+struct Compiler::Scope {
+	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
+	Scope(Type type, Scope* next) : type(type), next(next) { }
+	Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
+	void makeIteratorScopes(Scope* untilScope) {
+		for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
+	}
+	Type type;
+	String label; // empty for automatic while, for, case labels
+	Scope* next;
+// FIX : feels like a waste with three different vectors here, could we have double Scope entries for continuable and breakable scope types?
+	std::vector<Int32> breaks; // source points for break jmp's
+	std::vector<Int32> continues; // source points for continue jmp's
+	std::vector<Int32> finallys; // source points for finally jsr's
 };
-/* Built with QuickHashMaker.pika */
-static int findReservedKeyword(int n /* string length */, const Char* s) {
-	static const char* STRINGS[36] = {
-		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
-		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
-		"return", "switch", "this", "throw", "try", "typeof", "var", "void", "while", 
-		"with", "class", "const", "enum", "export", "extends", "import", "super", 
-		"null", "false", "true"
-	};
-	static const int QUICK_HASH_TABLE[256] = {
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 33, -1, -1, -1, -1, -1, -1, 2, 1, -1, -1, -1, 
-		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1, -1, -1, 35, 20, -1, -1, 
-		-1, -1, -1, 34, -1, -1, -1, -1, -1, -1, -1, 32, -1, -1, -1, -1, 
-		4, 5, 6, -1, -1, -1, -1, -1, -1, -1, 17, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, 9, -1, 26, -1, -1, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 8, -1, -1, -1, 3, -1, -1, 27, -1, -1, -1, -1, 
-		-1, -1, -1, -1, 28, 15, 7, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, 10, -1, -1, -1, -1, 31, -1, -1, -1, 14, -1, 
-		-1, -1, 16, -1, -1, 22, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, 18, -1, -1, -1, 
-		-1, 30, 29, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
-		-1, -1, -1, 24, -1, -1, -1, -1, -1, -1, -1, -1, 25, -1, -1, -1
-	};
-	if (n < 2 || n > 10) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
-	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
-/* Built with QuickHashMaker.pika */
-static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
-	static const char* STRINGS[5] = {
-		"null", "false", "true", "function", "this"
-	};
-	static const int QUICK_HASH_TABLE[8] = {
-		0, 2, -1, 3, -1, -1, 1, 4
-	};
-	if (n < 4 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
-	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
-
-
+				
 struct Compiler::ExpressionResult {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
 	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
@@ -1470,8 +1484,8 @@ struct Compiler::ExpressionResult {
 	Value v;
 };
 
-Compiler::Compiler(Engine& engine, ScriptFunctionDef* funcDef, bool forEval) : engine(engine), funcDef(funcDef)
-		, compilingForEval(forEval), outputCode(&funcDef->code), safeKeptIndexCount(0), acceptInOperator(true) { }
+Compiler::Compiler(Engine& engine, ScriptFunctionDef* funcDef, Target compileFor) : engine(engine), funcDef(funcDef)
+		, compilingFor(compileFor), safeKeptIndexCount(0), outputCode(&funcDef->code), acceptInOperator(true) { }
 
 void Compiler::gcMark(GCHeap& heap) {
 	heap.mark(funcDef);
@@ -1885,7 +1899,7 @@ ScriptFunctionDef* Compiler::functionDefinition(const Char* selfNameBegin, const
 	if (p == e) syntaxError("Expected ',' or ')'");
 	expectToken("{", true);
 	{
-		Compiler funcCompiler(engine, func, false);
+		Compiler funcCompiler(engine, func, Compiler::FOR_FUNCTION);
 		engine.getHeap().protect(&funcCompiler);
 		p = funcCompiler.compile(p, e);
 	}
@@ -1961,7 +1975,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					discard(xr);
 					const String* name = String::newHashedString(engine.getHeap(), b, p);
 					xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
-					if (!compilingForEval) { // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
+					if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
 						Int32 index;
 						LocalNameMap& nameMap = funcDef->localNames;
 						LocalNameMap::const_iterator it = nameMap.find(name);
@@ -2008,8 +2022,8 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 			index = -(++funcDef->varsCount);
 			nameMap[name] = index;
 		}
-		 // Notice: !compilingForEval is only for non-strict mode (if we ever support strict-mode in the future)
-		if (!compilingForEval) lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
+		if (compilingFor != FOR_EVAL) lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 	}
 	return lxr;
 }
@@ -2114,8 +2128,8 @@ void Compiler::functionStatement() {
 }
 
 void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
-	white();	
-		
+	white();
+	
 	if (token("{", false)) {
 		statementList(firstScope, evalXR);
 		expectToken("}", false);
@@ -2140,7 +2154,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		} else {
 			p = b;
 			optionalExpression(evalXR, LOWEST_PREC);
-			if (!compilingForEval) evalXR = discard(evalXR);
+			if (compilingFor != FOR_EVAL) evalXR = discard(evalXR);
 			semicolon();
 		}
 	} else {
@@ -2148,7 +2162,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		switch (static_cast<Statement>(statementTokenIndex)) {
 			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
-				if (compilingForEval) evalXR = makeRValue(evalXR);
+				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				Scope* s = firstScope;
 				const Char* b = identifier(false, false);
@@ -2180,7 +2194,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case IF_STATEMENT: {
-				if (compilingForEval) evalXR = makeRValue(evalXR);
+				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
 				expectToken("(", false);
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
@@ -2192,14 +2206,14 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					statement(firstScope, firstScope, evalXR);
 					completeForwardBranch(endPoint);
 				} else {
-					if (compilingForEval) evalXR = makeRValue(evalXR);
+					if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
 					completeForwardBranch(falsePoint);
 				}				
 				break;
 			}
 
 			case WHILE_STATEMENT: {
-				if (compilingForEval) evalXR = makeRValue(evalXR);
+				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
 				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
@@ -2208,7 +2222,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
-				if (compilingForEval) evalXR = makeRValue(evalXR);
+				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
 				completeForwardBranch(exitLoopPoint);
@@ -2272,7 +2286,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case RETURN_STATEMENT: {
-				if (compilingForEval) syntaxError("Illegal return");
+				if (compilingFor != FOR_FUNCTION) syntaxError("Illegal return");
 				ExpressionResult returnXR;
 				optionalExpression(returnXR, LOWEST_PREC);
 				Scope* s = firstScope;
@@ -2452,7 +2466,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	acceptInOperator = true;
 	ExpressionResult evalXR;
 	statementList(0, evalXR);
-	if (!compilingForEval) evalXR = discard(evalXR);
+	if (compilingFor != FOR_EVAL) evalXR = discard(evalXR);
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
 	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
@@ -2533,7 +2547,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 		functionDef = reinterpret_cast<ScriptFunctionDef*>(b->value.asObject());
 	} else {
 		functionDef = engine.getHeap().manage(new ScriptFunctionDef());
-		Compiler compiler(engine, functionDef, true);
+		Compiler compiler(engine, functionDef, Compiler::FOR_EVAL);
 		engine.getHeap().protect(&compiler);
 		compiler.compile(*sourceCode);
 		functionDefCache.assign(sourceCode, Value(functionDef));
@@ -2622,7 +2636,7 @@ int main(int argc, const char* argv[]) {
 			} else {
 				ScriptFunctionDef functionDef;
 				heap.protect(&functionDef);
-				Compiler compiler(engine, &functionDef, false);
+				Compiler compiler(engine, &functionDef, Compiler::FOR_GLOBAL);
 				heap.protect(&compiler);
 				compiler.compile(source);
 				

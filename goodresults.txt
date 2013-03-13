@@ -642,6 +642,8 @@ b
 
 function
 4
+object
+4
 *** value conversion ***
 33
 *** eval ***
@@ -689,6 +691,8 @@ true
 true
 true
 false
+
+true
 
 false
 5

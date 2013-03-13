@@ -49,12 +49,12 @@
 //			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
 //		arguments container
 //			missing callee or whatever
+//		at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
 //
 //	Compiler
 //
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		global environment compiler (don't accept return etc)
-//		literal function names, e.g. myGlobalName = function myLocalName() { ... }
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
@@ -169,6 +169,7 @@
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
 //		assignable globals this in processor
 //		function name() { } syntax
+//		literal function names, e.g. myGlobalName = function myLocalName() { ... }
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -786,28 +787,16 @@ enum Precedence {
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
-				struct ExpressionResult;
 				
-				Compiler(Engine& engine, ScriptFunctionDef* funcDef, bool forEval);
+				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
+				
+				Compiler(Engine& engine, ScriptFunctionDef* funcDef, Target compileFor);
 				virtual void gcMark(GCHeap& heap);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
 
-	protected:	struct Scope { // FIX : .cpp local
-					enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
-					Scope(Type type, Scope* next) : type(type), next(next) { }
-					Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
-					void makeIteratorScopes(Scope* untilScope) {
-						for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
-					}
-					Type type;
-					String label; // empty for automatic while, for, case labels
-					Scope* next;
-				// FIX : feels like a waste with three different vectors here, could we have double Scope entries for continuable and breakable scope types?
-					std::vector<Int32> breaks; // source points for break jmp's
-					std::vector<Int32> continues; // source points for continue jmp's
-					std::vector<Int32> finallys; // source points for finally jsr's
-				};
+	protected:	struct ExpressionResult;
+				struct Scope;
 
 				void syntaxError(const String& what);
 				void syntaxError(const std::string& what); // FIX : try to get rid of?
@@ -856,14 +845,14 @@ class Compiler : public GCItem {
 
 				Engine& engine; // FIX : necessary?
 				ScriptFunctionDef* const funcDef;
-				const bool compilingForEval;
+				const Target compilingFor;
 				std::map<Value, Int32> definedConstants;
 				CodeVector funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
-				CodeVector* outputCode;
 				std::vector<Int32> freeSafeKeepingIndexes;
 				Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
+				CodeVector* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
 				bool acceptInOperator;
 };
 

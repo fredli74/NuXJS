@@ -197,48 +197,7 @@
 	<key>Notifications</key>
 	<array/>
 	<key>OpenEditors</key>
-	<array>
-		<dict>
-			<key>Content</key>
-			<dict>
-				<key>PBXProjectModuleGUID</key>
-				<string>F77BB5C516F0080100647D86</string>
-				<key>PBXProjectModuleLabel</key>
-				<string>NuXJScript.cpp</string>
-				<key>PBXSplitModuleInNavigatorKey</key>
-				<dict>
-					<key>Split0</key>
-					<dict>
-						<key>PBXProjectModuleGUID</key>
-						<string>F77BB5C616F0080100647D86</string>
-						<key>PBXProjectModuleLabel</key>
-						<string>NuXJScript.cpp</string>
-						<key>_historyCapacity</key>
-						<integer>0</integer>
-						<key>bookmark</key>
-						<string>F77BB5EF16F0097200647D86</string>
-						<key>history</key>
-						<array>
-							<string>F77BB5BE16F007F800647D86</string>
-						</array>
-					</dict>
-					<key>SplitCount</key>
-					<string>1</string>
-				</dict>
-				<key>StatusBarVisibility</key>
-				<true/>
-			</dict>
-			<key>Geometry</key>
-			<dict>
-				<key>Frame</key>
-				<string>{{0, 20}, {953, 781}}</string>
-				<key>PBXModuleWindowStatusBarHidden2</key>
-				<false/>
-				<key>RubberWindowFrame</key>
-				<string>487 56 953 822 0 0 1440 878 </string>
-			</dict>
-		</dict>
-	</array>
+	<array/>
 	<key>PerspectiveWidths</key>
 	<array>
 		<integer>-1</integer>
@@ -312,7 +271,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>1</integer>
+									<integer>2</integer>
 									<integer>0</integer>
 								</array>
 							</array>
@@ -354,7 +313,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>goodTests.js</string>
+								<string>badtests.js</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -362,24 +321,17 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>goodTests.js</string>
+										<string>badtests.js</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F77BB5EE16F0097200647D86</string>
+										<string>F71381C716F09B3500378120</string>
 										<key>history</key>
 										<array>
-											<string>F71F38C816EF422E00D2A3AB</string>
-											<string>F77BB4AB16EF5E9200647D86</string>
-											<string>F77BB4BA16EF5F4E00647D86</string>
-											<string>F77BB4DF16EF627500647D86</string>
-											<string>F77BB50B16EF730E00647D86</string>
-											<string>F77BB55216EFF8FC00647D86</string>
-											<string>F77BB59E16F0010200647D86</string>
-											<string>F77BB5AF16F0073B00647D86</string>
-											<string>F77BB5DE16F008F500647D86</string>
-											<string>F77BB5EC16F0097200647D86</string>
-											<string>F77BB5ED16F0097200647D86</string>
+											<string>F71381B716F09A8100378120</string>
+											<string>F71381B816F09A8100378120</string>
+											<string>F71381C416F09B3500378120</string>
+											<string>F71381C516F09B3500378120</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -437,9 +389,9 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>F77BB3BD16EF467400647D86</string>
+				<string>F713813216F07B5200378120</string>
 				<string>1CE0B1FE06471DED0097A5F4</string>
-				<string>F77BB3BE16EF467400647D86</string>
+				<string>F713813316F07B5200378120</string>
 				<string>1CE0B20306471E060097A5F4</string>
 				<string>1CE0B20506471E060097A5F4</string>
 			</array>
@@ -577,14 +529,12 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>F77BB5E316F008F500647D86</string>
-		<string>1C530D57069F1CE1000CFCEE</string>
-		<string>F77BB3C716EF467400647D86</string>
+		<string>F71381C916F09B3500378120</string>
+		<string>F713819316F08DE900378120</string>
+		<string>F713819416F08DE900378120</string>
 		<string>1CD10A99069EF8BA00B06720</string>
+		<string>1C530D57069F1CE1000CFCEE</string>
 		<string>F74E7E0316D1A3E7003A6AB6</string>
-		<string>F77BB3CD16EF46E200647D86</string>
-		<string>F77BB3C616EF467400647D86</string>
-		<string>F77BB5C516F0080100647D86</string>
 		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
@@ -668,7 +618,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>F74E7E0316D1A3E7003A6AB6</string>
-				<string>F77BB3AE16EF463D00647D86</string>
+				<string>F713813416F07B5200378120</string>
 				<string>1CD0528F0623707200166675</string>
 				<string>XCMainBuildResultsModuleGUID</string>
 			</array>
@@ -790,13 +740,13 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1CD10A99069EF8BA00B06720</string>
-				<string>F77BB3BF16EF467400647D86</string>
+				<string>F713818B16F08DE900378120</string>
 				<string>1C162984064C10D400B95A72</string>
-				<string>F77BB3C016EF467400647D86</string>
-				<string>F77BB3C116EF467400647D86</string>
-				<string>F77BB3C216EF467400647D86</string>
-				<string>F77BB3C316EF467400647D86</string>
-				<string>F77BB3C416EF467400647D86</string>
+				<string>F713818C16F08DE900378120</string>
+				<string>F713818D16F08DE900378120</string>
+				<string>F713818E16F08DE900378120</string>
+				<string>F713818F16F08DE900378120</string>
+				<string>F713819016F08DE900378120</string>
 			</array>
 			<key>ToolbarConfiguration</key>
 			<string>xcode.toolbar.config.debugV3</string>
@@ -886,8 +836,8 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C530D57069F1CE1000CFCEE</string>
-				<string>F77BB4C216EF603E00647D86</string>
-				<string>F77BB4C316EF603E00647D86</string>
+				<string>F713813716F07E6100378120</string>
+				<string>F713813816F07E6100378120</string>
 				<string>1CDD528C0622207200134675</string>
 				<string>1CD0528E0623707200166675</string>
 			</array>
@@ -952,7 +902,7 @@
 			<key>TableOfContents</key>
 			<array>
 				<string>1C78EAAD065D492600B07095</string>
-				<string>F77BB3C516EF467400647D86</string>
+				<string>F713819116F08DE900378120</string>
 				<string>1C78EAAC065D492600B07095</string>
 			</array>
 			<key>ToolbarConfiguration</key>
