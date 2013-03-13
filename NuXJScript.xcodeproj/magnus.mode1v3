@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F77BB5D316F0084B00647D86</string>
+						<string>F77BB5EF16F0097200647D86</string>
 						<key>history</key>
 						<array>
 							<string>F77BB5BE16F007F800647D86</string>
@@ -366,7 +366,7 @@
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F77BB5D216F0084B00647D86</string>
+										<string>F77BB5EE16F0097200647D86</string>
 										<key>history</key>
 										<array>
 											<string>F71F38C816EF422E00D2A3AB</string>
@@ -377,9 +377,9 @@
 											<string>F77BB55216EFF8FC00647D86</string>
 											<string>F77BB59E16F0010200647D86</string>
 											<string>F77BB5AF16F0073B00647D86</string>
-											<string>F77BB5C216F0080100647D86</string>
-											<string>F77BB5C816F0083E00647D86</string>
-											<string>F77BB5C116F0080100647D86</string>
+											<string>F77BB5DE16F008F500647D86</string>
+											<string>F77BB5EC16F0097200647D86</string>
+											<string>F77BB5ED16F0097200647D86</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
@@ -577,14 +577,15 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
+		<string>F77BB5E316F008F500647D86</string>
 		<string>1C530D57069F1CE1000CFCEE</string>
 		<string>F77BB3C716EF467400647D86</string>
 		<string>1CD10A99069EF8BA00B06720</string>
-		<string>1C78EAAD065D492600B07095</string>
+		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F77BB3CD16EF46E200647D86</string>
 		<string>F77BB3C616EF467400647D86</string>
-		<string>F74E7E0316D1A3E7003A6AB6</string>
 		<string>F77BB5C516F0080100647D86</string>
+		<string>1C78EAAD065D492600B07095</string>
 		<string>/Users/magnus/projects/lab/ScriptLab/NuXJScript/NuXJScript.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
@@ -680,7 +681,7 @@
 			<key>WindowToolGUID</key>
 			<string>F74E7E0316D1A3E7003A6AB6</string>
 			<key>WindowToolIsVisible</key>
-			<true/>
+			<false/>
 		</dict>
 		<dict>
 			<key>FirstTimeWindowDisplayed</key>
@@ -961,7 +962,7 @@
 			<key>WindowToolGUID</key>
 			<string>1C78EAAD065D492600B07095</string>
 			<key>WindowToolIsVisible</key>
-			<false/>
+			<true/>
 		</dict>
 		<dict>
 			<key>Identifier</key>

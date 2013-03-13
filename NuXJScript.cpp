@@ -790,7 +790,7 @@ struct EvalVarsObject : public Object { // FIX : can we reuse something here? Us
 	Table vars;
 };
 
-FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
+FunctionFrame::FunctionFrame(ScriptFunction* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
 		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
@@ -1078,8 +1078,7 @@ bool Processor::privateRun() {
 										error(); // FIX : do we need to balance vsp on errors?
 									break;
 									
-			case WRITE_NAMED_OP:	if (!frame->setProperty(engine, constants[operand()].getString(), vsp[0]))
-										error(); // FIX: really?
+			case WRITE_NAMED_OP:	frame->setProperty(engine, constants[operand()].getString(), vsp[0]);
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();

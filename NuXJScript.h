@@ -350,7 +350,7 @@ class Value {
 				};
 				static const String* TYPE_STRINGS[7];
 	
-	private:	explicit Value(void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
+	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
 class Engine;
@@ -579,14 +579,14 @@ class EvalVarsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
-				FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv);
+				FunctionFrame(ScriptFunction* function, Int32 argc, const Value* argv);
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
 
-	protected:	const ScriptFunction* const selfFunction; // FIX : we have functionDef too in Frame, not *really* necessary, we should also contemplate adding functionDef pointer to CStackEntry directly (see below)
+	protected:	ScriptFunction* const selfFunction; // FIX : we have functionDef too in Frame, not *really* necessary, we should also contemplate adding functionDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals; // Includes variables and arguments.
 				Value argumentsValue;

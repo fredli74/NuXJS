@@ -223,7 +223,10 @@ print("del: " + delete g);
 (function() { g = "qwerty"; function g(a,b,c,d) { }; print(g); print("del: " + delete g); })(); // qwerty, del: false
 print("hasg: " + ("g" in this));
 
-/*print("del: " + delete f); // true
+(function f () { print ( typeof f ) } ) ();
+(function f(n) { print(n); if (n < 10) f(n + 1); print(n) })(0)
+
+print("del: " + delete f); // true
 print("hasf: " + ("f" in this)); // hasf: false
 (function f() { f=3; print(typeof f); })(); // function
 (function f() { eval("f=3"); print(typeof f); })(); // function
@@ -238,11 +241,9 @@ print("del: " + delete f); // true
 print("hasf: " + ("f" in this)); // hasf: false
 (function f() { function f(a,b) { }; print(f.length); })(); // 2
 (function f() { function f(a,b) { }; print("del: " + delete f); print(f.length); })(); // del: false, 2
-(function f() { print("del: " + delete f); f = 27; print("del: " + delete f); function f(a,b) { }; print(f.length); })(); // del: false, del: false, undefined
-print("hasf: " + ("f" in this)); // hasf: false
 (function f() { print("del: " + delete f); f = 27; print("del: " + delete f); function f(a,b) { }; print(typeof f); })(); // del: false, del: false, number
 print("hasf: " + ("f" in this)); // hasf: false
-(function f() { print(f.length); function f(a,b,c,d) { }; print(f.length); })(); // 4, 4*/
+(function f() { print(f.length); function f(a,b,c,d) { }; print(f.length); })(); // 4, 4
 
 print("*** for statement ***")
 
