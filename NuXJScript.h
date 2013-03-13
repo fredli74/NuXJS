@@ -19,6 +19,7 @@
 //		it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
 //		lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
 //			push them temporarily last on stack
+//			 or hold on, I think the entire gc approach needs rethinking, we should have something like gc(beyond) like in NuXScript...
 //		would be cleaner if we could pass a retValue pointer instead of taking a return value (but not nicer syntax for native calls returning tho, hmm, need to think)
 //			we want nice, quick, safe and clean syntax for:
 //				* calling synchronously <-- not prio
@@ -538,12 +539,13 @@ class ScriptFunctionDef : public Object {
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
 
-	protected:	const String* source;
-				CodeVector code;
+	protected:	CodeVector code;
 				std::vector<Value> constants;
 				Int32 argumentsCount;
 				Int32 varsCount; // not including arguments
 				LocalNameMap localNames;
+				const String* source;
+				const String* selfName;				
 };
 
 // This is actually a closure, but ECMAScript calls them Function objects.
@@ -584,11 +586,13 @@ class FunctionFrame : public Frame {
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, ScriptFunctionDef* evalFunctionDef);
 
-	protected:	Object* environment;
+	protected:	const ScriptFunction* const selfFunction; // FIX : we have functionDef too in Frame, not *really* necessary, we should also contemplate adding functionDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals; // Includes variables and arguments.
 				Value argumentsValue;
-				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.
+				Object* environment;
+				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
+				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
 };
 
 // FIX : if CStackEntry included a functionDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different functionDef really.
@@ -830,7 +834,7 @@ class Compiler : public GCItem {
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
-				ScriptFunctionDef* functionDefinition();
+				ScriptFunctionDef* functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd);
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier();
 				ExpressionResult varDeclaration();

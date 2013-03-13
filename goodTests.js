@@ -226,6 +226,7 @@ print("hasg: " + ("g" in this));
 /*print("del: " + delete f); // true
 print("hasf: " + ("f" in this)); // hasf: false
 (function f() { f=3; print(typeof f); })(); // function
+(function f() { eval("f=3"); print(typeof f); })(); // function
 print("hasf: " + ("f" in this)); // hasf: false
 (function() { f=3; print(typeof f); })(); // number
 print("hasf: " + ("f" in this)); // hasf: true
@@ -365,7 +366,7 @@ print((function() { try { return 1 } finally { return 3; print(2) } })());
 print(function() { var x = 0; try { return ++x; } finally { x++; print(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
 print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
-try { (function() { try { throw "x" } finally { try { throw "y" } catch (x) { print(x) } } })() } catch (x) { print(x) }
+try { (function() { try { throw "x" } finally { try { throw "y" } catch ( x ) { print(x) } } })() } catch (x) { print(x) }
 
 thrower=function(a) { print("throwing: " + a); throw ("thrown: " + a); print("not here"); }
 print((function() { b: try { thrower("throw me") } finally { print("fake catcher") ; break b }; return("ok then...") })());

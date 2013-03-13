@@ -661,7 +661,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 
 /* --- ScriptFunctionDef --- */
 
-ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), varsCount(0) { }
+ScriptFunctionDef::ScriptFunctionDef() : source(0), argumentsCount(0), varsCount(0), selfName(0) { }
 
 bool ScriptFunctionDef::lookupLocalName(const String* name, Int32& index) const {
 	LocalNameMap::const_iterator it = localNames.find(name);
@@ -677,6 +677,7 @@ void ScriptFunctionDef::gcMark(GCHeap& heap) {
 		it->markIn(heap);
 	for (LocalNameMap::iterator it = localNames.begin(), e = localNames.end(); it != e; ++it)
 		heap.mark(it->first);
+	heap.mark(selfName);
 	super::gcMark(heap);
 }
 
@@ -790,9 +791,9 @@ struct EvalVarsObject : public Object { // FIX : can we reuse something here? Us
 };
 
 FunctionFrame::FunctionFrame(const ScriptFunction* function, Int32 argc, const Value* argv)
-		: super(function->getDefinition()), environment(function->getEnvironment()), passedArgumentsCount(argc)
+		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
 		, locals(functionDef->varsCount + std::max(functionDef->argumentsCount, argc))
-		, argumentsValue(Value::NONEXISTENT), evalVars(0) {
+		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
 	localsPointer = locals.begin() + functionDef->varsCount;
 	std::fill(locals.begin(), localsPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, localsPointer);
@@ -814,6 +815,9 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 		}
 		*v = argumentsValue;
 		return true;
+	} else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) {
+		*v = Value(selfFunction);
+		return true;
 	} else if (environment->getProperty(engine, name, v)) return true; // FIX: can we do a looping non-recursive solution? faster
 	else return false;
 }
@@ -827,6 +831,8 @@ bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value&
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		argumentsValue = v;
 		return true;
+	} else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) {
+		return false;
 	} else {
 		return environment->setProperty(engine, name, v);
 	}
@@ -835,6 +841,7 @@ bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value&
 bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 	Int32 index;
 	if (functionDef->lookupLocalName(name, index)) return false;
+	else if (functionDef->selfName != 0 && name->isEqualTo(*functionDef->selfName)) return false;
 	else return environment->deleteProperty(engine, name);
 }
 
@@ -1861,8 +1868,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	return true;
 }
 
-ScriptFunctionDef* Compiler::functionDefinition() {
+ScriptFunctionDef* Compiler::functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd) {
 	ScriptFunctionDef* func = engine.getHeap().manage(new ScriptFunctionDef());
+	if (selfNameBegin != selfNameEnd)
+		func->selfName = String::newHashedString(engine.getHeap(), selfNameBegin, selfNameEnd);
 	expectToken("(", true);
 	white();
 	while (p != e && !token(")", false)) {
@@ -1905,8 +1914,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 				}
 				case FUNCTION_LITERAL: {
 					discard(xr);
-					// FIX : the optional function identifier
-					emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition()));
+					white();
+					const Char* b = identifier(false, false);
+					emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(b, p)));
 					xr = ExpressionResult(ExpressionResult::PUSHED);
 					break;
 				}
@@ -2098,7 +2108,7 @@ void Compiler::completeBreaks(const Scope* scope) {
 void Compiler::functionStatement() {
 	outputCode = &funcInitCode;
 	ExpressionResult lxr(declareIdentifier());
-	emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition()));
+	emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(p, p)));
 	makeAssignment(lxr);
 	emit(Processor::POP_OP);
 	outputCode = &funcDef->code;
@@ -2302,6 +2312,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				if (token("catch", true)) {
 					gotCatch = true;
 					expectToken("(", true);
+					white();
 					const Char* b = identifier(true, false);
 					const String* exceptionVarName = String::newHashedString(engine.getHeap(), b, p);
 					LocalNameMap& nameMap = funcDef->localNames;
