@@ -370,6 +370,13 @@
 			F77BB59B16EFFFA400647D86 /* PBXTextBookmark */ = F77BB59B16EFFFA400647D86 /* PBXTextBookmark */;
 			F77BB59C16EFFFB800647D86 /* PBXTextBookmark */ = F77BB59C16EFFFB800647D86 /* PBXTextBookmark */;
 			F77BB59D16EFFFBD00647D86 /* PBXTextBookmark */ = F77BB59D16EFFFBD00647D86 /* PBXTextBookmark */;
+			F77BB59E16F0010200647D86 /* PBXTextBookmark */ = F77BB59E16F0010200647D86 /* PBXTextBookmark */;
+			F77BB59F16F0010200647D86 /* PBXTextBookmark */ = F77BB59F16F0010200647D86 /* PBXTextBookmark */;
+			F77BB5A016F0010200647D86 /* PBXTextBookmark */ = F77BB5A016F0010200647D86 /* PBXTextBookmark */;
+			F77BB5A116F0010200647D86 /* PBXTextBookmark */ = F77BB5A116F0010200647D86 /* PBXTextBookmark */;
+			F77BB5A216F0010200647D86 /* PBXTextBookmark */ = F77BB5A216F0010200647D86 /* PBXTextBookmark */;
+			F77BB5A316F0010200647D86 /* PBXTextBookmark */ = F77BB5A316F0010200647D86 /* PBXTextBookmark */;
+			F77BB5A616F0016C00647D86 /* PBXTextBookmark */ = F77BB5A616F0016C00647D86 /* PBXTextBookmark */;
 		};
 		sourceControlManager = F74E7E0516D1A3E7003A6AB6 /* Source Control */;
 		userBuildSettings = {
@@ -398,9 +405,9 @@
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/goodresults.txt;
 		sourceTree = "<absolute>";
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1177, 11453}}";
-			sepNavSelRange = "{0, 0}";
-			sepNavVisRange = "{2601, 549}";
+			sepNavIntBoundsRect = "{{0, 0}, {1177, 12129}}";
+			sepNavSelRange = "{4025, 2}";
+			sepNavVisRange = "{4119, 208}";
 		};
 	};
 	F71F389A16EF386100D2A3AB /* PBXTextBookmark */ = {
@@ -420,9 +427,9 @@
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/temp;
 		sourceTree = "<absolute>";
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1177, 11505}}";
-			sepNavSelRange = "{0, 0}";
-			sepNavVisRange = "{2601, 549}";
+			sepNavIntBoundsRect = "{{0, 0}, {1177, 12116}}";
+			sepNavSelRange = "{4018, 2}";
+			sepNavVisRange = "{4138, 220}";
 		};
 	};
 	F71F389C16EF386100D2A3AB /* PBXTextBookmark */ = {
@@ -430,7 +437,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 551";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1724;
 		vrLoc = 17081;
@@ -442,9 +449,9 @@
 		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/goodTests.js;
 		sourceTree = "<absolute>";
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1177, 8749}}";
-			sepNavSelRange = "{6025, 0}";
-			sepNavVisRange = "{5129, 2711}";
+			sepNavIntBoundsRect = "{{0, 0}, {1482, 8814}}";
+			sepNavSelRange = "{21443, 0}";
+			sepNavVisRange = "{19899, 2246}";
 		};
 	};
 	F71F38BF16EF422E00D2A3AB /* PBXTextBookmark */ = {
@@ -590,9 +597,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1177, 34463}}";
-			sepNavSelRange = "{24592, 0}";
-			sepNavVisRange = "{23322, 2155}";
+			sepNavIntBoundsRect = "{{0, 0}, {1202, 33943}}";
+			sepNavSelRange = "{53152, 15}";
+			sepNavVisRange = "{49572, 3684}";
 			sepNavWindowFrame = "{{487, 0}, {953, 878}}";
 		};
 	};
@@ -1007,7 +1014,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 571";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1925;
 		vrLoc = 17909;
@@ -1017,7 +1024,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 552";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1835;
 		vrLoc = 17336;
@@ -1037,7 +1044,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 552";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1855;
 		vrLoc = 17336;
@@ -1057,7 +1064,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 553";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1947;
 		vrLoc = 17336;
@@ -1067,7 +1074,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 554";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1938;
 		vrLoc = 17336;
@@ -1124,7 +1131,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 553";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1926;
 		vrLoc = 17483;
@@ -1338,7 +1345,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 558";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1870;
 		vrLoc = 17156;
@@ -1348,7 +1355,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 526";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1248;
 		vrLoc = 17194;
@@ -1395,7 +1402,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 560";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1747;
 		vrLoc = 17157;
@@ -1405,7 +1412,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 526";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 944;
 		vrLoc = 16681;
@@ -1415,7 +1422,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 550";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1656;
 		vrLoc = 17115;
@@ -1425,7 +1432,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 544";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1330;
 		vrLoc = 16871;
@@ -1435,7 +1442,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 536";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1143;
 		vrLoc = 16770;
@@ -1445,7 +1452,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 538";
 		rLen = 0;
-		rLoc = 22447;
+		rLoc = 22766;
 		rType = 0;
 		vrLen = 1175;
 		vrLoc = 16795;
@@ -2176,7 +2183,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 566";
 		rLen = 0;
-		rLoc = 21261;
+		rLoc = 21580;
 		rType = 0;
 		vrLen = 2135;
 		vrLoc = 17277;
@@ -2186,7 +2193,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 566";
 		rLen = 0;
-		rLoc = 21261;
+		rLoc = 21580;
 		rType = 0;
 		vrLen = 2135;
 		vrLoc = 17277;
@@ -2236,7 +2243,7 @@
 		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
 		name = "goodTests.js: 570";
 		rLen = 0;
-		rLoc = 21511;
+		rLoc = 21830;
 		rType = 0;
 		vrLen = 2099;
 		vrLoc = 17989;
@@ -2971,11 +2978,81 @@
 		vrLen = 2719;
 		vrLoc = 5129;
 	};
+	F77BB59E16F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F71F389916EF386100D2A3AB /* goodresults.txt */;
+		name = "goodresults.txt: 550";
+		rLen = 2;
+		rLoc = 4025;
+		rType = 0;
+		vrLen = 208;
+		vrLoc = 4119;
+	};
+	F77BB59F16F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F71F389B16EF386100D2A3AB /* temp */;
+		name = "temp: 550";
+		rLen = 2;
+		rLoc = 4018;
+		rType = 0;
+		vrLen = 220;
+		vrLoc = 4138;
+	};
+	F77BB5A016F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F7CB917916D6263800D3007B /* NuXJScript.h */;
+		name = "NuXJScript.h: 171";
+		rLen = 0;
+		rLoc = 11782;
+		rType = 0;
+		vrLen = 2595;
+		vrLoc = 3294;
+	};
+	F77BB5A116F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 1390";
+		rLen = 15;
+		rLoc = 53152;
+		rType = 0;
+		vrLen = 3684;
+		vrLoc = 49572;
+	};
+	F77BB5A216F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
+		name = "goodTests.js: 605";
+		rLen = 0;
+		rLoc = 21553;
+		rType = 0;
+		vrLen = 2041;
+		vrLoc = 19830;
+	};
+	F77BB5A316F0010200647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
+		name = "goodTests.js: 604";
+		rLen = 0;
+		rLoc = 21454;
+		rType = 0;
+		vrLen = 2101;
+		vrLoc = 19830;
+	};
+	F77BB5A616F0016C00647D86 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F71F389D16EF386100D2A3AB /* goodTests.js */;
+		name = "goodTests.js: 609";
+		rLen = 0;
+		rLoc = 21443;
+		rType = 0;
+		vrLen = 2246;
+		vrLoc = 19899;
+	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1489, 11648}}";
-			sepNavSelRange = "{26282, 0}";
-			sepNavVisRange = "{25276, 2323}";
+			sepNavIntBoundsRect = "{{0, 0}, {2217, 10842}}";
+			sepNavSelRange = "{11782, 0}";
+			sepNavVisRange = "{3294, 2595}";
 			sepNavWindowFrame = "{{487, 0}, {953, 878}}";
 		};
 	};

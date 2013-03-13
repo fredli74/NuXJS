@@ -53,7 +53,6 @@
 //
 //		don't accept lf's after ++ etc (automatic ; insertion logic)
 //		global environment compiler (don't accept return etc)
-//		function name() { } syntax
 //		literal function names, e.g. myGlobalName = function myLocalName() { ... }
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
@@ -168,6 +167,7 @@
 //			arguments are reversed on native calls, and will be gc'd as stack has already popped 
 //				arguments no longer reversed since we push forwards now, but will still be gc'd
 //		assignable globals this in processor
+//		function name() { } syntax
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1

@@ -642,8 +642,11 @@ false
 false
 5
 
-false
-false
+ohboy
+18
+18
+anotherGlobal in this: false
+anotherGlobal in this: false
 100
 tick 101
 101

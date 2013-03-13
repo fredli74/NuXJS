@@ -600,9 +600,15 @@ print("");
 (function() { var x = 77; eval("var x = 5"); print(delete x); print(x) })();
 print("");
 
-print("anotherGlobal" in this);
+(function() { var f = 33; eval("function f() { print('ohboy') }"); f(); })();
+
+(function() { var f = 33; eval("f=18; function f() { print('ohboy') }"); print(f); })();
+
+(function() { var f = 33; eval("function f() { print('ohboy') }; f=18"); print(f); })();
+
+print("anotherGlobal in this: " + ("anotherGlobal" in this));
 eval("if (false) var anotherGlobal = 'this creates a global'");
-print("anotherGlobal" in this);
+print("anotherGlobal in this: " + ("anotherGlobal" in this));
 
 var y = -100; var a=(function() { var z = 3; var y = 2; var x = eval; z = x("var y = 100; (function() { print('tick ' + ++y); return y })"); print(y); return z })(); print(a()); print(a()); print(y); print("");
 
