@@ -2,9 +2,12 @@
 //
 //	Run-time
 //
+//		++ should add numbers *only*, now "3"++ is "31", which is wrong
 //		eval support
 //			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
+//				nope, they weren't
 //			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
+//				while, for done
 //			global eval support (sets all var and function declarations in global this)
 //		count (and run-time check) necessary value stack depth for functions
 //		array object (length property support, optimized for numerical indexes?)

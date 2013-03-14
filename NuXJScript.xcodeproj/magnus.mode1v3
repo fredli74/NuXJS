@@ -216,7 +216,7 @@
 						<key>_historyCapacity</key>
 						<integer>0</integer>
 						<key>bookmark</key>
-						<string>F7091E9516F1F085006F1AD7</string>
+						<string>F7091E9A16F1F101006F1AD7</string>
 						<key>history</key>
 						<array>
 							<string>F7091E5016F1ED7D006F1AD7</string>
@@ -313,8 +313,8 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>7</integer>
-									<integer>6</integer>
+									<integer>2</integer>
+									<integer>0</integer>
 								</array>
 							</array>
 							<key>PBXSmartGroupTreeModuleOutlineStateVisibleRectKey</key>
@@ -355,7 +355,7 @@
 								<key>PBXProjectModuleGUID</key>
 								<string>1CE0B20306471E060097A5F4</string>
 								<key>PBXProjectModuleLabel</key>
-								<string>goodTests.js</string>
+								<string>NuXJScript.h</string>
 								<key>PBXSplitModuleInNavigatorKey</key>
 								<dict>
 									<key>Split0</key>
@@ -363,16 +363,16 @@
 										<key>PBXProjectModuleGUID</key>
 										<string>1CE0B20406471E060097A5F4</string>
 										<key>PBXProjectModuleLabel</key>
-										<string>goodTests.js</string>
+										<string>NuXJScript.h</string>
 										<key>_historyCapacity</key>
 										<integer>0</integer>
 										<key>bookmark</key>
-										<string>F7091E9416F1F085006F1AD7</string>
+										<string>F7091E9916F1F101006F1AD7</string>
 										<key>history</key>
 										<array>
-											<string>F7091E7C16F1EFB9006F1AD7</string>
-											<string>F7091E8416F1EFE6006F1AD7</string>
-											<string>F7091E8516F1EFE6006F1AD7</string>
+											<string>F7091E9616F1F101006F1AD7</string>
+											<string>F7091E9716F1F101006F1AD7</string>
+											<string>F7091E9816F1F101006F1AD7</string>
 										</array>
 									</dict>
 									<key>SplitCount</key>
