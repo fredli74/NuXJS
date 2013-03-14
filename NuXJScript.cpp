@@ -601,7 +601,7 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
-	const Bucket* e = &buckets[buckets.size()];
+	const Bucket* e = buckets.end();
 	while (++b != e && (b->key == 0 || !b->value.exists())) { }
 	return (b == e ? 0 : b);
 }
@@ -717,7 +717,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < act
 
 /* --- CodeDef --- */
 
-CodeDefinition::CodeDefinition() : source(0), argumentsCount(0), varsCount(0), selfName(0) { }
+CodeDefinition::CodeDefinition() : source(0), selfName(0) { }
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* b = nameIndexes.lookup(name);
@@ -845,21 +845,21 @@ struct EvalVarsObject : public Object { // FIX : can we reuse something here? Us
 
 FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
-		, indexed(codeDef->varsCount + std::max(codeDef->argumentsCount, argc))
+		, indexed(codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc))
 		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
-	indexedPointer = indexed.begin() + codeDef->varsCount;
+	indexedPointer = indexed.begin() + codeDef->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
-	if (codeDef->argumentsCount > argc) std::fill(e, indexed.end(), Value::UNDEFINED);
+	if (codeDef->getArgumentsCount() > argc) std::fill(e, indexed.end(), Value::UNDEFINED);
 }
 
 void FunctionFrame::updatedCode() {
 	Int32 oldVarsCount = indexedPointer - indexed.begin();
 	size_t oldSize = indexed.size();
-	size_t newSize = codeDef->varsCount + passedArgumentsCount;
+	size_t newSize = codeDef->getVarsCount() + passedArgumentsCount;
 	// FIX : ugly and slow
 	indexed.resize(newSize);
-	indexedPointer = indexed.begin() + codeDef->varsCount;
+	indexedPointer = indexed.begin() + codeDef->getVarsCount();
 	std::copy(indexed.begin(), indexed.begin() + oldSize, indexedPointer - oldVarsCount);
 	std::fill(indexed.begin(), indexedPointer - oldVarsCount, Value::UNDEFINED); // FIX : optimize
 }
@@ -1026,11 +1026,11 @@ void Processor::chain(Continuation* continuation, Object* thisValue) {
 
 void Processor::chain(Function* completion) {
 	// FIX : if we decide that CodeWord is int, we could have this array const
-	static CodeWord CHAIN_CALL_STUB[2 + OPERAND_SIZE] = { CALL_GLOBAL_OP };
-	*reinterpret_cast<Int32*>(&CHAIN_CALL_STUB[1]) = 1;
-	CHAIN_CALL_STUB[1 + OPERAND_SIZE] = RETURN_OP;
+	static CodeWord chainCallStub[2 + OPERAND_SIZE] = { CALL_GLOBAL_OP };
+	*reinterpret_cast<Int32*>(&chainCallStub[1]) = 1;
+	chainCallStub[1 + OPERAND_SIZE] = RETURN_OP;
 	push(Value(completion));
-	chain(CHAIN_CALL_STUB);
+	chain(chainCallStub);
 }
 
 void Processor::chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue) {
@@ -1336,13 +1336,13 @@ bool Processor::run() {
 }
 
 // FIX : use accessCodeInt32
-static Int32 getInt32(const QuickVector<CodeWord>& code, size_t& offset) {
-	Int32 i = *reinterpret_cast<const Int32*>(code.begin() + offset);
+static Int32 getInt32(const CodeWord* code, size_t& offset) {
+	Int32 i = *reinterpret_cast<const Int32*>(code + offset);
 	offset += OPERAND_SIZE;
 	return i;
 }
 
-static void disassemble(GCHeap& heap, const QuickVector<CodeWord>& code, const QuickVector<Value>& constants) {
+static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
@@ -1361,7 +1361,9 @@ static void disassemble(GCHeap& heap, const QuickVector<CodeWord>& code, const Q
 		, "IN", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
-	for (size_t offset = 0; offset < code.size();) {
+	const CodeWord* code = codeDef.getCodePointer();
+	const Value* constants = codeDef.getConstantsPointer();
+	for (size_t offset = 0; offset < codeDef.getCodeSize();) {
 		Processor::Opcode opcode = static_cast<Processor::Opcode>(code[offset]);
 		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
 		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode];
@@ -1372,9 +1374,15 @@ static void disassemble(GCHeap& heap, const QuickVector<CodeWord>& code, const Q
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
 			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump + OPERAND_SIZE); break; }
+			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump); break; }
 			case Processor::READ_INDEXED_OP:
-			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(code, offset); break;
+			case Processor::WRITE_INDEXED_OP: {
+				Int32 index = getInt32(code, offset);
+				const String* name = codeDef.getIndexedName(index);
+				if (name != 0) std::wcerr << L" $" << name->toStdString();
+				std::wcerr << L" (" << index << L")";
+				break;
+			}
 			case Processor::CALL_GLOBAL_OP:
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
@@ -1681,7 +1689,8 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				tempLocalIndex = freeSafeKeepingIndexes[freeSafeKeepingIndexes.size() - 1];
 				freeSafeKeepingIndexes.resize(freeSafeKeepingIndexes.size() - 1);
 			} else {
-				tempLocalIndex = -(++codeDef->varsCount);
+				codeDef->varNames.append(0);
+				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
 				safeKeptIndexCount++;
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
@@ -1906,12 +1915,14 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 	expectToken("(", true);
 	white();
 	while (p != e && !token(")", false)) {
-		if (func->argumentsCount != 0) {
+		if (func->argumentNames.size() != 0) {
 			if (!token(",", false)) syntaxError("Expected ',' or ')'");
 			white();
 		}
 		const Char* b = identifier(true, false);
-		func->nameIndexes.assign(String::newHashedString(heap, b, p), Value(func->argumentsCount++));
+		const String* name = String::newHashedString(heap, b, p);
+		func->nameIndexes.assign(name, Value(static_cast<Int32>(func->argumentNames.size())));
+		func->argumentNames.append(name);
 		white();
 	}
 	if (p == e) syntaxError("Expected ',' or ')'");
@@ -2018,9 +2029,14 @@ Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	return xr;
 }
 
-Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
-	return makeRValue(expression(precedence));
-}
+Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) { return makeRValue(expression(precedence)); }
+
+/*
+	Normally statements discard expression results, but when compiling for eval, statements should return results.
+	flushXR is required to before any conditional branching and before branch targets to produce the result on the
+	vstack in case it has not already been pushed (in other words if it is not an rvalue, e.g. a constant).
+*/
+void Compiler::flushXR(ExpressionResult& evalXR) { if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR); }
 
 Compiler::ExpressionResult Compiler::declareIdentifier() {
 	const Char* b = identifier(true, false);
@@ -2031,7 +2047,8 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 		const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
 		if (b != 0) index = b->value;
 		else {
-			index = Value(-(++codeDef->varsCount));
+			codeDef->varNames.append(name);
+			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
 			codeDef->nameIndexes.assign(name, index);
 		}
 		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
@@ -2058,6 +2075,18 @@ void Compiler::varDeclarations() {
 	}
 }
 
+void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
+	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
+		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it)
+			completeForwardBranch(*it);
+	}
+}
+
+void Compiler::completeBreaks(const Scope* scope) {
+	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
+		completeForwardBranch(*it);
+}
+
 void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
@@ -2076,6 +2105,7 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 	}
 	discard(makeAssignment(iterXR));
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
+	flushXR(evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
@@ -2100,6 +2130,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	expectToken(")", true);
 	outputCode = &codeDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
+	flushXR(evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
@@ -2114,18 +2145,6 @@ void Compiler::semicolon() {
 		p = b;
 		syntaxError("Syntax error");
 	}
-}
-
-void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
-	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
-		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it)
-			completeForwardBranch(*it);
-	}
-}
-
-void Compiler::completeBreaks(const Scope* scope) {
-	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
-		completeForwardBranch(*it);
 }
 
 // FIX : make member functions of all the different statements
@@ -2174,7 +2193,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		switch (static_cast<Statement>(statementTokenIndex)) {
 			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
-				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
+				flushXR(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				Scope* s = firstScope;
 				const Char* b = identifier(false, false);
@@ -2206,7 +2225,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case IF_STATEMENT: {
-				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
+				flushXR(evalXR);
 				expectToken("(", false);
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
@@ -2218,14 +2237,14 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					statement(firstScope, firstScope, evalXR);
 					completeForwardBranch(endPoint);
 				} else {
-					if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
+					flushXR(evalXR);
 					completeForwardBranch(falsePoint);
 				}				
 				break;
 			}
 
 			case WHILE_STATEMENT: {
-				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
+				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
@@ -2234,7 +2253,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
-				if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR);
+				flushXR(evalXR);
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				emitBackwardBranch(Processor::JMP_OP, loopPoint);
 				completeForwardBranch(exitLoopPoint);
@@ -2243,22 +2262,25 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 
 			case DO_WHILE_STATEMENT: {
-				Int32 loppPoint = markBackwardBranch();
+				flushXR(evalXR);
+				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
+				flushXR(evalXR);
+				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				expectToken("while", true);
 				expectToken("(", true);
-				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				ExpressionResult xr(rvalueExpression());
 				expectToken(")", true);
-				emitBackwardBranch(Processor::JT_OP, loppPoint);
+				emitBackwardBranch(Processor::JT_OP, loopPoint);
 				semicolon();
 				completeBreaks(&emptyLabelScope);
 				break;
 			}
 			
 			case FOR_STATEMENT: {
+				flushXR(evalXR);
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
@@ -2487,12 +2509,12 @@ assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 	codeDef->code.shrink();
 	codeDef->constants.shrink();
 if (!supressStdErr) {
-	disassemble(heap, *outputCode, codeDef->constants);
+	disassemble(heap, *codeDef);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants.size() << std::endl;
 	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
-	std::cerr << "\tVars: " << codeDef->varsCount << std::endl;
-	std::cerr << "\tArguments: " << codeDef->argumentsCount << std::endl;
+	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
+	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
 }
 	return p;
 }

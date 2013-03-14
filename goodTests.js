@@ -573,6 +573,8 @@ print(eval("3; b: if (false) { 123; if (true) { 1; break b; 2 }}"))
 
 print(eval("3; b: if (false) { 123; if (false) { 1; break b; 2 }}"))
 
+print(eval("while (false) 7;"))
+
 print(eval("5; while (false) 7;"))
 
 print(eval("5; while (true) { 3; break }"))
@@ -585,6 +587,44 @@ print(eval("var i = 0; 234; while (++i < 10) { 23; continue }"))
 
 print(eval("var i = 3; 234; while (++i < 10) { j = 5; while (++j < i) j * 3 }"))
 
+i = 0; print(eval("do { ; } while (++i < 1000)"))
+
+i = 0; print(eval("do { ++i } while (i < 1000)"))
+
+i = 0; print(eval("234; do { ++i; if (i < 10) continue; i * 100 } while (i < 1000)"))
+
+i = 0; print(eval("234; do { ++i; if (i < 10) continue; 123 } while (i < 1000)"));
+
+print(eval("; for (var i = 0; i < -1; ++i) 123"))
+
+print(eval("1; for (var i = 0; i < -1; ++i) 123"))
+
+print(eval("; for (var i = 0; i < 1; ++i) 123"))
+
+print(eval("1; for (var i = 0; i < 1; ++i) 123"))
+
+print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i < 10) continue; 123 }"));
+
+print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i >= 10) break; 123 }"));
+/*
+o = new (function() { });
+
+print(eval("; for (var i in o) 123"))
+
+print(eval("1; for (var i in o) 123"))
+
+o["a"] = "b";
+
+print(eval("; for (var i in o) 123"))
+
+print(eval("1; for (var i in o) 123"))
+
+for (var i = 0; i < 100; ++i) o[i] = i * 1234;
+
+print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
+
+print(eval("for (var i in o) { ++i; if (i == 55) break; 123 }"));
+*/
 print((function() { var x = 33; eval("x = 55"); return x })());
 
 print((function() { var x = 33; eval("var x = 55"); return x })());

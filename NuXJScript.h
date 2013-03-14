@@ -224,6 +224,10 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				operator T*() const { return p; }
 				T* begin() const { return p; }
 				T* end() const { return p + n; }
+			#if !defined(NDEBUG) // FIX : test performance in release
+				T& operator[](Int32 index) const { assert(0 <= index && index < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
+				T& operator[](Int32 index) { assert(0 <= index && index < n); return p[index]; }
+			#endif
 				~QuickArray() { if (p != a) delete [] p; }
 				
 	protected:	size_t n;
@@ -255,6 +259,10 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				void append(const T& t) { insert(end(), &t, &t + 1); }
 				void shrink() { qArray.resize(count); }
+			#if !defined(NDEBUG) // FIX : test performance in release
+				T& operator[](Int32 index) const { assert(0 <= index && index < count); return qArray[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
+				T& operator[](Int32 index) { assert(0 <= index && index < count); return qArray[index]; }
+			#endif
 	protected:	QuickArray<T, BUILT_IN_COUNT> qArray;
 				size_t count;
 };				
@@ -566,14 +574,17 @@ class CodeDefinition : public Object {
 				CodeDefinition();
 				virtual void gcMark(GCHeap& heap);
 				bool lookupNameIndex(const String* name, Int32& index) const;
-				Int32 getArgumentsCount() const { return argumentsCount; }
-				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
-				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
+				Int32 getVarsCount() const { return varNames.size(); }
+				Int32 getArgumentsCount() const { return argumentNames.size(); }
+				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[~index] : argumentNames[index]); }
+				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : constants.begin()); }
+				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
+				size_t getCodeSize() const { return code.size(); }
 
 	protected:	QuickVector<CodeWord> code;
 				QuickVector<Value> constants;
-				Int32 argumentsCount;
-				Int32 varsCount; // not including arguments
+				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
+				QuickVector<const String*> argumentNames;
 				Table nameIndexes;
 				const String* source;
 				const String* selfName;				
@@ -859,6 +870,7 @@ class Compiler : public GCItem {
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier();
 				ExpressionResult varDeclaration();
+				void flushXR(ExpressionResult& evalXR);
 				void varDeclarations();
 				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
