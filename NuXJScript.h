@@ -507,19 +507,22 @@ class StringListEnumerator : public Enumerator {
 				StringListEnumerator(UInt32 maxCount);
 				void add(const String* s);
 				void sort(); // FIX : bad idea?
-				virtual void gcMark(GCHeap& heap);
 				virtual const String* nextPropertyName();
 
-	protected:	QuickArray<const String*, 8> list;
+	protected:	QuickArray<const String*, 8> list; // FIX : <- use vector?
 				UInt32 actualCount;
 				UInt32 nextIndex;
+
+				virtual void gcMark(GCHeap& heap) {
+					for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]);
+					super::gcMark(heap);
+				}
 };
 
 class UserObject : public Object {
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0);
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -529,6 +532,12 @@ class UserObject : public Object {
 				
 				Table properties;
 				Object* prototype;
+
+				virtual void gcMark(GCHeap& heap) {
+					properties.markIn(heap);
+					heap.mark(prototype);
+					super::gcMark(heap);
+				}
 };
 
 class Function : public UserObject {
@@ -545,10 +554,15 @@ class Function : public UserObject {
 class EvalFunction : public Function {
 	public:		EvalFunction(bool direct) : direct(direct) { }
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual void gcMark(GCHeap& heap);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
-	protected:	Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+				Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+
+				virtual void gcMark(GCHeap& heap) {
+					functionDefCache = Table(); // Yeah we just empty everything on each gc sweep
+					functionDefCache.markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 class FunctionFrame;
@@ -575,7 +589,6 @@ class CodeDefinition : public Object {
 	public:		typedef Object super;
 				
 				CodeDefinition();
-				virtual void gcMark(GCHeap& heap);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				Int32 getVarsCount() const { return varNames.size(); }
 				Int32 getArgumentsCount() const { return argumentNames.size(); }
@@ -589,15 +602,25 @@ class CodeDefinition : public Object {
 				Table nameIndexes;
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
+				QuickVector<Int32> temporaries;
 				const String* source;
 				const String* selfName;				
+
+				virtual void gcMark(GCHeap& heap) {
+					for (Value* it = constants.begin(); it != constants.end(); ++it) it->markIn(heap);
+					nameIndexes.markIn(heap);
+					for (const String** it = varNames.begin(); it != varNames.end(); ++it) heap.mark(*it);
+					for (const String** it = argumentNames.begin(); it != argumentNames.end(); ++it) heap.mark(*it);
+					heap.mark(source);
+					heap.mark(selfName);
+					super::gcMark(heap);
+				}
 };
 
 class Closure : public Function {
 	public:		typedef Function super;
 				
 				Closure(CodeDefinition* codeDef, Object* environment);
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				CodeDefinition* getDefinition() const;
@@ -605,6 +628,12 @@ class Closure : public Function {
 
 	protected:	CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(codeDef);
+					heap.mark(environment);
+					super::gcMark(heap);
+				}
 };
 
 class Frame : public Object {
@@ -616,16 +645,47 @@ class Frame : public Object {
 				
 	protected:	const CodeDefinition* const codeDef;
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(codeDef);
+					super::gcMark(heap);
+				}
+};
+
+class EvalVarsObject : public Object { // FIX : can we reuse something here? UserObject (with prototype)? FunctionFrame?
+	public:		typedef Object super;
+				friend class FunctionFrame;
+				EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v) {
+					if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
+					return parent->setProperty(engine, name, v);
+				}
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) {
+					const Table::Bucket* b = vars.lookup(name);
+					if (b != 0) { *v = b->value; return true; }
+					return parent->getProperty(engine, name, v);
+				}
+				virtual bool deleteProperty(Engine& engine, const String* name) {
+					if (vars.lookup(name) != 0) { vars.erase(name); return true; } 		// FIX : we need a better way to lookup & update in one
+					return parent->deleteProperty(engine, name);
+				}
+
+	protected:	Object* parent;
+				Table vars;
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(parent);
+					vars.markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 class Arguments;
-struct EvalVarsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
 				FunctionFrame(Closure* function, Int32 argc, const Value* argv);
 				void updatedCode();
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -638,6 +698,16 @@ class FunctionFrame : public Frame {
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
 				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(selfFunction);
+					for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
+					argumentsValue.markIn(heap);
+					heap.mark(environment);
+					heap.mark(evalVars);
+					super::gcMark(heap);
+				}
+
 };
 
 // FIX : if CStackEntry included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
@@ -651,7 +721,6 @@ class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
 				EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame);
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -659,6 +728,12 @@ class EvalFrame : public Frame {
 
 	protected:	Frame* parentFrame;
 				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(parentFrame);
+					for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 /*
@@ -670,7 +745,6 @@ class CatchFrame : public Frame {
 	public:		typedef Frame super;
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -679,6 +753,13 @@ class CatchFrame : public Frame {
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
 				Value exceptionValue;
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(parentFrame);
+					heap.mark(exceptionName);
+					exceptionValue.markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 class Arguments : public UserObject {
@@ -686,7 +767,6 @@ class Arguments : public UserObject {
 
 				Arguments(FunctionFrame* frame, Int32 argumentsCount);
 				virtual const String* className() const;
-				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -697,6 +777,12 @@ class Arguments : public UserObject {
 				Int32 argumentsCount;
 				Value lengthProperty;
 				QuickArray<Byte, 8> deletedArguments;
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(frame);
+					lengthProperty.markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 // FIX : test with very short max sz length
@@ -789,7 +875,6 @@ class Processor : public GCItem {
 				};
 
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
-				virtual void gcMark(GCHeap& heap);
 				void chain(const CodeWord* stub);
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
@@ -822,6 +907,18 @@ public: // FIX : not public, just for some asserts now I think
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
 				CStackEntry* csp;
+
+				virtual void gcMark(GCHeap& heap) {
+					for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
+					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
+						heap.mark(c->frame);
+						heap.mark(c->thisValue);
+					}
+					super::gcMark(heap);
+				}
+
+				// Copies from call stack. Will be gc marked from there.
+				
 				Frame* frame;
 				const Value* constants;
 				Value* indexed;
@@ -840,7 +937,6 @@ class Compiler : public GCItem {
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
 				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
-				virtual void gcMark(GCHeap& heap);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
 
@@ -901,10 +997,15 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord> funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
-				QuickVector<Int32> freeSafeKeepingIndexes;
-				Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
 				QuickVector<CodeWord>* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
 				bool acceptInOperator;
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(codeDef);
+					for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
+						it->first.markIn(heap);
+					super::gcMark(heap);
+				}
 };
 
 #endif

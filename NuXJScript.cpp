@@ -697,12 +697,6 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 	return list;
 }
 
-void UserObject::gcMark(GCHeap& heap) {
-	properties.markIn(heap);
-	heap.mark(prototype);
-	super::gcMark(heap);
-}
-
 /* --- RangeEnumerator --- */
 
 RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
@@ -712,7 +706,6 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 
 StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
 void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 
 /* --- CodeDef --- */
@@ -724,14 +717,6 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	if (b == 0) return false;
 	index = b->value.toInt();
 	return true;
-}
-
-void CodeDefinition::gcMark(GCHeap& heap) {
-	heap.mark(source);
-	for (Value* it = constants.begin(); it != constants.end(); ++it) it->markIn(heap);
-	nameIndexes.markIn(heap);
-	heap.mark(selfName);
-	super::gcMark(heap);
 }
 
 /* --- Function --- */
@@ -760,12 +745,6 @@ Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Valu
 	processor.chain(this, argc, argv, thisValue);
 	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 	return Value();
-}
-
-void Closure::gcMark(GCHeap& heap) {
-	heap.mark(codeDef);
-	heap.mark(environment);
-	super::gcMark(heap);
 }
 
 /* --- Arguments --- */
@@ -801,12 +780,6 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 	else return (deletedArguments[p - frame->getIndexedPointer() + 1] = true);
 }
 
-void Arguments::gcMark(GCHeap& heap) {
-	heap.mark(frame);
-	lengthProperty.markIn(heap);
-	super::gcMark(heap);
-}
-
 Enumerator* Arguments::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
@@ -817,31 +790,6 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 }
 
 /* --- FunctionFrame --- */
-
-struct EvalVarsObject : public Object { // FIX : can we reuse something here? UserObject (with prototype)? FunctionFrame?
-	typedef Object super;
-	EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
-	bool setProperty(Engine& engine, const String* name, const Value& v) {
-		if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
-		return parent->setProperty(engine, name, v);
-	}
-	bool getProperty(Engine& engine, const String* name, Value* v) {
-		const Table::Bucket* b = vars.lookup(name);
-		if (b != 0) { *v = b->value; return true; }
-		return parent->getProperty(engine, name, v);
-	}
-	bool deleteProperty(Engine& engine, const String* name) {
-		if (vars.lookup(name) != 0) { vars.erase(name); return true; } 		// FIX : we need a better way to lookup & update in one
-		return parent->deleteProperty(engine, name);
-	}
-	void gcMark(GCHeap& heap) {
-		vars.markIn(heap);
-		heap.mark(parent);
-		super::gcMark(heap);
-	}
-	Object* parent;
-	Table vars;
-};
 
 FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
@@ -907,16 +855,6 @@ bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 	else return environment->deleteProperty(engine, name);
 }
 
-void FunctionFrame::gcMark(GCHeap& heap) {
-	heap.mark(selfFunction);
-	heap.mark(codeDef);
-	heap.mark(environment);
-	heap.mark(evalVars);
-	for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
-	argumentsValue.markIn(heap);
-	super::gcMark(heap);
-}
-
 void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 	if (evalVars == 0) {
 		evalVars = heap.manage(new EvalVarsObject(environment));
@@ -932,7 +870,6 @@ EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) 
 		, parentFrame(parentFrame), indexed(evalFunctionDef->getVarsCount()) {
 	indexedPointer = indexed.end();
 }
-void EvalFrame::gcMark(GCHeap& heap) { heap.mark(codeDef); heap.mark(parentFrame); super::gcMark(heap); }
 bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
 bool EvalFrame::setProperty(Engine& engine, const String* name, const Value& v) { return parentFrame->setProperty(engine, name, v); }
 bool EvalFrame::deleteProperty(Engine& engine, const String* name) { return parentFrame->deleteProperty(engine, name); }
@@ -944,13 +881,6 @@ CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Va
 		: super(parentFrame->getFunctionDef()), parentFrame(parentFrame), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) {
 	indexedPointer = parentFrame->getIndexedPointer();
-}
-
-void CatchFrame::gcMark(GCHeap& heap) {
-	heap.mark(parentFrame);
-	heap.mark(exceptionName);
-	exceptionValue.markIn(heap);
-	super::gcMark(heap);
 }
 
 bool CatchFrame::getProperty(Engine& engine, const String* name, Value* v) {
@@ -977,15 +907,6 @@ void CatchFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) {
 Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0) { }
-
-void Processor::gcMark(GCHeap& heap) {
-	for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
-	for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
-		heap.mark(c->frame);
-		heap.mark(c->thisValue);
-	}
-	super::gcMark(heap);
-}
 
 void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
@@ -1512,14 +1433,7 @@ struct Compiler::ExpressionResult {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), safeKeptIndexCount(0), outputCode(&codeDef->code), acceptInOperator(true) { }
-
-void Compiler::gcMark(GCHeap& heap) {
-	heap.mark(codeDef);
-	for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
-		it->first.markIn(heap);
-	super::gcMark(heap);
-}
+		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) { }
 
 void Compiler::syntaxError(const String& what) {
 	throw Exception(heap, Value(heap.manage(new String(what))));
@@ -1688,13 +1602,12 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 		case ExpressionResult::PROPERTY: {
 			makeRValue(xr);
 			Int32 tempLocalIndex;
-			if (!freeSafeKeepingIndexes.empty()) {
-				tempLocalIndex = freeSafeKeepingIndexes[freeSafeKeepingIndexes.size() - 1];
-				freeSafeKeepingIndexes.resize(freeSafeKeepingIndexes.size() - 1);
+			if (!codeDef->temporaries.empty()) {
+				tempLocalIndex = codeDef->temporaries[codeDef->temporaries.size() - 1];
+				codeDef->temporaries.resize(codeDef->temporaries.size() - 1);
 			} else {
 				codeDef->varNames.append(0);
 				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
-				safeKeptIndexCount++;
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
 			emit(Processor::POP_OP);
@@ -1712,7 +1625,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
 			emit(Processor::POP_OP);
 		}
-		freeSafeKeepingIndexes.append(index);
+		codeDef->temporaries.append(index);
 	}
 }
 
@@ -2503,8 +2416,6 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	codeDef->code.resize(0);
 	codeDef->constants.resize(0);
 	outputCode = &codeDef->code;
-	freeSafeKeepingIndexes.resize(0);
-	safeKeptIndexCount = 0;
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
@@ -2515,7 +2426,6 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	emit(Processor::RETURN_OP);
 	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
 	// FIX : shrink code vector (copy to quickarray instead?)
-assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 	assert(outputCode == &codeDef->code);
 	codeDef->code.shrink();
 	codeDef->constants.shrink();
@@ -2523,7 +2433,6 @@ if (!supressStdErr) {
 	disassemble(heap, *codeDef);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants.size() << std::endl;
-	std::cerr << "\tSafe kept: " << safeKeptIndexCount << std::endl;
 	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
 }
@@ -2531,8 +2440,7 @@ if (!supressStdErr) {
 }
 
 void Compiler::compile(const String& source) {
-	const Char* e = source.end();
-	const Char* p = compile(source.begin(), e);
+	compile(source.begin(), source.end());
 	if (!eof()) syntaxError("Syntax error"); // FIX : better error?
 }
 
@@ -2601,12 +2509,6 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	return Value();
 }
 
-void EvalFunction::gcMark(GCHeap& heap) {
-	functionDefCache = Table(); // Yeah we just empty everything on each gc sweep
-	functionDefCache.markIn(heap);
-	super::gcMark(heap);
-}
-
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
 Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
@@ -2615,6 +2517,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
+	gcHeap.protect(&evalDirectFunction);
 }
 
 #include <fstream>

@@ -547,6 +547,8 @@ print(eval("aGlobal=new (function(){this.a='a string'})"))
 
 print(eval("aGlobal.a"))
 
+print("- if");
+
 print(eval("if (true) 3"))
 
 print(eval("if (false) 3"))
@@ -561,6 +563,8 @@ print(eval("if (false) 3+3; else 6-6"))
 
 print(eval("aGlobal; if (false) 3"))
 
+print("- break");
+
 print(eval("b: { 1; break b }"))
 
 print(eval("b: if (true) { 1; break b; 2 }"))
@@ -572,6 +576,8 @@ print(eval("3; b: if (true) { 123; if (false) { 1; break b; 2 }}"))
 print(eval("3; b: if (false) { 123; if (true) { 1; break b; 2 }}"))
 
 print(eval("3; b: if (false) { 123; if (false) { 1; break b; 2 }}"))
+
+print("- while");
 
 print(eval("while (false) 7;"))
 
@@ -587,6 +593,8 @@ print(eval("var i = 0; 234; while (++i < 10) { 23; continue }"))
 
 print(eval("var i = 3; 234; while (++i < 10) { j = 5; while (++j < i) j * 3 }"))
 
+print("- do while");
+
 i = 0; print(eval("do { ; } while (++i < 1000)"))
 
 i = 0; print(eval("do { ++i } while (i < 1000)"))
@@ -594,6 +602,8 @@ i = 0; print(eval("do { ++i } while (i < 1000)"))
 i = 0; print(eval("234; do { ++i; if (i < 10) continue; i * 100 } while (i < 1000)"))
 
 i = 0; print(eval("234; do { ++i; if (i < 10) continue; 123 } while (i < 1000)"));
+
+print("- for");
 
 print(eval("; for (var i = 0; i < -1; ++i) 123"))
 
@@ -606,6 +616,8 @@ print(eval("1; for (var i = 0; i < 1; ++i) 123"))
 print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i < 10) continue; 123 }"));
 
 print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i >= 10) break; 123 }"));
+
+print("- for in");
 
 o = new (function() { });
 
@@ -621,9 +633,19 @@ print(eval("1; for (var i in o) 123"))
 
 for (var i = 0; i < 100; ++i) o[i] = i * 1234;
 
+print("built");
+
 print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
 
-print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
+print("first");
+
+print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
+
+// print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
+
+print("second");
+
+print("- switch");
 
 print(eval("; switch (3+3) { case 7: 123 }"));
 print(eval("; switch (3+3) { case 7: 123; default: 5656 }"));
@@ -633,10 +655,22 @@ print(eval("; switch (3+3) { case 6: 123; case 7: 256; }"));
 print(eval("; switch (3+3+1) { case 6: 123; case 7: 256; }"));
 print(eval("; switch (3+3) { case 6: 123; break; case 7: 256; }"));
 print(eval("for (var i = 0; i < 10; ++i) switch (3+3) { case 6: 123; continue; case 7: 256; }"));
+
+print("- try catch");
+
 print(eval("; try { 234 } catch ( x ) { 555 }"));
 print(eval("1234; try { 234 } catch ( x ) { 555 }"));
 print(eval("1234; try { throw 55; 234 } catch ( x ) { 555 }"));
 print(eval("1234; try { throw 55; 234 } catch ( x ) { }"));
+print(eval("1234; try { throw 55; 234 } catch ( x ) { } finally { 9876 }"));
+print(eval("try { throw 2 } catch (x) { try { throw 3 } catch (y) { print(y) } } finally { try { } catch (y) { } }"));
+for (x = 0; x < 2; ++x) {
+	for (y = 1; y < 4; ++y) {
+		print(eval("switch (x) { case 0: 0; break; case 1: switch (y) { case 3: 3; break; case 2: try { throw 2 } catch (z) { z } } }"))
+	}
+}
+
+print("- more");
 
 print((function() { var x = 33; eval("x = 55"); return x })());
 

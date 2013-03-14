@@ -6,9 +6,9 @@ Exception: Syntax error
 Exception: Missing */
 Exception: Unterminated string
 Exception: Unterminated string
+Exception: Unterminated string
 Exception: Illegal escape character
-Exception: Illegal escape character
-Exception: Expected ',' or ')'
+Exception: Expected ')'
 Exception: Expected expression
 Exception: Expected expression
 Exception: Expected ',' or ')'
@@ -21,6 +21,13 @@ Exception: Expected identifier
 Exception: Expected identifier
 Exception: Expected ',' or ')'
 Exception: Expected '{'
+Exception: Expected '('
+Exception: Expected ')'
+Exception: Expected ',' or ')'
+Exception: Expected identifier
+Exception: Expected identifier
+Exception: Expected '{'
+Exception: Expected '}'
 Exception: Invalid number
 Exception: Invalid number
 Exception: Expected identifier
@@ -37,6 +44,7 @@ Exception: Expected 'catch' or 'finally'
 Exception: Expected identifier
 Exception: Expected expression
 Exception: Expected 'case', 'default' or '}'
+Exception: Expected expression
 Exception: Illegal l-value
 Exception: Expected ';'
 Exception: Illegal l-value
