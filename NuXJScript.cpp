@@ -781,7 +781,7 @@ Value* Arguments::findProperty(const String* name) {
 	if (name->isEqualTo(LENGTH_STRING)) return (deletedArguments[0] ? 0 : &lengthProperty);
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
-	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getLocalsPointer() + i : 0);
+	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getIndexedPointer() + i : 0);
 }
 
 bool Arguments::getProperty(Engine& engine, const String* name, Value* v) {
@@ -798,7 +798,7 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 	Value* p = findProperty(name);
 	if (p == 0) return super::deleteProperty(engine, name);
 	else if (p == &lengthProperty) return (deletedArguments[0] = true);
-	else return (deletedArguments[p - frame->getLocalsPointer() + 1] = true);
+	else return (deletedArguments[p - frame->getIndexedPointer() + 1] = true);
 }
 
 void Arguments::gcMark(GCHeap& heap) {
@@ -845,21 +845,30 @@ struct EvalVarsObject : public Object { // FIX : can we reuse something here? Us
 
 FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
-		, locals(codeDef->varsCount + std::max(codeDef->argumentsCount, argc))
+		, indexed(codeDef->varsCount + std::max(codeDef->argumentsCount, argc))
 		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
-	localsPointer = locals.begin() + codeDef->varsCount;
-	std::fill(locals.begin(), localsPointer, Value::UNDEFINED); // FIX : optimize
-	Value* e = std::copy(argv, argv + argc, localsPointer);
-	if (codeDef->argumentsCount > argc) std::fill(e, locals.end(), Value::UNDEFINED);
+	indexedPointer = indexed.begin() + codeDef->varsCount;
+	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED); // FIX : optimize
+	Value* e = std::copy(argv, argv + argc, indexedPointer);
+	if (codeDef->argumentsCount > argc) std::fill(e, indexed.end(), Value::UNDEFINED);
 }
 
-// TODO: solution for injecting dynamic bound variables, e.g. from running eval(), could secretely add a environment above maybe?
+void FunctionFrame::updatedCode() {
+	Int32 oldVarsCount = indexedPointer - indexed.begin();
+	size_t oldSize = indexed.size();
+	size_t newSize = codeDef->varsCount + passedArgumentsCount;
+	// FIX : ugly and slow
+	indexed.resize(newSize);
+	indexedPointer = indexed.begin() + codeDef->varsCount;
+	std::copy(indexed.begin(), indexed.begin() + oldSize, indexedPointer - oldVarsCount);
+	std::fill(indexed.begin(), indexedPointer - oldVarsCount, Value::UNDEFINED); // FIX : optimize
+}
 
 bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) {
-		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
-		*v = localsPointer[index];
+		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+		*v = indexedPointer[index];
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
@@ -878,8 +887,8 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) {
-		assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
-		localsPointer[index] = v;
+		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+		indexedPointer[index] = v;
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		argumentsValue = v;
@@ -899,10 +908,11 @@ bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 }
 
 void FunctionFrame::gcMark(GCHeap& heap) {
+	heap.mark(selfFunction);
 	heap.mark(codeDef);
 	heap.mark(environment);
 	heap.mark(evalVars);
-	for (Int32 i = 0; i < locals.size(); ++i) locals[i].markIn(heap);
+	for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
 	argumentsValue.markIn(heap);
 	super::gcMark(heap);
 }
@@ -919,7 +929,7 @@ void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 /* --- EvalFrame --- */
 
 EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
-	localsPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
+	indexedPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
 }
 void EvalFrame::gcMark(GCHeap& heap) { heap.mark(codeDef); heap.mark(parentFrame); super::gcMark(heap); }
 bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
@@ -932,7 +942,7 @@ void EvalFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) { p
 CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
 		: super(parentFrame->getFunctionDef()), parentFrame(parentFrame), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) {
-	localsPointer = parentFrame->getLocalsPointer();
+	indexedPointer = parentFrame->getIndexedPointer();
 }
 
 void CatchFrame::gcMark(GCHeap& heap) {
@@ -965,8 +975,7 @@ void CatchFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) {
 
 Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-	, csp(cstackStart - 1), vsp(vstackStart - 1), ip(0), clockCyclesLeft(0x7FFFFFFF) {
-}
+	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0) { }
 
 void Processor::gcMark(GCHeap& heap) {
 	for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
@@ -993,7 +1002,7 @@ void Processor::updateInternals() {
 	frame = csp->frame;
 	if (frame != 0) { // FIX : use dummy frame?
 		constants = frame->getFunctionDef()->getConstantsPointer();
-		locals = frame->getLocalsPointer();
+		indexed = frame->getIndexedPointer();
 	}
 }
 
@@ -1025,20 +1034,30 @@ void Processor::chain(Function* completion) {
 }
 
 void Processor::chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue) {
-	CodeDefinition* def = func->getDefinition();
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = thisValue;
-	ip = def->getCodePointer();
+	ip = func->getDefinition()->getCodePointer();
 	updateInternals();
 }
 
-void Processor::enterEval(CodeDefinition* codeDef) {
+void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisValue) {
+	this->frame = frame;
+	++csp; // FIX : overflow check
+	csp->returnIP = this->ip;
+	csp->frame = this->frame;
+	csp->thisValue = thisValue;
+	this->ip = ip;
+	updateInternals();
+}
+
+void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 --vsp;
-	frame->mergeEvalVars(engine.getHeap(), codeDef);
-	frame = engine.getHeap().manage(new EvalFrame(codeDef, frame));
+	Frame* f = (directCall ? frame : engine.getGlobals());
+	f->mergeEvalVars(engine.getHeap(), codeDef);
+	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
 	csp->returnIP = ip;
 	csp->frame = frame;
@@ -1125,8 +1144,8 @@ bool Processor::privateRun() {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
 			case CONST_OP:			push(constants[operand()]); break;
-			case READ_INDEXED_OP:	push(locals[operand()]); break;
-			case WRITE_INDEXED_OP:	locals[operand()] = vsp[0]; break;
+			case READ_INDEXED_OP:	push(indexed[operand()]); break;
+			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
 			case READ_NAMED_OP:		if (!frame->getProperty(engine, constants[operand()].getString(), ++vsp))
 										error(); // FIX : do we need to balance vsp on errors?
 									break;
@@ -1204,7 +1223,14 @@ bool Processor::privateRun() {
 				vsp -= n + 1;
 				break;
 			}
-			case CALL_EVAL_OP: {
+			case CALL_EVAL_OP: { // FIX : all these are too similar!
+				Int32 n = operand();
+				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				Function* f = vsp[-n].getFunction();
+				if (f == &engine.evalFunction) f = &engine.evalDirectFunction;
+				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				vsp -= n;
+				break;
 			}
 			case CALL_GLOBAL_OP: {
 				Int32 n = operand();
@@ -2441,6 +2467,8 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : only accept one compile? or opposite? create many different functions?
+	codeDef->code.resize(0);
+	codeDef->constants.resize(0);
 	outputCode = &codeDef->code;
 	freeSafeKeepingIndexes.resize(0);
 	safeKeptIndexCount = 0;
@@ -2456,7 +2484,8 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
 	assert(outputCode == &codeDef->code);
-	outputCode->shrink();
+	codeDef->code.shrink();
+	codeDef->constants.shrink();
 if (!supressStdErr) {
 	disassemble(heap, *outputCode, codeDef->constants);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
@@ -2535,7 +2564,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 		compiler.compile(*sourceCode);
 		functionDefCache.assign(sourceCode, Value(codeDef));
 	}
-	processor.enterEval(codeDef);
+	processor.enterEval(codeDef, direct);
 	return Value();
 }
 
@@ -2547,11 +2576,12 @@ void EvalFunction::gcMark(GCHeap& heap) {
 
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
-Engine::Engine(GCHeap& heap, Object* globals) : gcHeap(heap), globals(globals) {
+Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
+		, evalDirectFunction(true) {
 	assert(heap.belongs(globals));
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
-	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalDirectFunction)));
+	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
 }
 
 #include <fstream>
@@ -2579,10 +2609,19 @@ Engine::Engine(GCHeap& heap, Object* globals) : gcHeap(heap), globals(globals) {
 int main(int argc, const char* argv[]) {
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
+	
 	GCHeap heap;
 	UserObject globals;
 	heap.protect(&globals);
-	Engine engine(heap, &globals);
+	CodeDefinition globalCode;
+	heap.protect(&globalCode);
+	Closure globalClosure(&globalCode, &globals);
+	heap.protect(&globalClosure);
+	FunctionFrame globalFrame(&globalClosure, 0, 0);
+	heap.protect(&globalFrame);
+	
+	Engine engine(heap, &globalFrame);
+	
 	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction)));
@@ -2630,22 +2669,22 @@ int main(int argc, const char* argv[]) {
 			}
 			
 			if (execute) {
-				CodeDefinition codeDef;
-				heap.protect(&codeDef);
-				Compiler compiler(heap, &codeDef, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
-				heap.protect(&compiler);
-				compiler.compile(source);
-				
 				Value vstack[1024];
 				Processor::CStackEntry cstack[1024];
 				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				heap.protect(&processor);
 				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 				processor.chain(RETURN_TO_HOST_STUB);
-			//	processor.chain(&printFunction);
-				processor.chain(heap.manage(new Closure(&codeDef, &globals)), 0, 0, &globals);
-				bool done = false;
+
+				CodeDefinition codeDef;
+				heap.protect(&codeDef);
+				Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
+				heap.protect(&compiler);
+				compiler.compile(source);
+				globalFrame.updatedCode();
+				processor.chain(globalCode.getCodePointer(), &globalFrame, &globalFrame);
 				
+				bool done = false;
 				clock_t start = ::clock();	
 				do {
 					processor.resetTimeOut(gcRate);

@@ -532,21 +532,27 @@ class Function : public UserObject {
 };
 
 class EvalFunction : public Function {
+	public:		EvalFunction(bool direct) : direct(direct) { }
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual void gcMark(GCHeap& heap);
+				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
+	protected:	bool direct;
 	protected:	Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 };
 
+class FunctionFrame;
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
+	friend class Processor;
 	
-	public:		Engine(GCHeap& heap, Object* globals);
+	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
 				GCHeap& getHeap() const { return gcHeap; }
-				Object* getGlobals() const { return globals; }
+				FunctionFrame* getGlobals() const { return globals; }
 
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
-				Object* globals;
+				FunctionFrame* globals;
+				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 };
 
@@ -591,11 +597,11 @@ class Frame : public Object {
 	public:		typedef Object super;
 				Frame(const CodeDefinition* codeDef) : codeDef(codeDef) { }
 				const CodeDefinition* getFunctionDef() const { return codeDef; }
-				Value* getLocalsPointer() const { return localsPointer; }
+				Value* getIndexedPointer() const { return indexedPointer; }
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* def) = 0;
 				
 	protected:	const CodeDefinition* const codeDef;
-				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 };
 
 class Arguments;
@@ -604,6 +610,7 @@ class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
 				FunctionFrame(Closure* function, Int32 argc, const Value* argv);
+				void updatedCode(); // FIX : use and test
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -612,7 +619,7 @@ class FunctionFrame : public Frame {
 
 	protected:	Closure* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
-				QuickArray<Value> locals; // Includes variables and arguments.
+				QuickArray<Value> indexed; // Includes variables and arguments.
 				Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
@@ -770,7 +777,8 @@ class Processor : public GCItem {
 				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
 				void chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
-				void enterEval(CodeDefinition* codeDef);
+				void chain(const CodeWord* ip, Frame* frame, Object* thisValue); // FIX : turn into enter global code or what?
+				void enterEval(CodeDefinition* codeDef, bool directCall);
 	// FIX :			void call(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				Value& peek(Int32 offset);
@@ -799,7 +807,7 @@ public: // FIX : not public, just for some asserts now I think
 				CStackEntry* csp;
 				Frame* frame;
 				const Value* constants;
-				Value* locals;
+				Value* indexed;
 };
 
 enum Precedence {

@@ -123,7 +123,7 @@ true
 true
 false
 false
-false
+true
 added to built-in
 *** types ***
 undefined
@@ -701,13 +701,13 @@ ohboy
 18
 18
 anotherGlobal in this: false
-anotherGlobal in this: false
-100
+anotherGlobal in this: true
+2
 tick 101
 101
 tick 102
 102
--100
+102
 
 100
 tick 101
@@ -723,12 +723,12 @@ tick 102
 102
 -100
 
-100
+2
 tick 101
 101
 tick 102
 102
--100
+102
 
 *** fun stuff ***
          !!!!!!!!"""""""""""""""""""""""""""##########$$$$%%&(.)(*2%$#######""""""""!!!!!!!!!!!!!!!!
