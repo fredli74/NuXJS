@@ -606,7 +606,7 @@ print(eval("1; for (var i = 0; i < 1; ++i) 123"))
 print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i < 10) continue; 123 }"));
 
 print(eval("for (var i = 0; i < 100; ++i) { ++i; if (i >= 10) break; 123 }"));
-/*
+
 o = new (function() { });
 
 print(eval("; for (var i in o) 123"))
@@ -623,8 +623,8 @@ for (var i = 0; i < 100; ++i) o[i] = i * 1234;
 
 print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
 
-print(eval("for (var i in o) { ++i; if (i == 55) break; 123 }"));
-*/
+print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
+
 print((function() { var x = 33; eval("x = 55"); return x })());
 
 print((function() { var x = 33; eval("var x = 55"); return x })());

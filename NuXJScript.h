@@ -583,9 +583,9 @@ class CodeDefinition : public Object {
 
 	protected:	QuickVector<CodeWord> code;
 				QuickVector<Value> constants;
+				Table nameIndexes;
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
-				Table nameIndexes;
 				const String* source;
 				const String* selfName;				
 };
@@ -641,6 +641,8 @@ class FunctionFrame : public Frame {
 /*
 	This is the direct frame of an eval(), it only bridges all virtuals to the parent FunctionFrame, but has a different
 	codeDef pointer (for constants etc).
+	
+	FIX : I think we can use a FunctionFrame now for simplicity, if we just empty codeDef->nameIndexes first.
 */
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
@@ -653,6 +655,7 @@ class EvalFrame : public Frame {
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
+				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
 };
 
 /*

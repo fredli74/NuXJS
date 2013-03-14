@@ -922,14 +922,15 @@ void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 		evalVars = heap.manage(new EvalVarsObject(environment));
 		environment = evalVars;
 	}
-	for (const Table::Bucket* b = def->nameIndexes.getFirst(); b != 0; b = def->nameIndexes.getNext(b))
-		if (evalVars->vars.lookup(b->key) == 0) evalVars->vars.assign(b->key, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it)
+		if (*it != 0 && evalVars->vars.lookup(*it) == 0) evalVars->vars.assign(*it, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
 }
 
 /* --- EvalFrame --- */
 
-EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef), parentFrame(parentFrame) {
-	indexedPointer = 0; // Yeah, that is right, we shouldn't ever have a local access in an eval function, that would be a bug.
+EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef)
+		, parentFrame(parentFrame), indexed(evalFunctionDef->getVarsCount()) {
+	indexedPointer = indexed.end();
 }
 void EvalFrame::gcMark(GCHeap& heap) { heap.mark(codeDef); heap.mark(parentFrame); super::gcMark(heap); }
 bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
