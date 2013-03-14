@@ -186,12 +186,11 @@ typedef Int32 CodeWord; // FIX : int or byte?
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
-const UInt32 FRAME_BUILT_IN_LOCALS_COUNT = 8;
-const size_t STRING_BUILT_IN_LENGTH = 16;
+const size_t STANDARD_BUILT_IN_COUNT = 16;
 const double EPSILON = 1.0e-300;
 
 // FIX : name
-template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
+template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
 	public:		explicit QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
 				explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
 
@@ -215,11 +214,9 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 				}
 				
 				void resize(size_t newSize) {
-					if (newSize != n) {
-						QuickArray<T, BUILT_IN_COUNT> na(newSize);
-						std::copy(p, p + std::min(n, newSize), na.p);
-						swap(na);
-					}
+					QuickArray<T, BUILT_IN_COUNT> na(newSize);
+					std::copy(p, p + std::min(n, newSize), na.p);
+					swap(na);
 				}
 				
 				bool empty() const { return n == 0; }
@@ -233,6 +230,34 @@ template<typename T, size_t BUILT_IN_COUNT> class QuickArray {
 				T* p;
 				T a[BUILT_IN_COUNT];
 };
+
+template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
+	public:		explicit QuickVector(size_t capacity = BUILT_IN_COUNT) : qArray(capacity), count(0) { }
+				bool empty() const { return count == 0; }
+				size_t size() const { return count; }
+				operator T*() const { return qArray.begin(); }
+				size_t capacity() const { return qArray.size(); }
+				T* begin() const { return qArray.begin(); }
+				T* end() const { return qArray.begin() + count; }
+				void reserve(size_t newSize) {
+					if (newSize > capacity()) qArray.resize(std::max(newSize, capacity() * 2));
+				}
+				void resize(size_t newSize) { reserve(newSize); count = newSize; }
+				void insert(T* p, const T* b, const T* e) {
+					assert(0 <= p && p <= begin() + count);
+					assert(b <= e);
+					size_t o = p - begin();
+					reserve(count + (e - b));
+					p = begin() + o;
+					std::copy(p, end(), p + (e - b));
+					count += (e - b);
+					std::copy(b, e, p);
+				}
+				void append(const T& t) { insert(end(), &t, &t + 1); }
+				void shrink() { qArray.resize(count); }
+	protected:	QuickArray<T, BUILT_IN_COUNT> qArray;
+				size_t count;
+};				
 
 class GCList;
 class GCHeap;
@@ -340,14 +365,11 @@ class Value {
 				static const Value NUL; // Sorry, NULL is a sensitive word, e.g. macro in Windows
 
 	protected:	enum InternalType {
-					NONEXISTENT_TYPE = 0
-					, UNDEFINED_TYPE
-					, NULL_TYPE
-					, BOOLEAN_TYPE
-					, NUMBER_TYPE
-					, STRING_TYPE
-					, OBJECT_TYPE
+					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
+					, NUMBER_TYPE, STRING_TYPE, OBJECT_TYPE
+				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
+				#endif
 				};
 				explicit Value(InternalType type) throw()  : type(type) { }
 				bool compareStrictly(const Value& y) const;
@@ -432,9 +454,9 @@ class Table {
 	
 	The ECMAScript String object on the other hand is represented by a mutable UserObject.
 */
-class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
+class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
-				typedef QuickArray<Char, STRING_BUILT_IN_LENGTH> QArray;
+				typedef QuickArray<Char> QArray;
 
 				static const String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
 				static const String* fromInt(GCHeap& heap, Int32 i);
@@ -458,12 +480,6 @@ class String : public Object, public QuickArray<Char, STRING_BUILT_IN_LENGTH> {
 
 	protected:	mutable size_t hash;
 };
-
-struct StringObjectCompare {
-	bool operator() (const String* a, const String* b) const { return (a != b && a->isLessThan(*b)); }
-};
-
-typedef std::vector<CodeWord> CodeVector; // FIX : use QArray in all these places
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
@@ -548,8 +564,8 @@ class CodeDefinition : public Object {
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : &constants[0]); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : &code[0]); }
 
-	protected:	CodeVector code;
-				std::vector<Value> constants;
+	protected:	QuickVector<CodeWord> code;
+				QuickVector<Value> constants;
 				Int32 argumentsCount;
 				Int32 varsCount; // not including arguments
 				Table nameIndexes;
@@ -596,7 +612,7 @@ class FunctionFrame : public Frame {
 
 	protected:	Closure* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
-				QuickArray<Value, FRAME_BUILT_IN_LOCALS_COUNT> locals; // Includes variables and arguments.
+				QuickArray<Value> locals; // Includes variables and arguments.
 				Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
@@ -697,14 +713,15 @@ class Processor : public GCItem {
 
 				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
 	protected:	struct Catcher {
+					Catcher() { }
 					Catcher(const CodeWord* ip, Value* vsp, CStackEntry* csp) : ip(ip), csp(csp), vsp(vsp) { }
 					const CodeWord* ip;
 					Value* vsp;
 					CStackEntry* csp;
 				};
 				
-				std::vector<Catcher> catchers; // FIX : std::vector slow? linked list?
-				std::vector<Continuation*> continuations; // FIX : std::vector slow? linked list? in callstack directly? I have a feeling there is a more elegant solution to all this
+				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list?
+				QuickVector<Continuation*> continuations; // FIX : QuickVector slow? linked list? in callstack directly? I have a feeling there is a more elegant solution to all this
 
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP
@@ -835,7 +852,7 @@ class Compiler : public GCItem {
 				ExpressionResult declareIdentifier();
 				ExpressionResult varDeclaration();
 				void varDeclarations();
-				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
 				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void functionStatement();
@@ -854,12 +871,12 @@ class Compiler : public GCItem {
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
 				std::map<Value, Int32> definedConstants;
-				CodeVector funcInitCode; // function declarations, inserted at top of function when finalizing
+				QuickVector<CodeWord> funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
-				std::vector<Int32> freeSafeKeepingIndexes;
+				QuickVector<Int32> freeSafeKeepingIndexes;
 				Int32 safeKeptIndexCount; // Just used for assert. FIX : remove or what?
-				CodeVector* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
+				QuickVector<CodeWord>* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
 				bool acceptInOperator;
 };
 

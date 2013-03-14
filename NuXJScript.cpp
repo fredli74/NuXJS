@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <exception>
 #include <stdexcept>
-#include <vector>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -713,7 +712,6 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 
 StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
 void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-void StringListEnumerator::sort() { std::sort(list.begin(), list.begin() + actualCount, StringObjectCompare()); } // FIX : bad idea?
 void StringListEnumerator::gcMark(GCHeap& heap) { for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]); super::gcMark(heap); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
 
@@ -730,8 +728,7 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 void CodeDefinition::gcMark(GCHeap& heap) {
 	heap.mark(source);
-	for (std::vector<Value>::iterator it = constants.begin(), e = constants.end(); it != e; ++it)
-		it->markIn(heap);
+	for (Value* it = constants.begin(); it != constants.end(); ++it) it->markIn(heap);
 	nameIndexes.markIn(heap);
 	heap.mark(selfName);
 	super::gcMark(heap);
@@ -1015,7 +1012,7 @@ void Processor::chain(Continuation* continuation, Object* thisValue) {
 	csp->frame = 0;
 	csp->thisValue = thisValue;
 	ip = 0;
-	continuations.push_back(continuation);
+	continuations.append(continuation);
 }
 
 void Processor::chain(Function* completion) {
@@ -1106,12 +1103,12 @@ void Processor::throwVirtualException(const Value& exception) {
 		s1.append(s2.begin(), s2.end());
 		throw std::runtime_error(s1);
 	}
-	const Catcher& catcher = catchers.back();
+	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
 	csp = catcher.csp;
 	vsp = catcher.vsp;
 	push(exception);
-	catchers.pop_back();
+	catchers.resize(catchers.size() - 1);
 	updateInternals();
 }
 
@@ -1252,10 +1249,10 @@ bool Processor::privateRun() {
 			}
 			case TRY_OP: {
 				offset = operand();
-				catchers.push_back(Catcher(ip + offset, vsp, csp));
+				catchers.append(Catcher(ip + offset, vsp, csp));
 				break;
 			}
-			case TRIED_OP: catchers.pop_back(); break;
+			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
 			case CATCH_FRAME_OP: {
 				++csp;
 				csp->returnIP = 0;
@@ -1313,14 +1310,13 @@ bool Processor::run() {
 }
 
 // FIX : use accessCodeInt32
-static Int32 getInt32(CodeVector::const_iterator& it, const CodeVector::const_iterator& e) {
-	assert(e - it >= OPERAND_SIZE);
-	Int32 i = *reinterpret_cast<const Int32*>(&*it);
-	it += OPERAND_SIZE;
+static Int32 getInt32(const QuickVector<CodeWord>& code, size_t& offset) {
+	Int32 i = *reinterpret_cast<const Int32*>(code.begin() + offset);
+	offset += OPERAND_SIZE;
 	return i;
 }
 
-static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<Value>& constants) {
+static void disassemble(GCHeap& heap, const QuickVector<CodeWord>& code, const QuickVector<Value>& constants) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
@@ -1339,33 +1335,30 @@ static void disassemble(GCHeap& heap, const CodeVector& code, const std::vector<
 		, "IN", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
-	CodeVector::const_iterator b = code.begin();
-	CodeVector::const_iterator it = b;
-	CodeVector::const_iterator e = code.end();
-	while (it != e) {
-		Processor::Opcode opcode = static_cast<Processor::Opcode>(*it);
+	for (size_t offset = 0; offset < code.size();) {
+		Processor::Opcode opcode = static_cast<Processor::Opcode>(code[offset]);
 		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
-		std::cerr << "\t" << (it - b) << ':' << OP_STRINGS[opcode];
-		++it;
+		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode];
+		++offset;
 		switch (opcode) {
 			case Processor::JT_OP:
 			case Processor::JF_OP:
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
 			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: std::cerr << " @" << ((it - b) + getInt32(it, e) + OPERAND_SIZE); break;
+			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump + OPERAND_SIZE); break; }
 			case Processor::READ_INDEXED_OP:
-			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(it, e); break;
+			case Processor::WRITE_INDEXED_OP: std::cerr << " $" << getInt32(code, offset); break;
 			case Processor::CALL_GLOBAL_OP:
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
-			case Processor::NEW_OP: std::cerr << " *" << getInt32(it, e); break;
+			case Processor::NEW_OP: std::cerr << " *" << getInt32(code, offset); break;
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
-			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(it, e)].toString(heap)->toStdString(); break;
+			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(it, e)].getString()->toStdString(); break;
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].getString()->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -1470,9 +1463,9 @@ struct Compiler::Scope {
 	String label; // empty for automatic while, for, case labels
 	Scope* next;
 // FIX : feels like a waste with three different vectors here, could we have double Scope entries for continuable and breakable scope types?
-	std::vector<Int32> breaks; // source points for break jmp's
-	std::vector<Int32> continues; // source points for continue jmp's
-	std::vector<Int32> finallys; // source points for finally jsr's
+	QuickVector<Int32> breaks; // source points for break jmp's
+	QuickVector<Int32> continues; // source points for continue jmp's
+	QuickVector<Int32> finallys; // source points for finally jsr's
 };
 				
 struct Compiler::ExpressionResult {
@@ -1503,19 +1496,19 @@ void Compiler::syntaxError(const std::string& what) {
 }
 
 void Compiler::emit(Processor::Opcode op) {
-	outputCode->push_back(op);
+	outputCode->append(op);
 }
 
-static Int32& accessCodeInt32(CodeVector& code, Int32 offset) { return *reinterpret_cast<Int32*>(&code[offset]); }
+static Int32& accessCodeInt32(QuickVector<CodeWord>& code, Int32 offset) { return *reinterpret_cast<Int32*>(&code[offset]); }
 
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
-	outputCode->push_back(op);
+	outputCode->append(op);
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	accessCodeInt32(*outputCode, outputCode->size() - OPERAND_SIZE) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
-	outputCode->push_back(op);
+	outputCode->append(op);
 	Int32 point = outputCode->size();
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	return point;
@@ -1534,10 +1527,10 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
-		std::vector<Value>& constants = codeDef->constants;
-		constants.push_back(constant);
-		definedConstants[constant] = constants.size() - 1;
-		emitWithInt32(op, constants.size() - 1);
+		Int32 index = codeDef->constants.size();
+		codeDef->constants.append(constant);
+		definedConstants[constant] = index;
+		emitWithInt32(op, index);
 	} else {
 		emitWithInt32(op, it->second);
 	}
@@ -1659,8 +1652,8 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 			makeRValue(xr);
 			Int32 tempLocalIndex;
 			if (!freeSafeKeepingIndexes.empty()) {
-				tempLocalIndex = freeSafeKeepingIndexes.back();
-				freeSafeKeepingIndexes.pop_back();
+				tempLocalIndex = freeSafeKeepingIndexes[freeSafeKeepingIndexes.size() - 1];
+				freeSafeKeepingIndexes.resize(freeSafeKeepingIndexes.size() - 1);
 			} else {
 				tempLocalIndex = -(++codeDef->varsCount);
 				safeKeptIndexCount++;
@@ -1681,7 +1674,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
 			emit(Processor::POP_OP);
 		}
-		freeSafeKeepingIndexes.push_back(index);
+		freeSafeKeepingIndexes.append(index);
 	}
 }
 
@@ -2039,7 +2032,7 @@ void Compiler::varDeclarations() {
 	}
 }
 
-void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const CodeVector& iterCode
+void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
@@ -2074,7 +2067,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
-	CodeVector incCode;
+	QuickVector<CodeWord> incCode;
 	outputCode = &incCode;
 	ExpressionResult incXR;
 	if (optionalExpression(incXR, LOWEST_PREC)) discard(incXR);
@@ -2099,13 +2092,13 @@ void Compiler::semicolon() {
 
 void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
 	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
-		for (std::vector<Int32>::const_iterator it = s->continues.begin(); it != s->continues.end(); ++it)
+		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it)
 			completeForwardBranch(*it);
 	}
 }
 
 void Compiler::completeBreaks(const Scope* scope) {
-	for (std::vector<Int32>::const_iterator it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
+	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
 		completeForwardBranch(*it);
 }
 
@@ -2165,7 +2158,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
-						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
 				}
@@ -2175,7 +2168,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				}
 				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
 					syntaxError("Illegal label for continue");
-				(isBreak ? s->breaks : s->continues).push_back(emitForwardBranch(Processor::JMP_OP));
+				(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 				semicolon();
 				break;
 			}
@@ -2243,7 +2236,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
-				CodeVector initCode;
+				QuickVector<CodeWord> initCode;
 				if (token("var", true)) {
 					white();
 					acceptInOperator = false;
@@ -2290,7 +2283,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 							returnXR = safeKeep(returnXR);
 							safeKept = true;
 						}
-						s->finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 					s = s->next;
@@ -2308,7 +2301,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				expectToken("{", true); // FIX : sub for block
 				statementList(&tryScope, evalXR);
 				expectToken("}", false);
-				tryScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+				tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
 				Int32 catchEndPoint = INVALID_CODE_POINT;
 				
@@ -2336,16 +2329,16 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					statementList(&catchScope, evalXR);
 					expectToken("}", false);
 					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
-					catchScope.finallys.push_back(emitForwardBranch(Processor::JSR_OP));
+					catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
-					for (std::vector<Int32>::const_iterator it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
+					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
 						completeForwardBranch(*it);
 					if (localIndex.exists()) codeDef->nameIndexes.assign(exceptionVarName, localIndex);
 				}
 				
 				// Finally
 				
-				for (std::vector<Int32>::const_iterator it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
+				for (const Int32* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
 					completeForwardBranch(*it);
 				emit(Processor::TRIED_OP);
 				Int32 rethrowPoint = markBackwardBranch();
@@ -2386,8 +2379,8 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				expectToken(")", true);
 				expectToken("{", true);
 				Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
-				CodeVector testsCode;
-				std::vector<Int32> jumpOffsets;
+				QuickVector<CodeWord> testsCode;
+				QuickVector<Int32> jumpOffsets;
 				Int32 startOffset = outputCode->size();
 				Int32 defaultPoint = INVALID_CODE_POINT;
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
@@ -2401,7 +2394,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
 						emitWithInt32(Processor::JT_OP, codeDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
-						jumpOffsets.push_back(testsCode.size() - OPERAND_SIZE);
+						jumpOffsets.append(testsCode.size() - OPERAND_SIZE);
 						outputCode = &codeDef->code;
 					} else if (token("default", false)) {
 						expectToken(":", true);
@@ -2421,7 +2414,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);
-				for (std::vector<Int32>::const_iterator it = jumpOffsets.begin(), e = jumpOffsets.end(); it != e; ++it)
+				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it)
 					accessCodeInt32(testsCode, *it) -= outputCode->size() - startOffset;
 				outputCode->insert(outputCode->end(), testsCode.begin(), testsCode.end());
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
@@ -2449,7 +2442,7 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : only accept one compile? or opposite? create many different functions?
 	outputCode = &codeDef->code;
-	freeSafeKeepingIndexes.clear();
+	freeSafeKeepingIndexes.resize(0);
 	safeKeptIndexCount = 0;
 	p = b;
 	this->e = e;
@@ -2462,8 +2455,8 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
 	// FIX : shrink code vector (copy to quickarray instead?)
 assert(freeSafeKeepingIndexes.size() == safeKeptIndexCount);
-freeSafeKeepingIndexes.clear();
 	assert(outputCode == &codeDef->code);
+	outputCode->shrink();
 if (!supressStdErr) {
 	disassemble(heap, *outputCode, codeDef->constants);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
