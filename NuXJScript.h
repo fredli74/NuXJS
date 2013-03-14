@@ -7,7 +7,7 @@
 //			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
 //				nope, they weren't
 //			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
-//				while, for done
+//				while, for done, switch and try / catch done, I think, any more?	
 //			global eval support (sets all var and function declarations in global this)
 //		count (and run-time check) necessary value stack depth for functions
 //		array object (length property support, optimized for numerical indexes?)
@@ -228,8 +228,8 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				T* begin() const { return p; }
 				T* end() const { return p + n; }
 			#if !defined(NDEBUG) // FIX : test performance in release
-				T& operator[](Int32 index) const { assert(0 <= index && index < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
-				T& operator[](Int32 index) { assert(0 <= index && index < n); return p[index]; }
+				T& operator[](Int32 index) const { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
+				T& operator[](Int32 index) { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; }
 			#endif
 				~QuickArray() { if (p != a) delete [] p; }
 				
@@ -619,12 +619,12 @@ class Frame : public Object {
 };
 
 class Arguments;
-class EvalVarsObject;
+struct EvalVarsObject;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
 				FunctionFrame(Closure* function, Int32 argc, const Value* argv);
-				void updatedCode(); // FIX : use and test
+				void updatedCode();
 				virtual void gcMark(GCHeap& heap);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -885,11 +885,12 @@ class Compiler : public GCItem {
 				void statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void statementList(Scope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
+				bool eof() const { return p == e; }
 				void semicolon();
 				void expectToken(const char* t, bool eatLeadingWhite);
 				void white();
 				void token();
-				Char* unescape(Char* buffer, const Char*& p, const Char* e);
+				Char* unescape(Char* buffer, const Char* e);
 				bool isLeadingIdentifierChar(Char c);
 				const Char* identifier(bool required, bool acceptReservedKeywords);
 

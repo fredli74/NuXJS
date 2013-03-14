@@ -625,6 +625,19 @@ print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
 
 print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
 
+print(eval("; switch (3+3) { case 7: 123 }"));
+print(eval("; switch (3+3) { case 7: 123; default: 5656 }"));
+print(eval("345; switch (3+3) { case 7: 123; default: 5656 }"));
+print(eval("345; switch (3+3) { case 7: 123 }"));
+print(eval("; switch (3+3) { case 6: 123; case 7: 256; }"));
+print(eval("; switch (3+3+1) { case 6: 123; case 7: 256; }"));
+print(eval("; switch (3+3) { case 6: 123; break; case 7: 256; }"));
+print(eval("for (var i = 0; i < 10; ++i) switch (3+3) { case 6: 123; continue; case 7: 256; }"));
+print(eval("; try { 234 } catch ( x ) { 555 }"));
+print(eval("1234; try { 234 } catch ( x ) { 555 }"));
+print(eval("1234; try { throw 55; 234 } catch ( x ) { 555 }"));
+print(eval("1234; try { throw 55; 234 } catch ( x ) { }"));
+
 print((function() { var x = 33; eval("x = 55"); return x })());
 
 print((function() { var x = 33; eval("var x = 55"); return x })());
@@ -699,3 +712,4 @@ mandelbrot = function() {
 }
 mandelbrot()
 
+    

@@ -48,6 +48,20 @@ super = 5
 
 (function(a,b,c))
 
+function f
+
+function f (
+
+function f ( a
+
+function f ( a, 
+
+function f ( a , )
+
+function f ( a , b )
+
+function f ( a , b ) {
+
 a = 0x
 
 a = .
@@ -79,6 +93,8 @@ try { } catch ( ) { }
 switch () { }
 
 switch (3) { x=1 }
+
+switch () { 
 
 (true ? a : b) = 3
 

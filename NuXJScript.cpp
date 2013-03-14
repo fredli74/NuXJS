@@ -1576,12 +1576,13 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 }
 
 void Compiler::white() {
-	while (p != e) {
+	while (!eof()) {
 		switch (*p) {
 			case ' ':
 			case '\t':	++p; break;
 			case '\r':	if (p + 1 != e && p[1] == '\n') ++p;
-			case '\n':	while (++p != e && (*p == ' ' || *p == '\t')) { } // Eat leading .. on a new line
+			case '\n':	++p;
+						while (!eof() && (*p == ' ' || *p == '\t')) ++p; // Eat leading .. on a new line
 						if (e - p >= 2 && p[0] == '.' && p[1] == '.') p += 2;
 						break;
 			case '/':	if (p + 1 != e && p[1] == '/') {
@@ -1591,7 +1592,7 @@ void Compiler::white() {
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
 							p = std::search(p += 2, e, END_CHARS, END_CHARS + 2);
-							if (p == e) syntaxError("Missing */");
+							if (eof()) syntaxError("Missing */");
 							p += 2;
 							break;
 						}
@@ -1604,8 +1605,8 @@ bool Compiler::token(const char* t, bool eatLeadingWhite) {
 	assert(*t != 0);
 	const Char* b = p;
 	if (eatLeadingWhite) white();
-	while (*t != 0 && p != e && *p == *t) { ++p; ++t; }
-	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (p == e || !isLeadingIdentifierChar(*p)))) {
+	while (*t != 0 && !eof() && *p == *t) { ++p; ++t; }
+	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (eof() || !isLeadingIdentifierChar(*p)))) {
 		return true;
 	} else {
 		p = b;
@@ -1614,13 +1615,14 @@ bool Compiler::token(const char* t, bool eatLeadingWhite) {
 }
 
 void Compiler::token() {
-	while (p != e && *p >= 'a' && *p <= 'z') ++p;
+	while (!eof() && *p >= 'a' && *p <= 'z') ++p;
 }
 
 const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
 	const Char* b = p;
-	if (p != e && isLeadingIdentifierChar(*p)) {
-		while (++p != e && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) { }
+	if (!eof() && isLeadingIdentifierChar(*p)) {
+		++p;
+		while (!eof() && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) ++p;
 		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
 			syntaxError("Illegal use of reserved keyword");
 	}
@@ -1638,8 +1640,8 @@ static size_t unescapedMaxLength(const Char* p, const Char* e) {
 	}
 	return l;
 }
-	
-Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {	
+
+Char* Compiler::unescape(Char* buffer, const Char* e) {	
 	assert(p <= e && (*p == '"' || *p == '\''));
 	static const Char ESCAPE_CHARS[] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
 	static const Char ESCAPE_CODES[] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
@@ -1647,7 +1649,7 @@ Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {
 	Char endChar = *p;
 	const Char* b = ++p;
 	Char* d = buffer;
-	while (p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+	while (!eof() && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
 		if (*p == '\\' && p + 1 < e) {
 			d = std::copy(b, p, d);
 			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
@@ -1661,7 +1663,7 @@ Char* Compiler::unescape(Char* buffer, const Char*& p, const Char* e) {
 			*d++ = Char(l);
 		} else ++p;
 	}
-	if (p >= e || *p != endChar) syntaxError("Unterminated string");
+	if (eof() || *p != endChar) syntaxError("Unterminated string");
 	return std::copy(b, p++, d);
 }
 
@@ -1749,7 +1751,8 @@ Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { ret
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	white();
 	Int32 count = 0;
-	while (p != e && !token(")", false)) {
+	while (!token(")", false)) {
+		if (eof()) syntaxError(count == 0 ? "Expected ')'" : "Expected ',' or ')'");
 		if (count != 0) {
 			if (!token(",", false)) syntaxError("Expected ',' or ')'");
 			white();
@@ -1758,7 +1761,6 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 		white();
 		++count;
 	}
-	if (p == e) syntaxError("Expected ',' or ')'");
 	emitWithInt32(op, count);
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -1915,7 +1917,8 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 		func->selfName = String::newHashedString(heap, selfNameBegin, selfNameEnd);
 	expectToken("(", true);
 	white();
-	while (p != e && !token(")", false)) {
+	while (!token(")", false)) {
+		if (eof()) syntaxError(func->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
 		if (func->argumentNames.size() != 0) {
 			if (!token(",", false)) syntaxError("Expected ',' or ')'");
 			white();
@@ -1926,7 +1929,6 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 		func->argumentNames.append(name);
 		white();
 	}
-	if (p == e) syntaxError("Expected ',' or ')'");
 	expectToken("{", true);
 	{
 		Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
@@ -1939,7 +1941,7 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	white();
-	if (p == e) return false;
+	if (eof()) return false;
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		const Char* b = p;
 		token();
@@ -1967,7 +1969,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 			}
 		} else {
 			p = b;
-			assert(p != e);
+			assert(!eof());
 			switch (*p) {
 				case '0': {
 					if (p + 1 != e && p[1] == 'x') {
@@ -1994,7 +1996,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 					discard(xr);
 					size_t maxLength = unescapedMaxLength(p, e);
 					QuickArray<Char, 64> buffer(maxLength);
-					Char* unescapeEnd = unescape(buffer, p, e);
+					Char* unescapeEnd = unescape(buffer, e);
 					assert(unescapeEnd <= buffer + maxLength);
 					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(String::newHashedString(heap, buffer, unescapeEnd)));
 					break;
@@ -2142,7 +2144,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 void Compiler::semicolon() {
 	const Char* b = p;
 	white();
-	if (p != e && *p != '}' && !token(";", false) && std::find(b, p, '\n') == p) {
+	if (!eof() && *p != '}' && !token(";", false) && std::find(b, p, '\n') == p) {
 		p = b;
 		syntaxError("Syntax error");
 	}
@@ -2345,11 +2347,13 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case TRY_STATEMENT: {
+				flushXR(evalXR);
 				Scope tryScope(Scope::TRY_TYPE, firstScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
 				statementList(&tryScope, evalXR);
 				expectToken("}", false);
+				flushXR(evalXR);
 				tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 				Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
 				Int32 catchEndPoint = INVALID_CODE_POINT;
@@ -2377,6 +2381,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					expectToken("{", true); // FIX : sub
 					statementList(&catchScope, evalXR);
 					expectToken("}", false);
+					flushXR(evalXR);
 					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
 					catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -2396,6 +2401,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					expectToken("{", true); // FIX : sub
 					statementList(&finallyScope, evalXR);
 					expectToken("}", false);
+					flushXR(evalXR);
 				} else {
 					if (!gotCatch) syntaxError("Expected 'catch' or 'finally'");
 				}
@@ -2423,6 +2429,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case SWITCH_STATEMENT: {
+				flushXR(evalXR);
 				expectToken("(", true);
 				ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
 				expectToken(")", true);
@@ -2435,8 +2442,10 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				bool firstStatement = true;
 				white();
-				while (p != e && !token("}", false)) {
-					if (token("case", false)) {
+				while (!token("}", false)) {
+					if (eof()) syntaxError("Expected '}'");
+					else if (token("case", false)) {
+						flushXR(evalXR);
 						outputCode = &testsCode;
 						makeRValue(controlXR);
 						ExpressionResult xr(rvalueExpression());
@@ -2448,6 +2457,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
+						flushXR(evalXR);
 						defaultPoint = markBackwardBranch();
 					} else if (firstStatement) {
 						syntaxError("Expected 'case', 'default' or '}'");
@@ -2459,8 +2469,8 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					firstStatement = false;
 					white();
 				}
-				if (p == e) syntaxError("Expected '}'");
 				
+				flushXR(evalXR);
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);
 				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it)
@@ -2485,7 +2495,7 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 	do {
 		b = p;
 		statement(firstScope, firstScope, evalXR);
-	} while (p != e && b != p);
+	} while (!eof() && b != p);
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
@@ -2523,7 +2533,7 @@ if (!supressStdErr) {
 void Compiler::compile(const String& source) {
 	const Char* e = source.end();
 	const Char* p = compile(source.begin(), e);
-	if (p != e) syntaxError("Syntax error"); // FIX : better error?
+	if (!eof()) syntaxError("Syntax error"); // FIX : better error?
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -2680,8 +2690,8 @@ int main(int argc, const char* argv[]) {
 				std::getline(*inStream, s);
 				if (!s.empty()) {
 					String line(s);
+					if (!source.empty()) source = String(source, LF_STRING);
 					source = String(source, line);
-					source = String(source, LF_STRING);
 				} else {
 					execute = true;
 				}
