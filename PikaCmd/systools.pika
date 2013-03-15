@@ -1,9 +1,9 @@
 /*
-	systools.pika v0.94
+	systools.pika v0.941
 
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2009-2012, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 */
 /*
@@ -19,7 +19,12 @@
 
 	'pathSlash' = appendDirSlash('path')
 		
-		Appends '/' to 'path' if the its last character is not already '/'.
+		Appends '/' to 'path' if the its last character is not already '/', '\' or ':'.
+
+	'path' = removeDirSlash('pathSlash')
+		
+		Removes last character from 'pathSlash' if it is '/', '\' or ':'. You can use it to climb a path upwards like
+		this: { parent = dirOfPath(removeDirSlash('/abc/def/ghi')) }
 		
 	'dir' = dirOfPath('path')
 	
@@ -118,6 +123,7 @@
 include('stdlib.pika');
 
 appendDirSlash = function { $0 # (if (span(right($0, 1), '/\:') == 0) '/') };
+removeDirSlash = function { if (span(right($0, 1), '/\:') != 0) chop($0, 1) else $0 };
 dirOfPath = function { $0{:rfind($0, '/\:') + 1} };
 basenameOfPath = function { fn = $0{rfind($0, '/\:') + 1:}; ( if ((i = rfind(fn, '.')) >= 0) fn{:i} else fn ) };
 filenameOfPath = function { $0{rfind($0, '/\:') + 1:} };
@@ -196,7 +202,7 @@ if (PLATFORM == 'UNIX') {
 	dir = function {
 		vargs(@files, @action,, @order, @descending);
 		defaults(@order,void , @descending,false);
-		if (span('*', files) == 0) files = appendDirSlash(files) # '*';
+		if (right(files, 1) == '/') files #= '*';
 		options = dir.ORDER_OPTIONS[order][descending{0}];
 		tokenize(pipe(bake('ls -kp1d{options} {toNativePath(files)}'), false), >action($0{rfind(chop($0, 1), '/') + 1:}));
 		( void )
@@ -277,14 +283,19 @@ if (PLATFORM == 'UNIX') {
 	dir = function {
 		vargs(@files, @action,, @order, @descending);
 		defaults(@order,'' , @descending,false);
+		singleFile = void;
 		dirs = true;
+		if (span('*', files) == 0 && find(right(files, 1), '/\:') != 0) {
+			singleFile = lower(filenameOfPath(files));
+			files #= '*'
+		};
 		options = dir.ORDER_OPTIONS[order][descending{0}];
 		tokenize(pipe(bake(
 				'SET DIRCMD=&DIR /B /AD-H {toNativePath(files)}&ECHO \&&DIR /B {options} {toNativePath(files)}')
 				, false), >{
 			if ($0 == '\') dirs = false
 			else if (dirs) dirs[undotify($0)] = true
-			else action($0 # (if (exists(@dirs[undotify($0)])) '/'));
+			else if (singleFile == void || lower($0) == singleFile) action($0 # (if (exists(@dirs[undotify($0)])) '/'));
 		});
 	};
 	
