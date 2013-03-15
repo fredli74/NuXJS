@@ -31,5 +31,5 @@ else
 	echo
 	echo "### BAD TESTS ###"
 	echo
-	build/Debug/NuXJScript <badtests.js 2>/dev/null | diff --strip-trailing-cr badresults.txt -
+	build/Debug/NuXJScript <badTests.js 2>/dev/null | diff --strip-trailing-cr badResults.txt -
 fi
