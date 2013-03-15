@@ -2,10 +2,10 @@
 
 include('stdlib.pika');
 include('systools.pika');
-include('debug.pika');
 
 vargs(@me,, @tests, @exe);
-if (!exists(@tests) || tests === '-') tests = '*.js';
+if (!exists(@tests) || tests === '-') tests = '*.js'
+else if (right(tests, 3) != '.js') tests #= '.js';
 
 revs.n = 0;
 makeGold = false;
@@ -21,7 +21,12 @@ if (tests === 'makegold') {
 //	svn log -r11680:11688 -q NuXJScript.cpp
 
 	if (doRevRange) {
-		for (i = fromRev; i <= toRev; ++i) append(@revs, i);
+		print('Listing revisions...');
+		svnlog = pipe(bake("svn log -q -r{fromRev}:{toRev}"));
+		tokenize(svnlog, >{ if (wildmatch($0, 'r{[0-9]?*} *', @r)) append(@revs, r); });
+		s = '';
+		iterate(@revs, >s #= (if (s != '') ',') # $2);
+		print('Revs: ' # s);
 		delete(@exe);
 	};
 };
@@ -31,6 +36,14 @@ if (PLATFORM === 'UNIX') {
 	defaults(@exe, (if (!doRevRange) 'build/Release/NuXJScript -s' else './NuXJScript -s'));
 	TIME_COMMAND_FORMAT = '(time -p {exe} benchmarks/{fn} >{outPath}) 2>{timePath}';
 	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp';
+	parseTimeOutput = function { a = $1; tokenize($0, >append(a, $0)); }
+} else if (PLATFORM == 'WINDOWS') {
+	defaults(@exe, (if (!doRevRange) 'Release/NuXJScript -s' else 'NuXJScript -s'));
+	TIME_COMMAND_FORMAT = 'timeit -s {exe} benchmarks/{fn} >{outPath} 2>{timePath}';
+	BUILD_CPP_COMMAND = 'BuildCpp.cmd NuXJScript NuXJScript.cpp';
+	parseTimeOutput = function { a = $1; count = 0; tokenize($0, >if (count++ >= 3 && $0 != void) append(a, $0{20:})); [a][0] = 'E=' # [a][0]; [a][1] = 'P=' # [a][1];}
+} else {
+	throw("EH!?");
 };
 
 outPath = pipe.newTempPath();
@@ -49,8 +62,11 @@ iterate(@revs, >{
 	rev = $2;
 	err = try(>{
 		if (rev !== void) {
-			print(pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h'));
-			print(pipe(BUILD_CPP_COMMAND));
+			print('Checking out ' # rev # '...');
+			pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h');
+			print('Building...');
+			pipe(BUILD_CPP_COMMAND);
+			print('Done.');
 		};
 		iterate(@names, >{
 			name = $2;
@@ -72,7 +88,13 @@ iterate(@revs, >{
 				}
 			};
 			print(times);
-			tokenize(times, >{ append(@timeLines[name][rev], $0); widths[name] = max(widths[name], length($0)); });
+			a = @timeLines[name][rev];
+			[a].n = 0;
+			if (times == 'FAIL') append(a, 'FAIL')
+			else {
+				parseTimeOutput(times, a);
+				iterate(a, >widths[name] = max(widths[name], length($2)));
+			}
 		});
 	});
 	print(err);

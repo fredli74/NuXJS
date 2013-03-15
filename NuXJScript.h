@@ -180,6 +180,7 @@
 
 #include "assert.h"
 #include <string>
+#include <cstring>
 
 typedef unsigned short Char;
 typedef int Int32;
