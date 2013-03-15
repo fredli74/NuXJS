@@ -641,7 +641,7 @@ print("first");
 
 print(eval("for (var i in o) { ++i; if (i == 55) continue; 123 }"));
 
-// print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
+print(eval("for (var i in o) { ++i; if (i == 55) { print('found'); break; }; 123 }"));
 
 print("second");
 

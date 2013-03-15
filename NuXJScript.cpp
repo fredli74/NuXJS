@@ -1086,7 +1086,9 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
-									
+			
+			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
+			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
 			case ADD_OP:	poppush(vsp[-1].add(heap, vsp[0])); break;
 			case SUB_OP:	poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
 			case MUL_OP:	poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
@@ -1268,7 +1270,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
-		, "ADD", "SUB", "MUL", "DIV", "MOD"
+		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
 		, "PLUS", "MINUS"
@@ -1344,8 +1346,8 @@ struct OperatorInfo {
 // FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::ADD_OP },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::SUB_OP },
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP },
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
 	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP },
@@ -1375,8 +1377,8 @@ const OperatorInfo POST_OPS[] = {
 	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP },
 	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP },
 	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP },
-	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::ADD_OP },
-	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::SUB_OP },
+	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP },
+	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP },
 	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
 	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP },
@@ -1701,7 +1703,6 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case POST_INC_DEC: {
 			makeRValue(xr);
 			emit(Processor::REPUSH_OP);
-			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			emit(Processor::POP_OP);
@@ -1780,7 +1781,6 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			makeRValue(xr);
-			emitWithConstant(Processor::CONST_OP, Value(1.0)); 
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			break;

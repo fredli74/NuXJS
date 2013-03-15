@@ -2,13 +2,6 @@
 //
 //	Run-time
 //
-//		++ should add numbers *only*, now "3"++ is "31", which is wrong
-//		eval support
-//			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
-//				nope, they weren't
-//			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
-//				while, for done, switch and try / catch done, I think, any more?	
-//			global eval support (sets all var and function declarations in global this)
 //		count (and run-time check) necessary value stack depth for functions
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
@@ -174,6 +167,13 @@
 //		assignable globals this in processor
 //		function name() { } syntax
 //		literal function names, e.g. myGlobalName = function myLocalName() { ... }
+//		++ should add numbers *only*, now "3"++ is "31", which is wrong
+//		eval support
+//			I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
+//				nope, they weren't
+//			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
+//				while, for done, switch and try / catch done, I think, any more?	
+//			global eval support (sets all var and function declarations in global this)
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -845,6 +845,7 @@ class Processor : public GCItem {
 					, WRITE_NAMED_OP								// operand: const index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
+					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
 					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
 					, SHL_OP, SHR_OP, USHR_OP						// stack: left value, right value -> result value
