@@ -2521,6 +2521,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 }
 
 #include <fstream>
+#include <memory>
 
 	class PrintFunction : public Function {
 		public:		typedef Function super;
