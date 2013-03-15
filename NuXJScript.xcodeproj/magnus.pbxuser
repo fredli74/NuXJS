@@ -2,7 +2,7 @@
 {
 	08FB7793FE84155DC02AAC07 /* Project object */ = {
 		activeArchitecturePreference = x86_64;
-		activeBuildConfigurationName = Debug;
+		activeBuildConfigurationName = Release;
 		activeExecutable = F74E7E1316D1A409003A6AB6 /* NuXJScript */;
 		activeTarget = 8DD76F620486A84900D96B5E /* NuXJScript */;
 		addToTargets = (
@@ -202,6 +202,18 @@
 			F794B1F816F290B500AC9D53 /* PBXTextBookmark */ = F794B1F816F290B500AC9D53 /* PBXTextBookmark */;
 			F794B1FB16F290B500AC9D53 /* PBXTextBookmark */ = F794B1FB16F290B500AC9D53 /* PBXTextBookmark */;
 			F794B1FC16F290B500AC9D53 /* PBXTextBookmark */ = F794B1FC16F290B500AC9D53 /* PBXTextBookmark */;
+			F794B20A16F2A3B900AC9D53 /* PBXTextBookmark */ = F794B20A16F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B20C16F2A3B900AC9D53 /* PBXTextBookmark */ = F794B20C16F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B20E16F2A3B900AC9D53 /* PBXTextBookmark */ = F794B20E16F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B21016F2A3B900AC9D53 /* PBXTextBookmark */ = F794B21016F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B21216F2A3B900AC9D53 /* PBXTextBookmark */ = F794B21216F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B21416F2A3B900AC9D53 /* PBXTextBookmark */ = F794B21416F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B21616F2A3B900AC9D53 /* PBXTextBookmark */ = F794B21616F2A3B900AC9D53 /* PBXTextBookmark */;
+			F794B21816F2A3EC00AC9D53 /* PBXTextBookmark */ = F794B21816F2A3EC00AC9D53 /* PBXTextBookmark */;
+			F794B21916F2A3EC00AC9D53 /* PBXTextBookmark */ = F794B21916F2A3EC00AC9D53 /* PBXTextBookmark */;
+			F794B21A16F2A3EC00AC9D53 /* PBXTextBookmark */ = F794B21A16F2A3EC00AC9D53 /* PBXTextBookmark */;
+			F794B21C16F2A3EC00AC9D53 /* PBXTextBookmark */ = F794B21C16F2A3EC00AC9D53 /* PBXTextBookmark */;
+			F794B21D16F2A41800AC9D53 /* PBXTextBookmark */ = F794B21D16F2A41800AC9D53 /* PBXTextBookmark */;
 		};
 		sourceControlManager = F74E7E0516D1A3E7003A6AB6 /* Source Control */;
 		userBuildSettings = {
@@ -454,7 +466,7 @@
 		uiCtxt = {
 			sepNavIntBoundsRect = "{{0, 0}, {1181, 10049}}";
 			sepNavSelRange = "{21620, 0}";
-			sepNavVisRange = "{20710, 1152}";
+			sepNavVisRange = "{20710, 1269}";
 		};
 	};
 	F74E7E0516D1A3E7003A6AB6 /* Source Control */ = {
@@ -473,9 +485,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1343, 34008}}";
-			sepNavSelRange = "{31758, 13}";
-			sepNavVisRange = "{30929, 2526}";
+			sepNavIntBoundsRect = "{{0, 0}, {1762, 34203}}";
+			sepNavSelRange = "{768, 0}";
+			sepNavVisRange = "{0, 2549}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};
@@ -781,9 +793,15 @@
 	};
 	F794B1B416F275F900AC9D53 /* etsi.h */ = {
 		isa = PBXFileReference;
+		lastKnownFileType = sourcecode.c.h;
 		name = etsi.h;
 		path = /Users/magnus/projects/SonicCharge/Scalare/Common/etsi.h;
 		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {962, 642}}";
+			sepNavSelRange = "{0, 0}";
+			sepNavVisRange = "{0, 826}";
+		};
 	};
 	F794B1B516F275F900AC9D53 /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
@@ -1138,11 +1156,200 @@
 		vrLen = 2636;
 		vrLoc = 31366;
 	};
+	F794B20A16F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B20B16F2A3B900AC9D53 /* systoolsTests.pika */;
+		name = "systoolsTests.pika: 1";
+		rLen = 0;
+		rLoc = 0;
+		rType = 0;
+		vrLen = 2514;
+		vrLoc = 6394;
+	};
+	F794B20B16F2A3B900AC9D53 /* systoolsTests.pika */ = {
+		isa = PBXFileReference;
+		name = systoolsTests.pika;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/PikaCmd/systoolsTests.pika;
+		sourceTree = "<absolute>";
+	};
+	F794B20C16F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B20D16F2A3B900AC9D53 /* systools.pika */;
+		name = "systools.pika: 28";
+		rLen = 34;
+		rLoc = 901;
+		rType = 0;
+		vrLen = 1586;
+		vrLoc = 0;
+	};
+	F794B20D16F2A3B900AC9D53 /* systools.pika */ = {
+		isa = PBXFileReference;
+		name = systools.pika;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/PikaCmd/systools.pika;
+		sourceTree = "<absolute>";
+	};
+	F794B20E16F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B20F16F2A3B900AC9D53 /* recursion_bm_1.js */;
+		name = "recursion_bm_1.js: 2";
+		rLen = 0;
+		rLoc = 80;
+		rType = 0;
+		vrLen = 83;
+		vrLoc = 0;
+	};
+	F794B20F16F2A3B900AC9D53 /* recursion_bm_1.js */ = {
+		isa = PBXFileReference;
+		name = recursion_bm_1.js;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmarks/recursion_bm_1.js;
+		sourceTree = "<absolute>";
+	};
+	F794B21016F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21116F2A3B900AC9D53 /* benchmark.pika */;
+		name = "benchmark.pika: 8";
+		rLen = 0;
+		rLoc = 169;
+		rType = 0;
+		vrLen = 1244;
+		vrLoc = 0;
+	};
+	F794B21116F2A3B900AC9D53 /* benchmark.pika */ = {
+		isa = PBXFileReference;
+		lastKnownFileType = text;
+		name = benchmark.pika;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmark.pika;
+		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {962, 1053}}";
+			sepNavSelRange = "{296, 0}";
+			sepNavVisRange = "{0, 1262}";
+		};
+	};
+	F794B21216F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21316F2A3B900AC9D53 /* algo_bm_1.js */;
+		name = "algo_bm_1.js: 24";
+		rLen = 0;
+		rLoc = 511;
+		rType = 0;
+		vrLen = 511;
+		vrLoc = 0;
+	};
+	F794B21316F2A3B900AC9D53 /* algo_bm_1.js */ = {
+		isa = PBXFileReference;
+		lastKnownFileType = sourcecode.javascript;
+		name = algo_bm_1.js;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmarks/algo_bm_1.js;
+		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {962, 667}}";
+			sepNavSelRange = "{511, 0}";
+			sepNavVisRange = "{0, 511}";
+		};
+	};
+	F794B21416F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21516F2A3B900AC9D53 /* eval_bm_2.js */;
+		rLen = 0;
+		rLoc = 9223372036854775807;
+		rType = 0;
+	};
+	F794B21516F2A3B900AC9D53 /* eval_bm_2.js */ = {
+		isa = PBXFileReference;
+		lastKnownFileType = sourcecode.javascript;
+		name = eval_bm_2.js;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmarks/eval_bm_2.js;
+		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {962, 667}}";
+			sepNavSelRange = "{104, 0}";
+			sepNavVisRange = "{0, 104}";
+		};
+	};
+	F794B21616F2A3B900AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21716F2A3B900AC9D53 /* eval_bm_2.js */;
+		name = "eval_bm_2.js: 6";
+		rLen = 0;
+		rLoc = 104;
+		rType = 0;
+		vrLen = 104;
+		vrLoc = 0;
+	};
+	F794B21716F2A3B900AC9D53 /* eval_bm_2.js */ = {
+		isa = PBXFileReference;
+		name = eval_bm_2.js;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmarks/eval_bm_2.js;
+		sourceTree = "<absolute>";
+	};
+	F794B21816F2A3EC00AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21516F2A3B900AC9D53 /* eval_bm_2.js */;
+		name = "eval_bm_2.js: 6";
+		rLen = 0;
+		rLoc = 104;
+		rType = 0;
+		vrLen = 104;
+		vrLoc = 0;
+	};
+	F794B21916F2A3EC00AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21316F2A3B900AC9D53 /* algo_bm_1.js */;
+		name = "algo_bm_1.js: 24";
+		rLen = 0;
+		rLoc = 511;
+		rType = 0;
+		vrLen = 511;
+		vrLoc = 0;
+	};
+	F794B21A16F2A3EC00AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21B16F2A3EC00AC9D53 /* benchmark.pika */;
+		name = "benchmark.pika: 8";
+		rLen = 0;
+		rLoc = 169;
+		rType = 0;
+		vrLen = 1247;
+		vrLoc = 0;
+	};
+	F794B21B16F2A3EC00AC9D53 /* benchmark.pika */ = {
+		isa = PBXFileReference;
+		lastKnownFileType = text;
+		name = benchmark.pika;
+		path = /Users/magnus/projects/lab/ScriptLab/NuXJScript/benchmark.pika;
+		sourceTree = "<absolute>";
+		uiCtxt = {
+			sepNavIntBoundsRect = "{{0, 0}, {962, 1053}}";
+			sepNavSelRange = "{296, 0}";
+			sepNavVisRange = "{0, 1262}";
+		};
+	};
+	F794B21C16F2A3EC00AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21116F2A3B900AC9D53 /* benchmark.pika */;
+		name = "benchmark.pika: 14";
+		rLen = 0;
+		rLoc = 296;
+		rType = 0;
+		vrLen = 1262;
+		vrLoc = 0;
+	};
+	F794B21D16F2A41800AC9D53 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F794B21B16F2A3EC00AC9D53 /* benchmark.pika */;
+		name = "benchmark.pika: 14";
+		rLen = 0;
+		rLoc = 296;
+		rType = 0;
+		vrLen = 1262;
+		vrLoc = 0;
+	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1951, 13117}}";
-			sepNavSelRange = "{32880, 0}";
-			sepNavVisRange = "{31366, 2636}";
+			sepNavIntBoundsRect = "{{0, 0}, {1123, 13221}}";
+			sepNavSelRange = "{26262, 6}";
+			sepNavVisRange = "{25885, 771}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};

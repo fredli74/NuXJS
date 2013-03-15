@@ -1,0 +1,74 @@
+#! /usr/local/bin/PikaCmd
+
+include('stdlib.pika');
+include('systools.pika');
+include('debug.pika');
+
+vargs(@me,, @exe, @rev);
+defaults(@exe, 'build/Release/NuXJScript -s', @rev, '');
+
+makeGold = false;
+fromRev = toRev = rev;
+if (rev === 'makegold') {
+	makeGold = true;
+	fromRev = toRev = rev = '';
+} else if (rev !== '') {
+	doRevRange = wildmatch(rev, '[0-9]?*-[0-9]?*', 'pattern', @fromRev, @toRev);
+};
+
+if (PLATFORM === 'UNIX') {
+	TIME_COMMAND_FORMAT = '(time -p {exe} benchmarks/{fn} >{outPath}) 2>{timePath}';
+};
+
+outPath = pipe.newTempPath();
+timePath = pipe.newTempPath();
+
+prune(@names);
+prune(@widths);
+dir("benchmarks/*.js", >{
+	fn = $0;
+	name = basenameOfPath(fn);
+	append(@names, name);
+	defaults(@widths[name], length(name));
+	print(name);
+	print(repeat('-', length(name)));
+	cmd = bake(TIME_COMMAND_FORMAT);
+	rc = system(cmd);
+	times = load(timePath);
+	output = load(outPath);
+	output = replace(output, "\r\n", "\n");
+	goldenFile = 'benchmarks/golden/' # name # '.txt';
+	if (makeGold) {
+		save(goldenFile, output);
+	} else {
+		expected = load(goldenFile);
+		if (output != expected) {
+			times = 'FAIL';
+		}
+	};
+	print(times);
+	tokenize(times, >{ append(@timeLines[name][rev], $0); widths[name] = max(widths[name], length($0)); });
+});
+prune(@tabs);
+prune(@lines);
+lines[0] = '        ';
+lines[1] = '        ';
+lines.n = 2;
+iterate(@names, >{
+	name = $2;
+	lines[0] #= name # repeat(' ', widths[name] - length(name)) # '  ';
+	lines[1] #= repeat('-', widths[name]) # '  ';
+	lineIndex = 2;
+	for (rev = fromRev; rev <= toRev; rev = (if (rev == void) 'bye' else rev + 1)) {
+		for (l = 0; l < 4; ++l) {
+			if (lineIndex >= lines.n) {
+				lines[lineIndex] = (if (l == 0) (rev # repeat(' ', 8 - length(rev))) else '        ');
+				++lines.n;
+			};
+			s = coalesce(@timeLines[name][rev][l], '');
+			lines[lineIndex] #= s # repeat(' ', widths[name] - length(s)) # '  ';
+			++lineIndex;
+		}
+	}
+});
+iterate(@lines, >print($2));

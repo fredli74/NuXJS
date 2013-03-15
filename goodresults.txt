@@ -656,6 +656,7 @@ object
 1
 <object>
 a string
+- if
 3
 undefined
 6
@@ -663,12 +664,14 @@ undefined
 6
 0
 <object>
+- break
 1
 1
 3
 123
 3
 3
+- while
 undefined
 5
 3
@@ -676,22 +679,29 @@ undefined
 234
 23
 24
+- do while
 undefined
 1000
 100000
 123
+- for
 undefined
 1
 123
 123
 123
 11
+- for in
 undefined
 1
 123
 123
+built
 123
+first
 123
+second
+- switch
 undefined
 5656
 5656
@@ -700,6 +710,7 @@ undefined
 256
 123
 123
+- try catch
 234
 234
 555
@@ -707,6 +718,13 @@ undefined
 9876
 3
 undefined
+0
+0
+0
+undefined
+2
+3
+- more
 55
 55
 undefined
