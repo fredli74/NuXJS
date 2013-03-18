@@ -482,6 +482,8 @@ class String : public Object, public QuickArray<Char> {
 				String(const String& l, const String& r);
 				explicit String(const std::wstring& s);
 				explicit String(size_t length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
+// FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
+//				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* className() const;
