@@ -14,15 +14,13 @@ fromRev = toRev = '';
 if (tests === 'makegold') {
 	makeGold = true;
 } else if (exists(@exe)) {
-	doRevRange = wildmatch(exe, '{[0-9]?*}-{[0-9]?*}', @fromRev, @toRev);
+	doRevRange = wildmatch(exe, '{[0-9]?*}[-:]{[0-9]?*}', @fromRev, @toRev);
 	if (!doRevRange) {
 		if (doRevRange = wildmatch(exe, '{[0-9]?*}', @fromRev)) toRev = fromRev;
 	};
-//	svn log -r11680:11688 -q NuXJScript.cpp
-
 	if (doRevRange) {
 		print('Listing revisions...');
-		svnlog = pipe(bake("svn log -q -r{fromRev}:{toRev}"));
+		svnlog = pipe(bake("svn log -q -r{fromRev}:{toRev} svn://svn.elysian.se:7404/NuEdgeSVN/lab/trunk/ScriptLab/NuXJScript NuXJScript.h NuXJScript.cpp"));
 		tokenize(svnlog, >{ if (wildmatch($0, 'r{[0-9]?*} *', @r)) append(@revs, r); });
 		s = '';
 		iterate(@revs, >s #= (if (s != '') ',') # $2);

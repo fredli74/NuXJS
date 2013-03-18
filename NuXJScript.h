@@ -98,6 +98,7 @@
 //			problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
 //			two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
 //				might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
+//			another option would be to not require a frame *at all* for quick calls that doesn't have eval or sub-functions (is it possible?). Just allocate space on the value stack. But what to do with accepting too few arguments?
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
@@ -228,7 +229,8 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				operator T*() const { return p; }
 				T* begin() const { return p; }
 				T* end() const { return p + n; }
-			#if !defined(NDEBUG) // FIX : test performance in release
+			// FIX : ambigious according to c++ standard or something, didnt' work -v
+			#if 0 && !defined(NDEBUG) // FIX : test performance in release
 				T& operator[](Int32 index) const { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
 				T& operator[](Int32 index) { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; }
 			#endif
@@ -480,7 +482,7 @@ class String : public Object, public QuickArray<Char> {
 				String(const String& l, const String& r);
 				explicit String(const std::wstring& s);
 				explicit String(size_t length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
-				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
+				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
@@ -811,10 +813,6 @@ class Exception : public std::exception, public GCItem {
 class Processor : public GCItem {
 	public:		typedef GCItem super;
 
-	public:		struct Continuation {
-					public:		virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) = 0;
-				};
-	
 				// FIX : this could be a struct used by a member Processor too instead of separate ip, frame etc...
 				struct CStackEntry {
 					const CodeWord* returnIP;
@@ -832,7 +830,6 @@ class Processor : public GCItem {
 				};
 				
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list?
-				QuickVector<Continuation*> continuations; // FIX : QuickVector slow? linked list? in callstack directly? I have a feeling there is a more elegant solution to all this
 
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP
@@ -878,17 +875,16 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
-				void chain(Continuation* continuation, Object* thisValue);
 				void chain(Function* completion);
 				void chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
 				void chain(const CodeWord* ip, Frame* frame, Object* thisValue); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
 	// FIX :			void call(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
-				Value& peek(Int32 offset);
 				void pop(Int32 count = 1);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
+				Value getResult() const { return result; }
 void error(); // FIX
 				
 	protected:	void poppush(const Value& v);
@@ -909,6 +905,7 @@ public: // FIX : not public, just for some asserts now I think
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
 				CStackEntry* csp;
+				Value result;
 
 				virtual void gcMark(GCHeap& heap) {
 					for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
@@ -916,6 +913,7 @@ public: // FIX : not public, just for some asserts now I think
 						heap.mark(c->frame);
 						heap.mark(c->thisValue);
 					}
+					result.markIn(heap);
 					super::gcMark(heap);
 				}
 

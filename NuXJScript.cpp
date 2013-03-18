@@ -911,7 +911,6 @@ Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* csta
 void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
-Value& Processor::peek(Int32 offset) { assert(vsp - offset >= vstackStart); return vsp[-offset]; }
 Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
@@ -935,15 +934,6 @@ void Processor::chain(const CodeWord* stub) {
 	csp->thisValue = 0;
 	ip = stub;
 	updateInternals();
-}
-
-void Processor::chain(Continuation* continuation, Object* thisValue) {
-	++csp; // FIX : overflow check
-	csp->returnIP = ip;
-	csp->frame = 0;
-	csp->thisValue = thisValue;
-	ip = 0;
-	continuations.append(continuation);
 }
 
 void Processor::chain(Function* completion) {
@@ -987,6 +977,11 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	ip = codeDef->getCodePointer();
 	updateInternals();
 }
+
+/*void Processor::enterCall(
+				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
+				processor.chain(RETURN_TO_HOST_STUB);
+*/
 
 void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
 	Value v;
@@ -1132,6 +1127,8 @@ bool Processor::privateRun() {
 			case RETURN_TO_HOST_OP:
 							ip = (csp--)->returnIP;
 							assert(csp >= cstackStart - 1);
+							result = vsp[0];
+							pop(1);
 							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
 							// updateInternals();
 							return false;
@@ -2539,10 +2536,6 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 		}
 	};
 
-	struct ReturnToHost : public Processor::Continuation {
-		virtual bool execute(Engine& engine, Processor& processor, Object* thisValue) { return false; }
-	} RETURN_TO_HOST;
-
 int main(int argc, const char* argv[]) {
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
@@ -2626,7 +2619,6 @@ int main(int argc, const char* argv[]) {
 				do {
 					processor.resetTimeOut(gcRate);
 					done = !processor.run();
-					Value v = vstack[0];
 					
 					size_t sweptCount = heap.gc();
 					if (!supressStdErr) {
@@ -2637,7 +2629,8 @@ int main(int argc, const char* argv[]) {
 					if (done) {
 						if (!supressStdErr) {
 							std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
-							assert(processor.vsp - vstack + 1 == 1);
+							assert(processor.vsp - vstack + 1 == 0);
+							Value v = processor.getResult();
 							std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 						}
 						if (doTime) {
