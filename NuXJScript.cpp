@@ -483,7 +483,7 @@ Table::KeyHash String::calcHash() const {
 		const Char* p = begin();
 		for (size_t i = 0; i < l; ++i) {
 			x *= 16777619;
-			x += p[i];
+			x += p[i]; // FIX : FNV uses xor, not add, why did I do this? Also FNV is really made for byte processing. Also, http://www.isthe.com/chongo/tech/comp/fnv/ recommends xor'ing before multiplying. Better? 
 		}
 		hash = (x == 0 ? x + 1 : x);
 	}
