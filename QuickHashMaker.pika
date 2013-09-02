@@ -17,7 +17,7 @@ static int --{functionName}--(int n /* string length */, const char* s /* zero-t
 	if (n < --{minLength}-- || n > --{maxLength}--) return -1;
 	int stringIndex = QUICK_HASH_TABLE[--{hashExpression}--];
 	return (stringIndex >= 0 && strcmp(s, STRINGS[stringIndex]) == 0) ? stringIndex : -1;
-};
+}
 ';
 
 FUNCTION_TEMPLATE_GENERIC = '
@@ -32,7 +32,7 @@ static int --{functionName}--(int n /* string length */, const char* s) {
 	if (n < --{minLength}-- || n > --{maxLength}--) return -1;
 	int stringIndex = QUICK_HASH_TABLE[--{hashExpression}--];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
+}
 ';
 
 print('One string per line or many enclosed in " ". Finish with empty line.');

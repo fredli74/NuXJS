@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NuXJScript", "NuXJScript.vcxproj", "{B2F3FA23-8FDC-5AE4-5871-7F28B6E3FA5C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NuXJScript", "NuXJScript.vcxproj", "{FC8E9EF3-C5AB-D9B3-A0F3-203A19DC0EDB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -9,10 +9,10 @@ Global
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{B2F3FA23-8FDC-5AE4-5871-7F28B6E3FA5C}.Debug|Win32.ActiveCfg = Debug|Win32
-		{B2F3FA23-8FDC-5AE4-5871-7F28B6E3FA5C}.Debug|Win32.Build.0 = Debug|Win32
-		{B2F3FA23-8FDC-5AE4-5871-7F28B6E3FA5C}.Release|Win32.ActiveCfg = Release|Win32
-		{B2F3FA23-8FDC-5AE4-5871-7F28B6E3FA5C}.Release|Win32.Build.0 = Release|Win32
+		{FC8E9EF3-C5AB-D9B3-A0F3-203A19DC0EDB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FC8E9EF3-C5AB-D9B3-A0F3-203A19DC0EDB}.Debug|Win32.Build.0 = Debug|Win32
+		{FC8E9EF3-C5AB-D9B3-A0F3-203A19DC0EDB}.Release|Win32.ActiveCfg = Release|Win32
+		{FC8E9EF3-C5AB-D9B3-A0F3-203A19DC0EDB}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
