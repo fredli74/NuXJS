@@ -78,7 +78,7 @@
 				PBXFileTableDataSourceColumnSortingKey = PBXFileDataSource_Filename_ColumnID;
 				PBXFileTableDataSourceColumnWidthsKey = (
 					20,
-					1004,
+					989,
 					20,
 					48,
 					43,
@@ -132,11 +132,6 @@
 			PBXPerProjectTemplateStateSaveDate = 399850411;
 			PBXWorkspaceStateSaveDate = 399850411;
 		};
-		perUserProjectItems = {
-			F709E10E16FF548F0096731E = F709E10E16FF548F0096731E /* PBXTextBookmark */;
-			F709E10F16FF548F0096731E = F709E10F16FF548F0096731E /* PBXTextBookmark */;
-			F709E11116FF548F0096731E = F709E11116FF548F0096731E /* PBXTextBookmark */;
-		};
 		sourceControlManager = F74E7E0516D1A3E7003A6AB6 /* Source Control */;
 		userBuildSettings = {
 		};
@@ -146,47 +141,6 @@
 		executables = (
 			F74E7E1316D1A409003A6AB6 /* NuXJScript */,
 		);
-	};
-	F709E10E16FF548F0096731E /* PBXTextBookmark */ = {
-		isa = PBXTextBookmark;
-		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
-		name = "NuXJScript.cpp: 2653";
-		rLen = 0;
-		rLoc = 98178;
-		rType = 0;
-		vrLen = 2187;
-		vrLoc = 8297;
-	};
-	F709E10F16FF548F0096731E /* PBXTextBookmark */ = {
-		isa = PBXTextBookmark;
-		fRef = F709E11016FF548F0096731E /* callthoughts */;
-		rLen = 0;
-		rLoc = 9223372036854775808;
-		rType = 0;
-	};
-	F709E11016FF548F0096731E /* callthoughts */ = {
-		isa = PBXFileReference;
-		lastKnownFileType = text;
-		name = callthoughts;
-		path = /Users/magnus/Desktop/callthoughts;
-		sourceTree = "<absolute>";
-	};
-	F709E11116FF548F0096731E /* PBXTextBookmark */ = {
-		isa = PBXTextBookmark;
-		fRef = F709E11216FF548F0096731E /* callthoughts */;
-		name = "callthoughts: 34";
-		rLen = 0;
-		rLoc = 1723;
-		rType = 0;
-		vrLen = 3719;
-		vrLoc = 0;
-	};
-	F709E11216FF548F0096731E /* callthoughts */ = {
-		isa = PBXFileReference;
-		lastKnownFileType = text;
-		name = callthoughts;
-		path = /Users/magnus/Desktop/callthoughts;
-		sourceTree = "<absolute>";
 	};
 	F74E7E0516D1A3E7003A6AB6 /* Source Control */ = {
 		isa = PBXSourceControlManager;
@@ -204,9 +158,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1468, 34749}}";
-			sepNavSelRange = "{98178, 0}";
-			sepNavVisRange = "{8297, 2187}";
+			sepNavIntBoundsRect = "{{0, 0}, {1468, 34710}}";
+			sepNavSelRange = "{98427, 0}";
+			sepNavVisRange = "{10069, 1780}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};
@@ -280,9 +234,9 @@
 	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1902, 12701}}";
-			sepNavSelRange = "{41618, 6}";
-			sepNavVisRange = "{40068, 2404}";
+			sepNavIntBoundsRect = "{{0, 0}, {1391, 13091}}";
+			sepNavSelRange = "{49042, 0}";
+			sepNavVisRange = "{0, 4331}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};
