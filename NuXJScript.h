@@ -46,6 +46,7 @@
 //		arguments container
 //			missing callee or whatever
 //		at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
+//		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
 //
 //	Compiler
 //
