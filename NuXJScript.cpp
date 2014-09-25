@@ -183,7 +183,6 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 		while (dp[-1] == '9') *--dp = '0';
 		if (dp == bp) *--bp = '1';																						// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
 		else dp[-1]++;
-		if (dp[-1] == '1') --ep;																						// We incremented a 0, cut precision (afterwards, a bit Q&D).
 	}
 	*pp = '.';
 	if (ep > pp) while (ep[-1] == '0') --ep;

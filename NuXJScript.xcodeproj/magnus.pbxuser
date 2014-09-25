@@ -2,7 +2,7 @@
 {
 	08FB7793FE84155DC02AAC07 /* Project object */ = {
 		activeArchitecturePreference = x86_64;
-		activeBuildConfigurationName = Debug;
+		activeBuildConfigurationName = Release;
 		activeExecutable = F74E7E1316D1A409003A6AB6 /* NuXJScript */;
 		activeTarget = 8DD76F620486A84900D96B5E /* NuXJScript */;
 		addToTargets = (
@@ -129,8 +129,12 @@
 					PBXFileDataSource_Warnings_ColumnID,
 				);
 			};
-			PBXPerProjectTemplateStateSaveDate = 399850411;
-			PBXWorkspaceStateSaveDate = 399850411;
+			PBXPerProjectTemplateStateSaveDate = 404333400;
+			PBXWorkspaceStateSaveDate = 404333400;
+		};
+		perUserProjectItems = {
+			F7A810351819A51B00317C85 /* PBXTextBookmark */ = F7A810351819A51B00317C85 /* PBXTextBookmark */;
+			F7A810371819B50100317C85 /* PBXTextBookmark */ = F7A810371819B50100317C85 /* PBXTextBookmark */;
 		};
 		sourceControlManager = F74E7E0516D1A3E7003A6AB6 /* Source Control */;
 		userBuildSettings = {
@@ -158,9 +162,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1468, 34710}}";
+			sepNavIntBoundsRect = "{{0, 0}, {1762, 34554}}";
 			sepNavSelRange = "{98427, 0}";
-			sepNavVisRange = "{10069, 1780}";
+			sepNavVisRange = "{48220, 2394}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};
@@ -231,6 +235,26 @@
 		variableFormatDictionary = {
 			"0-short unsigned int-Value::toString" = 1;
 		};
+	};
+	F7A810351819A51B00317C85 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 309";
+		rLen = 0;
+		rLoc = 12043;
+		rType = 0;
+		vrLen = 1740;
+		vrLoc = 11334;
+	};
+	F7A810371819B50100317C85 /* PBXTextBookmark */ = {
+		isa = PBXTextBookmark;
+		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
+		name = "NuXJScript.cpp: 2658";
+		rLen = 0;
+		rLoc = 98427;
+		rType = 0;
+		vrLen = 2394;
+		vrLoc = 48220;
 	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {
