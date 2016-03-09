@@ -154,15 +154,55 @@ s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output
 
 print("*** objects ***")
 
-MyObject = function() { }; o = new MyObject; o.name = "magnus"; o.age = 41;
-print("name" in o);
-print("age" in o);
-print("nope" in o);
-print(o in o);
-print("o" in this);
+emptyObject = {};
+print(typeof emptyObject);
+
+filledObject =   {  a  :   "b"   , 3  :   (5,10+23)   , ","  :   emptyObject != null ? "y":"n"  };
+print(filledObject.a);
+print(filledObject[3]);
+print(filledObject[","]);
+
+deepObject = { left : { l : "ll" , r:"lr" },right:{l:"rl",r:"rr"} };
+print(deepObject.left.l); print(deepObject.left.r); print(deepObject.right.l); print(deepObject.right.r);
+
+objectFromLiteral = { a : "this" , c : "is" , };
+print(objectFromLiteral.a);
+print(objectFromLiteral.c);
+
+objectFromCall = Object();
+objectFromCall.f = "expected";
+objectFromCall.g = "behavior";
+print(objectFromCall.f);
+print(objectFromCall.g);
+
+objectFromConstructor = new Object();
+objectFromConstructor.h = "... and";
+objectFromConstructor.i = "this too";
+print(objectFromConstructor.h);
+print(objectFromConstructor.i);
+
+MyObject = function() { }; objectFromCustomConstructor = new MyObject; objectFromCustomConstructor.name = "magnus"; objectFromCustomConstructor.age = 41;
+print("name" in objectFromCustomConstructor);
+print("age" in objectFromCustomConstructor);
+print("nope" in objectFromCustomConstructor);
+print(objectFromCustomConstructor in objectFromCustomConstructor);
+print("objectFromCustomConstructor" in this);
 
 print.extended = "added to built-in";
 print(print.extended);
+
+delete print.extended;
+print(print.extended);
+
+Object.prototype.patch = "patched";
+print(emptyObject.patch);
+print(deepObject.patch);
+print(objectFromLiteral.patch);
+print(objectFromCall.patch);
+print(objectFromConstructor.patch);
+print(objectFromCustomConstructor.patch);
+
+delete Object.prototype.patch;
 
 print("*** types ***")
 
@@ -441,7 +481,7 @@ print(b());
 
 print("*** arguments ***")
 
-f=function() { var a = arguments; var arguments; var b = arguments; var arguments = 3; var c = arguments; print(a==b); print(a); print(c) }; f();
+f=function() { var a = arguments; var arguments; var b = arguments; var arguments = 3; var c = arguments; print(a==b); print(typeof a); print(c) }; f();
 
 f=function() { print(arguments[0]); print(arguments[1]); print(arguments[2]); }; f(1,'b',true);
 
@@ -543,7 +583,7 @@ print(eval("aGlobal=1"))
 
 print(eval("aGlobal"))
 
-print(eval("aGlobal=new (function(){this.a='a string'})"))
+print(typeof eval("aGlobal=new (function(){this.a='a string'})"))
 
 print(eval("aGlobal.a"))
 
@@ -561,7 +601,7 @@ print(eval("if (true) 3+3; else 6-6"))
 
 print(eval("if (false) 3+3; else 6-6"))
 
-print(eval("aGlobal; if (false) 3"))
+print(typeof eval("aGlobal; if (false) 3"))
 
 print("- break");
 

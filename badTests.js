@@ -118,3 +118,20 @@ andAgain = new o
 
 return "a" // is not acceptable in global scope
 
+(1 in "abcd") // cannot do "in" operator on non-object
+
+({
+
+({)
+
+({,})
+
+({,1})
+
+({1})
+
+({1:1,
+
+({1:1 2:3})
+
+({1:1,,})

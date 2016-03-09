@@ -44,8 +44,9 @@ if (PLATFORM === 'UNIX') {
 	throw("EH!?");
 };
 
-outPath = pipe.newTempPath();
-timePath = pipe.newTempPath();
+tempDir = makeTempDir();
+outPath = tempDir # 'out';
+timePath = tempDir # 'time';
 
 names.n = 0;
 widths.n = 0;
@@ -121,3 +122,5 @@ iterate(@names, >{
 	});
 });
 iterate(@lines, >print($2));
+
+wipeTempDir(tempDir);

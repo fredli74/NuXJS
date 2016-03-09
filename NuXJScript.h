@@ -11,7 +11,8 @@
 //		true primitive <-> object conversions
 //		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
 //		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
-//		for in should also include properties in prototypes, I believe
+//		for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
+//		hasProperty should also be recursive over prototype chain
 //		it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
 //		lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
 //			push them temporarily last on stack
@@ -47,6 +48,8 @@
 //			missing callee or whatever
 //		at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
 //		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
+//		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
+//		proper error exceptions (TypeError etc)
 //
 //	Compiler
 //
@@ -127,6 +130,7 @@
 //			actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
 //		switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
 //		fast lookup of operators (some clever quick hashing)
+//		couldn't we share identical strings in the same engine? any disadvantage to that?
 //
 //	GC
 //
@@ -251,9 +255,14 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				T* begin() const { return qArray.begin(); }
 				T* end() const { return qArray.begin() + count; }
 				void reserve(size_t newSize) {
-					if (newSize > capacity()) qArray.resize(std::max(newSize, capacity() * 2));
+					if (newSize > capacity()) {
+						qArray.resize(std::max(newSize, capacity() * 2));
+					}
 				}
-				void resize(size_t newSize) { reserve(newSize); count = newSize; }
+				void resize(size_t newSize) {
+					reserve(newSize);
+					count = newSize;
+				}
 				void insert(T* p, const T* b, const T* e) {
 					assert(0 <= p && p <= begin() + count);
 					assert(b <= e);
@@ -572,8 +581,14 @@ class EvalFunction : public Function {
 };
 
 class FunctionFrame;
+
+class ObjectObject : public Function {
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+};
+
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
+	friend class ObjectObject; // FIX : to access objectPrototype only
 	friend class Processor;
 	
 	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
@@ -582,6 +597,7 @@ class Engine {
 
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
+				UserObject objectPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
@@ -845,6 +861,7 @@ class Processor : public GCItem {
 					, WRITE_NAMED_OP								// operand: const index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
+					, ADD_PROPERTY_OP								// operand: const index (name), stack: object, value -> object
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
 					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
@@ -857,13 +874,13 @@ class Processor : public GCItem {
 					, CALL_GLOBAL_OP								// operand: n, stack: function, n * args -> return value
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return value
 					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return value, special eval call is required because of need to differentiate direct or indirect call to eval
-					, NEW_OP										// operand: n, stack: constructor object, n * args -> return value, new object
+					, NEW_OP										// operand: n, stack: constructor object, n * args -> new object, return value
 					, NEW_RESULT_OP									// stack: new object, return value -> new this value
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
-					, GEN_FUNC_OP									// operand: const index, stack: -> function
+					, GEN_FUNC_OP									// operand: const index (function), stack: -> function
 					, THROW_OP										// stack: value ->
 					, TRY_OP										// operand: offset for catch
 					, TRIED_OP
@@ -950,6 +967,7 @@ class Compiler : public GCItem {
 				void syntaxError(const std::string& what); // FIX : try to get rid of?
 				void emit(Processor::Opcode op);
 				void emitWithInt32(Processor::Opcode op, Int32 i);
+				int addConstant(const Value& constant);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
 				Int32 emitForwardBranch(Processor::Opcode op);
 				void completeForwardBranch(Int32 point);
@@ -968,6 +986,8 @@ class Compiler : public GCItem {
 				ExpressionResult operand(const OperatorInfo& op);
 				ExpressionResult rvalueOperand(const OperatorInfo& op);
 				ExpressionResult functionCall(Processor::Opcode op);
+				Value stringOrNumberConstant();
+				ExpressionResult objectInitialiser();
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);

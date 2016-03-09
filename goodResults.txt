@@ -119,12 +119,33 @@ adhb
 10
 10
 *** objects ***
+object
+b
+33
+y
+ll
+lr
+rl
+rr
+this
+is
+expected
+behavior
+... and
+this too
 true
 true
 false
 false
 true
 added to built-in
+undefined
+patched
+patched
+patched
+patched
+patched
+undefined
 *** types ***
 undefined
 undefined
@@ -600,7 +621,7 @@ tick
 26
 *** arguments ***
 true
-<object>
+object
 3
 1
 b
@@ -654,7 +675,7 @@ object
 6
 1
 1
-<object>
+object
 a string
 - if
 3
@@ -663,7 +684,7 @@ undefined
 undefined
 6
 0
-<object>
+object
 - break
 1
 1

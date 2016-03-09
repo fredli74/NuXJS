@@ -55,3 +55,12 @@ Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Illegal return
+Exception: Unhandled exception: runtime error
+Exception: Expected property name
+Exception: Expected property name
+Exception: Expected property name
+Exception: Expected property name
+Exception: Expected ':'
+Exception: Expected property name
+Exception: Expected ',' or '}'
+Exception: Expected property name

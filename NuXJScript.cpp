@@ -470,7 +470,9 @@ bool String::getProperty(Engine& engine, const String* name, Value* v) {
 		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
 		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
 		return true;
-	} else return engine.stringPrototype.getProperty(engine, name, v);
+	} else {
+		return engine.stringPrototype.getProperty(engine, name, v);
+	}
 }
 
 // FIX : speed up by skipping when string is really long
@@ -728,6 +730,16 @@ const String* Function::className() const { return &F_UNCTION_STRING; }
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
+
+/* --- Object object --- */
+
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
+
+Value ObjectObject::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
+}
+
+static ObjectObject OBJECT_OBJECT; // for object literals
 
 /* --- Closure --- */
 
@@ -1080,7 +1092,7 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
-			
+
 			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
 			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
 			case ADD_OP:	poppush(vsp[-1].add(heap, vsp[0])); break;
@@ -1180,6 +1192,14 @@ bool Processor::privateRun() {
 				push(Value(heap.manage(new Closure(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
+			case ADD_PROPERTY_OP: {
+				o = vsp[-1].asObject();
+				assert(o != 0);
+				o->setProperty(engine, constants[operand()].getString(), vsp[0]);
+				pop(1);
+				break;
+			}
+			
 			case FRAME_OP: push(Value(frame)); break;
 			case DELETE_OP: {
 				o = vsp[-1].toObject(heap);
@@ -1209,8 +1229,8 @@ bool Processor::privateRun() {
 			}
 			case THROW_OP: throwVirtualException(vsp[0]); break;
 			case IN_OP: {
-				o = vsp[0].toObject(heap);
-				if (o == 0) error();
+				o = vsp[0].asObject();
+				if (o == 0) error(); // FIX : TypeError
 				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].toString(heap)));
 				pop(1);
 				break;				
@@ -1232,8 +1252,9 @@ bool Processor::privateRun() {
 				assert(o != 0);
 				Int32 offset = operand();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
-				if (name != 0) vsp[0] = Value(name);
-				else {
+				if (name != 0) {
+					vsp[0] = Value(name);
+				} else {
 					ip += offset;
 					pop(1);
 				}
@@ -1265,7 +1286,7 @@ static Int32 getInt32(const CodeWord* code, size_t& offset) {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY"
+		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1297,7 +1318,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump); break; }
 			case Processor::READ_INDEXED_OP:
 			case Processor::WRITE_INDEXED_OP: {
-				Int32 index = getInt32(code, offset);
+				const Int32 index = getInt32(code, offset);
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
@@ -1312,6 +1333,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
+			case Processor::ADD_PROPERTY_OP:
 			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].getString()->toStdString(); break;
 			default: break;
 		}
@@ -1446,7 +1468,9 @@ void Compiler::emit(Processor::Opcode op) {
 	outputCode->append(op);
 }
 
-static Int32& accessCodeInt32(QuickVector<CodeWord>& code, Int32 offset) { return *reinterpret_cast<Int32*>(&code[offset]); }
+static Int32& accessCodeInt32(QuickVector<CodeWord>& code, Int32 offset) {
+	return *reinterpret_cast<Int32*>(&code[offset]);
+}
 
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
 	outputCode->append(op);
@@ -1471,16 +1495,20 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 	emitWithInt32(op, point - (outputCode->size() + OPERAND_SIZE + 1));
 }
 
-void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
+int Compiler::addConstant(const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
 		Int32 index = codeDef->constants.size();
 		codeDef->constants.append(constant);
 		definedConstants[constant] = index;
-		emitWithInt32(op, index);
+		return index;
 	} else {
-		emitWithInt32(op, it->second);
+		return it->second;
 	}
+}
+
+void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
+	emitWithInt32(op, addConstant(constant));
 }
 
 bool Compiler::isLeadingIdentifierChar(Char c) {
@@ -1516,8 +1544,13 @@ void Compiler::white() {
 bool Compiler::token(const char* t, bool eatLeadingWhite) {
 	assert(*t != 0);
 	const Char* b = p;
-	if (eatLeadingWhite) white();
-	while (*t != 0 && !eof() && *p == *t) { ++p; ++t; }
+	if (eatLeadingWhite) {
+		white();
+	}
+	while (*t != 0 && !eof() && *p == *t) {
+		++p;
+		++t;
+	}
 	if (*t == 0 && (!isLeadingIdentifierChar(t[-1]) || (eof() || !isLeadingIdentifierChar(*p)))) {
 		return true;
 	} else {
@@ -1534,11 +1567,16 @@ const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
 	const Char* b = p;
 	if (!eof() && isLeadingIdentifierChar(*p)) {
 		++p;
-		while (!eof() && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) ++p;
-		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0)
+		while (!eof() && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) {
+			++p;
+		}
+		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0) {
 			syntaxError("Illegal use of reserved keyword");
+		}
 	}
-	if (required && p == b) syntaxError("Expected identifier");
+	if (required && p == b) {
+		syntaxError("Expected identifier");
+	}
 	return b;
 }
 
@@ -1648,12 +1686,16 @@ Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 }
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
-	if (!Compiler::token(token, eatLeadingWhite)) syntaxError(std::string("Expected '") + token + "'");
+	if (!Compiler::token(token, eatLeadingWhite)) {
+		syntaxError(std::string("Expected '") + token + "'");
+	}
 }
 
 Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 	ExpressionResult rr(expression(op.closeToken != 0 ? LOWEST_PREC : op.prec));
-	if (op.closeToken != 0) expectToken(op.closeToken, true);
+	if (op.closeToken != 0) {
+		expectToken(op.closeToken, true);
+	}
 	return rr;
 }
 
@@ -1663,16 +1705,93 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	white();
 	Int32 count = 0;
 	while (!token(")", false)) {
-		if (eof()) syntaxError(count == 0 ? "Expected ')'" : "Expected ',' or ')'");
+		if (eof()) {
+			syntaxError(count == 0 ? "Expected ')'" : "Expected ',' or ')'");
+		}
 		if (count != 0) {
-			if (!token(",", false)) syntaxError("Expected ',' or ')'");
+			if (!token(",", false)) {
+				syntaxError("Expected ',' or ')'");
+			}
 			white();
 		}
-		ExpressionResult argXR(rvalueExpression(COMMA_PREC));
+		rvalueExpression(COMMA_PREC);
 		white();
 		++count;
 	}
 	emitWithInt32(op, count);
+	return ExpressionResult(ExpressionResult::PUSHED);
+}
+
+Value Compiler::stringOrNumberConstant() {
+	switch (*p) {
+		case '0': {
+			if (p + 1 != e && p[1] == 'x') {
+				UInt32 u;
+				const Char* b = p += 2;
+				p = parseHex(b, e, u);
+				if (p == b) {
+					syntaxError("Invalid number");
+				}
+				return Value(u);
+			}
+			/* else continue */
+		}
+		case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
+			double d;
+			const Char* b = p;
+			p = parseDouble(p, e, d);
+			if (p == b) {
+				syntaxError("Invalid number");
+			}
+			return Value(d);
+		}
+		case '\'': case '"': {
+			size_t maxLength = unescapedMaxLength(p, e);
+			QuickArray<Char, 64> buffer(maxLength);
+			Char* unescapeEnd = unescape(buffer, e);
+			assert(unescapeEnd <= buffer + maxLength);
+			return Value(String::newHashedString(heap, buffer, unescapeEnd));
+		}
+	}
+	return Value();
+}
+
+Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
+	white();
+	
+	// FIX : we could add an operator for these three, I guess they will be common
+	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
+	emitWithInt32(Processor::NEW_OP, 0);
+	emit(Processor::NEW_RESULT_OP);
+
+	Int32 count = 0;
+	while (!token("}", false)) {
+		if (count != 0) {
+			if (!token(",", false)) {
+				syntaxError("Expected ',' or '}'");
+			}
+			white();
+		}
+		if (token("}", true)) {
+			break;
+		}
+		white();
+		const Char* b = p;
+		Value name = stringOrNumberConstant();
+		if (p == b) {
+			b = identifier(false, true);
+			if (p == b) {
+				syntaxError("Expected property name");
+			} else {
+				name = Value(String::newHashedString(heap, b, p));
+			}
+		}
+		expectToken(":", true);
+		rvalueExpression(COMMA_PREC);
+		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(name.toString(heap)));
+		white();
+		++count;
+	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
@@ -1681,7 +1800,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	const Char* b = p;
 	// FIX : use a quick hash solution
 	int i = 0;
-	while (i < opCount && !token(opList[i].token, false)) ++i;
+	while (i < opCount && !token(opList[i].token, false)) {
+		++i;
+	}
 	if (i >= opCount) return false;
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
@@ -1757,7 +1878,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			emit(Processor::NEW_RESULT_OP);
 			break;
 		}
-				
+		
 		case DELETE_OPERATOR: {
 			discard(xr);
 			xr = operand(op);
@@ -1822,14 +1943,19 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 
 CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd) {
 	CodeDefinition* func = heap.manage(new CodeDefinition());
-	if (selfNameBegin != selfNameEnd)
+	if (selfNameBegin != selfNameEnd) {
 		func->selfName = String::newHashedString(heap, selfNameBegin, selfNameEnd);
+	}
 	expectToken("(", true);
 	white();
 	while (!token(")", false)) {
-		if (eof()) syntaxError(func->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+		if (eof()) {
+			syntaxError(func->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+		}
 		if (func->argumentNames.size() != 0) {
-			if (!token(",", false)) syntaxError("Expected ',' or ')'");
+			if (!token(",", false)) {
+				syntaxError("Expected ',' or ')'");
+			}
 			white();
 		}
 		const Char* b = identifier(true, false);
@@ -1850,7 +1976,9 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	white();
-	if (eof()) return false;
+	if (eof()) {
+		return false;
+	}
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		const Char* b = p;
 		token();
@@ -1879,48 +2007,35 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		} else {
 			p = b;
 			assert(!eof());
-			switch (*p) {
-				case '0': {
-					if (p + 1 != e && p[1] == 'x') {
+			Value v = stringOrNumberConstant();
+			if (p != b) {
+				discard(xr);
+				xr = ExpressionResult(ExpressionResult::CONSTANT, v);
+			} else {
+				switch (*p) {
+					case '{': {
+						++p;
 						discard(xr);
-						UInt32 u;
-						const Char* b = p += 2;
-						p = parseHex(b, e, u);
-						if (p == b) syntaxError("Invalid number");
-						xr = ExpressionResult(ExpressionResult::CONSTANT, Value(u));
+						xr = objectInitialiser();
 						break;
 					}
-					/* else continue */
-				}
-				case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
-					discard(xr);
-					double d;
-					const Char* b = p;
-					p = parseDouble(p, e, d);
-					if (p == b) syntaxError("Invalid number");
-					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(d));
-					break;
-				}
-				case '\'': case '"': {
-					discard(xr);
-					size_t maxLength = unescapedMaxLength(p, e);
-					QuickArray<Char, 64> buffer(maxLength);
-					Char* unescapeEnd = unescape(buffer, e);
-					assert(unescapeEnd <= buffer + maxLength);
-					xr = ExpressionResult(ExpressionResult::CONSTANT, Value(String::newHashedString(heap, buffer, unescapeEnd)));
-					break;
-				}
-				default: {
-					const Char* b = identifier(false, false);
-					if (p == b) return false; // fix : nicer way?
-					discard(xr);
-					const String* name = String::newHashedString(heap, b, p);
-					xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
-					if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-						const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
-						if (b != 0) xr = ExpressionResult(ExpressionResult::INDEXED, b->value);
+					
+					default: {
+						const Char* b = identifier(false, false);
+						if (p == b) {
+							return false;
+						}
+						discard(xr);
+						const String* name = String::newHashedString(heap, b, p);
+						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
+						if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
+							const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
+							if (b != 0) {
+								xr = ExpressionResult(ExpressionResult::INDEXED, b->value);
+							}
+						}
+						break;
 					}
-					break;
 				}
 			}
 		}
@@ -1937,7 +2052,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 
 Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	ExpressionResult xr;
-	if (!optionalExpression(xr, precedence)) syntaxError("Expected expression");
+	if (!optionalExpression(xr, precedence)) {
+		syntaxError("Expected expression");
+	}
 	return xr;
 }
 
@@ -1972,7 +2089,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 Compiler::ExpressionResult Compiler::varDeclaration() {
 	ExpressionResult lxr(declareIdentifier());
 	if (token("=", true)) {
-		ExpressionResult rr(rvalueExpression(COMMA_PREC));
+		rvalueExpression(COMMA_PREC);
 		makeAssignment(lxr);
 		emit(Processor::POP_OP);
 	}
@@ -1982,7 +2099,9 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 void Compiler::varDeclarations() {
 	while (true) {
 		varDeclaration();
-		if (!token(",", true)) break;
+		if (!token(",", true)) {
+			break;
+		}
 		white();
 	}
 }
@@ -2038,7 +2157,9 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	QuickVector<CodeWord> incCode;
 	outputCode = &incCode;
 	ExpressionResult incXR;
-	if (optionalExpression(incXR, LOWEST_PREC)) discard(incXR);
+	if (optionalExpression(incXR, LOWEST_PREC)) {
+		discard(incXR);
+	}
 	expectToken(")", true);
 	outputCode = &codeDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
@@ -2046,7 +2167,9 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
-	if (exitLoopPoint != INVALID_CODE_POINT) completeForwardBranch(exitLoopPoint);
+	if (exitLoopPoint != INVALID_CODE_POINT) {
+		completeForwardBranch(exitLoopPoint);
+	}
 	completeBreaks(emptyLabelScope);
 }
 
@@ -2089,7 +2212,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		if (p != b && token(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String label(b, q);
 			for (Scope* s = firstScope; s != 0; s = s->next) {
-				if (!s->label.empty() && s->label.isEqualTo(label)) syntaxError("Duplicate label");
+				if (!s->label.empty() && s->label.isEqualTo(label)) {
+					syntaxError("Duplicate label");
+				}
 			}
 			Scope newLabelScope(label, firstScope);
 			statement(&newLabelScope, scopeLabelsEnd, evalXR);
@@ -2097,7 +2222,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		} else {
 			p = b;
 			optionalExpression(evalXR, LOWEST_PREC);
-			if (compilingFor != FOR_EVAL) evalXR = discard(evalXR);
+			if (compilingFor != FOR_EVAL) {
+				evalXR = discard(evalXR);
+			}
 			semicolon();
 		}
 	} else {
@@ -2139,7 +2266,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			case IF_STATEMENT: {
 				flushXR(evalXR);
 				expectToken("(", false);
-				ExpressionResult xr(rvalueExpression());
+				rvalueExpression();
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
 				statement(firstScope, firstScope, evalXR);
@@ -2161,7 +2288,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				Scope emptyLabelScope(EMPTY_STRING, firstScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
-				ExpressionResult xr(rvalueExpression());
+				rvalueExpression();
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
@@ -2183,7 +2310,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				completeContinues(&emptyLabelScope, scopeLabelsEnd);
 				expectToken("while", true);
 				expectToken("(", true);
-				ExpressionResult xr(rvalueExpression());
+				rvalueExpression();
 				expectToken(")", true);
 				emitBackwardBranch(Processor::JT_OP, loopPoint);
 				semicolon();
@@ -2331,7 +2458,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case THROW_STATEMENT: {
-				ExpressionResult xr(rvalueExpression());
+				rvalueExpression();
 				emit(Processor::THROW_OP);
 				semicolon();
 				break;
@@ -2352,12 +2479,14 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				bool firstStatement = true;
 				white();
 				while (!token("}", false)) {
-					if (eof()) syntaxError("Expected '}'");
+					if (eof()) {
+						syntaxError("Expected '}'");
+					}
 					else if (token("case", false)) {
 						flushXR(evalXR);
 						outputCode = &testsCode;
 						makeRValue(controlXR);
-						ExpressionResult xr(rvalueExpression());
+						rvalueExpression();
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
 						emitWithInt32(Processor::JT_OP, codeDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
@@ -2429,6 +2558,9 @@ if (!supressStdErr) {
 	disassemble(heap, *codeDef);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants.size() << std::endl;
+	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
+		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
+	}
 	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
 }
@@ -2437,7 +2569,9 @@ if (!supressStdErr) {
 
 void Compiler::compile(const String& source) {
 	compile(source.begin(), source.end());
-	if (!eof()) syntaxError("Syntax error"); // FIX : better error?
+	if (!eof()) {
+		syntaxError("Syntax error"); // FIX : better error?
+	}
 }
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
@@ -2512,6 +2646,10 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	assert(heap.belongs(globals));
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
+	gcHeap.protect(&objectPrototype);
+	ObjectObject* objectObject = gcHeap.manage(new ObjectObject());
+	objectObject->setProperty(*this, &PROTOTYPE_STRING, Value(&objectPrototype));
+	globals->setProperty(*this, &O_BJECT_STRING, Value(objectObject));
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
 }
