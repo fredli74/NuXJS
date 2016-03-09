@@ -1702,8 +1702,8 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { return makeRValue(operand(op)); }
 
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
-	white();
 	Int32 count = 0;
+	white();
 	while (!token(")", false)) {
 		if (eof()) {
 			syntaxError(count == 0 ? "Expected ')'" : "Expected ',' or ')'");
@@ -1756,26 +1756,35 @@ Value Compiler::stringOrNumberConstant() {
 	return Value();
 }
 
-Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
-	white();
-	
+Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
 	// FIX : we could add an operator for these three, I guess they will be common
 	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
 	emitWithInt32(Processor::NEW_OP, 0);
 	emit(Processor::NEW_RESULT_OP);
-
-	Int32 count = 0;
-	while (!token("}", false)) {
-		if (count != 0) {
-			if (!token(",", false)) {
-				syntaxError("Expected ',' or '}'");
-			}
-			white();
-		}
-		if (token("}", true)) {
+	
+	Int32 index = 0;
+	while (!token("]", true)) {
+		rvalueExpression(COMMA_PREC);
+		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(String::fromInt(heap, index)));
+		if (token("]", true)) {
 			break;
 		}
-		white();
+		if (!token(",", true)) {
+			syntaxError("Expected ',' or ']'");
+		}
+		++index;
+	}
+	return ExpressionResult(ExpressionResult::PUSHED);
+}
+
+Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
+	// FIX : we could add an operator for these three, I guess they will be common
+	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
+	emitWithInt32(Processor::NEW_OP, 0);
+	emit(Processor::NEW_RESULT_OP);
+	
+	white();
+	while (!token("}", false)) {
 		const Char* b = p;
 		Value name = stringOrNumberConstant();
 		if (p == b) {
@@ -1789,8 +1798,13 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 		expectToken(":", true);
 		rvalueExpression(COMMA_PREC);
 		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(name.toString(heap)));
+		if (token("}", true)) {
+			break;
+		}
+		if (!token(",", true)) {
+			syntaxError("Expected ',' or '}'");
+		}
 		white();
-		++count;
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -2017,6 +2031,13 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						++p;
 						discard(xr);
 						xr = objectInitialiser();
+						break;
+					}
+					
+					case '[': {
+						++p;
+						discard(xr);
+						xr = arrayInitialiser();
 						break;
 					}
 					

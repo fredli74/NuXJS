@@ -3,6 +3,8 @@
 include('stdlib.pika');
 include('systools.pika');
 
+// benchmark.pika <test>|makegold <exe>|<rev-rev>|<rev>
+
 vargs(@me,, @tests, @exe);
 if (!exists(@tests) || tests === '-') tests = '*.js'
 else if (right(tests, 3) != '.js') tests #= '.js';

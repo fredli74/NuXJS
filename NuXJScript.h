@@ -17,6 +17,7 @@
 //		lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
 //			push them temporarily last on stack
 //			 or hold on, I think the entire gc approach needs rethinking, we should have something like gc(beyond) like in NuXScript...
+//			actually, the problem isn't huge as we have an asynchronous vm, we could restrict gc to happen in "bottom" main loop
 //		would be cleaner if we could pass a retValue pointer instead of taking a return value (but not nicer syntax for native calls returning tho, hmm, need to think)
 //			we want nice, quick, safe and clean syntax for:
 //				* calling synchronously <-- not prio
@@ -50,6 +51,7 @@
 //		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
 //		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 //		proper error exceptions (TypeError etc)
+//		(new) Object(v) should convert v to number, string object etc
 //
 //	Compiler
 //
@@ -60,7 +62,6 @@
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
 //		array literals
-//		object literals
 //
 //	GC
 //
@@ -180,6 +181,7 @@
 //			implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
 //				while, for done, switch and try / catch done, I think, any more?	
 //			global eval support (sets all var and function declarations in global this)
+//		object literals
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -553,6 +555,15 @@ class UserObject : public Object {
 					heap.mark(prototype);
 					super::gcMark(heap);
 				}
+};
+
+class UserArray : public UserObject {
+	public:		typedef Object super;
+	
+				UserArray(Object* prototype = 0);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
 };
 
 class Function : public UserObject {
@@ -987,6 +998,7 @@ class Compiler : public GCItem {
 				ExpressionResult rvalueOperand(const OperatorInfo& op);
 				ExpressionResult functionCall(Processor::Opcode op);
 				Value stringOrNumberConstant();
+				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
