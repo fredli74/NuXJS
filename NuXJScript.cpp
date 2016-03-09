@@ -12,9 +12,11 @@
 	bool supressStdErr = false; // FIX : drop
 
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
-static int strncmp(const Char* a, const char* b, size_t n) {
-	int i = 0;
-	while (i < n && a[i] == b[i] && a[i] != 0 && b[i] != 0) ++i;
+static int strncmp(const Char* a, const char* b, UInt32 n) {
+	UInt32 i = 0;
+	while (i < n && a[i] == b[i] && a[i] != 0 && b[i] != 0) {
+		++i;
+	}
 	return (i == n ? 0 : a[i] - b[i]);
 }
 /* Built with QuickHashMaker.pika */
@@ -81,13 +83,16 @@ static bool isNaN(double d) { return d != d; }
 // FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
 
 static const Char* parseHex(const Char* p, const Char* e, UInt32& i) {
-	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
+	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p) {
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
+	}
 	return p;
 }
 
 static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
-	for (i = 0; p != e && *p >= '0' && *p <= '9'; ++p) i = i * 10 + (*p - '0');
+	for (i = 0; p != e && *p >= '0' && *p <= '9'; ++p) {
+		i = i * 10 + (*p - '0');
+	}
 	return p;
 }
 
@@ -198,6 +203,7 @@ const String EMPTY_STRING("");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
 const String O_BJECT_STRING("Object");
+const String A_RRAY_STRING("Array");
 const String BOOLEAN_STRING("boolean");
 const String NUMBER_STRING("number");
 const String STRING_STRING("string");
@@ -266,9 +272,13 @@ double Value::toDouble() const {
 Int32 Value::toInt() const {
 	double v = toDouble();
 	int i = static_cast<Int32>(v);
-	if (i == v) return i;
-	if (isNaN(v) || fabs(v) == std::numeric_limits<double>::infinity()) return 0; // FIX : faster test for weird numbers?
-	return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
+	if (i == v) {
+		return i;
+	} else if (isNaN(v) || fabs(v) == std::numeric_limits<double>::infinity()) {
+		return 0; // FIX : faster test for weird numbers?
+	} else {
+		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<Int32>(fmod(-v, 4294967296.0));
+	}
 }
 
 const String* Value::toString(GCHeap& heap) const {
@@ -479,10 +489,10 @@ bool String::getProperty(Engine& engine, const String* name, Value* v) {
 // FNV Hash
 Table::KeyHash String::calcHash() const {
 	if (hash == 0) {
-		size_t l = size();
+		UInt32 l = size();
 		UInt32 x = 2166136261U;
 		const Char* p = begin();
-		for (size_t i = 0; i < l; ++i) {
+		for (UInt32 i = 0; i < l; ++i) {
 			x *= 16777619;
 			x += p[i]; // FIX : FNV uses xor, not add, why did I do this? Also FNV is really made for byte processing. Also, http://www.isthe.com/chongo/tech/comp/fnv/ recommends xor'ing before multiplying. Better? 
 		}
@@ -494,17 +504,23 @@ Table::KeyHash String::calcHash() const {
 bool String::isEqualTo(const String& o) const {
 	if (this == &o) return true;
 	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
-	size_t l = size();
+	UInt32 l = size();
 	if (l != o.size()) return false;
 	return std::equal(begin(), end(), o.begin());
 }
 
 bool String::isLessThan(const String& o) const {
-	if (this == &o) return false;
-	size_t l = std::min(size(), o.size());
+	if (this == &o) {
+		return false;
+	}
+	UInt32 l = std::min(size(), o.size());
 	const Char* a = begin();
 	const Char* b = o.begin();
-	for (int i = 0; i < l; ++i) if (a[i] != b[i]) return (a[i] < b[i]);
+	for (UInt32 i = 0; i < l; ++i) {
+		if (a[i] != b[i]) {
+			return (a[i] < b[i]);
+		}
+	}
 	return size() < o.size();
 }
 
@@ -549,7 +565,7 @@ GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 GCList::GCList() throw() : count(0) { }
 
-size_t GCList::size() const { return count; }
+UInt32 GCList::size() const { return count; }
 
 void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
@@ -603,7 +619,8 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->key == 0 || !b->value.exists())) { }
+	while (++b != e && (b->key == 0 || !b->value.exists())) {
+	}
 	return (b == e ? 0 : b);
 }
 
@@ -720,7 +737,7 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	return true;
 }
 
-/* --- Function --- */
+/* --- Object support --- */
 
 Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
@@ -731,15 +748,66 @@ Value Function::construct(Engine& engine, Processor& processor, Int32 argc, cons
 	return call(engine, processor, argc, argv, thisValue);
 }
 
-/* --- Object object --- */
-
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-
-Value ObjectObject::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value ObjectConstructor::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
 }
 
-static ObjectObject OBJECT_OBJECT; // for object literals
+static ObjectConstructor OBJECT_OBJECT; // for object literals
+
+Array::Array(Object* prototype) : super(prototype), lengthProperty(0) { }
+
+bool Array::getProperty(Engine& engine, const String* name, Value* v) {
+	if (name->isEqualTo(LENGTH_STRING)) {
+		*v = Value(lengthProperty);
+		return true;
+	} else {
+		return super::getProperty(engine, name, v);
+	}
+}
+
+bool Array::setProperty(Engine& engine, const String* name, const Value& v) {
+	if (name->isEqualTo(LENGTH_STRING)) {
+		// FIX : error if not int!
+		UInt32 newLength = v.toInt(); // fix : to unsigned int
+		if (newLength < lengthProperty) {
+			for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
+				UInt32 i;
+				const String* key = b->key;
+				const Char* const e = key->end();
+				const Char* p = parseUnsignedInt(key->begin(), e, i);
+				if (p == e && i >= newLength) {
+					properties.erase(key);
+				}
+			}
+		}
+		lengthProperty = newLength;
+		return true;
+	} else {
+		UInt32 i;
+		const Char* const e = name->end();
+		const Char* p = parseUnsignedInt(name->begin(), e, i);
+		if (p == e && i >= lengthProperty) {
+			lengthProperty = i + 1;
+		}
+		return super::setProperty(engine, name, v);
+	}
+}
+
+bool Array::deleteProperty(Engine& engine, const String* name) {
+	if (name->isEqualTo(LENGTH_STRING)) {
+		return false;
+	} else {
+		return super::deleteProperty(engine, name);
+	}
+}
+
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
+Value ArrayConstructor::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return Value(engine.getHeap().manage(new Array(&engine.arrayPrototype)));
+}
+
+static ArrayConstructor ARRAY_OBJECT; // for array literals
 
 /* --- Closure --- */
 
@@ -748,8 +816,12 @@ CodeDefinition* Closure::getDefinition() const { return codeDef; }
 Object* Closure::getEnvironment() const { return environment; }
 
 bool Closure::getProperty(Engine& engine, const String* name, Value* v) {
-	if (name->isEqualTo(LENGTH_STRING)) { *v = Value(codeDef->getArgumentsCount()); return true; }
-	else return super::getProperty(engine, name, v);
+	if (name->isEqualTo(LENGTH_STRING)) {
+		*v = Value(codeDef->getArgumentsCount());
+		return true;
+	} else {
+		return super::getProperty(engine, name, v);
+	}
 }
 
 Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -760,7 +832,7 @@ Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Valu
 
 /* --- Arguments --- */
 
-Arguments::Arguments(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
+Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount) : frame(frame)
 		, argumentsCount(argumentsCount), lengthProperty(argumentsCount), deletedArguments(argumentsCount + 1) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
@@ -768,7 +840,9 @@ Arguments::Arguments(FunctionFrame* frame, Int32 argumentsCount) : frame(frame)
 const String* Arguments::className() const { return &A_RGUMENTS_STRING; }
 
 Value* Arguments::findProperty(const String* name) {
-	if (name->isEqualTo(LENGTH_STRING)) return (deletedArguments[0] ? 0 : &lengthProperty);
+	if (name->isEqualTo(LENGTH_STRING)) {
+		return (deletedArguments[0] ? 0 : &lengthProperty);
+	}
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
 	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getIndexedPointer() + i : 0);
@@ -794,7 +868,7 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 Enumerator* Arguments::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
-	for (Int32 i = 0; i < argumentsCount; ++i)
+	for (UInt32 i = 0; i < argumentsCount; ++i)
 		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
 	// list->sort(); // FIX : bad idea?
 	return list;
@@ -814,8 +888,8 @@ FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 
 void FunctionFrame::updatedCode() {
 	Int32 oldVarsCount = indexedPointer - indexed.begin();
-	size_t oldSize = indexed.size();
-	size_t newSize = codeDef->getVarsCount() + passedArgumentsCount;
+	UInt32 oldSize = indexed.size();
+	UInt32 newSize = codeDef->getVarsCount() + passedArgumentsCount;
 	// FIX : ugly and slow
 	indexed.resize(newSize);
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
@@ -1277,7 +1351,7 @@ bool Processor::run() {
 }
 
 // FIX : use accessCodeInt32
-static Int32 getInt32(const CodeWord* code, size_t& offset) {
+static Int32 getInt32(const CodeWord* code, UInt32& offset) {
 	Int32 i = *reinterpret_cast<const Int32*>(code + offset);
 	offset += OPERAND_SIZE;
 	return i;
@@ -1304,7 +1378,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	};
 	const CodeWord* code = codeDef.getCodePointer();
 	const Value* constants = codeDef.getConstantsPointer();
-	for (size_t offset = 0; offset < codeDef.getCodeSize();) {
+	for (UInt32 offset = 0; offset < codeDef.getCodeSize();) {
 		Processor::Opcode opcode = static_cast<Processor::Opcode>(code[offset]);
 		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
 		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode];
@@ -1468,7 +1542,7 @@ void Compiler::emit(Processor::Opcode op) {
 	outputCode->append(op);
 }
 
-static Int32& accessCodeInt32(QuickVector<CodeWord>& code, Int32 offset) {
+static Int32& accessCodeInt32(QuickVector<CodeWord>& code, UInt32 offset) {
 	return *reinterpret_cast<Int32*>(&code[offset]);
 }
 
@@ -1580,10 +1654,10 @@ const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
 	return b;
 }
 
-static size_t unescapedMaxLength(const Char* p, const Char* e) {
+static UInt32 unescapedMaxLength(const Char* p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	Char endChar = *p;
-	size_t l = 0;
+	UInt32 l = 0;
 	while (++p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
 		if (*p == '\\' && p + 1 < e) ++p;
 		++l;
@@ -1746,7 +1820,7 @@ Value Compiler::stringOrNumberConstant() {
 			return Value(d);
 		}
 		case '\'': case '"': {
-			size_t maxLength = unescapedMaxLength(p, e);
+			UInt32 maxLength = unescapedMaxLength(p, e);
 			QuickArray<Char, 64> buffer(maxLength);
 			Char* unescapeEnd = unescape(buffer, e);
 			assert(unescapeEnd <= buffer + maxLength);
@@ -1758,7 +1832,7 @@ Value Compiler::stringOrNumberConstant() {
 
 Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
 	// FIX : we could add an operator for these three, I guess they will be common
-	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
+	emitWithConstant(Processor::CONST_OP, Value(&ARRAY_OBJECT));
 	emitWithInt32(Processor::NEW_OP, 0);
 	emit(Processor::NEW_RESULT_OP);
 	
@@ -2597,15 +2671,15 @@ void Compiler::compile(const String& source) {
 
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
-size_t GCHeap::size() const { return currentList->size(); }
-size_t GCHeap::gc() {
-	size_t sweptCount = 0;
+UInt32 GCHeap::size() const { return currentList->size(); }
+UInt32 GCHeap::gc() {
+	UInt32 sweptCount = 0;
 
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext)
 		const_cast<GCItem*>(item)->gcMark(*this);
 	
 	{
-		size_t n = 0;
+		UInt32 n = 0;
 		for (const GCItem* i = currentList->_gcNext->_gcNext; i != currentList->_gcNext; i = i->_gcNext) {
 			assert(i->_gcPrev->_gcList == currentList);
 			delete i->_gcPrev;
@@ -2668,9 +2742,13 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	gcHeap.protect(&objectPrototype);
-	ObjectObject* objectObject = gcHeap.manage(new ObjectObject());
+	gcHeap.protect(&arrayPrototype);
+	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
+	ObjectConstructor* arrayObject = gcHeap.manage(new ObjectConstructor());
 	objectObject->setProperty(*this, &PROTOTYPE_STRING, Value(&objectPrototype));
+	arrayObject->setProperty(*this, &PROTOTYPE_STRING, Value(&arrayPrototype));
 	globals->setProperty(*this, &O_BJECT_STRING, Value(objectObject));
+	globals->setProperty(*this, &A_RRAY_STRING, Value(arrayObject));
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
 }
@@ -2689,7 +2767,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	
 	struct GCFunction : public Function {
 		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-			size_t sweptCount = engine.getHeap().gc();
+			UInt32 sweptCount = engine.getHeap().gc();
 			return Value(static_cast<Int32>(sweptCount));
 		}
 	};
@@ -2778,7 +2856,7 @@ int main(int argc, const char* argv[]) {
 					processor.resetTimeOut(gcRate);
 					done = !processor.run();
 					
-					size_t sweptCount = heap.gc();
+					UInt32 sweptCount = heap.gc();
 					if (!supressStdErr) {
 						std::cerr << "\tGC swept: " << sweptCount << std::endl;
 						std::cerr << "\tGC kept: " << heap.size() << std::endl;

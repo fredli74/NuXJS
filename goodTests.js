@@ -108,6 +108,13 @@ print(~~(1.0/0.0) == 0);
 print(~~(-1.0/0.0) == 0);
 print(+"q"); // Should be NaN
 print(~~(+"q") == 0);
+print(4294967295.0|0); // Should be -1
+print((-4294967295.0)|0); // Should be 1
+print(-4294967295.0|0); // Should be 1
+print(2147483648.0|0); // Should be -2147483648
+print(-2147483648.0|0); // Should be -2147483648
+print(4294967295>>>0); // Should be 4294967295
+print((-4294967295)>>>0); // Should be 1
 
 var i = 0 ;   while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
  do { j = j - i * 0.5 } while ( i ++ < 2000 )

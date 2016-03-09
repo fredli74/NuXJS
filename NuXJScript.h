@@ -198,12 +198,12 @@ typedef Int32 CodeWord; // FIX : int or byte?
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
-const size_t STANDARD_BUILT_IN_COUNT = 16;
+const UInt32 STANDARD_BUILT_IN_COUNT = 16;
 const double EPSILON = 1.0e-300;
 
 // FIX : name
-template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
-	public:		explicit QuickArray(size_t n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
+template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
+	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
 				explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
 
 				void swap(QuickArray& other) {
@@ -225,50 +225,50 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					return *this;
 				}
 				
-				void resize(size_t newSize) {
+				void resize(UInt32 newSize) {
 					QuickArray<T, BUILT_IN_COUNT> na(newSize);
 					std::copy(p, p + std::min(n, newSize), na.p);
 					swap(na);
 				}
 				
 				bool empty() const { return n == 0; }
-				size_t size() const { return n; }
+				UInt32 size() const { return n; }
 				operator T*() const { return p; }
 				T* begin() const { return p; }
 				T* end() const { return p + n; }
 			// FIX : ambigious according to c++ standard or something, didnt' work -v
 			#if 0 && !defined(NDEBUG) // FIX : test performance in release
-				T& operator[](Int32 index) const { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
-				T& operator[](Int32 index) { assert(0 <= index && static_cast<size_t>(index) < n); return p[index]; }
+				T& operator[](Int32 index) const { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
+				T& operator[](Int32 index) { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; }
 			#endif
 				~QuickArray() { if (p != a) delete [] p; }
 				
-	protected:	size_t n;
+	protected:	UInt32 n;
 				T* p;
 				T a[BUILT_IN_COUNT];
 };
 
-template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
-	public:		explicit QuickVector(size_t capacity = BUILT_IN_COUNT) : qArray(capacity), count(0) { }
+template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
+	public:		explicit QuickVector(UInt32 capacity = BUILT_IN_COUNT) : qArray(capacity), count(0) { }
 				bool empty() const { return count == 0; }
-				size_t size() const { return count; }
+				UInt32 size() const { return count; }
 				operator T*() const { return qArray.begin(); }
-				size_t capacity() const { return qArray.size(); }
+				UInt32 capacity() const { return qArray.size(); }
 				T* begin() const { return qArray.begin(); }
 				T* end() const { return qArray.begin() + count; }
-				void reserve(size_t newSize) {
+				void reserve(UInt32 newSize) {
 					if (newSize > capacity()) {
 						qArray.resize(std::max(newSize, capacity() * 2));
 					}
 				}
-				void resize(size_t newSize) {
+				void resize(UInt32 newSize) {
 					reserve(newSize);
 					count = newSize;
 				}
 				void insert(T* p, const T* b, const T* e) {
 					assert(0 <= p && p <= begin() + count);
 					assert(b <= e);
-					size_t o = p - begin();
+					UInt32 o = p - begin();
 					reserve(count + (e - b));
 					p = begin() + o;
 					std::copy(p, end(), p + (e - b));
@@ -278,11 +278,11 @@ template<typename T, size_t BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				void append(const T& t) { insert(end(), &t, &t + 1); }
 				void shrink() { qArray.resize(count); }
 			#if !defined(NDEBUG) // FIX : test performance in release
-				T& operator[](Int32 index) const { assert(0 <= index && index < count); return qArray[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
-				T& operator[](Int32 index) { assert(0 <= index && index < count); return qArray[index]; }
+				T& operator[](UInt32 index) const { assert(index < count); return qArray[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
+				T& operator[](UInt32 index) { assert(index < count); return qArray[index]; }
 			#endif
 	protected:	QuickArray<T, BUILT_IN_COUNT> qArray;
-				size_t count;
+				UInt32 count;
 };				
 
 class GCList;
@@ -326,19 +326,19 @@ class GCItem {
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
 	public:		GCList() throw();
-				size_t size() const;
+				UInt32 size() const;
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 
-	protected:	size_t count;
+	protected:	UInt32 count;
 };
 
 class GCHeap {
 	public:		GCHeap();
 				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
-				size_t size() const;
-				size_t gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
+				UInt32 size() const;
+				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
@@ -493,9 +493,9 @@ class String : public Object, public QuickArray<Char> {
 				String(const Char* b, const Char* e);
 				String(const String& l, const String& r);
 				explicit String(const std::wstring& s);
-				explicit String(size_t length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
+				explicit String(UInt32 length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
-//				template<size_t N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
+//				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* className() const;
@@ -506,7 +506,7 @@ class String : public Object, public QuickArray<Char> {
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;
 
-	protected:	mutable size_t hash;
+	protected:	mutable UInt32 hash;
 };
 
 class RangeEnumerator : public Enumerator {
@@ -557,13 +557,15 @@ class UserObject : public Object {
 				}
 };
 
-class UserArray : public UserObject {
-	public:		typedef Object super;
+class Array : public UserObject {
+	public:		typedef UserObject super;
 	
-				UserArray(Object* prototype = 0);
+				Array(Object* prototype = 0);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
+
+	protected:	UInt32 lengthProperty;
 };
 
 class Function : public UserObject {
@@ -593,13 +595,18 @@ class EvalFunction : public Function {
 
 class FunctionFrame;
 
-class ObjectObject : public Function {
+class ObjectConstructor : public Function {
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+};
+
+class ArrayConstructor : public Function {
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 };
 
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
-	friend class ObjectObject; // FIX : to access objectPrototype only
+	friend class ObjectConstructor; // FIX : to access objectPrototype only
+	friend class ArrayConstructor; // FIX : to access arrayPrototype only
 	friend class Processor;
 	
 	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
@@ -609,6 +616,7 @@ class Engine {
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
 				UserObject objectPrototype;
+				UserObject arrayPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
@@ -625,10 +633,10 @@ class CodeDefinition : public Object {
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				Int32 getVarsCount() const { return varNames.size(); }
 				Int32 getArgumentsCount() const { return argumentNames.size(); }
-				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[~index] : argumentNames[index]); }
+				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : constants.begin()); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
-				size_t getCodeSize() const { return code.size(); }
+				UInt32 getCodeSize() const { return code.size(); }
 
 	protected:	QuickVector<CodeWord> code;
 				QuickVector<Value> constants;
@@ -798,7 +806,7 @@ class CatchFrame : public Frame {
 class Arguments : public UserObject {
 	public:		typedef UserObject super;
 
-				Arguments(FunctionFrame* frame, Int32 argumentsCount);
+				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -807,7 +815,7 @@ class Arguments : public UserObject {
 
 	protected:	Value* findProperty(const String* name);
 				FunctionFrame* frame;
-				Int32 argumentsCount;
+				UInt32 argumentsCount;
 				Value lengthProperty;
 				QuickArray<Byte, 8> deletedArguments;
 
@@ -825,7 +833,7 @@ class Exception : public std::exception, public GCItem {
 					heap.protect(this);
 					try {
 						const String* src = value.toString(heap);
-						const size_t l = (sizeof (sz) / sizeof (*sz) - 1);
+						const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
 						*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 					}
 					catch (...) {
