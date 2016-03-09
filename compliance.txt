@@ -1,0 +1,3 @@
+. Mainly EcmaScript 3 except where easy/cheap/free to be EcmaScript 5 or 6 compliant instead
+
+. Object members can use reserved keywords as in ES5, ES6, unlike ES3.
