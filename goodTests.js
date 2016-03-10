@@ -271,6 +271,24 @@ print(newedArray.length);
 print(newedArray[0]);
 print(newedArray[3]);
 
+newedArray = new Array();
+print(newedArray.length);
+
+/* FIX : should throw
+newedArray = new Array(-1);
+print(newedArray.length);
+print(newedArray[0]);
+*/
+
+newedArray = new Array(50);
+print(newedArray.length);
+
+/* FIX : should throw
+newedArray = new Array(50.5);
+print(newedArray.length);
+print(newedArray[0]);
+*/
+
 print(Array.prototype.length);
 print(delete Array.prototype.length);
 Array.prototype.patch = "patched";

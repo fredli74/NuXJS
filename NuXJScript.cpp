@@ -804,7 +804,16 @@ bool Array::deleteProperty(Engine& engine, const String* name) {
 
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
 Value ArrayConstructor::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return Value(engine.getHeap().manage(new Array(&engine.arrayPrototype)));
+	Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
+	if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
+		array->setProperty(engine, &LENGTH_STRING, argv[0]);
+	} else {
+		GCHeap& heap = engine.getHeap();
+		for (Int32 i = 0; i < argc; ++i) {
+			array->setProperty(engine, String::fromInt(heap, i), argv[i]);
+		}
+	}
+	return Value(array);
 }
 
 static ArrayConstructor ARRAY_OBJECT; // for array literals
@@ -2753,7 +2762,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
-	ObjectConstructor* arrayObject = gcHeap.manage(new ObjectConstructor());
+	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
 	objectObject->setProperty(*this, &PROTOTYPE_STRING, Value(&objectPrototype));
 	arrayObject->setProperty(*this, &PROTOTYPE_STRING, Value(&arrayPrototype));
 	globals->setProperty(*this, &O_BJECT_STRING, Value(objectObject));
