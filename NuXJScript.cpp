@@ -2086,18 +2086,17 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		token();
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
+			discard(xr);
 			switch (static_cast<Literal>(i)) {
-				case NULL_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value::NUL); break;
-				case FALSE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case TRUE_LITERAL: discard(xr); xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
+				case NULL_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value::NUL); break;
+				case FALSE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case TRUE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case THIS_LITERAL: {
-					discard(xr);
 					emit(Processor::THIS_OP);
 					xr = ExpressionResult(ExpressionResult::PUSHED); break;
 					break;
 				}
 				case FUNCTION_LITERAL: {
-					discard(xr);
 					white();
 					const Char* b = identifier(false, false);
 					emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(b, p)));

@@ -1,0 +1,12 @@
+*) \0 is interpreted as null char even if followed by decimals (octals are not supported)
+
+*) Number -> string conversion doesn't fully follow the ECMAScript rules. Uses slightly lower precision (and prefers E notation a bit more often) to avoid rouding errors.
+
+*) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR.
+
+*) Unicode in identifiers are not allowed
+
+*) Although based mainly on ECMAScript 5, custom properties are not supported (getters, setters etc)
+
+*) No RegExp support. Including literals etc.
+
