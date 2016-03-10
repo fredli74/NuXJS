@@ -241,19 +241,18 @@ Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTI
 
 bool Value::toBool() const {
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return b;
 		case NUMBER_TYPE: return (d != 0.0);
 		case STRING_TYPE: return (!s->empty());
 		case OBJECT_TYPE: return true;
+		default: assert(0);
 	}
 }
 
 double Value::toDouble() const {
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE:
 		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
@@ -266,6 +265,7 @@ double Value::toDouble() const {
 			if (q == p) return NaN();
 			return v;
 		}
+		default: assert(0);
 	}
 }
 
@@ -277,38 +277,37 @@ Int32 Value::toInt() const {
 	} else if (isNaN(v) || fabs(v) == std::numeric_limits<double>::infinity()) {
 		return 0; // FIX : faster test for weird numbers?
 	} else {
-		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<Int32>(fmod(-v, 4294967296.0));
+		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
 	}
 }
 
 const String* Value::toString(GCHeap& heap) const {
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
 		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
 		case NUMBER_TYPE: return String::fromDouble(heap, d);
 		case STRING_TYPE: return s;
 case OBJECT_TYPE: return heap.manage(new String("<object>"));
+		default: assert(0);
 	}
 }
 
 Object* Value::toObject(GCHeap& heap) const {
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: /* FIX */ return 0;
 		case NUMBER_TYPE: /* FIX */ return 0;
 		case STRING_TYPE: return const_cast<String*>(s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case OBJECT_TYPE: return o;
+		default: assert(0);
 	}
 }
 
 bool Value::operator==(const Value& y) const {
 	if (type != y.type) return false;
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return true;
@@ -316,6 +315,7 @@ bool Value::operator==(const Value& y) const {
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
+		default: assert(0);
 	}
 }
 
@@ -323,7 +323,6 @@ bool Value::operator<(const Value& y) const {
 	if (type < y.type) return true;
 	if (type > y.type) return false;
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return false;
@@ -331,19 +330,20 @@ bool Value::operator<(const Value& y) const {
 		case NUMBER_TYPE: return d < y.d;
 		case STRING_TYPE: return s->isLessThan(*y.s);
 		case OBJECT_TYPE: return o < y.o;
+		default: assert(0);
 	}
 }
 
 bool Value::compareStrictly(const Value& y) const {
 	assert(y.type == type);
 	switch (type) {
-		default: assert(0);
 		case UNDEFINED_TYPE: return true;
 		case NULL_TYPE: return true;
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
+		default: assert(0);
 	}
 }
 
@@ -1145,6 +1145,8 @@ bool Processor::privateRun() {
 		switch (*ip++) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
+			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
+			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
@@ -1360,7 +1362,8 @@ static Int32 getInt32(const CodeWord* code, UInt32& offset) {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "REPUSH", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
+		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
+		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1691,15 +1694,15 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool duplicate) {
 	switch (xr.t) {
-		default: assert(0);
 		case ExpressionResult::PUSHED: return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
+		case ExpressionResult::PROPERTY: if (duplicate) emit(Processor::REPUSH_2_OP); emit(Processor::GET_PROPERTY_OP); break;
+		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -1727,6 +1730,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	}
 }
 
+// FIX : why don't we make a special expression result type for safe kept value and put this one in discard / makeRValue ?
 void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 	if (xr.t == ExpressionResult::INDEXED) {
 		Int32 index = xr.v.toInt();
@@ -1906,8 +1910,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case BINARY: xr = makeRValue(xr); rvalueOperand(op); emit(op.vmOp); break;
 
 		case POST_INC_DEC: {
-			makeRValue(xr);
-			emit(Processor::REPUSH_OP);
+			const bool doShuffle = (xr.t == ExpressionResult::PROPERTY);
+			makeRValue(xr, true);
+			emit(doShuffle ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			emit(Processor::POP_OP);
@@ -1971,13 +1976,13 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			switch (xr.t) {
-				default: assert(0);
 				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* continue */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
 				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* continue */
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED); break;
+				default: assert(0);
 			}
 			break;
 		}
@@ -1985,7 +1990,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PRE_INC_DEC: {
 			discard(xr);
 			xr = operand(op);
-			makeRValue(xr);
+			makeRValue(xr, true);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			break;
@@ -2007,7 +2012,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case ASSIGNMENT: {
 			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
-				lxr = makeRValue(lxr);
+				lxr = makeRValue(lxr, true);
 				rvalueOperand(op);
 				emit(op.vmOp);
 			} else {
@@ -2471,7 +2476,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					s = s->next;
 				}
 				makeRValue(returnXR);
-				if (safeKept) returnSafeKept(returnXR, false);
+				if (safeKept) {
+					returnSafeKept(returnXR, false);
+				}
 				emit(Processor::RETURN_OP);
 				semicolon();
 				break;
@@ -2641,7 +2648,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	acceptInOperator = true;
 	ExpressionResult evalXR;
 	statementList(0, evalXR);
-	if (compilingFor != FOR_EVAL) evalXR = discard(evalXR);
+	if (compilingFor != FOR_EVAL) {
+		evalXR = discard(evalXR);
+	}
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
 	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());

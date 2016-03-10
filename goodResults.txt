@@ -89,6 +89,13 @@ true
 true
 NaN
 true
+-1
+1
+1
+-2147483648
+-2147483648
+4294967295
+1
 2001, -250015.5
 2001, -250015.5
 *** special numbers ***
@@ -146,6 +153,36 @@ patched
 patched
 patched
 undefined
+true
+6
+8
+g
+5
+8
+*** arrays ***
+0
+undefined
+280
+12340
+undefined
+12346
+12346
+1
+undefined
+hola
+undefined
+55
+3
+3702
+undefined
+undefined
+undefined
+undefined
+undefined
+0
+false
+patched
+true
 *** types ***
 undefined
 undefined

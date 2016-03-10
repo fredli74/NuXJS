@@ -64,3 +64,11 @@ Exception: Expected ':'
 Exception: Expected property name
 Exception: Expected ',' or '}'
 Exception: Expected property name
+Exception: Expected expression
+Exception: Expected expression
+Exception: Expected expression
+Exception: Expected expression
+Exception: Expected ',' or ']'
+Exception: Expected expression
+Exception: Expected ',' or ']'
+Exception: Expected expression

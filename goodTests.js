@@ -209,7 +209,73 @@ print(objectFromCall.patch);
 print(objectFromConstructor.patch);
 print(objectFromCustomConstructor.patch);
 
-delete Object.prototype.patch;
+print(delete Object.prototype.patch);
+
+// had a bug with this...
+(function() {
+	var o = { a: 1 };
+	o.a += 5;
+	print(o.a++);
+	print(++o.a);
+
+	var a = {b:0};
+	a.b=1;
+	a.b+=1
+	function fo(a,b) { var o = { }; o[a] = b; return o; };
+	function i(j) { return j; };
+	print(fo('q','g')[i('q')]);
+	(o = fo('q','g'))[i('q')] = 5;
+	print(o.q);
+	(o = fo('q',3))[i('q')] += fo('z',5)[i('z')];
+	print(o.q);
+})();
+
+print("*** arrays ***")
+
+emptyArray = [   ]  ;
+print(emptyArray.length);
+print(emptyArray[0]);
+
+var x = 100;
+bigArray = [
+	  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+ 	, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1000 / x ];
+(function() { for (var i = 0; i < bigArray.length; ++i) bigArray[i] = bigArray[i] * 1234; })();
+print(bigArray.length);
+print(bigArray[279]);
+print(bigArray[280]);
+bigArray[12345] = null;
+print(bigArray.length);
+bigArray[' 12346'] = 1;
+print(bigArray.length);
+print(bigArray[' 12346']);
+print(bigArray[12346]);
+bigArray['12346'] = "hola";
+print(bigArray[12346]);
+bigArray[-1.234] = 55;
+print(bigArray[-1]);
+print(bigArray[-1.234]);
+bigArray.length = 3;
+print(bigArray.length);
+print(bigArray[2]);
+print(bigArray[3]);
+print(bigArray[12345]);
+
+newedArray = new Array(1,2,3,4);
+print(newedArray.length);
+print(newedArray[0]);
+print(newedArray[3]);
+
+print(Array.prototype.length);
+print(delete Array.prototype.length);
+Array.prototype.patch = "patched";
+print(bigArray.patch);
+print(delete Array.prototype.patch);
 
 print("*** types ***")
 

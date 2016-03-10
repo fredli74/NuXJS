@@ -52,6 +52,7 @@
 //		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 //		proper error exceptions (TypeError etc)
 //		(new) Object(v) should convert v to number, string object etc
+//		all primitive traps
 //
 //	Compiler
 //
@@ -61,7 +62,6 @@
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
-//		array literals
 //
 //	GC
 //
@@ -114,6 +114,8 @@
 //			if we don't do the REPUSH idea instead of safe-keeping so much
 //		Make writes terminal and REPUSH in a = b = c type of expression...
 //		Don't lookup names in frame when not necessary. (And use hash table!)
+//		big array literals goes nuts with ADD_PROPERTY constants, should have an PUSH_ELEMENT or something instead
+//		not a big fan of the POST_INC_DEC_SHUFFLE_OP solution, feels ugly, but can't for the world come up with any simpler solutions!?
 //
 //	Compiler
 //
@@ -182,6 +184,7 @@
 //				while, for done, switch and try / catch done, I think, any more?	
 //			global eval support (sets all var and function declarations in global this)
 //		object literals
+//		array literals
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -616,7 +619,7 @@ class Engine {
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
 				UserObject objectPrototype;
-				UserObject arrayPrototype;
+				Array arrayPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
@@ -873,6 +876,8 @@ class Processor : public GCItem {
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
+					, REPUSH_2_OP									// stack: value1, value2 -> value1, value2, value1, value2
+					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value
 					, CONST_OP										// operand: const index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local index, stack: value -> value
@@ -947,7 +952,9 @@ public: // FIX : not public, just for some asserts now I think
 				Value result;
 
 				virtual void gcMark(GCHeap& heap) {
-					for (Value* v = vstackStart; v != vsp + 1; ++v) v->markIn(heap);
+					for (Value* v = vstackStart; v != vsp + 1; ++v) {
+						v->markIn(heap);
+					}
 					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
 						heap.mark(c->frame);
 						heap.mark(c->thisValue);
@@ -993,9 +1000,9 @@ class Compiler : public GCItem {
 				Int32 markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode op, Int32 point);
 
-				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (used by return statement if there are finally blocks to call first)
+				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g.used by return statement if there are finally blocks to call first)
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
-				ExpressionResult makeRValue(const ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				ExpressionResult makeRValue(const ExpressionResult& xr, bool duplicate = false); // Creates an r-value (i.e. pushed on value stack) out of a result. If `duplicate` is true and expression result is of PROPERTY type a REPUSH_2 is emitted for the object/name pair so that we can re-use the expression result e.g. for a.b += c
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 
