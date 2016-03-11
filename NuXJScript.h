@@ -371,7 +371,8 @@ class Value {
 				explicit Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
-				bool isObject() const { return type == OBJECT_TYPE; }
+				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
+				bool isString() const { return type == STRING_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
@@ -620,6 +621,7 @@ class Engine {
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				Closure* toPrimitiveValueFunction; // Created with script code for simplicity
+				Closure* toStringFunction; // Created with script code for simplicity
 };
 
 // This is an Object so that we can store it as a constant and also in Table
@@ -886,7 +888,8 @@ class Processor : public GCItem {
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
-					, TO_PRIMITIVE_2_OP								// stack: value -> primitive_value
+					, TO_PRIMITIVE_2_OP								// stack: value_1, value_2 -> primitive_value_1, primitive_value_2
+					, TO_STRING_OP									// stack: value -> string_value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value

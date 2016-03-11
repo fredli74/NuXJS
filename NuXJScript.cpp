@@ -1151,18 +1151,18 @@ bool Processor::privateRun() {
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
-									if (!o->getProperty(engine, vsp[0].toString(heap), vsp - 1))
+									if (!o->getProperty(engine, vsp[0].getString(), vsp - 1))
 										vsp[-1] = Value::UNDEFINED; // FIX : is this right?
 									pop(1);
 									break;
 			
 			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(heap)) == 0) error();
-									o->setProperty(engine, vsp[-1].toString(heap), vsp[0]);
+									o->setProperty(engine, vsp[-1].getString(), vsp[0]);
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
 
-			case TO_PRIMITIVE_2_OP:
+			case TO_PRIMITIVE_2_OP:	// FIX : is it really worth this extra cludge just to get the right call order of e.g. obj+func() (func should be called first, but if we do TO_PRIMITIVE_OP directly on the top stack item before processing right side, obj.toValue() will be called first)
 				if (vsp[-1].isObject()) {
 					push(vsp[-1]);
 					vsp[-2] = vsp[-1];
@@ -1175,6 +1175,16 @@ bool Processor::privateRun() {
 			case TO_PRIMITIVE_OP:
 				if (vsp[0].isObject()) {
 					*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+				}
+				break;
+
+			case TO_STRING_OP:
+				if (!vsp[0].isString()) {
+					if (vsp[0].isObject()) {
+						*vsp = engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					} else {
+						vsp[0] = Value(vsp[0].toString(heap));
+					}
 				}
 				break;
 
@@ -1373,7 +1383,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE", "SWAP"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_PRIMITIVE", "TO_PRIMITIVE_2"
+		, "TO_PRIMITIVE", "TO_PRIMITIVE_2", "TO_STRING"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1947,6 +1957,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 
 		case POST_INC_DEC: {
 			if (xr.t == ExpressionResult::PROPERTY) {
+			// FIX : TO_STRING once here
 				emit(Processor::REPUSH_2_OP);
 			}
 			makeRValue(xr);
@@ -1983,6 +1994,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			white();
 			const Char* b = identifier(true, true);
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(heap, b, p)));
+			// FIX : no TO_STRING needed!
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -2029,6 +2041,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			if (xr.t == ExpressionResult::PROPERTY) {
+			// FIX : TO_STRING once here
 				emit(Processor::REPUSH_2_OP);
 			}
 			makeRValue(xr);
@@ -2054,6 +2067,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
 				if (xr.t == ExpressionResult::PROPERTY) {
+				// FIX : TO_STRING once here
 					emit(Processor::REPUSH_2_OP);
 				}
 				lxr = makeRValue(lxr);
@@ -2069,6 +2083,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PROPERTY_BRACKETS: {
 			xr = makeRValue(xr);
 			rvalueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			emit(Processor::TO_STRING_OP);
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -2805,7 +2820,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
 Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
-		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0) {
+		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0) {
 	assert(heap.belongs(globals));
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
@@ -2860,6 +2875,13 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 supressStdErr = true;
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}"));
 		toPrimitiveValueFunction = gcHeap.protect(new Closure(codeDef, globals));
+	}
+	{
+		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
+		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
+		gcHeap.protect(&compiler);
+		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b}"));
+		toStringFunction = gcHeap.protect(new Closure(codeDef, globals));
 supressStdErr = false;
 	}
 }
