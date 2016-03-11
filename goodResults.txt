@@ -706,6 +706,15 @@ object
 4
 *** value conversion ***
 33
+click
+111
+click
+111
+good toString
+NaN
+bad valueOf
+good toString
+NaN
 *** eval ***
 3
 6

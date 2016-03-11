@@ -371,6 +371,7 @@ class Value {
 				explicit Value(Object* o) : type(OBJECT_TYPE), o(o) { }
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
+				bool isObject() const { return type == OBJECT_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return s; }
@@ -392,6 +393,7 @@ class Value {
 				static const Value NONEXISTENT;		// Used in tables for deleted entries. Never seen by script-code.
 				static const Value UNDEFINED;
 				static const Value NUL; // Sorry, NULL is a sensitive word, e.g. macro in Windows
+				static const Value NOT_A_NUMBER; // Sorry, NAN is sensitive, defined by some math.h
 
 	protected:	enum InternalType {
 					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
@@ -418,6 +420,7 @@ class Engine;
 class Enumerator;
 class Function;
 class Processor;
+// FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
@@ -430,9 +433,6 @@ class Object : public GCItem {
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
-
-				void toPrimitiveStringOrThrow(Engine& engine, Processor& processor);
-				void toPrimitiveNumber(Engine& engine, Processor& processor);
 };
 
 class Enumerator : public Object {
@@ -587,6 +587,7 @@ class EvalFunction : public Function {
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
+				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
 				Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
 				virtual void gcMark(GCHeap& heap) {
@@ -597,19 +598,13 @@ class EvalFunction : public Function {
 };
 
 class FunctionFrame;
-
-class ObjectConstructor : public Function {
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-};
-
-class ArrayConstructor : public Function {
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-};
+class Closure;
 
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
 	friend class ObjectConstructor; // FIX : to access objectPrototype only
 	friend class ArrayConstructor; // FIX : to access arrayPrototype only
+	friend class FunctionConstructor; // FIX : - " -
 	friend class Processor;
 	
 	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
@@ -619,10 +614,12 @@ class Engine {
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
 				UserObject objectPrototype;
+				Closure* functionPrototype; // FIX : do we ned to allocate this one?
 				Array arrayPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
+				Closure* toPrimitiveValueFunction; // Created with script code for simplicity
 };
 
 // This is an Object so that we can store it as a constant and also in Table
@@ -661,6 +658,7 @@ class CodeDefinition : public Object {
 				}
 };
 
+// FIX : name -> UserFunction ?
 class Closure : public Function {
 	public:		typedef Function super;
 				
@@ -876,45 +874,46 @@ class Processor : public GCItem {
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
-					, REPUSH_2_OP									// stack: value1, value2 -> value1, value2, value1, value2
+					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value
-					, CONST_OP										// operand: const index, stack: -> constant
-					, READ_INDEXED_OP								// operand: local index, stack: -> value
-					, WRITE_INDEXED_OP								// operand: local index, stack: value -> value
-					, READ_NAMED_OP									// operand: const index (name), stack: -> value
-					, WRITE_NAMED_OP								// operand: const index (name), stack: value -> value
+					, CONST_OP										// operand: const_index, stack: -> constant
+					, READ_INDEXED_OP								// operand: local_index, stack: -> value
+					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
+					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
-					, ADD_PROPERTY_OP								// operand: const index (name), stack: object, value -> object
+					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
+//					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
 					, INC_OP, DEC_OP								// stack: value -> number
-					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left value, right value -> result value
-					, OR_OP, XOR_OP, AND_OP							// stack: left value, right value -> result value
-					, SHL_OP, SHR_OP, USHR_OP						// stack: left value, right value -> result value
+					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
+					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
+					, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
 					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
 					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: value -> boolean
 					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
-					, CALL_GLOBAL_OP								// operand: n, stack: function, n * args -> return value
-					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return value
-					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return value, special eval call is required because of need to differentiate direct or indirect call to eval
-					, NEW_OP										// operand: n, stack: constructor object, n * args -> new object, return value
-					, NEW_RESULT_OP									// stack: new object, return value -> new this value
+					, CALL_OP										// operand: n, stack: function, n * args -> return_value
+					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
+					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
+					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
+					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
-					, GEN_FUNC_OP									// operand: const index (function), stack: -> function
+					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
 					, THROW_OP										// stack: value ->
-					, TRY_OP										// operand: offset for catch
+					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
-					, CATCH_FRAME_OP								// operand: const index for exception variable name
+					, CATCH_FRAME_OP								// operand: const_index for exception variable name
 					, POP_FRAME_OP
 					, IN_OP											// stack: string, object -> boolean
 					, TYPEOF_OP										// stack: value -> string
-					, TYPEOF_NAMED_OP								// operand: const index (name), stack: -> string
+					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
-					, NEXT_PROPERTY_OP								// immediate: exit loop offset, stack: enumerator -> string
+					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string
 				};
 
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
@@ -933,7 +932,8 @@ void error(); // FIX
 				
 	protected:	void poppush(const Value& v);
 				Int32 operand();
-				bool toPrimitiveTrap(const CodeWord* rollbackIp);
+				void toPrimitiveValue();
+				void toPrimitiveValues();
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
@@ -1002,7 +1002,7 @@ class Compiler : public GCItem {
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g.used by return statement if there are finally blocks to call first)
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
-				ExpressionResult makeRValue(const ExpressionResult& xr, bool duplicate = false); // Creates an r-value (i.e. pushed on value stack) out of a result. If `duplicate` is true and expression result is of PROPERTY type a REPUSH_2 is emitted for the object/name pair so that we can re-use the expression result e.g. for a.b += c
+				ExpressionResult makeRValue(const ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 

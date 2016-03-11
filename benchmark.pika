@@ -3,7 +3,7 @@
 include('stdlib.pika');
 include('systools.pika');
 
-// benchmark.pika <test>|makegold <exe>|<rev-rev>|<rev>
+// benchmark.pika <test(s)> <exe>|<rev-rev>|<rev>|makegold
 
 vargs(@me,, @tests, @exe);
 if (!exists(@tests) || tests === '-') tests = '*.js'
@@ -13,21 +13,24 @@ revs.n = 0;
 makeGold = false;
 doRevRange = false;
 fromRev = toRev = '';
-if (tests === 'makegold') {
-	makeGold = true;
-} else if (exists(@exe)) {
-	doRevRange = wildmatch(exe, '{[0-9]?*}[-:]{[0-9]?*}', @fromRev, @toRev);
-	if (!doRevRange) {
-		if (doRevRange = wildmatch(exe, '{[0-9]?*}', @fromRev)) toRev = fromRev;
-	};
-	if (doRevRange) {
-		print('Listing revisions...');
-		svnlog = pipe(bake("svn log -q -r{fromRev}:{toRev} svn://svn.elysian.se/nuedgesvn/lab/trunk/ScriptLab/NuXJScript NuXJScript.h NuXJScript.cpp"));
-		tokenize(svnlog, >{ if (wildmatch($0, 'r{[0-9]?*} *', @r)) append(@revs, r); });
-		s = '';
-		iterate(@revs, >s #= (if (s != '') ',') # $2);
-		print('Revs: ' # s);
+if (exists(@exe)) {
+	if (exe === 'makegold') {
+		makeGold = true;
 		delete(@exe);
+	} else {
+		doRevRange = wildmatch(exe, '{[0-9]?*}[-:]{[0-9]?*}', @fromRev, @toRev);
+		if (!doRevRange) {
+			if (doRevRange = wildmatch(exe, '{[0-9]?*}', @fromRev)) toRev = fromRev;
+		};
+		if (doRevRange) {
+			print('Listing revisions...');
+			svnlog = pipe(bake("svn log -q -r{fromRev}:{toRev} svn://svn.elysian.se/nuedgesvn/lab/trunk/ScriptLab/NuXJScript NuXJScript.h NuXJScript.cpp"));
+			tokenize(svnlog, >{ if (wildmatch($0, 'r{[0-9]?*} *', @r)) append(@revs, r); });
+			s = '';
+			iterate(@revs, >s #= (if (s != '') ',') # $2);
+			print('Revs: ' # s);
+			delete(@exe);
+		};
 	};
 };
 if (revs.n == 0) append(@revs, '');

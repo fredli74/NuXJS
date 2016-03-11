@@ -633,9 +633,9 @@ new String("a") == new String("a") is false.
 */
 
 o=new (function() { this.valueOf = function() { return 33 } } )
-print(+o)
+print(+o);
 
-/*
+
 OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)
 TestObject = function() { };
 TestObject.prototype = new OneHundredEleven;
@@ -645,8 +645,8 @@ AString = function() { this.valueOf = null; this.toString = function() { print("
 o = new AString; print(+o)
  
 StringAgain = function() { this.valueOf = function() { print("bad valueOf"); return this }; this.toString = function() { print("good toString"); return "stringy"; } };
-o = new StringAgain; print(+o)
- */
+o = new StringAgain; print(+o);
+
 /*
 i = 0;
 f = function(s) { this.valueOf = function() { print(s); return ++i; } };
@@ -656,7 +656,16 @@ print(a-b-c);
 print(a-(b-c));
 print(a+b*c);
 print(a*b+c);
-*/
+
+
+(function() {
+	var o={valueOf:function(){print("valueOf called"); return 1}}
+	print(+o)
+	print(o+o)
+	function f(x) { print("function called"); return x }
+	print(o+f(2))
+	print(f(2)+o)
+})();*/
 
 print("*** eval ***");
 

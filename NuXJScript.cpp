@@ -262,7 +262,9 @@ double Value::toDouble() const {
 			double v;
 			const Char* p = s->begin();
 			const Char* q = parseDouble(p, s->end(), v);
-			if (q == p) return NaN();
+			if (q == p) {
+				return NaN();
+			}
 			return v;
 		}
 		default: assert(0);
@@ -415,6 +417,7 @@ void Value::markIn(GCHeap& heap) const {
 const Value Value::NONEXISTENT(Value::NONEXISTENT_TYPE);
 const Value Value::UNDEFINED(Value::UNDEFINED_TYPE);
 const Value Value::NUL(Value::NULL_TYPE);
+const Value Value::NOT_A_NUMBER(NaN());
 
 /* --- String --- */
 
@@ -748,10 +751,12 @@ Value Function::construct(Engine& engine, Processor& processor, Int32 argc, cons
 	return call(engine, processor, argc, argv, thisValue);
 }
 
+class ObjectConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-Value ObjectConstructor::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
-}
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
+				}
+};
 
 static ObjectConstructor OBJECT_OBJECT; // for object literals
 
@@ -802,21 +807,41 @@ bool Array::deleteProperty(Engine& engine, const String* name) {
 	}
 }
 
+class ArrayConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-Value ArrayConstructor::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
-	if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
-		array->setProperty(engine, &LENGTH_STRING, argv[0]);
-	} else {
-		GCHeap& heap = engine.getHeap();
-		for (Int32 i = 0; i < argc; ++i) {
-			array->setProperty(engine, String::fromInt(heap, i), argv[i]);
-		}
-	}
-	return Value(array);
-}
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
+					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
+						array->setProperty(engine, &LENGTH_STRING, argv[0]);
+					} else {
+						GCHeap& heap = engine.getHeap();
+						for (Int32 i = 0; i < argc; ++i) {
+							array->setProperty(engine, String::fromInt(heap, i), argv[i]);
+						}
+					}
+					return Value(array);
+				}
+};
 
 static ArrayConstructor ARRAY_OBJECT; // for array literals
+
+#if 0
+class FunctionConstructor : public Function {
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					Array* array = engine.getHeap().manage(new Function(&engine.functionPrototype));
+					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
+						array->setProperty(engine, &LENGTH_STRING, argv[0]);
+					} else {
+						GCHeap& heap = engine.getHeap();
+						for (Int32 i = 0; i < argc; ++i) {
+							array->setProperty(engine, String::fromInt(heap, i), argv[i]);
+						}
+					}
+					return Value(array);
+				}
+};
+#endif
 
 /* --- Closure --- */
 
@@ -1032,7 +1057,7 @@ void Processor::chain(const CodeWord* stub) {
 
 void Processor::chain(Function* completion) {
 	// FIX : if we decide that CodeWord is int, we could have this array const
-	static CodeWord chainCallStub[2 + OPERAND_SIZE] = { CALL_GLOBAL_OP };
+	static CodeWord chainCallStub[2 + OPERAND_SIZE] = { CALL_OP };
 	*reinterpret_cast<Int32*>(&chainCallStub[1]) = 1;
 	chainCallStub[1 + OPERAND_SIZE] = RETURN_OP;
 	push(Value(completion));
@@ -1072,60 +1097,6 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	updateInternals();
 }
 
-/*void Processor::enterCall(
-				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
-				processor.chain(RETURN_TO_HOST_STUB);
-*/
-
-void Object::toPrimitiveStringOrThrow(Engine& engine, Processor& processor) {
-	Value v;
-	Object* o;
-	Function* f;
-	if (getProperty(engine, &TO_STRING_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ThrowIfObject : public Function {
-			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-				if (argv[0].asObject() != 0) processor.error();
-				return argv[0];
-			}
-		} THROW_IF_OBJECT;
-		processor.chain(&THROW_IF_OBJECT);
-		f->call(engine, processor, 0, 0, this);
-++processor.vsp;
-	} else {
-		processor.error();
-	}
-}
-
-void Object::toPrimitiveNumber(Engine& engine, Processor& processor) {
-	Value v;
-	Object* o;
-	Function* f;
-	if (getProperty(engine, &VALUE_OF_STRING, &v) && (o = v.asObject()) != 0 && (f = o->asFunction()) != 0) {
-		static struct ToPrimitiveStringOrThrow : public Function {
-			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-				assert(argc == 1);
-				Object* o = argv[0].asObject();
-				if (o != 0) thisValue->toPrimitiveStringOrThrow(engine, processor);
-				return argv[0];
-			}
-		} TO_PRIMITIVE_STRING_OR_THROW;
-		processor.chain(&TO_PRIMITIVE_STRING_OR_THROW);
-		f->call(engine, processor, 0, 0, this);
-++processor.vsp;
-	} else {
-		toPrimitiveStringOrThrow(engine, processor);
-	}
-}
-
-bool Processor::toPrimitiveTrap(const CodeWord* rollbackIp) {
-	Object* o = vsp->asObject();
-	if (o == 0) return false;
-	ip = rollbackIp;
---vsp;
-	o->toPrimitiveNumber(engine, *this);
-	return true;
-}
-
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX
 		std::string s1("Unhandled exception: ");
@@ -1140,6 +1111,16 @@ void Processor::throwVirtualException(const Value& exception) {
 	push(exception);
 	catchers.resize(catchers.size() - 1);
 	updateInternals();
+}
+
+void Processor::toPrimitiveValues() {
+	--ip;
+	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+}
+
+void Processor::toPrimitiveValue() {
+	--ip;
+	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 }
 
 bool Processor::privateRun() {
@@ -1177,23 +1158,27 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
-
+/*
+			case TO_PRIMITIVE_OP:	if (vsp[0].isObject())
+										*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+									break;
+*/
 			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
 			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
-			case ADD_OP:	poppush(vsp[-1].add(heap, vsp[0])); break;
-			case SUB_OP:	poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
-			case MUL_OP:	poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
-			case DIV_OP:	poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
-			case MOD_OP:	poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
-			case OR_OP:		poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
-			case XOR_OP:	poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
-			case AND_OP:	poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
+			case ADD_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(vsp[-1].add(heap, vsp[0])); break;
+			case SUB_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
+			case MUL_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
+			case DIV_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
+			case MOD_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case OR_OP:		if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
+			case XOR_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
+			case AND_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
 			case SHL_OP:	poppush(Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case SHR_OP:	poppush(Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case USHR_OP:	poppush(Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(vsp[0].toDouble()); break;
-			case MINUS_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(-vsp[0].toDouble()); break;
-			case INV_OP:	if (!toPrimitiveTrap(ip - 1)) vsp[0] = Value(~vsp[0].toInt()); break;
+			case PLUS_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(-vsp[0].toDouble()); break;
+			case INV_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
 			case X_EQ_OP:	poppush(Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
 			case X_NEQ_OP:	poppush(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
@@ -1249,7 +1234,7 @@ bool Processor::privateRun() {
 				vsp -= n;
 				break;
 			}
-			case CALL_GLOBAL_OP: {
+			case CALL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
@@ -1268,7 +1253,7 @@ bool Processor::privateRun() {
 				vsp -= n - 1;
 				break;
 			}
-			case NEW_RESULT_OP: poppush((vsp[0].asObject() != 0 ? vsp[0] : vsp[-1])); break;
+			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
 			case THIS_OP: push(Value(csp->thisValue)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
@@ -1373,6 +1358,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
+//		, "TO_PRIMITIVE_OP"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1380,7 +1366,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
-		, "CALL_GLOBAL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT"
+		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
@@ -1410,7 +1396,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 				std::wcerr << L" (" << index << L")";
 				break;
 			}
-			case Processor::CALL_GLOBAL_OP:
+			case Processor::CALL_OP:
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
 			case Processor::NEW_OP: std::cerr << " *" << getInt32(code, offset); break;
@@ -1445,6 +1431,7 @@ struct OperatorInfo {
 	Associativity assoc;
 	OperatorType type;
 	Processor::Opcode vmOp;
+	bool toPrimitive;
 };
 
 // FIX : sort these two
@@ -1452,10 +1439,9 @@ const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
 	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP },
 	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP },
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP }, // FIX : eh, duplicate?
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP },
-	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP },
-	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true },
+	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true },
+	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true },
 	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP },
 	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP },
 	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP },
@@ -1485,14 +1471,14 @@ const OperatorInfo POST_OPS[] = {
 	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP },
 	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
 	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
-	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP },
-	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP },
-	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP },
-	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP },
-	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP },
-	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP },
-	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP },
-	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP },
+	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true },
+	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true },
+	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true },
+	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP, true },
+	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP, true },
+	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP, true },
+	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true },
+	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true },
 	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP },
 	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::NEQ_OP },
 	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP }, 
@@ -1703,14 +1689,14 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool duplicate) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED: return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: if (duplicate) emit(Processor::REPUSH_2_OP); emit(Processor::GET_PROPERTY_OP); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
@@ -1786,7 +1772,9 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 	return rr;
 }
 
-Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { return makeRValue(operand(op)); }
+Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) {
+	return makeRValue(operand(op));
+}
 
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	Int32 count = 0;
@@ -1847,7 +1835,7 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 	// FIX : we could add an operator for these three, I guess they will be common
 	emitWithConstant(Processor::CONST_OP, Value(&ARRAY_OBJECT));
 	emitWithInt32(Processor::NEW_OP, 0);
-	emit(Processor::NEW_RESULT_OP);
+	emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
 	
 	Int32 index = 0;
 	while (!token("]", true)) {
@@ -1868,7 +1856,7 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 	// FIX : we could add an operator for these three, I guess they will be common
 	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
 	emitWithInt32(Processor::NEW_OP, 0);
-	emit(Processor::NEW_RESULT_OP);
+	emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
 	
 	white();
 	while (!token("}", false)) {
@@ -1915,13 +1903,27 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case COMMA: discard(xr); xr = rvalueOperand(op); break;
 		case VOID_OPERATOR: discard(xr); xr = discard(operand(op)); break;
 		case GROUP: discard(xr); xr = operand(op); break;
-		case UNARY: discard(xr); xr = rvalueOperand(op); emit(op.vmOp); break;		
-		case BINARY: xr = makeRValue(xr); rvalueOperand(op); emit(op.vmOp); break;
+		
+		case UNARY: {
+			discard(xr);
+			xr = rvalueOperand(op);
+			emit(op.vmOp);
+			break;
+		}
+		
+		case BINARY: {
+			xr = makeRValue(xr);
+			rvalueOperand(op);
+			emit(op.vmOp);
+			break;
+		}
 
 		case POST_INC_DEC: {
-			const bool doShuffle = (xr.t == ExpressionResult::PROPERTY);
-			makeRValue(xr, true);
-			emit(doShuffle ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
+			if (xr.t == ExpressionResult::PROPERTY) {
+				emit(Processor::REPUSH_2_OP);
+			}
+			makeRValue(xr);
+			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			emit(Processor::POP_OP);
@@ -1959,7 +1961,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case FUNCTION_CALL: {
-			Processor::Opcode op = Processor::CALL_GLOBAL_OP;
+			Processor::Opcode op = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.getString()->isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
 			if (xr.t == ExpressionResult::PROPERTY) op = Processor::CALL_METHOD_OP;
 			else xr = makeRValue(xr);
@@ -1977,7 +1979,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				white();
 				xr = functionCall(Processor::NEW_OP);
 			}
-			emit(Processor::NEW_RESULT_OP);
+			emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
 			break;
 		}
 		
@@ -1999,7 +2001,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PRE_INC_DEC: {
 			discard(xr);
 			xr = operand(op);
-			makeRValue(xr, true);
+			if (xr.t == ExpressionResult::PROPERTY) {
+				emit(Processor::REPUSH_2_OP);
+			}
+			makeRValue(xr);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			break;
@@ -2021,7 +2026,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case ASSIGNMENT: {
 			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
-				lxr = makeRValue(lxr, true);
+				if (xr.t == ExpressionResult::PROPERTY) {
+					emit(Processor::REPUSH_2_OP);
+				}
+				lxr = makeRValue(lxr);
 				rvalueOperand(op);
 				emit(op.vmOp);
 			} else {
@@ -2048,31 +2056,9 @@ CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Ch
 	if (selfNameBegin != selfNameEnd) {
 		func->selfName = String::newHashedString(heap, selfNameBegin, selfNameEnd);
 	}
-	expectToken("(", true);
-	white();
-	while (!token(")", false)) {
-		if (eof()) {
-			syntaxError(func->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
-		}
-		if (func->argumentNames.size() != 0) {
-			if (!token(",", false)) {
-				syntaxError("Expected ',' or ')'");
-			}
-			white();
-		}
-		const Char* b = identifier(true, false);
-		const String* name = String::newHashedString(heap, b, p);
-		func->nameIndexes.assign(name, Value(static_cast<Int32>(func->argumentNames.size())));
-		func->argumentNames.append(name);
-		white();
-	}
-	expectToken("{", true);
-	{
-		Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
-		heap.protect(&funcCompiler);
-		p = funcCompiler.compile(p, e);
-	}
-	expectToken("}", false);
+	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
+	heap.protect(&funcCompiler);
+	p = funcCompiler.compile(p, e);
 	return func;
 }
 
@@ -2166,14 +2152,20 @@ Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	return xr;
 }
 
-Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) { return makeRValue(expression(precedence)); }
+Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
+	return makeRValue(expression(precedence));
+}
 
 /*
 	Normally statements discard expression results, but when compiling for eval, statements should return results.
 	flushXR is required to before any conditional branching and before branch targets to produce the result on the
 	vstack in case it has not already been pushed (in other words if it is not an rvalue, e.g. a constant).
 */
-void Compiler::flushXR(ExpressionResult& evalXR) { if (compilingFor == FOR_EVAL) evalXR = makeRValue(evalXR); }
+void Compiler::flushXR(ExpressionResult& evalXR) {
+	if (compilingFor == FOR_EVAL) {
+		evalXR = makeRValue(evalXR);
+	}
+}
 
 Compiler::ExpressionResult Compiler::declareIdentifier() {
 	const Char* b = identifier(true, false);
@@ -2182,8 +2174,9 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Value index;
 		const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
-		if (b != 0) index = b->value;
-		else {
+		if (b != 0) {
+			index = b->value;
+		} else {
 			codeDef->varNames.append(name);
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
 			codeDef->nameIndexes.assign(name, index);
@@ -2216,14 +2209,16 @@ void Compiler::varDeclarations() {
 
 void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
 	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
-		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it)
+		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it) {
 			completeForwardBranch(*it);
+		}
 	}
 }
 
 void Compiler::completeBreaks(const Scope* scope) {
-	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it)
+	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it) {
 		completeForwardBranch(*it);
+	}
 }
 
 void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
@@ -2467,7 +2462,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			}
 			
 			case RETURN_STATEMENT: {
-				if (compilingFor != FOR_FUNCTION) syntaxError("Illegal return");
+				if (compilingFor != FOR_FUNCTION) {
+					syntaxError("Illegal return");
+				}
 				ExpressionResult returnXR;
 				optionalExpression(returnXR, LOWEST_PREC);
 				Scope* s = firstScope;
@@ -2654,14 +2651,40 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
+	if (compilingFor == FOR_FUNCTION) {
+		expectToken("(", true);
+		white();
+		while (!token(")", false)) {
+			if (eof()) {
+				syntaxError(codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+			}
+			if (codeDef->argumentNames.size() != 0) {
+				if (!token(",", false)) {
+					syntaxError("Expected ',' or ')'");
+				}
+				white();
+			}
+			const Char* b = identifier(true, false);
+			const String* name = String::newHashedString(heap, b, p);
+			codeDef->nameIndexes.assign(name, Value(static_cast<Int32>(codeDef->argumentNames.size())));
+			codeDef->argumentNames.append(name);
+			white();
+		}
+		expectToken("{", true);
+	}
 	ExpressionResult evalXR;
 	statementList(0, evalXR);
+	if (compilingFor == FOR_FUNCTION) {
+		expectToken("}", false);
+	}
 	if (compilingFor != FOR_EVAL) {
 		evalXR = discard(evalXR);
 	}
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
-	if (!funcInitCode.empty()) outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
+	if (!funcInitCode.empty()) {
+		outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
+	}
 	// FIX : shrink code vector (copy to quickarray instead?)
 	assert(outputCode == &codeDef->code);
 	codeDef->code.shrink();
@@ -2681,6 +2704,7 @@ if (!supressStdErr) {
 
 void Compiler::compile(const String& source) {
 	compile(source.begin(), source.end());
+	white();
 	if (!eof()) {
 		syntaxError("Syntax error"); // FIX : better error?
 	}
@@ -2754,20 +2778,63 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 const String FROM_CHAR_CODE_STRING("fromCharCode");
 
 Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
-		, evalDirectFunction(true) {
+		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0) {
 	assert(heap.belongs(globals));
 	gcHeap.protect(&stringPrototype);
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
+//	functionPrototype = gcHeap.protect(new Closure);
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
 	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
+//	FunctionConstructor* functionObject = gcHeap.manage(new FunctionConstructor());
 	objectObject->setProperty(*this, &PROTOTYPE_STRING, Value(&objectPrototype));
 	arrayObject->setProperty(*this, &PROTOTYPE_STRING, Value(&arrayPrototype));
+//	functionObject->setProperty(*this, &PROTOTYPE_STRING, Value(&functionPrototype));
 	globals->setProperty(*this, &O_BJECT_STRING, Value(objectObject));
 	globals->setProperty(*this, &A_RRAY_STRING, Value(arrayObject));
+//	globals->setProperty(*this, &F_UNCTION_STRING, Value(functionObject));
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
+	
+	{
+		UserObject* mathObject = gcHeap.manage(new UserObject(&objectPrototype));
+		static const String M_ATH_STRING("Math");
+		globals->setProperty(*this, &M_ATH_STRING, Value(mathObject));
+
+		static struct SqrtFunction : public Function { // FIX : .length?! and all the others?!
+			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+				return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+			}
+		} SQRT_FUNCTION;
+		static const String SQRT_STRING("sqrt");
+		mathObject->setProperty(*this, &SQRT_STRING, Value(&SQRT_FUNCTION));
+	}
+
+	{
+		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
+		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
+		gcHeap.protect(&compiler);
+		// FIX : throw what?
+		// full source:
+		/*
+			function toPrimitiveValue(o) {
+				var v;
+				function convertWith(m) {
+					var t;
+					return (typeof (o[m]) === "function" && ((v = o[m]()) === null || ((t = typeof(v)) !== 'object' && t !== 'function')));
+				}
+				if (!convertWith("valueOf") && !convertWith("toString")) {
+					throw("error");
+				}
+				return v;
+			}
+		*/
+supressStdErr = true;
+		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}"));
+		toPrimitiveValueFunction = gcHeap.protect(new Closure(codeDef, globals));
+supressStdErr = false;
+	}
 }
 
 #include <fstream>
