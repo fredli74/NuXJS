@@ -57,3 +57,10 @@ length
 
 *** regression tests ***
 yeah
+toString()
+valueOf()
+1234
+toString()
+1234
+toString()
+1236

@@ -34,3 +34,9 @@ print("*** regression tests ***");
  
 // gc-protect temporary object during method call
 (new (function(){this.a=function() { gc(); print(this.b) }; this.b="yeah" })).a()
+
+// non-standard evaluation order for implicit "to primitive" conversions
+var v={toString:function(){print("toString()");return "abcd"},valueOf:function(){print("valueOf()");return 1234;}};
+print(v[v]=+v);
+print(v[v]++);
+print(++v[v]);

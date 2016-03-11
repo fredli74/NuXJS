@@ -746,6 +746,13 @@ valueOf called
 function called
 valueOf called
 3
+valueOf = 1234
+5678
+valueOf = 1234
+9012
+undefined
+toString = "abcd"
+efgh
 *** eval ***
 3
 6

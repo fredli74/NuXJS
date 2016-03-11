@@ -665,6 +665,20 @@ print(a*b+c);
 	print(f(2)+o)
 })();
 
+(function() {
+	var v={toString:void null,valueOf:function(){print("valueOf = 1234");return 1234;}};
+	var o=new Object();
+	o[v]=5678;
+	print(o[1234]);
+	delete v.toString;
+	o[v]=9012;
+	print(o[1234]);
+	print(o["[object Object]"]);
+	v.toString=function(){print('toString = "abcd"');return "abcd";};
+	o[v]="efgh";
+	print(o.abcd);
+})();
+
 print("*** eval ***");
 
 print(eval("3"))

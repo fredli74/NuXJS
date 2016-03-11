@@ -241,18 +241,19 @@ Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTI
 
 bool Value::toBool() const {
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return b;
 		case NUMBER_TYPE: return (d != 0.0);
 		case STRING_TYPE: return (!s->empty());
 		case OBJECT_TYPE: return true;
-		default: assert(0);
 	}
 }
 
 double Value::toDouble() const {
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE:
 		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
@@ -267,7 +268,6 @@ double Value::toDouble() const {
 			}
 			return v;
 		}
-		default: assert(0);
 	}
 }
 
@@ -1550,7 +1550,8 @@ struct Compiler::ExpressionResult {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) { }
+		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) {
+}
 
 void Compiler::syntaxError(const String& what) {
 	throw Exception(heap, Value(heap.manage(new String(what))));
@@ -2880,7 +2881,7 @@ supressStdErr = true;
 		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
 		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
 		gcHeap.protect(&compiler);
-		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b}"));
+		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}"));
 		toStringFunction = gcHeap.protect(new Closure(codeDef, globals));
 supressStdErr = false;
 	}

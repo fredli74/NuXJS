@@ -10,3 +10,4 @@
 
 *) No RegExp support. Including literals etc.
 
+*) implicit valueOf and toString conversions are done earlier than in ECMA standard and not necessarily in the same order or number of times. E.g. v[o]++ in Ecmascript means two calls to toString() but one in NuXJScript.
