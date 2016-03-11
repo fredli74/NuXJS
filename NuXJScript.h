@@ -874,8 +874,9 @@ class Processor : public GCItem {
 					INVALID_OP
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
-					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2
-					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value
+					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
+					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
+					, SWAP_OP										// stack: value_1, value_2 -> value_2, value_1						// used by TO_PRIMITIVE_2_OP
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
@@ -884,7 +885,8 @@ class Processor : public GCItem {
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
-//					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
+					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
+					, TO_PRIMITIVE_2_OP								// stack: value -> primitive_value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value

@@ -715,6 +715,37 @@ NaN
 bad valueOf
 good toString
 NaN
+a
+b
+c
+6
+a
+b
+c
+-7
+b
+c
+a
+10
+b
+c
+a
+122
+a
+b
+c
+197
+valueOf called
+1
+valueOf called
+valueOf called
+2
+function called
+valueOf called
+3
+function called
+valueOf called
+3
 *** eval ***
 3
 6

@@ -1123,6 +1123,8 @@ void Processor::toPrimitiveValue() {
 	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 }
 
+static const CodeWord CHAIN_SWAP_STUB[2] = { Processor::SWAP_OP, Processor::RETURN_OP };
+
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
 	assert(csp >= cstackStart);
@@ -1137,6 +1139,7 @@ bool Processor::privateRun() {
 			case REPUSH_OP:			push(vsp[0]); break;
 			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
+			case SWAP_OP:			push(vsp[-1]); vsp[-2] = vsp[-1]; poppush(vsp[0]); break;
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
@@ -1158,27 +1161,39 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
-/*
-			case TO_PRIMITIVE_OP:	if (vsp[0].isObject())
-										*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-									break;
-*/
+
+			case TO_PRIMITIVE_2_OP:
+				if (vsp[-1].isObject()) {
+					push(vsp[-1]);
+					vsp[-2] = vsp[-1];
+					poppush(vsp[0]);
+					chain(CHAIN_SWAP_STUB);
+					*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+				}
+				break;
+
+			case TO_PRIMITIVE_OP:
+				if (vsp[0].isObject()) {
+					*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+				}
+				break;
+
 			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
 			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
-			case ADD_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(vsp[-1].add(heap, vsp[0])); break;
-			case SUB_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
-			case MUL_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
-			case DIV_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
-			case MOD_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
-			case OR_OP:		if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
-			case XOR_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
-			case AND_OP:	if (vsp[-1].isObject() || vsp[0].isObject()) toPrimitiveValues(); else poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
+			case ADD_OP:	poppush(vsp[-1].add(heap, vsp[0])); break;
+			case SUB_OP:	poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
+			case MUL_OP:	poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
+			case DIV_OP:	poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
+			case MOD_OP:	poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case OR_OP:		poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
+			case XOR_OP:	poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
+			case AND_OP:	poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
 			case SHL_OP:	poppush(Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case SHR_OP:	poppush(Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
 			case USHR_OP:	poppush(Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
-			case PLUS_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(vsp[0].toDouble()); break;
-			case MINUS_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(-vsp[0].toDouble()); break;
-			case INV_OP:	if (vsp->isObject()) toPrimitiveValue(); else vsp[0] = Value(~vsp[0].toInt()); break;
+			case PLUS_OP:	vsp[0] = Value(vsp[0].toDouble()); break;
+			case MINUS_OP:	vsp[0] = Value(-vsp[0].toDouble()); break;
+			case INV_OP:	vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
 			case X_EQ_OP:	poppush(Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
 			case X_NEQ_OP:	poppush(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
@@ -1242,7 +1257,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case NEW_OP: {
-				Int32 n = operand();
+				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Function* f = vsp[-n].getFunction();
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v); // FIX : standard object prototype if v.asObject() == 0 ?
@@ -1356,9 +1371,9 @@ static Int32 getInt32(const CodeWord* code, UInt32& offset) {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
+		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE", "SWAP"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-//		, "TO_PRIMITIVE_OP"
+		, "TO_PRIMITIVE", "TO_PRIMITIVE_2"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1772,7 +1787,7 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 	return rr;
 }
 
-Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) {
+Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { // FIX : drop, silly little
 	return makeRValue(operand(op));
 }
 
@@ -1906,14 +1921,26 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case UNARY: {
 			discard(xr);
-			xr = rvalueOperand(op);
+			xr = operand(op);
+			const bool needPrimitive = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
+			xr = makeRValue(xr);
+			if (needPrimitive) {
+				emit(Processor::TO_PRIMITIVE_OP);
+			}
 			emit(op.vmOp);
 			break;
 		}
 		
 		case BINARY: {
+			const bool needPrimitiveL = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
+			makeRValue(xr);
+			xr = operand(op);
+			const bool needPrimitiveR = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
 			xr = makeRValue(xr);
-			rvalueOperand(op);
+			if (needPrimitiveL || needPrimitiveR) {
+				emit(Processor::TO_PRIMITIVE_2_OP);
+				emit(Processor::TO_PRIMITIVE_OP);
+			}
 			emit(op.vmOp);
 			break;
 		}
@@ -1987,11 +2014,11 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			switch (xr.t) {
-				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* continue */
+				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* continue */
+				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED); break;
 				default: assert(0);
 			}
