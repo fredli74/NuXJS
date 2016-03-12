@@ -662,6 +662,13 @@ print((new ValueObject("1234")) > (new ValueObject("1234.0")));
 print((new ValueObject("1234")) >= (new ValueObject("1234.0")));
 print((new ValueObject("1234")) < (new ValueObject("1234.0")));
 print((new ValueObject("1234")) <= (new ValueObject("1234.0")));
+print((new ValueObject("1234")) == (new ValueObject(1234.0)));
+print((new ValueObject("1234")) == (new ValueObject(1234.1)));
+print((new ValueObject("1234")) != (new ValueObject("1234.0")));
+print((new ValueObject(1234)) != (new ValueObject(1234.0)));
+var v = new ValueObject(1234);
+print(v == v);
+print(v != v);
 
 print(33 + (new ValueObject(55)));
 print(33 + (new ValueObject("55")));
@@ -689,6 +696,10 @@ print("1234" > (new ValueObject("1234.0")));
 print("1234" >= (new ValueObject("1234.0")));
 print("1234" < (new ValueObject("1234.0")));
 print("1234" <= (new ValueObject("1234.0")));
+print("1234" == (new ValueObject(1234.0)));
+print("1234" == (new ValueObject(1234.1)));
+print("1234" != (new ValueObject("1234.0")));
+print(1234 != (new ValueObject(1234.0)));
 
 print((new ValueObject(33)) + 55);
 print((new ValueObject(33)) + "55");
@@ -715,6 +726,10 @@ print((new ValueObject("1234")) > "1234.0");
 print((new ValueObject("1234")) >= "1234.0");
 print((new ValueObject("1234")) < "1234.0");
 print((new ValueObject("1234")) <= "1234.0");
+print((new ValueObject("1234")) == 1234.0);
+print((new ValueObject("1234")) == 1234.1);
+print((new ValueObject("1234")) != "1234.0");
+print((new ValueObject(1234)) != 1234.0);
 
 print(+new ValueObject(239423.2349));
 print(+new ValueObject("239423.2349"));
