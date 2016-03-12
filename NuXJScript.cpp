@@ -1152,17 +1152,26 @@ bool Processor::privateRun() {
 
 			case TO_PRIMITIVE_OP:
 				if (vsp[0].isObject()) {
-					vsp[0] = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
 			case TO_STRING_OP:
 				if (!vsp[0].isString()) {
 					if (vsp[0].isObject()) {
-						vsp[0] = engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+						engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					} else {
 						vsp[0] = Value(vsp[0].toString(heap));
 					}
+				}
+				break;
+				
+			case PRE_EQUAL_OP:
+				if (vsp[-1].isObject() != vsp[0].isObject()) {
+					if (vsp[-1].isObject()) {
+						std::swap(vsp[-1], vsp[0]);
+					}
+					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
@@ -1361,7 +1370,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_PRIMITIVE", "TO_STRING"
+		, "TO_PRIMITIVE", "TO_STRING", "PRE_EQUAL_OP"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1422,7 +1431,7 @@ const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
-	GROUP, UNARY, BINARY, IN_OPERATOR, ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
+	GROUP, UNARY, BINARY, IN_OPERATOR, ABSTRACT_EQUAL, ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
 	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
@@ -1454,7 +1463,7 @@ const OperatorInfo PRE_OPS[] = {
 
 const OperatorInfo POST_OPS[] = {
 	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP },
-	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::EQ_OP },
+	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::EQ_OP },
 	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP },
 	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::USHR_OP, true },
 	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP, true },
@@ -1483,7 +1492,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true },
 	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true },
 	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP },
-	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::NEQ_OP },
+	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::NEQ_OP },
 	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true },
 	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true },
 	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true },
@@ -1914,6 +1923,14 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case BINARY: {
 			makeRValue(xr, op.toPrimitive);
 			xr = makeRValue(operand(op), op.toPrimitive);
+			emit(op.vmOp);
+			break;
+		}
+		
+		case ABSTRACT_EQUAL: {
+			makeRValue(xr, false);
+			xr = makeRValue(operand(op), false);
+			emit(Processor::PRE_EQUAL_OP);
 			emit(op.vmOp);
 			break;
 		}

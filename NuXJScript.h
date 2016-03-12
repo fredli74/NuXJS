@@ -376,6 +376,7 @@ class Value {
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
+				bool isNumber() const { return type == NUMBER_TYPE; }
 				bool isString() const { return type == STRING_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
@@ -892,6 +893,7 @@ class Processor : public GCItem {
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
 					, TO_STRING_OP									// stack: value -> string_value
+					, PRE_EQUAL_OP									// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
