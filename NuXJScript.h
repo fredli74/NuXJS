@@ -939,8 +939,6 @@ void error(); // FIX
 				
 	protected:	void poppush(const Value& v);
 				Int32 operand();
-				void toPrimitiveValue();
-				void toPrimitiveValues();
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);

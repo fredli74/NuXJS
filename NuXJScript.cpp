@@ -1114,16 +1114,6 @@ void Processor::throwVirtualException(const Value& exception) {
 	updateInternals();
 }
 
-void Processor::toPrimitiveValues() {
-	--ip;
-	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-}
-
-void Processor::toPrimitiveValue() {
-	--ip;
-	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-}
-
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
 	assert(csp >= cstackStart);
