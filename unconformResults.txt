@@ -64,3 +64,34 @@ toString()
 1234
 toString()
 1236
+valueOf called
+1
+valueOf called
+valueOf called
+2
+valueOf called
+function called
+3
+function called
+valueOf called
+3
+a
+b
+c
+6
+a
+b
+c
+-7
+a
+b
+c
+8
+a
+b
+c
+142
+a
+b
+c
+197

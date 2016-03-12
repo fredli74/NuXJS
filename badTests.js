@@ -152,3 +152,5 @@ return "a" // is not acceptable in global scope
 
 [1,,]
 
+(a=5)+=6
+

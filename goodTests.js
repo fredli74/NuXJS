@@ -192,7 +192,8 @@ MyObject = function() { }; objectFromCustomConstructor = new MyObject; objectFro
 print("name" in objectFromCustomConstructor);
 print("age" in objectFromCustomConstructor);
 print("nope" in objectFromCustomConstructor);
-print(objectFromCustomConstructor in objectFromCustomConstructor);
+// FIX : enable once we have toString in object.prototype
+// print(objectFromCustomConstructor in objectFromCustomConstructor);
 print("objectFromCustomConstructor" in this);
 
 print.extended = "added to built-in";
@@ -632,9 +633,131 @@ new String("a") == new String("a") is false.
  
 */
 
+function ValueObject(v) {
+	this.valueOf = function() { return v };
+};
+
+print((new ValueObject(33)) + (new ValueObject(55)));
+print((new ValueObject(33)) + (new ValueObject("55")));
+print((new ValueObject("62456")) + (new ValueObject(23452)));
+print((new ValueObject(76)) - (new ValueObject(23)));
+print((new ValueObject(35)) * (new ValueObject("123")));
+print((new ValueObject("1574.4")) / (new ValueObject(12.3)));
+print((new ValueObject(329329)) % (new ValueObject(127)));
+print((new ValueObject(55)) & (new ValueObject(27)));
+print((new ValueObject(-439)) | (new ValueObject(33)));
+print((new ValueObject(123)) ^ (new ValueObject(243)));
+print((new ValueObject(4398)) << (new ValueObject(5)));
+print((new ValueObject(129384)) >> (new ValueObject(3)));
+print((new ValueObject(-348234)) >>> (new ValueObject(11)));
+print((new ValueObject(1234)) < (new ValueObject(1235)));
+print((new ValueObject(1234)) < (new ValueObject(1234)));
+print((new ValueObject(1234)) <= (new ValueObject(1235)));
+print((new ValueObject(1234)) <= (new ValueObject("1234.0")));
+print((new ValueObject(1235)) > (new ValueObject(1234)));
+print((new ValueObject(1234)) > (new ValueObject(1234)));
+print((new ValueObject(1235)) >= (new ValueObject(1234)));
+print((new ValueObject("1234.0")) >= (new ValueObject(1234)));
+print((new ValueObject("1234")) > (new ValueObject("1234.0")));
+print((new ValueObject("1234")) >= (new ValueObject("1234.0")));
+print((new ValueObject("1234")) < (new ValueObject("1234.0")));
+print((new ValueObject("1234")) <= (new ValueObject("1234.0")));
+
+print(33 + (new ValueObject(55)));
+print(33 + (new ValueObject("55")));
+print("62456" + (new ValueObject(23452)));
+print(76 - (new ValueObject(23)));
+print(35 * (new ValueObject("123")));
+print("1574.4" / (new ValueObject(12.3)));
+print(329329 % (new ValueObject(127)));
+print(55 & (new ValueObject(27)));
+print(-439 | (new ValueObject(33)));
+print(123 ^ (new ValueObject(243)));
+print(4398 << (new ValueObject(5)));
+print(129384 >> (new ValueObject(3)));
+print(-348234 >>> (new ValueObject(11)));
+print(1234 < (new ValueObject(1235)));
+print(1234 < (new ValueObject(1234)));
+print(1234 <= (new ValueObject(1235)));
+print(1234 <= (new ValueObject("1234.0")));
+print(1235 > (new ValueObject(1234)));
+print(1234 > (new ValueObject(1234)));
+print(1235 >= (new ValueObject(1234)));
+print("1234.0" >= (new ValueObject(1234)));
+print("1234.0" >= (new ValueObject(1234)));
+print("1234" > (new ValueObject("1234.0")));
+print("1234" >= (new ValueObject("1234.0")));
+print("1234" < (new ValueObject("1234.0")));
+print("1234" <= (new ValueObject("1234.0")));
+
+print((new ValueObject(33)) + 55);
+print((new ValueObject(33)) + "55");
+print((new ValueObject("62456")) + 23452);
+print((new ValueObject(76)) - 23);
+print((new ValueObject(35)) * "123");
+print((new ValueObject("1574.4")) / 12.3);
+print((new ValueObject(329329)) % 127);
+print((new ValueObject(55)) & 27);
+print((new ValueObject(-439)) | 33);
+print((new ValueObject(123)) ^ 243);
+print((new ValueObject(4398)) << 5);
+print((new ValueObject(129384)) >> 3);
+print((new ValueObject(-348234)) >>> 11);
+print((new ValueObject(1234)) < 1235);
+print((new ValueObject(1234)) < 1234);
+print((new ValueObject(1234)) <= 1235);
+print((new ValueObject(1234)) <= "1234.0");
+print((new ValueObject(1235)) > 1234);
+print((new ValueObject(1234)) > 1234);
+print((new ValueObject(1235)) >= 1234);
+print((new ValueObject("1234.0")) >= 1234);
+print((new ValueObject("1234")) > "1234.0");
+print((new ValueObject("1234")) >= "1234.0");
+print((new ValueObject("1234")) < "1234.0");
+print((new ValueObject("1234")) <= "1234.0");
+
+print(+new ValueObject(239423.2349));
+print(+new ValueObject("239423.2349"));
+print(-new ValueObject(238742));
+print(-new ValueObject("238742"));
+print(~new ValueObject(-3492384));
+print(~new ValueObject("-3492384"));
+
+var v = new ValueObject(123);
+print(typeof v);
+print(v++);
+print(typeof v);
+print(v);
+v = new ValueObject(v);
+print(typeof v);
+print(++v);
+print(typeof v);
+
+v = new ValueObject(v);
+print(typeof v);
+print(v--);
+print(typeof v);
+print(v);
+v = new ValueObject(v);
+print(typeof v);
+print(--v);
+print(typeof v);
+
+o = new ValueObject(12345); print(typeof o); print(o += 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o += (new ValueObject(6789))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o -= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o -= (new ValueObject(6789))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o *= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o *= (new ValueObject(6789))); print(typeof o); print(o);
+o = new ValueObject(15744); print(typeof o); print(o /= 123); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o /= (new ValueObject(64))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o %= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o %= (new ValueObject(1748))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o &= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o &= (new ValueObject(374))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o |= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o |= (new ValueObject(13764))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o ^= 6789); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o ^= (new ValueObject(34857))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o >>= 5); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o >>= (new ValueObject(5))); print(typeof o); print(o);
+o = new ValueObject(12345); print(typeof o); print(o <<= 5); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o <<= (new ValueObject(5))); print(typeof o); print(o);
+o = new ValueObject(-12345); print(typeof o); print(o >>>= 5); print(typeof o); print(o); o = new ValueObject(o); print(typeof o); print(o >>>= (new ValueObject(5))); print(typeof o); print(o);
+
+
 o=new (function() { this.valueOf = function() { return 33 } } )
 print(+o);
-
 
 OneHundredEleven = function() { this.valueOf = function() { print("click"); return 111 }; this.toString = null; }; o = new OneHundredEleven; print(+o)
 TestObject = function() { };
@@ -646,24 +769,6 @@ o = new AString; print(+o)
  
 StringAgain = function() { this.valueOf = function() { print("bad valueOf"); return this }; this.toString = function() { print("good toString"); return "stringy"; } };
 o = new StringAgain; print(+o);
-
-i = 0;
-f = function(s) { this.valueOf = function() { print(s); return ++i; } };
-a = new f('a'); b = new f('b'); c = new f('c');
-print(a+b+c);
-print(a-b-c);
-print(a-(b-c));
-print(a+b*c);
-print(a*b+c);
-
-(function() {
-	var o={valueOf:function(){print("valueOf called"); return 1}}
-	print(+o)
-	print(o+o)
-	function f(x) { print("function called"); return x }
-	print(o+f(2))
-	print(f(2)+o)
-})();
 
 (function() {
 	var v={toString:void null,valueOf:function(){print("valueOf = 1234");return 1234;}};
@@ -678,6 +783,16 @@ print(a*b+c);
 	o[v]="efgh";
 	print(o.abcd);
 })();
+
+var v = { valueOf: function() { return 'a' } };
+var x = { a: 55 };
+print(delete x[v]);
+print(typeof x.a);
+
+var v = { toString: function() { return "koko" } };
+var o={koko:"koko"};
+print("koko" in o);
+print(v in o);
 
 print("*** eval ***");
 

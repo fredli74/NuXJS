@@ -72,3 +72,4 @@ Exception: Expected ',' or ']'
 Exception: Expected expression
 Exception: Expected ',' or ']'
 Exception: Expected expression
+Exception: Illegal l-value

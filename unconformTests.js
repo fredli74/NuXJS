@@ -40,3 +40,22 @@ var v={toString:function(){print("toString()");return "abcd"},valueOf:function()
 print(v[v]=+v);
 print(v[v]++);
 print(++v[v]);
+
+(function() {
+	var o={valueOf:function(){print("valueOf called"); return 1}}
+	print(+o)
+	print(o+o)
+	function f(x) { print("function called"); return x }
+	print(o+f(2))
+	print(f(2)+o)
+})();
+
+i = 0;
+f = function(s) { this.valueOf = function() { print(s); return ++i; } };
+a = new f('a'); b = new f('b'); c = new f('c');
+print(a+b+c);
+print(a-b-c);
+print(a-(b-c));
+print(a+b*c);
+print(a*b+c);
+

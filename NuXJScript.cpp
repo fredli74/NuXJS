@@ -285,31 +285,32 @@ Int32 Value::toInt() const {
 
 const String* Value::toString(GCHeap& heap) const {
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
 		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
 		case NUMBER_TYPE: return String::fromDouble(heap, d);
 		case STRING_TYPE: return s;
 case OBJECT_TYPE: return heap.manage(new String("<object>"));
-		default: assert(0);
 	}
 }
 
 Object* Value::toObject(GCHeap& heap) const {
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: /* FIX */ return 0;
 		case NUMBER_TYPE: /* FIX */ return 0;
 		case STRING_TYPE: return const_cast<String*>(s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case OBJECT_TYPE: return o;
-		default: assert(0);
 	}
 }
 
 bool Value::operator==(const Value& y) const {
 	if (type != y.type) return false;
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return true;
@@ -317,7 +318,6 @@ bool Value::operator==(const Value& y) const {
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
-		default: assert(0);
 	}
 }
 
@@ -325,6 +325,7 @@ bool Value::operator<(const Value& y) const {
 	if (type < y.type) return true;
 	if (type > y.type) return false;
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return false;
@@ -332,28 +333,28 @@ bool Value::operator<(const Value& y) const {
 		case NUMBER_TYPE: return d < y.d;
 		case STRING_TYPE: return s->isLessThan(*y.s);
 		case OBJECT_TYPE: return o < y.o;
-		default: assert(0);
 	}
 }
 
 bool Value::compareStrictly(const Value& y) const {
 	assert(y.type == type);
 	switch (type) {
+		default: assert(0);
 		case UNDEFINED_TYPE: return true;
 		case NULL_TYPE: return true;
 		case BOOLEAN_TYPE: return b == y.b;
 		case NUMBER_TYPE: return d == y.d;
 		case STRING_TYPE: return s->isEqualTo(*y.s);
 		case OBJECT_TYPE: return o == y.o;
-		default: assert(0);
 	}
 }
 
 bool Value::isStrictlyEqualTo(const Value& y) const { return (type == y.type ? compareStrictly(y) : false); }
 
 bool Value::isEqualTo(const Value& y) const {
-	if (type == y.type) return compareStrictly(y);
-	else {
+	if (type == y.type) {
+		return compareStrictly(y);
+	} else {
 		if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
 		if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
 		if (type == NUMBER_TYPE && y.type == STRING_TYPE) return d == y.toDouble();
@@ -1123,8 +1124,6 @@ void Processor::toPrimitiveValue() {
 	*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 }
 
-static const CodeWord CHAIN_SWAP_STUB[2] = { Processor::SWAP_OP, Processor::RETURN_OP };
-
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
 	assert(csp >= cstackStart);
@@ -1139,7 +1138,6 @@ bool Processor::privateRun() {
 			case REPUSH_OP:			push(vsp[0]); break;
 			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
-			case SWAP_OP:			push(vsp[-1]); vsp[-2] = vsp[-1]; poppush(vsp[0]); break;
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
@@ -1161,16 +1159,6 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
-
-			case TO_PRIMITIVE_2_OP:	// FIX : is it really worth this extra cludge just to get the right call order of e.g. obj+func() (func should be called first, but if we do TO_PRIMITIVE_OP directly on the top stack item before processing right side, obj.toValue() will be called first)
-				if (vsp[-1].isObject()) {
-					push(vsp[-1]);
-					vsp[-2] = vsp[-1];
-					poppush(vsp[0]);
-					chain(CHAIN_SWAP_STUB);
-					*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
-				}
-				break;
 
 			case TO_PRIMITIVE_OP:
 				if (vsp[0].isObject()) {
@@ -1299,7 +1287,7 @@ bool Processor::privateRun() {
 			case DELETE_OP: {
 				o = vsp[-1].toObject(heap);
 				if (o == 0) error();
-				poppush(Value(o->deleteProperty(engine, vsp[0].toString(heap))));
+				poppush(Value(o->deleteProperty(engine, vsp[0].getString())));
 				break;
 			}
 			case POP_FRAME_OP: {
@@ -1326,7 +1314,7 @@ bool Processor::privateRun() {
 			case IN_OP: {
 				o = vsp[0].asObject();
 				if (o == 0) error(); // FIX : TypeError
-				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].toString(heap)));
+				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].getString()));
 				pop(1);
 				break;				
 			}
@@ -1381,9 +1369,9 @@ static Int32 getInt32(const CodeWord* code, UInt32& offset) {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE", "SWAP"
+		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_PRIMITIVE", "TO_PRIMITIVE_2", "TO_STRING"
+		, "TO_PRIMITIVE", "TO_STRING"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "UNSIGNED_SHR"
@@ -1444,7 +1432,7 @@ const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
-	GROUP, UNARY, BINARY, ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
+	GROUP, UNARY, BINARY, IN_OPERATOR, ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
 	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
@@ -1456,14 +1444,14 @@ struct OperatorInfo {
 	Associativity assoc;
 	OperatorType type;
 	Processor::Opcode vmOp;
-	bool toPrimitive;
+	bool toPrimitive; // FIX : almost true everywhere, drop and make exception for '!' ?
 };
 
 // FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
 	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP },
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP, true },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP, true },
 	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true },
 	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true },
 	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true },
@@ -1478,22 +1466,22 @@ const OperatorInfo POST_OPS[] = {
 	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP },
 	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::EQ_OP },
 	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP },
-	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::USHR_OP },
-	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP },
-	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHL_OP },
-	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::ADD_OP },
-	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SUB_OP },
-	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MUL_OP },
-	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::DIV_OP },
-	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MOD_OP },
-	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::AND_OP },
-	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::XOR_OP },
-	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::OR_OP },
-	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP },
-	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP },
-	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP },
-	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP },
-	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP },
+	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::USHR_OP, true },
+	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP, true },
+	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHL_OP, true },
+	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::ADD_OP, true },
+	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SUB_OP, true },
+	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MUL_OP, true },
+	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::DIV_OP, true },
+	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MOD_OP, true },
+	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::AND_OP, true },
+	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::XOR_OP, true },
+	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::OR_OP, true },
+	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP, true },
+	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP, true },
+	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true },
+	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true },
+	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true },
 	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
 	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true },
@@ -1506,16 +1494,16 @@ const OperatorInfo POST_OPS[] = {
 	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true },
 	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP },
 	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::NEQ_OP },
-	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP }, 
-	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP }, 
-	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP }, 
-	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP },
+	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true },
+	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true },
+	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true },
+	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP, true },
 	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP },
 	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP },
 	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
 	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP },
-	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::IN_OP }	// Important: must be last
+	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, true }	// Important: must be last
 };
 
 // FIX : sort
@@ -1715,14 +1703,14 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return std::copy(b, p++, d);
 }
 
-Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: return xr;
+		case ExpressionResult::PUSHED: if (toPrimitive) emit(Processor::TO_PRIMITIVE_OP); return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(Processor::TO_PRIMITIVE_OP); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(Processor::TO_PRIMITIVE_OP); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(Processor::TO_PRIMITIVE_OP); break;
 		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
@@ -1796,10 +1784,6 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 		expectToken(op.closeToken, true);
 	}
 	return rr;
-}
-
-Compiler::ExpressionResult Compiler::rvalueOperand(const OperatorInfo& op) { // FIX : drop, silly little
-	return makeRValue(operand(op));
 }
 
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
@@ -1926,42 +1910,37 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	}
 	// FIX : sort
 	switch (op.type) {
-		case COMMA: discard(xr); xr = rvalueOperand(op); break;
+		case COMMA: discard(xr); xr = makeRValue(operand(op)); break;
 		case VOID_OPERATOR: discard(xr); xr = discard(operand(op)); break;
 		case GROUP: discard(xr); xr = operand(op); break;
 		
 		case UNARY: {
 			discard(xr);
-			xr = operand(op);
-			const bool needPrimitive = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
-			xr = makeRValue(xr);
-			if (needPrimitive) {
-				emit(Processor::TO_PRIMITIVE_OP);
-			}
+			xr = makeRValue(operand(op), op.toPrimitive);
 			emit(op.vmOp);
 			break;
 		}
 		
 		case BINARY: {
-			const bool needPrimitiveL = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
+			makeRValue(xr, op.toPrimitive);
+			xr = makeRValue(operand(op), op.toPrimitive);
+			emit(op.vmOp);
+			break;
+		}
+
+		case IN_OPERATOR: {
 			makeRValue(xr);
-			xr = operand(op);
-			const bool needPrimitiveR = (op.toPrimitive && xr.t != ExpressionResult::NONE && xr.t != ExpressionResult::CONSTANT); // FIX : func?
-			xr = makeRValue(xr);
-			if (needPrimitiveL || needPrimitiveR) {
-				emit(Processor::TO_PRIMITIVE_2_OP);
-				emit(Processor::TO_PRIMITIVE_OP);
-			}
+			emit(Processor::TO_STRING_OP);
+			xr = makeRValue(operand(op));
 			emit(op.vmOp);
 			break;
 		}
 
 		case POST_INC_DEC: {
 			if (xr.t == ExpressionResult::PROPERTY) {
-			// FIX : TO_STRING once here
 				emit(Processor::REPUSH_2_OP);
 			}
-			makeRValue(xr);
+			makeRValue(xr, true);
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
@@ -1974,7 +1953,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(Processor::POP_OP);
-			rvalueOperand(op);
+			makeRValue(operand(op));
 			completeForwardBranch(point);
 			break;
 		}
@@ -1982,7 +1961,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case CONDITIONAL: {
 			xr = makeRValue(xr);
 			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-			rvalueOperand(op);
+			makeRValue(operand(op));
 			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
 			xr = rvalueExpression(op.prec);
@@ -1995,7 +1974,6 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			white();
 			const Char* b = identifier(true, true);
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(heap, b, p)));
-			// FIX : no TO_STRING needed!
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -2011,7 +1989,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case NEW_OPERATOR: {
 			discard(xr);
-			rvalueOperand(op);
+			makeRValue(operand(op));
 			if (!token("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
 				xr = ExpressionResult(ExpressionResult::PUSHED);
@@ -2042,10 +2020,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			if (xr.t == ExpressionResult::PROPERTY) {
-			// FIX : TO_STRING once here
 				emit(Processor::REPUSH_2_OP);
 			}
-			makeRValue(xr);
+			makeRValue(xr, true);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			break;
@@ -2065,17 +2042,15 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case ASSIGNMENT: {
-			ExpressionResult lxr(xr);
 			if (op.vmOp != Processor::INVALID_OP) { // FIX : sep type
 				if (xr.t == ExpressionResult::PROPERTY) {
-				// FIX : TO_STRING once here
 					emit(Processor::REPUSH_2_OP);
 				}
-				lxr = makeRValue(lxr);
-				rvalueOperand(op);
+				makeRValue(xr, op.toPrimitive);
+				makeRValue(operand(op), op.toPrimitive);
 				emit(op.vmOp);
 			} else {
-				rvalueOperand(op);
+				makeRValue(operand(op), op.toPrimitive);
 			}
 			xr = makeAssignment(xr);
 			break;
@@ -2083,7 +2058,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case PROPERTY_BRACKETS: {
 			xr = makeRValue(xr);
-			rvalueOperand(op); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			makeRValue(operand(op)); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
 			emit(Processor::TO_STRING_OP);
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
@@ -2881,6 +2856,7 @@ supressStdErr = true;
 		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
 		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
 		gcHeap.protect(&compiler);
+		// FIX : isb+'' right at the end here? + converts with toPrimitiveValue
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}"));
 		toStringFunction = gcHeap.protect(new Closure(codeDef, globals));
 supressStdErr = false;

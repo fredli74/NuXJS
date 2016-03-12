@@ -52,7 +52,8 @@
 //		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 //		proper error exceptions (TypeError etc)
 //		(new) Object(v) should convert v to number, string object etc
-//		all primitive traps
+//		toPrimitive also for native function arguments like sqrt etc, how?
+//		are we comparing NaN correctly? e.g. NaN !== NaN
 //
 //	Compiler
 //
@@ -134,6 +135,9 @@
 //		switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
 //		fast lookup of operators (some clever quick hashing)
 //		couldn't we share identical strings in the same engine? any disadvantage to that?
+//		simple constants pre-calculations
+//		let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
+//		also would be good if a["ko"] or a[3423] didn't create a TO_STRING_OP
 //
 //	GC
 //
@@ -878,7 +882,6 @@ class Processor : public GCItem {
 					, REPUSH_OP										// stack: value -> value, value
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
-					, SWAP_OP										// stack: value_1, value_2 -> value_2, value_1						// used by TO_PRIMITIVE_2_OP
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
@@ -888,7 +891,6 @@ class Processor : public GCItem {
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
-					, TO_PRIMITIVE_2_OP								// stack: value_1, value_2 -> primitive_value_1, primitive_value_2
 					, TO_STRING_OP									// stack: value -> string_value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
@@ -1007,7 +1009,7 @@ class Compiler : public GCItem {
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g.used by return statement if there are finally blocks to call first)
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
-				ExpressionResult makeRValue(const ExpressionResult& xr); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 
@@ -1015,7 +1017,6 @@ class Compiler : public GCItem {
 				void completeBreaks(const Scope* scope);
 
 				ExpressionResult operand(const OperatorInfo& op);
-				ExpressionResult rvalueOperand(const OperatorInfo& op);
 				ExpressionResult functionCall(Processor::Opcode op);
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
