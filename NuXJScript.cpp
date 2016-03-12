@@ -1162,14 +1162,14 @@ bool Processor::privateRun() {
 
 			case TO_PRIMITIVE_OP:
 				if (vsp[0].isObject()) {
-					*vsp = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
 			case TO_STRING_OP:
 				if (!vsp[0].isString()) {
 					if (vsp[0].isObject()) {
-						*vsp = engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+						engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					} else {
 						vsp[0] = Value(vsp[0].toString(heap));
 					}
@@ -1197,10 +1197,10 @@ bool Processor::privateRun() {
 			case X_NEQ_OP:	poppush(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
 			case EQ_OP:		poppush(Value(vsp[-1].isEqualTo(vsp[0]))); break;
 			case NEQ_OP:	poppush(Value(!vsp[-1].isEqualTo(vsp[0]))); break;
-			case LT_OP:		poppush(Value(vsp[-1].isLessThan(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case LEQ_OP:	poppush(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
-			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break; // FIX : do toPrimitive here, isLessThan is order-less
+			case LT_OP:		poppush(Value(vsp[-1].isLessThan(vsp[0]))); break;
+			case LEQ_OP:	poppush(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
+			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break;
+			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	offset = operand(); ip += offset; break;							
 			case JT_OP:		offset = operand(); ip += (vsp[0].toBool() ? offset : 0); pop(1); break;
 			case JF_OP:		offset = operand(); ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;

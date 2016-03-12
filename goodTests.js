@@ -139,6 +139,9 @@ print(garlicNan>cheeseNan) // NaN comparisons are always false
 print(garlicNan!=cheeseNan) // but this is true
 print(garlicNan!==cheeseNan) // but this is true
 
+// FIX : test null, undefined etc
+// FIX : test all comparison rules
+
 print("*** booleans ***")
 
 if (false && false || true && true) print("ok"); else print("oops");
