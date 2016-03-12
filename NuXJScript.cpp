@@ -1162,14 +1162,14 @@ bool Processor::privateRun() {
 
 			case TO_PRIMITIVE_OP:
 				if (vsp[0].isObject()) {
-					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					vsp[0] = engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
 			case TO_STRING_OP:
 				if (!vsp[0].isString()) {
 					if (vsp[0].isObject()) {
-						engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+						vsp[0] = engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					} else {
 						vsp[0] = Value(vsp[0].toString(heap));
 					}
