@@ -2,7 +2,7 @@
 
 *) Number -> string conversion doesn't fully follow the ECMAScript rules. Uses slightly lower precision (and prefers E notation a bit more often) to avoid rouding errors.
 
-*) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR.
+*) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 
 *) Unicode in identifiers are not allowed
 
@@ -11,3 +11,5 @@
 *) No RegExp support. Including literals etc.
 
 *) implicit valueOf and toString conversions are done earlier than in ECMA standard and not necessarily in the same order or number of times. E.g. v[o]++ in Ecmascript means two calls to toString() but one in NuXJScript.
+
+*) does not support octal (0o) or binary (0b) in string->value conversion

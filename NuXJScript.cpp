@@ -109,24 +109,33 @@ static const Char* parseDouble(const Char* p, const Char* e, double& v) {
 	double d = 0;
 	const Char* q = p;
 	double sign = (e - q > 1 && (*q == '+' || *q == '-') ? (*q++ == '-' ? -1.0 : 1.0) : 1.0);
-	if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) {
-		v = 0.0;
-		return p;
-	}
-	const Char* b = q;
-	while (q != e && *q >= '0' && *q <= '9') d = d * 10.0 + (*q++ - '0');
-	if (q != e && *q == '.') {
-		double f = 1.0;
-		while (++q != e && *q >= '0' && *q <= '9') d += (*q - '0') * (f *= 0.1);
-		if (q == b + 1) {
+	if (e - q >= 8 && strncmp(q, "Infinity", 8) == 0) {
+		q += 8;
+		d = std::numeric_limits<double>::infinity();
+	} else {
+		if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) {
 			v = 0.0;
 			return p;
 		}
-	}
-	if (q != e && (*q == 'E' || *q == 'e')) {
-		Int32 i;
-		const Char* t = parseInt(q + 1, e, i);
-		if (t != q + 1) { d *= pow(10, static_cast<double>(i)); q = t; }
+		const Char* b = q;
+		while (q != e && *q >= '0' && *q <= '9') {
+			d = d * 10.0 + (*q++ - '0');
+		}
+		if (q != e && *q == '.') {
+			double f = 1.0;
+			while (++q != e && *q >= '0' && *q <= '9') {
+				d += (*q - '0') * (f *= 0.1);
+			}
+			if (q == b + 1) {
+				v = 0.0;
+				return p;
+			}
+		}
+		if (q != e && (*q == 'E' || *q == 'e')) {
+			Int32 i;
+			const Char* t = parseInt(q + 1, e, i);
+			if (t != q + 1) { d *= pow(10, static_cast<double>(i)); q = t; }
+		}
 	}
 	v = d * sign;
 	return q;
@@ -251,6 +260,17 @@ bool Value::toBool() const {
 	}
 }
 
+static const Char* eatStringWhite(const Char* p, const Char* e) {
+	while (p < e) {
+		switch (*p) {
+			case '\t': case '\n': case '\v': case '\f': case '\r': case ' ': break; // FIX : support U+00A0	NO-BREAK SPACE	<NBSP>, U+2028	LINE SEPARATOR	<LS>, U+2029	PARAGRAPH SEPARATOR, U+FEFF	ZERO WIDTH NO-BREAK SPACE	 ?
+			default: return p;
+		}
+		++p;
+	}
+	return p;
+}
+
 double Value::toDouble() const {
 	switch (type) {
 		default: assert(0);
@@ -260,13 +280,23 @@ double Value::toDouble() const {
 		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
 		case NUMBER_TYPE: return d;
 		case STRING_TYPE: {
-			double v;
+			double v = 0.0;
 			const Char* p = s->begin();
-			const Char* q = parseDouble(p, s->end(), v);
-			if (q == p) {
-				return NaN();
+			const Char* e = s->end();
+			p = eatStringWhite(p, e);
+			if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
+				UInt32 u;
+				const Char* b = p + 2;
+				p = parseHex(b, e, u);
+				if (p == b) {
+					return NaN();
+				}
+				v = u;
+			} else {
+				p = parseDouble(p, e, v);
 			}
-			return v;
+			p = eatStringWhite(p, e);
+			return (p == e ? v : NaN());
 		}
 	}
 }
@@ -357,9 +387,10 @@ bool Value::isEqualTo(const Value& y) const {
 	} else {
 		if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
 		if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
-		if (type == NUMBER_TYPE && y.type == STRING_TYPE) return d == y.toDouble();
-		if (type == STRING_TYPE && y.type == NUMBER_TYPE) return toDouble() == y.d;
-		if (type == BOOLEAN_TYPE || y.type == BOOLEAN_TYPE) return toDouble() == y.toDouble();
+		if (type == NUMBER_TYPE && y.type == STRING_TYPE) return isEqualTo(Value(y.toDouble()));
+		if (type == STRING_TYPE && y.type == NUMBER_TYPE) return Value(toDouble()).isEqualTo(y);
+		if (type == BOOLEAN_TYPE) return Value(toDouble()).isEqualTo(y);
+		if (y.type == BOOLEAN_TYPE) return isEqualTo(Value(y.toDouble()));
 		// If Type(x) is either String or Number and Type(y) is Object,
 		// return the result of the comparison x == ToPrimitive(y).
 		// If Type(x) is Object and Type(y) is either String or Number,
@@ -419,6 +450,7 @@ const Value Value::NONEXISTENT(Value::NONEXISTENT_TYPE);
 const Value Value::UNDEFINED(Value::UNDEFINED_TYPE);
 const Value Value::NUL(Value::NULL_TYPE);
 const Value Value::NOT_A_NUMBER(NaN());
+const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
@@ -1166,12 +1198,15 @@ bool Processor::privateRun() {
 				}
 				break;
 				
-			case PRE_EQUAL_OP:
+			case PRE_EQ_OP:
 				if (vsp[-1].isObject() != vsp[0].isObject()) {
-					if (vsp[-1].isObject()) {
+					if (vsp[-1].isObject() && (vsp[0].isString() || vsp[0].isNumber())) {
 						std::swap(vsp[-1], vsp[0]);
+						engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
-					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					if (vsp[0].isObject() && (vsp[-1].isString() || vsp[-1].isNumber())) {
+						engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					}
 				}
 				break;
 
@@ -1370,10 +1405,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_PRIMITIVE", "TO_STRING", "PRE_EQUAL_OP"
+		, "TO_PRIMITIVE", "TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
-		, "SHL", "SHR", "UNSIGNED_SHR"
+		, "SHL", "SHR", "USHR"
 		, "PLUS", "MINUS"
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
@@ -1604,6 +1639,8 @@ void Compiler::white() {
 	while (!eof()) {
 		switch (*p) {
 			case ' ':
+			case '\v':
+			case '\f':
 			case '\t':	++p; break;
 			case '\r':	if (p + 1 != e && p[1] == '\n') ++p;
 			case '\n':	++p;
@@ -1930,7 +1967,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case ABSTRACT_EQUAL: {
 			makeRValue(xr, false);
 			xr = makeRValue(operand(op), false);
-			emit(Processor::PRE_EQUAL_OP);
+			emit(Processor::PRE_EQ_OP);
 			emit(op.vmOp);
 			break;
 		}
@@ -2822,6 +2859,10 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
 	
+	globals->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
+	globals->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
+	globals->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
+	
 	{
 		UserObject* mathObject = gcHeap.manage(new UserObject(&objectPrototype));
 		static const String M_ATH_STRING("Math");
@@ -2834,6 +2875,14 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 		} SQRT_FUNCTION;
 		static const String SQRT_STRING("sqrt");
 		mathObject->setProperty(*this, &SQRT_STRING, Value(&SQRT_FUNCTION));
+
+		static struct FloorFunction : public Function { // FIX : .length?! and all the others?!
+			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+				return (argc >= 1 ? Value(floor(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+			}
+		} FLOOR_FUNCTION;
+		static const String FLOOR_STRING("floor");
+		mathObject->setProperty(*this, &FLOOR_STRING, Value(&FLOOR_FUNCTION));
 	}
 
 	{

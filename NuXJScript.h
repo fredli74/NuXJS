@@ -54,6 +54,9 @@
 //		(new) Object(v) should convert v to number, string object etc
 //		toPrimitive also for native function arguments like sqrt etc, how?
 //		are we comparing NaN correctly? e.g. NaN !== NaN
+//		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
+//		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
+//		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 //
 //	Compiler
 //
@@ -400,6 +403,7 @@ class Value {
 				static const Value UNDEFINED;
 				static const Value NUL; // Sorry, NULL is a sensitive word, e.g. macro in Windows
 				static const Value NOT_A_NUMBER; // Sorry, NAN is sensitive, defined by some math.h
+				static const Value INFINITE_NUMBER; // Sorry, INFINITY is also sensitive
 
 	protected:	enum InternalType {
 					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
@@ -893,7 +897,7 @@ class Processor : public GCItem {
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
 					, TO_STRING_OP									// stack: value -> string_value
-					, PRE_EQUAL_OP									// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
+					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value

@@ -1,4 +1,4 @@
-// function print(x) { console.log(x) }
+if (!print) print = function(x) { console.log(x) }
 // function time(f) { var start = Date.now(); f(); print("elapsed: " + (Date.now() - start)); }
 
 print("*** comments ***")
@@ -140,7 +140,6 @@ print(garlicNan!=cheeseNan) // but this is true
 print(garlicNan!==cheeseNan) // but this is true
 
 // FIX : test null, undefined etc
-// FIX : test all comparison rules
 
 print("*** booleans ***")
 
@@ -636,6 +635,35 @@ new String("a") == new String("a") is false.
  
 */
 
+// Valids:
+print(+"");
+print(+"0");
+print(+"000");
+print(+"0123");
+print(+"12345");
+print(+"+12345");
+print(+"-12345");
+print(+"+12345.57685");
+print(+"+12345.57685e10");
+print(+"+12345.57685e+10");
+print(+"+12345.57685e-10");
+print(+"+12345.57685E-10");
+print(+" +12345.57685E-10");
+print(+"+12345.57685E-10 ");
+print(+"  \n  \r +12345.57685E-10   \v \t ");
+print(+"  \n  \r 0x0   \v \t ");
+print(+"  \n  \r 0xDE   \v \t ");
+print(+"  \n  \r 0xAA55AA55   \v \t ");
+print(+"Infinity");
+print(+"+Infinity");
+print(+"-Infinity");
+
+// Invalids:
+print(+"  \n  \r -0xAA55AA55   \v \t ");
+print(+"k");
+print(+"5k");
+print(+"+ 5");
+
 function ValueObject(v) {
 	this.valueOf = function() { return v };
 };
@@ -1029,6 +1057,52 @@ mandelbrot = function() {
 		}
 	}
 }
-mandelbrot()
+mandelbrot();
 
-    
+(function(){
+	print("*** operation matrix ***");
+
+	var valueStrings = [
+		'undefined', 'null', 'false', 'true', '0', '1', '-128', '1234.5678', '-1.0e+7', 'NaN', 'Infinity', '""', '"str"'
+		, '"-128"', '"1.0"', '"  +1234  "', '"string"', '"5tring"'
+		, '({valueOf:function(){return "-128"}})','({valueOf:function(){return null}})'
+	];
+
+	var values = [ ];
+	for (var i = 0; i < valueStrings.length; ++i) {
+		values[i] = eval(valueStrings[i]);
+	}
+
+	var tests = [
+		"==", "!=", "===", "!==", "<", "<=", ">", ">=", "+", "-", "*", "/", "%", "&", "^", "|", "<<", ">>", ">>>"
+	];
+
+	for (var t = 0; t < tests.length; ++t) {
+		var test = tests[t];
+		print(test);
+		for (var i = 0; i < values.length; ++i) {
+			var a = values[i];
+			var results = "";
+			for (var j = 0; j < values.length; ++j) {
+				var b = values[j];
+				var r;
+				try {
+					r = eval('a' + test + 'b');
+					if (typeof r === 'number') {
+						r = Math.floor(r * 100000 + 0.5) / 100000;
+					}
+				}
+				catch (e) {
+					r = e;
+				}
+				if (results !== "") {
+					results += " ";
+				}
+				results += r;
+			}
+			results = valueStrings[i] + ": " + results;
+			print(results);
+		}
+		print("");
+	}
+})();
