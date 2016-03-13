@@ -127,7 +127,9 @@ adhb
 10
 line
 feed	tab'single quotes'
-"double quotes" back\slash   xxx  @ é cr
+"double quotes" back\slash   xxx  @ cr
+false
+true
 *** objects ***
 object
 b
