@@ -390,13 +390,13 @@ class Value {
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
 				Object* toObject(GCHeap& heap) const;
-				bool operator==(const Value& y) const;
-				bool operator<(const Value& y) const;
-				bool isStrictlyEqualTo(const Value& y) const;
-				bool isEqualTo(const Value& y) const;
-				bool isLessThan(const Value& y) const;
-				bool isLessThanOrEqualTo(const Value& y) const;
-				Value add(GCHeap& heap, const Value& y) const;
+				bool operator==(const Value& r) const;
+				bool operator<(const Value& r) const;
+				bool isStrictlyEqualTo(const Value& r) const;
+				bool isEqualTo(const Value& r) const;
+				bool isLessThan(const Value& r) const;
+				bool isLessThanOrEqualTo(const Value& r) const;
+				Value add(GCHeap& heap, const Value& r) const;
 				void markIn(GCHeap& heap) const;
 
 				static const Value NONEXISTENT;		// Used in tables for deleted entries. Never seen by script-code.
@@ -405,6 +405,7 @@ class Value {
 				static const Value NOT_A_NUMBER; // Sorry, NAN is sensitive, defined by some math.h
 				static const Value INFINITE_NUMBER; // Sorry, INFINITY is also sensitive
 
+				// WARNING! Do NOT change order of elements in InternalType enum.
 	protected:	enum InternalType {
 					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
 					, NUMBER_TYPE, STRING_TYPE, OBJECT_TYPE

@@ -271,6 +271,26 @@ static const Char* eatStringWhite(const Char* p, const Char* e) {
 	return p;
 }
 
+static double stringToDouble(const String& s) {
+	double v = 0.0;
+	const Char* p = s.begin();
+	const Char* e = s.end();
+	p = eatStringWhite(p, e);
+	if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
+		UInt32 u;
+		const Char* b = p + 2;
+		p = parseHex(b, e, u);
+		if (p == b) {
+			return NaN();
+		}
+		v = u;
+	} else {
+		p = parseDouble(p, e, v);
+	}
+	p = eatStringWhite(p, e);
+	return (p == e ? v : NaN());
+}
+
 double Value::toDouble() const {
 	switch (type) {
 		default: assert(0);
@@ -279,25 +299,7 @@ double Value::toDouble() const {
 		case NULL_TYPE: return 0.0;
 		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
 		case NUMBER_TYPE: return d;
-		case STRING_TYPE: {
-			double v = 0.0;
-			const Char* p = s->begin();
-			const Char* e = s->end();
-			p = eatStringWhite(p, e);
-			if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
-				UInt32 u;
-				const Char* b = p + 2;
-				p = parseHex(b, e, u);
-				if (p == b) {
-					return NaN();
-				}
-				v = u;
-			} else {
-				p = parseDouble(p, e, v);
-			}
-			p = eatStringWhite(p, e);
-			return (p == e ? v : NaN());
-		}
+		case STRING_TYPE: return stringToDouble(*s);
 	}
 }
 
@@ -337,65 +339,72 @@ Object* Value::toObject(GCHeap& heap) const {
 	}
 }
 
-bool Value::operator==(const Value& y) const {
-	if (type != y.type) return false;
+bool Value::operator==(const Value& r) const {
+	if (type != r.type) return false;
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return true;
-		case BOOLEAN_TYPE: return b == y.b;
-		case NUMBER_TYPE: return d == y.d;
-		case STRING_TYPE: return s->isEqualTo(*y.s);
-		case OBJECT_TYPE: return o == y.o;
+		case BOOLEAN_TYPE: return b == r.b;
+		case NUMBER_TYPE: return d == r.d;
+		case STRING_TYPE: return s->isEqualTo(*r.s);
+		case OBJECT_TYPE: return o == r.o;
 	}
 }
 
-bool Value::operator<(const Value& y) const {
-	if (type < y.type) return true;
-	if (type > y.type) return false;
+bool Value::operator<(const Value& r) const {
+	if (type < r.type) return true;
+	if (type > r.type) return false;
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return false;
-		case BOOLEAN_TYPE: return b < y.b;
-		case NUMBER_TYPE: return d < y.d;
-		case STRING_TYPE: return s->isLessThan(*y.s);
-		case OBJECT_TYPE: return o < y.o;
+		case BOOLEAN_TYPE: return b < r.b;
+		case NUMBER_TYPE: return d < r.d;
+		case STRING_TYPE: return s->isLessThan(*r.s);
+		case OBJECT_TYPE: return o < r.o;
 	}
 }
 
-bool Value::compareStrictly(const Value& y) const {
-	assert(y.type == type);
+bool Value::compareStrictly(const Value& r) const {
+	assert(r.type == type);
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return true;
 		case NULL_TYPE: return true;
-		case BOOLEAN_TYPE: return b == y.b;
-		case NUMBER_TYPE: return d == y.d;
-		case STRING_TYPE: return s->isEqualTo(*y.s);
-		case OBJECT_TYPE: return o == y.o;
+		case BOOLEAN_TYPE: return b == r.b;
+		case NUMBER_TYPE: return d == r.d;
+		case STRING_TYPE: return s->isEqualTo(*r.s);
+		case OBJECT_TYPE: return o == r.o;
 	}
 }
 
-bool Value::isStrictlyEqualTo(const Value& y) const { return (type == y.type ? compareStrictly(y) : false); }
+bool Value::isStrictlyEqualTo(const Value& r) const { return (type == r.type ? compareStrictly(r) : false); }
 
-bool Value::isEqualTo(const Value& y) const {
-	if (type == y.type) {
-		return compareStrictly(y);
+/*
+				undefined	null	boolean				number			string				object
+	undefined	TRUE		TRUE	FALSE				FALSE			FALSE				FALSE
+	null		TRUE		TRUE	FALSE				FALSE			FALSE				FALSE
+	boolean		FALSE		FALSE	l === r				num(l) === r	num(l) === num(r)	FALSE
+	number		FALSE		FALSE	l === num(r)		l === r			l === num(r)		l == prim(r)
+	string		FALSE		FALSE	num(l) === num(r)	num(l) === r	l === r				l == prim(r)
+	object		FALSE		FALSE	FALSE				prim(l) == r	prim(l) == r		l === r
+*/
+bool Value::isEqualTo(const Value& r) const {
+	if (type == r.type) {
+		return compareStrictly(r);
+	} else if (type < r.type) {	// Symmetrical operation, flip for simpler logic.
+		return r.isEqualTo(*this);
 	} else {
-		if (type == NULL_TYPE && y.type == UNDEFINED_TYPE) return true;
-		if (type == UNDEFINED_TYPE && y.type == NULL_TYPE) return true;
-		if (type == NUMBER_TYPE && y.type == STRING_TYPE) return isEqualTo(Value(y.toDouble()));
-		if (type == STRING_TYPE && y.type == NUMBER_TYPE) return Value(toDouble()).isEqualTo(y);
-		if (type == BOOLEAN_TYPE) return Value(toDouble()).isEqualTo(y);
-		if (y.type == BOOLEAN_TYPE) return isEqualTo(Value(y.toDouble()));
-		// If Type(x) is either String or Number and Type(y) is Object,
-		// return the result of the comparison x == ToPrimitive(y).
-		// If Type(x) is Object and Type(y) is either String or Number,
-		// return the result of the comparison ToPrimitive(x) == y.
-		return false;
+		switch (type) {
+			case NULL_TYPE: return true;
+			case BOOLEAN_TYPE: return false;
+			case NUMBER_TYPE: return (r.type == BOOLEAN_TYPE && d == (r.b ? 1.0 : 0.0));
+			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*s) == (r.type == BOOLEAN_TYPE ? (r.b ? 1.0 : 0.0) : r.d));
+			default: return false;
+		}
 	}
 }
 
@@ -1200,11 +1209,10 @@ bool Processor::privateRun() {
 				
 			case PRE_EQ_OP:
 				if (vsp[-1].isObject() != vsp[0].isObject()) {
-					if (vsp[-1].isObject() && (vsp[0].isString() || vsp[0].isNumber())) {
+					if (vsp[-1].isObject()) {
 						std::swap(vsp[-1], vsp[0]);
-						engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
-					if (vsp[0].isObject() && (vsp[-1].isString() || vsp[-1].isNumber())) {
+					if (vsp[-1].isString() || vsp[-1].isNumber()) {
 						engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
 				}
