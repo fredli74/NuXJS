@@ -547,11 +547,8 @@ Table::KeyHash String::calcHash() const {
 }
 
 bool String::isEqualTo(const String& o) const {
-	if (this == &o) return true;
-	if (hash != o.hash && hash != 0 && o.hash != 0) return false;
-	UInt32 l = size();
-	if (l != o.size()) return false;
-	return std::equal(begin(), end(), o.begin());
+	return (this == &o || ( (hash == o.hash || hash == 0 || o.hash == 0)
+		&& size() == o.size() && std::equal(begin(), end(), o.begin())));
 }
 
 bool String::isLessThan(const String& o) const {
@@ -664,8 +661,7 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->key == 0 || !b->value.exists())) {
-	}
+	while (++b != e && (b->key == 0 || !b->value.exists())) { }
 	return (b == e ? 0 : b);
 }
 
@@ -691,7 +687,7 @@ void Table::markIn(GCHeap& heap) {
 	}
 }
 
-void Table::update(const String* key, const Value& value) {
+void Table::update(const String* key, const Value& value) { // FIX : why not put this in assign?
 	KeyHash hash = key->calcHash();
 	Bucket* b = find(key, hash);
 	if (b->key == 0) {
@@ -755,8 +751,18 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 
 Enumerator* UserObject::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
-	// list->sort(); // FIX : bad idea?
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
+		list->add(b->key);
+	}
+	if (prototype != 0) { // FIX : we shouldn't have null prototype I think, better with a dummy object
+		Enumerator* protoEnum = prototype->getEnumerator(engine);
+		const String* s;
+		while ((s = protoEnum->nextPropertyName()) != 0) {
+			if (properties.lookup(s) == 0) {
+				list->add(s);
+			}
+		}
+	}
 	return list;
 }
 
@@ -767,9 +773,9 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 
 /* --- StringListEnumerator --- */
 
-StringListEnumerator::StringListEnumerator(UInt32 maxCount) : list(maxCount), actualCount(0), nextIndex(0) { }
-void StringListEnumerator::add(const String* s) { assert(actualCount < list.size()); list[actualCount++] = s; }
-const String* StringListEnumerator::nextPropertyName() { return (nextIndex < actualCount ? list[nextIndex++] : 0); }
+StringListEnumerator::StringListEnumerator(UInt32 initialCapacity) : list(initialCapacity), nextIndex(0) { }
+void StringListEnumerator::add(const String* s) { list.append(s); }
+const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
 
 /* --- CodeDef --- */
 
@@ -946,7 +952,6 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
 	for (UInt32 i = 0; i < argumentsCount; ++i)
 		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
-	// list->sort(); // FIX : bad idea?
 	return list;
 }
 
@@ -959,7 +964,9 @@ FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
-	if (codeDef->getArgumentsCount() > argc) std::fill(e, indexed.end(), Value::UNDEFINED);
+	if (codeDef->getArgumentsCount() > argc) {
+		std::fill(e, indexed.end(), Value::UNDEFINED);
+	}
 }
 
 void FunctionFrame::updatedCode() {
@@ -989,8 +996,9 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 	} else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		*v = Value(selfFunction);
 		return true;
-	} else if (environment->getProperty(engine, name, v)) return true; // FIX: can we do a looping non-recursive solution? faster
-	else return false;
+	} else {
+		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster
+	}
 }
 
 bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value& v) {
@@ -1021,8 +1029,11 @@ void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 		evalVars = heap.manage(new EvalVarsObject(environment));
 		environment = evalVars;
 	}
-	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it)
-		if (*it != 0 && evalVars->vars.lookup(*it) == 0) evalVars->vars.assign(*it, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it) {
+		if (*it != 0 && evalVars->vars.lookup(*it) == 0) {
+			evalVars->vars.assign(*it, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+		}
+	}
 }
 
 /* --- EvalFrame --- */

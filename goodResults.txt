@@ -125,6 +125,9 @@ undefined
 adhb
 10
 10
+line
+feed	tab'single quotes'
+"double quotes" back\slash   xxx  @ é cr
 *** objects ***
 object
 b
@@ -1538,3 +1541,44 @@ Infinity: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 ({valueOf:function(){return "-128"}}): 4294967168 4294967168 4294967168 2147483584 4294967168 2147483584 4294967168 16383 4294967168 4294967168 4294967168 4294967168 4294967168 4294967168 2147483584 16383 4294967168 4294967168 4294967168 4294967168
 ({valueOf:function(){return null}}): 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
+*** prototypes ***
+adf
+avpok
+oqritj
+pok
+pok
+qthreguajf
+viusdh
+{ asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
+{ chainAProperty: ChainA value, chainBProperty: ChainB value, rootProperty: Root value, shadowProperty: ChainB value }
+<object>
+<object>
+ChainB value
+ChainB value
+ChainA value
+Root value
+true
+<object>
+true
+true
+true
+ChainA value
+true
+true
+ChainA value
+<object>
+ChainA value
+undefined
+ChainA value
+Root value
+<object>
+true
+Root value
+true
+Root value
+<object>
+true
+true
+false
+undefined
+<object>

@@ -8,11 +8,8 @@
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
 //		basic library (math, string, array ops)
-//		true primitive <-> object conversions
-//		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
-//		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
 //		for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
-//		hasProperty should also be recursive over prototype chain
+//			done, but not for strings and arguments objects
 //		it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
 //		lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
 //			push them temporarily last on stack
@@ -46,17 +43,20 @@
 //			alt 2 is regarding code to be either script or native
 //			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
 //		arguments container
-//			missing callee or whatever
+//			missing callee
+//				that is, if we don't slaughter the whole stupid non-strict argument object and go for the simpler strict version
 //		at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
 //		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
+//			actually, any \ that isn't escape is valid, \ is just swallowed see http://www.ecma-international.org/ecma-262/6.0/index.html#sec-literals-string-literals
+//			also \<cr>|<crlf>|<lf>|<ls>|<ps> is valid and should continue string on next line
 //		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 //		proper error exceptions (TypeError etc)
 //		(new) Object(v) should convert v to number, string object etc
 //		toPrimitive also for native function arguments like sqrt etc, how?
-//		are we comparing NaN correctly? e.g. NaN !== NaN
 //		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 //		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
+//		support -0.0 (use std::signbit? or whatever...) add to operation matrix test
 //
 //	Compiler
 //
@@ -108,6 +108,8 @@
 //			two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
 //				might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
 //			another option would be to not require a frame *at all* for quick calls that doesn't have eval or sub-functions (is it possible?). Just allocate space on the value stack. But what to do with accepting too few arguments?
+//			third option: simply focus on making a fast mem pool instead
+//				oh snap, it's the gc that's the main performance problem, not the freeing... gotta look into that
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
@@ -120,6 +122,9 @@
 //		Don't lookup names in frame when not necessary. (And use hash table!)
 //		big array literals goes nuts with ADD_PROPERTY constants, should have an PUSH_ELEMENT or something instead
 //		not a big fan of the POST_INC_DEC_SHUFFLE_OP solution, feels ugly, but can't for the world come up with any simpler solutions!?
+//		PRE_EQ_OP isn't actually necessary, we could just backup ip once if isObject and retry the EQ after toPrimitive (same applies to TO_PRIMITIVE_OP actually, but that's a bigger story considering the virtually impossible task of "primitivizing" two stack elements at once for binary operators)
+//			alternatively have two opcodes, swap on type < (like in isEqualTo today) and save CPU on isEqualTo as operands are already sorted
+//		.length is very common, special opcode?
 //
 //	Compiler
 //
@@ -192,6 +197,11 @@
 //			global eval support (sets all var and function declarations in global this)
 //		object literals
 //		array literals
+//		true primitive <-> object conversions
+//		true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
+//		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
+//		are we comparing NaN correctly? e.g. NaN !== NaN
+//			yes
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -535,17 +545,17 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(UInt32 maxCount);
+				StringListEnumerator(UInt32 initialCapacity);
 				void add(const String* s);
-				void sort(); // FIX : bad idea?
 				virtual const String* nextPropertyName();
 
-	protected:	QuickArray<const String*, 8> list; // FIX : <- use vector?
-				UInt32 actualCount;
+	protected:	QuickVector<const String*> list;
 				UInt32 nextIndex;
 
 				virtual void gcMark(GCHeap& heap) {
-					for (UInt32 i = 0; i < actualCount; ++i) heap.mark(list[i]);
+					for (UInt32 i = 0; i < list.size(); ++i) {
+						heap.mark(list[i]);
+					}
 					super::gcMark(heap);
 				}
 };
@@ -559,9 +569,7 @@ class UserObject : public Object {
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				
-	protected:	void populateStringListEnumerator(StringListEnumerator* list);
-				
-				Table properties;
+	protected:	Table properties;
 				Object* prototype;
 
 				virtual void gcMark(GCHeap& heap) {
@@ -652,10 +660,10 @@ class CodeDefinition : public Object {
 
 	protected:	QuickVector<CodeWord> code;
 				QuickVector<Value> constants;
-				Table nameIndexes;
+				Table nameIndexes; // < 0 : local variables, >= 0 : arguments
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
-				QuickVector<Int32> temporaries;
+				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
 				const String* source;
 				const String* selfName;				
 
@@ -785,7 +793,9 @@ class EvalFrame : public Frame {
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(parentFrame);
-					for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
+					for (Value* it = indexed.begin(); it != indexed.end(); ++it) {
+						it->markIn(heap);
+					}
 					super::gcMark(heap);
 				}
 };

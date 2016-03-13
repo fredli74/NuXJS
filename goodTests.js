@@ -160,6 +160,12 @@ print("abcdefgh"[-1]);
 print("abcdefgh".length);
 s = "abcdefgh"; s = s[0] + s[3] + s[7] + s[1]; print(s);
 s = "0123456789"; print(s.length); s.length = 0; print(s.length); // both output 10, string lengths are not writable
+/*print("multi\
+line string");*/
+print("line\nfeed\ttab\'single quotes\'\n\"double quotes\" back\\slash  \b\b xxx \f \x40 \rcr");
+print("\u1234"[0] === String.fromCharCode(1234));
+print("\u1234"[0] === String.fromCharCode(0x1234));
+// FIX : charCodeAt instead
 
 print("*** objects ***")
 
@@ -1105,4 +1111,81 @@ mandelbrot();
 		}
 		print("");
 	}
+})();
+
+(function() {
+	print("*** prototypes ***");
+
+	function sort(a) {
+		for (i = 0; i < a.length - 1; ++i) {
+			for (j = i + 1; j < a.length; ++j) {
+				if (a[j] < a[i]) {
+					a[i] = [ a[j], a[j] = a[i] ][0];
+				}
+			}
+		}
+		return a;
+	}
+	var a = sort([ "pok", "adf", "viusdh", "oqritj", "qthreguajf", "avpok", "pok" ]);
+	for (var i = 0; i < a.length; ++i) print(a[i]);
+
+	function contents(o) {
+		var keys = [ ];
+		for (var i in o) {
+			keys[keys.length] = i;
+		}
+		sort(keys);
+		var s = "{ ";
+		for (var i = 0; i < keys.length; ++i) {
+			s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : " }"); 
+		}
+		return s;
+	}
+
+	print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
+	
+	function Root() { this.shadowProperty = this.rootProperty = "Root value"; };
+	function ChainA() { this.chainAProperty = this.shadowProperty = "ChainA value"; };
+	ChainA.prototype = new Root();
+	function ChainB() { this.chainBProperty = this.shadowProperty = "ChainB value"; };
+	ChainB.prototype = new ChainA();
+
+	print(contents(new ChainB));
+
+	var chain = new ChainB();
+	print(chain);
+	ChainA.prototype.toString = function() { return this.shadowProperty; };
+	print(chain);
+	print(chain.shadowProperty);
+	print(chain.chainBProperty);
+	print(chain.chainAProperty);
+	print(chain.rootProperty);
+	print('rootProperty' in chain);
+	print(chain);
+	print('shadowProperty' in chain);
+	print(delete chain.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(delete chain.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(chain);
+	
+	var chain = new ChainA();
+	print(chain.shadowProperty);
+	print(chain.chainBProperty);
+	print(chain.chainAProperty);
+	print(chain.rootProperty);
+	print(chain);
+	print(delete chain.shadowProperty);
+	print(chain.shadowProperty);
+	print(delete chain.shadowProperty);
+	print(chain.shadowProperty);
+	print(chain);
+	print('shadowProperty' in chain);
+	print(delete ChainA.prototype.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(chain);
+
 })();
