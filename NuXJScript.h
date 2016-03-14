@@ -377,32 +377,33 @@ class String;
 class Object;
 class Function;
 class Value {
+	friend class Table;
 	public:		Value()
 				#if !defined(NDEBUG)
-						: type(BAD_TYPE)
+						: t(BAD_TYPE)
 				#endif
 						{ }
-				explicit Value(bool b) : type(BOOLEAN_TYPE), b(b) { }
-				explicit Value(Int32 i) : type(NUMBER_TYPE), d(i) { }
-				explicit Value(UInt32 u) : type(NUMBER_TYPE), d(u) { }
-				explicit Value(double d) : type(NUMBER_TYPE), d(d) { }
-				explicit Value(const String* s) : type(STRING_TYPE), s(s) { }
-				explicit Value(Object* o) : type(OBJECT_TYPE), o(o) { }
+				explicit Value(bool b) : t(BOOLEAN_TYPE) { u.b = b; }
+				explicit Value(Int32 i) : t(NUMBER_TYPE) { u.d = i; }
+				explicit Value(UInt32 ui) : t(NUMBER_TYPE) { u.d = ui; }
+				explicit Value(double d) : t(NUMBER_TYPE) { u.d = d; }
+				explicit Value(const String* s) : t(STRING_TYPE) { u.s = s; }
+				explicit Value(Object* o) : t(OBJECT_TYPE) { u.o = o; }
 	
-				bool exists() const { return type != NONEXISTENT_TYPE; }
-				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
-				bool isNumber() const { return type == NUMBER_TYPE; }
-				bool isString() const { return type == STRING_TYPE; }
-				Object* asObject() const { return (type == OBJECT_TYPE ? o : 0); }
+				bool exists() const { return t != NONEXISTENT_TYPE; }
+				bool isObject() const { return t == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
+				bool isNumber() const { return t == NUMBER_TYPE; }
+				bool isString() const { return t == STRING_TYPE; }
+				Object* asObject() const { return (t == OBJECT_TYPE ? u.o : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
-				const String* getString() const { assert(type == STRING_TYPE); return s; }
+				const String* getString() const { assert(t == STRING_TYPE); return u.s; }
 				const String* typeOfString() const;
 				bool toBool() const;
 				Int32 toInt() const;
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
 				Object* toObject(GCHeap& heap) const;
-				bool operator==(const Value& r) const;
+				bool operator==(const Value& r) const; // FIX : kill these two?
 				bool operator<(const Value& r) const;
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
@@ -424,16 +425,17 @@ class Value {
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
-				};
-				explicit Value(InternalType type) throw()  : type(type) { }
-				bool compareStrictly(const Value& y) const;
-				InternalType type;
-				union {
+				} t;
+				union Union {
 					bool b;
 					double d;
 					const String* s;
 					Object* o;
-				};
+				} u;
+
+				explicit Value(InternalType type) throw() : t(type) { }
+				explicit Value(InternalType type, Union u) throw() : t(type), u(u) { }
+				bool compareStrictly(const Value& y) const;
 				static const String* TYPE_STRINGS[7];
 	
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
@@ -473,13 +475,15 @@ class Table {
 					, CONFIGURABLE_MASK = (1U << 29)
 					, EXISTS_MASK = (1U << 28)
 					, DEFAULT_FLAGS = (15U << 28)
-					, NON_EXISTENT = 0
+					, NONEXISTENT = 0
 				};
 				
 				struct Bucket {
 					Bucket();
 					const String* key;
 					Value value;
+					bool exists() const { return value.exists(); }
+					operator Value() const { return value; }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);
@@ -735,7 +739,7 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 				}
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) {
 					const Table::Bucket* b = vars.lookup(name);
-					if (b != 0) { *v = b->value; return true; }
+					if (b != 0) { *v = Value(*b); return true; }
 					return parent->getProperty(engine, name, v);
 				}
 				virtual bool deleteProperty(Engine& engine, const String* name) {

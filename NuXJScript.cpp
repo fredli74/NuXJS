@@ -245,17 +245,17 @@ static struct BadFunction : public Function { // FIX : .length?! and all the oth
 
 const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
-const String* Value::typeOfString() const { return (type == OBJECT_TYPE ? o->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]); }
-Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : o->getFunction()); }
+const String* Value::typeOfString() const { return (t == OBJECT_TYPE ? u.o->typeOfString() : TYPE_STRINGS[static_cast<int>(t)]); }
+Function* Value::getFunction() const { return (t != OBJECT_TYPE ? &BAD_FUNCTION : u.o->getFunction()); }
 
 bool Value::toBool() const {
-	switch (type) {
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
-		case BOOLEAN_TYPE: return b;
-		case NUMBER_TYPE: return (d != 0.0);
-		case STRING_TYPE: return (!s->empty());
+		case BOOLEAN_TYPE: return u.b;
+		case NUMBER_TYPE: return (u.d != 0.0);
+		case STRING_TYPE: return (!u.s->empty());
 		case OBJECT_TYPE: return true;
 	}
 }
@@ -292,14 +292,14 @@ static double stringToDouble(const String& s) {
 }
 
 double Value::toDouble() const {
-	switch (type) {
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
-		case BOOLEAN_TYPE: return b ? 1.0 : 0.0;
-		case NUMBER_TYPE: return d;
-		case STRING_TYPE: return stringToDouble(*s);
+		case BOOLEAN_TYPE: return u.b ? 1.0 : 0.0;
+		case NUMBER_TYPE: return u.d;
+		case STRING_TYPE: return stringToDouble(*u.s);
 	}
 }
 
@@ -316,72 +316,72 @@ Int32 Value::toInt() const {
 }
 
 const String* Value::toString(GCHeap& heap) const {
-	switch (type) {
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
-		case BOOLEAN_TYPE: return b ? &TRUE_STRING : &FALSE_STRING;
-		case NUMBER_TYPE: return String::fromDouble(heap, d);
-		case STRING_TYPE: return s;
+		case BOOLEAN_TYPE: return u.b ? &TRUE_STRING : &FALSE_STRING;
+		case NUMBER_TYPE: return String::fromDouble(heap, u.d);
+		case STRING_TYPE: return u.s;
 case OBJECT_TYPE: return heap.manage(new String("<object>"));
 	}
 }
 
 Object* Value::toObject(GCHeap& heap) const {
-	switch (type) {
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: /* FIX */ return 0;
 		case NUMBER_TYPE: /* FIX */ return 0;
-		case STRING_TYPE: return const_cast<String*>(s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
-		case OBJECT_TYPE: return o;
+		case STRING_TYPE: return const_cast<String*>(u.s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
+		case OBJECT_TYPE: return u.o;
 	}
 }
 
 bool Value::operator==(const Value& r) const {
-	if (type != r.type) return false;
-	switch (type) {
+	if (t != r.t) return false;
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return true;
-		case BOOLEAN_TYPE: return b == r.b;
-		case NUMBER_TYPE: return d == r.d;
-		case STRING_TYPE: return s->isEqualTo(*r.s);
-		case OBJECT_TYPE: return o == r.o;
+		case BOOLEAN_TYPE: return u.b == r.u.b;
+		case NUMBER_TYPE: return u.d == r.u.d;
+		case STRING_TYPE: return u.s->isEqualTo(*r.u.s);
+		case OBJECT_TYPE: return u.o == r.u.o;
 	}
 }
 
 bool Value::operator<(const Value& r) const {
-	if (type < r.type) return true;
-	if (type > r.type) return false;
-	switch (type) {
+	if (t < r.t) return true;
+	if (t > r.t) return false;
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return false;
-		case BOOLEAN_TYPE: return b < r.b;
-		case NUMBER_TYPE: return d < r.d;
-		case STRING_TYPE: return s->isLessThan(*r.s);
-		case OBJECT_TYPE: return o < r.o;
+		case BOOLEAN_TYPE: return u.b < r.u.b;
+		case NUMBER_TYPE: return u.d < r.u.d;
+		case STRING_TYPE: return u.s->isLessThan(*r.u.s);
+		case OBJECT_TYPE: return u.o < r.u.o;
 	}
 }
 
 bool Value::compareStrictly(const Value& r) const {
-	assert(r.type == type);
-	switch (type) {
+	assert(r.t == t);
+	switch (t) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return true;
 		case NULL_TYPE: return true;
-		case BOOLEAN_TYPE: return b == r.b;
-		case NUMBER_TYPE: return d == r.d;
-		case STRING_TYPE: return s->isEqualTo(*r.s);
-		case OBJECT_TYPE: return o == r.o;
+		case BOOLEAN_TYPE: return u.b == r.u.b;
+		case NUMBER_TYPE: return u.d == r.u.d;
+		case STRING_TYPE: return u.s->isEqualTo(*r.u.s);
+		case OBJECT_TYPE: return u.o == r.u.o;
 	}
 }
 
-bool Value::isStrictlyEqualTo(const Value& r) const { return (type == r.type ? compareStrictly(r) : false); }
+bool Value::isStrictlyEqualTo(const Value& r) const { return (t == r.t ? compareStrictly(r) : false); }
 
 /*
 				undefined	null	boolean				number			string				object
@@ -393,23 +393,23 @@ bool Value::isStrictlyEqualTo(const Value& r) const { return (type == r.type ? c
 	object		FALSE		FALSE	FALSE				prim(l) == r	prim(l) == r		l === r
 */
 bool Value::isEqualTo(const Value& r) const {
-	if (type == r.type) {
+	if (t == r.t) {
 		return compareStrictly(r);
-	} else if (type < r.type) {	// Symmetrical operation, flip for simpler logic.
+	} else if (t < r.t) {	// Symmetrical operation, flip for simpler logic.
 		return r.isEqualTo(*this);
 	} else {
-		switch (type) {
+		switch (t) {
 			case NULL_TYPE: return true;
 			case BOOLEAN_TYPE: return false;
-			case NUMBER_TYPE: return (r.type == BOOLEAN_TYPE && d == (r.b ? 1.0 : 0.0));
-			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*s) == (r.type == BOOLEAN_TYPE ? (r.b ? 1.0 : 0.0) : r.d));
+			case NUMBER_TYPE: return (r.t == BOOLEAN_TYPE && u.d == (r.u.b ? 1.0 : 0.0));
+			case STRING_TYPE: return (r.t >= BOOLEAN_TYPE && stringToDouble(*u.s) == (r.t == BOOLEAN_TYPE ? (r.u.b ? 1.0 : 0.0) : r.u.d));
 			default: return false;
 		}
 	}
 }
 
 bool Value::isLessThan(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return s->isLessThan(*y.s);
+	if (t == STRING_TYPE && y.t == STRING_TYPE) return u.s->isLessThan(*y.u.s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber < otherNumber;
@@ -423,7 +423,7 @@ bool Value::isLessThan(const Value& y) const {
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.s->isLessThan(*s);
+	if (t == STRING_TYPE && y.t == STRING_TYPE) return !y.u.s->isLessThan(*u.s);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber <= otherNumber;
@@ -437,7 +437,7 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 }
 
 Value Value::add(GCHeap& heap, const Value& y) const {
-	if (type == STRING_TYPE || y.type == STRING_TYPE) {
+	if (t == STRING_TYPE || y.t == STRING_TYPE) {
 		const String* ls = toString(heap);
 		const String* rs = y.toString(heap);
 		if (rs->empty()) return Value(ls);
@@ -448,9 +448,9 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 }
 
 void Value::markIn(GCHeap& heap) const {
-	switch (type) {
-		case STRING_TYPE: heap.mark(s); break;
-		case OBJECT_TYPE: heap.mark(o); break;
+	switch (t) {
+		case STRING_TYPE: heap.mark(u.s); break;
+		case OBJECT_TYPE: heap.mark(u.o); break;
 		default: break;
 	}
 }
@@ -643,7 +643,7 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : key(0) { }
+Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT) { }
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
 
@@ -655,13 +655,13 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->key == 0 || !b->value.exists())) { }
+	while (++b != e && (b->key == 0 || !b->exists())) { }
 	return (b == e ? 0 : b);
 }
 
 const Table::Bucket* Table::lookup(const String* key) const {
 	const Bucket* b = find(key, key->calcHash());
-	return (b->key != 0 && b->value.exists() ? b : 0);
+	return (b->key != 0 && b->exists() ? b : 0);
 }
 
 void Table::assign(const String* key, const Value& value) { update(key, value); }
@@ -673,8 +673,13 @@ void Table::markIn(GCHeap& heap) {
 		const Bucket& b = buckets[i];
 		if (b.key != 0) {
 			heap.mark(b.key);
-			if (b.value.exists()) {
-				b.value.markIn(heap);
+			if (b.exists()) {
+				b.value.markIn(heap);/*
+				switch (b.type) {
+					case Value::STRING_TYPE: heap.mark(b.valueUnion.s); break;
+					case Value::OBJECT_TYPE: heap.mark(b.valueUnion.o); break;
+					default: break;
+				}*/
 				rebuildLoadCount++;
 			}
 		}
@@ -702,12 +707,14 @@ void Table::update(const String* key, const Value& value) { // FIX : why not put
 //	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
 		b->value = value;
 //	}
+//	b->value.hash16 = hash;
 }
 
 Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	while (buckets[i].key != 0 && !buckets[i].key->isEqualTo(*key)) {
+	Table::Bucket* b;
+	while ((b = &buckets[i])->key != 0 && !b->key->isEqualTo(*key)) {
 		i = (i + 1) & mask;
 	}
 	return &buckets[i];
@@ -718,7 +725,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].key != 0 && buckets[i].value.exists()) {
+		if (buckets[i].key != 0 && buckets[i].exists()) {
 			UInt32 j = buckets[i].key->calcHash() & mask;
 			while (newBuckets[j].key != 0) {
 				j = (j + 1) & mask;
@@ -744,7 +751,7 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 
 bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
 	const Table::Bucket* b = properties.lookup(name);
-	if (b != 0) { *v = b->value; return true; }
+	if (b != 0) { *v = Value(*b); return true; }
 	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 }
 
@@ -788,7 +795,7 @@ CodeDefinition::CodeDefinition() : source(0), selfName(0) { }
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* b = nameIndexes.lookup(name);
 	if (b == 0) return false;
-	index = b->value.toInt();
+	index = Value(*b).toInt();
 	return true;
 }
 
@@ -2235,7 +2242,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
 							const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
 							if (b != 0) {
-								xr = ExpressionResult(ExpressionResult::INDEXED, b->value);
+								xr = ExpressionResult(ExpressionResult::INDEXED, Value(*b));
 							}
 						}
 						break;
@@ -2285,7 +2292,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 		Value index;
 		const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
 		if (b != 0) {
-			index = b->value;
+			index = Value(*b);
 		} else {
 			codeDef->varNames.append(name);
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
@@ -2623,7 +2630,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					Value localIndex = Value::NONEXISTENT;
 					const Table::Bucket* bucket = codeDef->nameIndexes.lookup(exceptionVarName);
 					if (bucket != 0) {
-						localIndex = bucket->value;
+						localIndex = Value(*b);
 						codeDef->nameIndexes.erase(exceptionVarName);
 					}
 					completeForwardBranch(catchPoint);
@@ -2873,7 +2880,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	const Table::Bucket* b = functionDefCache.lookup(sourceCode);
 	 // FIX : .getObject?
 	if (b != 0) {
-		codeDef = reinterpret_cast<CodeDefinition*>(b->value.asObject());
+		codeDef = reinterpret_cast<CodeDefinition*>(Value(*b).asObject());
 	} else {
 		codeDef = engine.getHeap().manage(new CodeDefinition());
 		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);
@@ -2989,7 +2996,9 @@ supressStdErr = false;
 int main(int argc, const char* argv[]) {
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
-	
+/*std::cerr << "Value size: " << sizeof (Value) << std::endl;
+std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
+std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	GCHeap heap;
 	UserObject globals;
 	heap.protect(&globals);
