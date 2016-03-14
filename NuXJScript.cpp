@@ -754,7 +754,7 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 		list->add(b->key);
 	}
-	if (prototype != 0) { // FIX : we shouldn't have null prototype I think, better with a dummy object
+	if (prototype != 0) {
 		Enumerator* protoEnum = prototype->getEnumerator(engine);
 		const String* s;
 		while ((s = protoEnum->nextPropertyName()) != 0) {
@@ -893,7 +893,7 @@ class FunctionConstructor : public Function {
 
 /* --- Closure --- */
 
-Closure::Closure(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
+Closure::Closure(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment), prototype(Value::NONEXISTENT) { }
 CodeDefinition* Closure::getDefinition() const { return codeDef; }
 Object* Closure::getEnvironment() const { return environment; }
 
@@ -901,9 +901,31 @@ bool Closure::getProperty(Engine& engine, const String* name, Value* v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		*v = Value(codeDef->getArgumentsCount());
 		return true;
+	} else if (name->isEqualTo(PROTOTYPE_STRING)) {
+		if (!prototype.exists()) {
+			prototype = Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
+			// FIX : prototype should have a 'constructor' member, but it is not enumerable but still deletable, sigh
+		}
+		*v = prototype;
+		return true;
 	} else {
 		return super::getProperty(engine, name, v);
 	}
+}
+
+bool Closure::setProperty(Engine& engine, const String* name, const Value& v) {
+	if (name->isEqualTo(LENGTH_STRING)) {
+		return false;
+	} else if (name->isEqualTo(PROTOTYPE_STRING)) {
+		prototype = v;
+		return true;
+	} else {
+		return super::setProperty(engine, name, v);
+	}
+}
+
+bool Closure::deleteProperty(Engine& engine, const String* name) {
+	return (!name->isEqualTo(PROTOTYPE_STRING) && !name->isEqualTo(LENGTH_STRING) && super::deleteProperty(engine, name));
 }
 
 Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -1311,8 +1333,9 @@ bool Processor::privateRun() {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Function* f = vsp[-n].getFunction();
 				Value v(Value::NONEXISTENT);
-				f->getProperty(engine, &PROTOTYPE_STRING, &v); // FIX : standard object prototype if v.asObject() == 0 ?
-				Object* newObject = heap.manage(new UserObject(v.asObject()));
+				f->getProperty(engine, &PROTOTYPE_STRING, &v);
+				Object* prototype = v.asObject();
+				Object* newObject = heap.manage(new UserObject(prototype != 0 ? prototype : &engine.objectPrototype));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);

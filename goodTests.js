@@ -348,7 +348,9 @@ x=9;(function() { var y=3,x=5 })(); print(x);
 f = function(a,b,c) { }
 print(f.length)
 f.length = 0
-print(f.length);
+print("f.length=" + f.length);
+print("delete f.length=" + delete f.length);
+print("f.length=" + f.length);
 
 f = function() { }
 print(f.length);
@@ -1116,6 +1118,56 @@ mandelbrot();
 (function() {
 	print("*** prototypes ***");
 
+	function ChainA(a, b, c, d) { this.shadowProperty = "ChainA value"; this.toString = function() { return this.shadowProperty; }; };
+	ChainA.prototype.rootProperty = "Root value";
+	print(ChainA.prototype.constructor);
+	print(delete ChainA.prototype.constructor);
+	print(delete ChainA.prototype);
+	function ChainB() { this.chainAProperty = this.shadowProperty = "ChainB value"; };
+	ChainB.prototype = new ChainA();
+	function ChainC() { this.chainBProperty = this.shadowProperty = "ChainC value"; };
+	ChainC.prototype = new ChainB();
+	
+	function Damaged() { }
+	Damaged.prototype = 12345;
+	var damaged = new Damaged;
+	Object.prototype.sdfnkdan = 'o3htieofd';
+	print("damaged.sdfnkdan="+damaged.sdfnkdan);
+	print("delete Object.prototype.sdfnkdan="+(delete Object.prototype.sdfnkdan));
+
+	var chain = new ChainC();
+	print(chain.shadowProperty);
+	print(chain.chainBProperty);
+	print(chain.chainAProperty);
+	print(chain.rootProperty);
+	print('rootProperty' in chain);
+	print(chain);
+	print('shadowProperty' in chain);
+	print(delete chain.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(delete chain.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(chain);
+	
+	var chain = new ChainB();
+	print(chain.shadowProperty);
+	print(chain.chainBProperty);
+	print(chain.chainAProperty);
+	print(chain.rootProperty);
+	print(chain);
+	print(delete chain.shadowProperty);
+	print(chain.shadowProperty);
+	print(delete chain.shadowProperty);
+	print(chain.shadowProperty);
+	print(chain);
+	print('shadowProperty' in chain);
+	print(delete ChainB.prototype.shadowProperty);
+	print('shadowProperty' in chain);
+	print(chain.shadowProperty);
+	print(chain);
+
 	function sort(a) {
 		for (i = 0; i < a.length - 1; ++i) {
 			for (j = i + 1; j < a.length; ++j) {
@@ -1143,49 +1195,13 @@ mandelbrot();
 	}
 
 	print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
-	
-	function Root() { this.shadowProperty = this.rootProperty = "Root value"; };
-	function ChainA() { this.chainAProperty = this.shadowProperty = "ChainA value"; };
-	ChainA.prototype = new Root();
-	function ChainB() { this.chainBProperty = this.shadowProperty = "ChainB value"; };
-	ChainB.prototype = new ChainA();
 
-	print(contents(new ChainB));
-
-	var chain = new ChainB();
-	print(chain);
-	ChainA.prototype.toString = function() { return this.shadowProperty; };
-	print(chain);
-	print(chain.shadowProperty);
-	print(chain.chainBProperty);
-	print(chain.chainAProperty);
-	print(chain.rootProperty);
-	print('rootProperty' in chain);
-	print(chain);
-	print('shadowProperty' in chain);
+	ChainB.prototype.toString = undefined;
+	chain = new ChainC;
+	print(contents(chain));
+	print(delete ChainC.prototype.shadowProperty);
+	print(contents(chain));
 	print(delete chain.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(delete chain.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(chain);
-	
-	var chain = new ChainA();
-	print(chain.shadowProperty);
-	print(chain.chainBProperty);
-	print(chain.chainAProperty);
-	print(chain.rootProperty);
-	print(chain);
-	print(delete chain.shadowProperty);
-	print(chain.shadowProperty);
-	print(delete chain.shadowProperty);
-	print(chain.shadowProperty);
-	print(chain);
-	print('shadowProperty' in chain);
-	print(delete ChainA.prototype.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(chain);
+	print(contents(chain));
 
 })();

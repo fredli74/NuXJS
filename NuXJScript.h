@@ -57,6 +57,7 @@
 //		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 //		support -0.0 (use std::signbit? or whatever...) add to operation matrix test
+//		I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
 //
 //	Compiler
 //
@@ -621,7 +622,6 @@ class Closure;
 
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
-	friend class ObjectConstructor; // FIX : to access objectPrototype only
 	friend class ArrayConstructor; // FIX : to access arrayPrototype only
 	friend class FunctionConstructor; // FIX : - " -
 	friend class Processor;
@@ -632,8 +632,8 @@ class Engine {
 
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
-				UserObject objectPrototype;
-				Closure* functionPrototype; // FIX : do we ned to allocate this one?
+	public:		UserObject objectPrototype; // FIX : make private? put where really?
+	protected:	Closure* functionPrototype; // FIX : do we ned to allocate this one?
 				Array arrayPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
@@ -683,17 +683,21 @@ class Closure : public Function {
 	public:		typedef Function super;
 				
 				Closure(CodeDefinition* codeDef, Object* environment);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length
+				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length and .prototype
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // for .prototype
+				virtual bool deleteProperty(Engine& engine, const String* name); // for .prototype
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 
 	protected:	CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
+				Value prototype; // created on-demand for .prototype
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
 					heap.mark(environment);
+					prototype.markIn(heap);
 					super::gcMark(heap);
 				}
 };
