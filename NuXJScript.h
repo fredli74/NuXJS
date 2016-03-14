@@ -418,23 +418,23 @@ class Value {
 				static const Value NOT_A_NUMBER; // Sorry, NAN is sensitive, defined by some math.h
 				static const Value INFINITE_NUMBER; // Sorry, INFINITY is also sensitive
 
-				// WARNING! Do NOT change order of elements in InternalType enum.
-	protected:	enum InternalType {
+				// WARNING! Do NOT change order of elements in Type enum.
+	protected:	enum Type {
 					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
 					, NUMBER_TYPE, STRING_TYPE, OBJECT_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
 				} type;
-				union Union {
+				union Variable {
 					bool boolean;
 					double number;
 					const String* string;
 					Object* object;
 				} var;
 
-				explicit Value(InternalType type) throw() : type(type) { }
-				explicit Value(InternalType type, const Union& var) throw() : type(type), var(var) { }
+				explicit Value(Type type) throw() : type(type) { }
+				explicit Value(Type type, const Variable& var) throw() : type(type), var(var) { }
 				bool compareStrictly(const Value& y) const;
 				static const String* TYPE_STRINGS[7];
 	
@@ -481,15 +481,16 @@ class Table {
 				struct Bucket {
 					Bucket();
 					const String* key;
-					Value value;
-					bool exists() const { return value.exists(); }
-					operator Value() const { return value; }
+					Byte type;
+					Value::Variable var;
+					bool exists() const { return type != Value::NONEXISTENT_TYPE; }
+					operator Value() const { return Value(static_cast<Value::Type>(type), var); }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);
 				UInt32 getLoadCount() const;
 				const Bucket* getFirst() const;
-				const Bucket* getNext(const Bucket* b) const;
+				const Bucket* getNext(const Bucket* bucket) const;
 				// FIX : we need a better way to lookup & update in one, right now it needs separate lookup and assign (see EvalVarsObject)
 				const Bucket* lookup(const String* key) const; // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void assign(const String* key, const Value& value); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).

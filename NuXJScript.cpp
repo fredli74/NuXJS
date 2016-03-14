@@ -643,7 +643,7 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT) { }
+Table::Bucket::Bucket() : key(0), type(Value::NONEXISTENT_TYPE) { }
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
 
@@ -652,16 +652,16 @@ Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), l
 UInt32 Table::getLoadCount() const { return loadCount; }
 const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
 
-const Table::Bucket* Table::getNext(const Bucket* b) const {
-	assert(b != 0);
+const Table::Bucket* Table::getNext(const Bucket* bucket) const {
+	assert(bucket != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->key == 0 || !b->exists())) { }
-	return (b == e ? 0 : b);
+	while (++bucket != e && (bucket->key == 0 || !bucket->exists())) { }
+	return (bucket == e ? 0 : bucket);
 }
 
 const Table::Bucket* Table::lookup(const String* key) const {
-	const Bucket* b = find(key, key->calcHash());
-	return (b->key != 0 && b->exists() ? b : 0);
+	const Bucket* bucket = find(key, key->calcHash());
+	return (bucket->key != 0 && bucket->exists() ? bucket : 0);
 }
 
 void Table::assign(const String* key, const Value& value) { update(key, value); }
@@ -670,16 +670,15 @@ void Table::erase(const String* key) { update(key, Value::NONEXISTENT); }
 void Table::markIn(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		const Bucket& b = buckets[i];
-		if (b.key != 0) {
-			heap.mark(b.key);
-			if (b.exists()) {
-				b.value.markIn(heap);/*
-				switch (b.type) {
-					case Value::STRING_TYPE: heap.mark(b.valueUnion.s); break;
-					case Value::OBJECT_TYPE: heap.mark(b.valueUnion.object); break;
+		const Bucket& bucket = buckets[i];
+		if (bucket.key != 0) {
+			heap.mark(bucket.key);
+			if (bucket.exists()) {
+				switch (bucket.type) {
+					case Value::STRING_TYPE: heap.mark(bucket.var.string); break;
+					case Value::OBJECT_TYPE: heap.mark(bucket.var.object); break;
 					default: break;
-				}*/
+				}
 				rebuildLoadCount++;
 			}
 		}
@@ -693,19 +692,20 @@ void Table::markIn(GCHeap& heap) {
 
 void Table::update(const String* key, const Value& value) { // FIX : why not put this in assign?
 	UInt32 hash = key->calcHash();
-	Bucket* b = find(key, hash);
-	if (b->key == 0) {
+	Bucket* bucket = find(key, hash);
+	if (bucket->key == 0) {
 		if (loadCount >= calcMaxLoad(buckets.size())) {
 			rebuild(n + 2);
 			assert(loadCount < calcMaxLoad(buckets.size()));
-			b = find(key, hash);
-			assert(b->key == 0);
+			bucket = find(key, hash);
+			assert(bucket->key == 0);
 		}
 		++loadCount;
-		b->key = key;
+		bucket->key = key;
 	}
 //	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
-		b->value = value;
+		bucket->type = static_cast<Byte>(value.type);
+		bucket->var = value.var;
 //	}
 //	b->value.hash16 = hash;
 }
@@ -713,8 +713,8 @@ void Table::update(const String* key, const Value& value) { // FIX : why not put
 Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	Table::Bucket* b;
-	while ((b = &buckets[i])->key != 0 && !b->key->isEqualTo(*key)) {
+	Table::Bucket* bucket;
+	while ((bucket = &buckets[i])->key != 0 && !bucket->key->isEqualTo(*key)) {
 		i = (i + 1) & mask;
 	}
 	return &buckets[i];
