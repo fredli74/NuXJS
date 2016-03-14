@@ -478,7 +478,6 @@ class Table {
 				
 				struct Bucket {
 					Bucket();
-					UInt32 hashAndFlags;
 					const String* key;
 					Value value;
 				};

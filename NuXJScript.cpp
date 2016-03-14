@@ -643,7 +643,7 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : hashAndFlags(NON_EXISTENT) { }
+Table::Bucket::Bucket() : key(0) { }
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
 
@@ -655,13 +655,13 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->hashAndFlags == NON_EXISTENT || !b->value.exists())) { }
+	while (++b != e && (b->key == 0 || !b->value.exists())) { }
 	return (b == e ? 0 : b);
 }
 
 const Table::Bucket* Table::lookup(const String* key) const {
 	const Bucket* b = find(key, key->calcHash());
-	return (b->hashAndFlags != NON_EXISTENT && b->value.exists() ? b : 0);
+	return (b->key != 0 && b->value.exists() ? b : 0);
 }
 
 void Table::assign(const String* key, const Value& value) { update(key, value); }
@@ -671,7 +671,7 @@ void Table::markIn(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		const Bucket& b = buckets[i];
-		if (b.hashAndFlags != NON_EXISTENT) {
+		if (b.key != 0) {
 			heap.mark(b.key);
 			if (b.value.exists()) {
 				b.value.markIn(heap);
@@ -689,15 +689,14 @@ void Table::markIn(GCHeap& heap) {
 void Table::update(const String* key, const Value& value) { // FIX : why not put this in assign?
 	UInt32 hash = key->calcHash();
 	Bucket* b = find(key, hash);
-	if (b->hashAndFlags == NON_EXISTENT) {
+	if (b->key == 0) {
 		if (loadCount >= calcMaxLoad(buckets.size())) {
 			rebuild(n + 2);
 			assert(loadCount < calcMaxLoad(buckets.size()));
 			b = find(key, hash);
-			assert(b->hashAndFlags == 0);
+			assert(b->key == 0);
 		}
 		++loadCount;
-		b->hashAndFlags = (hash & HASH_MASK) | DEFAULT_FLAGS;
 		b->key = key;
 	}
 //	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
@@ -708,8 +707,7 @@ void Table::update(const String* key, const Value& value) { // FIX : why not put
 Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	while (buckets[i].hashAndFlags != NON_EXISTENT
-			&& ((buckets[i].hashAndFlags & HASH_MASK) != (hash & HASH_MASK) || !buckets[i].key->isEqualTo(*key))) {
+	while (buckets[i].key != 0 && !buckets[i].key->isEqualTo(*key)) {
 		i = (i + 1) & mask;
 	}
 	return &buckets[i];
@@ -720,9 +718,9 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].hashAndFlags != NON_EXISTENT && buckets[i].value.exists()) {
+		if (buckets[i].key != 0 && buckets[i].value.exists()) {
 			UInt32 j = buckets[i].key->calcHash() & mask;
-			while (newBuckets[j].hashAndFlags != NON_EXISTENT) {
+			while (newBuckets[j].key != 0) {
 				j = (j + 1) & mask;
 			}
 			newBuckets[j] = buckets[i];
