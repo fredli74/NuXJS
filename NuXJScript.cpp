@@ -532,7 +532,7 @@ bool String::getProperty(Engine& engine, const String* name, Value* v) {
 
 // FIX : speed up by skipping when string is really long
 // FNV Hash
-Table::KeyHash String::calcHash() const {
+UInt32 String::calcHash() const {
 	if (hash == 0) {
 		UInt32 l = size();
 		UInt32 x = 2166136261U;
@@ -643,15 +643,9 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : key(0), value(Value::NONEXISTENT) { }
+Table::Bucket::Bucket() : hashAndFlags(NON_EXISTENT) { }
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
-
-UInt32 Table::suggestN(UInt32 count) { // FIX : keep?
-	UInt32 n = 0;
-	while (count >= calcMaxLoad(1U << n)) ++n;
-	return n;
-}
 
 Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
 
@@ -661,13 +655,13 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* b) const {
 	assert(b != 0);
 	const Bucket* e = buckets.end();
-	while (++b != e && (b->key == 0 || !b->value.exists())) { }
+	while (++b != e && (b->hashAndFlags == NON_EXISTENT || !b->value.exists())) { }
 	return (b == e ? 0 : b);
 }
 
 const Table::Bucket* Table::lookup(const String* key) const {
 	const Bucket* b = find(key, key->calcHash());
-	return (b->key != 0 && b->value.exists() ? b : 0);
+	return (b->hashAndFlags != NON_EXISTENT && b->value.exists() ? b : 0);
 }
 
 void Table::assign(const String* key, const Value& value) { update(key, value); }
@@ -676,9 +670,14 @@ void Table::erase(const String* key) { update(key, Value::NONEXISTENT); }
 void Table::markIn(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		heap.mark(buckets[i].key);
-		buckets[i].value.markIn(heap);
-		if (buckets[i].key != 0 && buckets[i].value.exists()) rebuildLoadCount++;
+		const Bucket& b = buckets[i];
+		if (b.hashAndFlags != NON_EXISTENT) {
+			heap.mark(b.key);
+			if (b.value.exists()) {
+				b.value.markIn(heap);
+				rebuildLoadCount++;
+			}
+		}
 	}
 	if (rebuildLoadCount != loadCount) {
 		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
@@ -688,26 +687,31 @@ void Table::markIn(GCHeap& heap) {
 }
 
 void Table::update(const String* key, const Value& value) { // FIX : why not put this in assign?
-	KeyHash hash = key->calcHash();
+	UInt32 hash = key->calcHash();
 	Bucket* b = find(key, hash);
-	if (b->key == 0) {
+	if (b->hashAndFlags == NON_EXISTENT) {
 		if (loadCount >= calcMaxLoad(buckets.size())) {
 			rebuild(n + 2);
 			assert(loadCount < calcMaxLoad(buckets.size()));
 			b = find(key, hash);
-			assert(b->key == 0);
+			assert(b->hashAndFlags == 0);
 		}
 		++loadCount;
-		b->hash = hash;
+		b->hashAndFlags = (hash & HASH_MASK) | DEFAULT_FLAGS;
 		b->key = key;
 	}
-	b->value = value;
+//	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
+		b->value = value;
+//	}
 }
 
-Table::Bucket* Table::find(const String* key, KeyHash hash) const {
+Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	while (buckets[i].key != 0 && (buckets[i].hash != hash || !buckets[i].key->isEqualTo(*key))) i = (i + 1) & mask;
+	while (buckets[i].hashAndFlags != NON_EXISTENT
+			&& ((buckets[i].hashAndFlags & HASH_MASK) != (hash & HASH_MASK) || !buckets[i].key->isEqualTo(*key))) {
+		i = (i + 1) & mask;
+	}
 	return &buckets[i];
 }
 
@@ -716,9 +720,11 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].key != 0 && buckets[i].value.exists()) {
+		if (buckets[i].hashAndFlags != NON_EXISTENT && buckets[i].value.exists()) {
 			UInt32 j = buckets[i].key->calcHash() & mask;
-			while (newBuckets[j].key != 0) j = (j + 1) & mask;
+			while (newBuckets[j].hashAndFlags != NON_EXISTENT) {
+				j = (j + 1) & mask;
+			}
 			newBuckets[j] = buckets[i];
 			++newLoadCount;
 		}
@@ -971,7 +977,9 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 
 Enumerator* Arguments::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) list->add(b->key);
+	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
+		list->add(b->key);
+	}
 	for (UInt32 i = 0; i < argumentsCount; ++i)
 		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
 	return list;

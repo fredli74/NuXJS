@@ -211,10 +211,11 @@
 #include <string>
 #include <cstring>
 
-typedef unsigned short Char;
+typedef unsigned short UInt16;
 typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
+typedef UInt16 Char;
 typedef Int32 CodeWord; // FIX : int or byte?
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
@@ -465,11 +466,19 @@ class Enumerator : public Object {
 };
 
 class Table {
-	public:		typedef UInt32 KeyHash;
+	public:		enum {
+					HASH_MASK = ~(15U << 28)
+					, WRITABLE_MASK = (1U << 31)
+					, ENUMERABLE_MASK = (1U << 30)
+					, CONFIGURABLE_MASK = (1U << 29)
+					, EXISTS_MASK = (1U << 28)
+					, DEFAULT_FLAGS = (15U << 28)
+					, NON_EXISTENT = 0
+				};
 				
 				struct Bucket {
 					Bucket();
-					KeyHash hash;
+					UInt32 hashAndFlags;
 					const String* key;
 					Value value;
 				};
@@ -485,9 +494,8 @@ class Table {
 				void markIn(GCHeap& heap);
 
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
-				static UInt32 suggestN(UInt32 count); // FIX : keep?
 				void update(const String* key, const Value& value);
-				Bucket* find(const String* key, KeyHash hash) const;
+				Bucket* find(const String* key, UInt32 hash) const;
 				UInt32 rebuild(UInt32 newN);
 				
 				UInt32 n; ///< Size of member table is two to the power of n.
@@ -526,7 +534,7 @@ class String : public Object, public QuickArray<Char> {
 				virtual const String* className() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
-				Table::KeyHash calcHash() const;
+				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;
