@@ -468,23 +468,24 @@ class Enumerator : public Object {
 };
 
 class Table {
-	public:		enum {
-					HASH_MASK = ~(15U << 28)
-					, WRITABLE_MASK = (1U << 31)
-					, ENUMERABLE_MASK = (1U << 30)
-					, CONFIGURABLE_MASK = (1U << 29)
-					, EXISTS_MASK = (1U << 28)
-					, DEFAULT_FLAGS = (15U << 28)
-					, NONEXISTENT = 0
-				};
-				
-				struct Bucket {
-					Bucket();
-					const String* key;
-					Byte type;
-					Value::Variable var;
-					bool exists() const { return type != Value::NONEXISTENT_TYPE; }
-					operator Value() const { return Value(static_cast<Value::Type>(type), var); }
+	public:		class Bucket {
+					friend class Table;
+					public:		Bucket() : key(0), flags(0) { };
+								Value getValue() const { return Value(static_cast<Value::Type>(type), var); }
+								const String* getKey() const { return key; }
+					protected:	enum {
+									KEY_EXISTS_MASK = 1
+									, VALUE_EXISTS_MASK = 2
+									, WRITABLE_MASK = 4
+									, ENUMERABLE_MASK = 8
+									, CONFIGURABLE_MASK = 16
+								};
+								Byte flags;
+								Byte type;
+								const String* key;
+								Value::Variable var;
+								bool keyExists() const { return flags != 0; }
+								bool valueExists() const { return ((flags & VALUE_EXISTS_MASK) != 0); }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);
@@ -740,7 +741,7 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 				}
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) {
 					const Table::Bucket* bucket = vars.lookup(name);
-					if (bucket != 0) { *v = Value(*bucket); return true; }
+					if (bucket != 0) { *v = bucket->getValue(); return true; }
 					return parent->getProperty(engine, name, v);
 				}
 				virtual bool deleteProperty(Engine& engine, const String* name) {

@@ -643,8 +643,6 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-Table::Bucket::Bucket() : key(0), type(Value::NONEXISTENT_TYPE) { }
-
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
 
 Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
@@ -655,25 +653,53 @@ const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 
 const Table::Bucket* Table::getNext(const Bucket* bucket) const {
 	assert(bucket != 0);
 	const Bucket* e = buckets.end();
-	while (++bucket != e && (bucket->key == 0 || !bucket->exists())) { }
+	while (++bucket != e && !bucket->valueExists()) { }
 	return (bucket == e ? 0 : bucket);
 }
 
 const Table::Bucket* Table::lookup(const String* key) const {
 	const Bucket* bucket = find(key, key->calcHash());
-	return (bucket->key != 0 && bucket->exists() ? bucket : 0);
+	return (bucket->valueExists() ? bucket : 0);
 }
 
-void Table::assign(const String* key, const Value& value) { update(key, value); }
-void Table::erase(const String* key) { update(key, Value::NONEXISTENT); }
+void Table::assign(const String* key, const Value& value) {
+	assert(value.exists());
+	UInt32 hash = key->calcHash();
+	Bucket* bucket = find(key, hash);
+	if (!bucket->keyExists()) {
+		if (loadCount >= calcMaxLoad(buckets.size())) {
+			rebuild(n + 2);
+			assert(loadCount < calcMaxLoad(buckets.size()));
+			bucket = find(key, hash);
+			assert(!bucket->keyExists());
+		}
+		++loadCount;
+		bucket->key = key;
+		bucket->flags = Bucket::KEY_EXISTS_MASK | Bucket::VALUE_EXISTS_MASK;
+	}
+//	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
+		bucket->type = static_cast<Byte>(value.type);
+		bucket->var = value.var;
+		bucket->flags |= Bucket::VALUE_EXISTS_MASK;
+//	}
+//	b->value.hash16 = hash;
+}
+
+void Table::erase(const String* key) {
+	UInt32 hash = key->calcHash();
+	Bucket* bucket = find(key, hash);
+	if (bucket->valueExists()) {
+		bucket->flags = Bucket::KEY_EXISTS_MASK;
+	}
+}
 
 void Table::markIn(GCHeap& heap) {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		const Bucket& bucket = buckets[i];
-		if (bucket.key != 0) {
-			heap.mark(bucket.key);
-			if (bucket.exists()) {
+		if (bucket.keyExists()) {
+			heap.mark(bucket.key); // FIX : Really, doesn't it get cleaned out by rebuild anyhow?
+			if (bucket.valueExists()) {
 				switch (bucket.type) {
 					case Value::STRING_TYPE: heap.mark(bucket.var.string); break;
 					case Value::OBJECT_TYPE: heap.mark(bucket.var.object); break;
@@ -690,31 +716,11 @@ void Table::markIn(GCHeap& heap) {
 	}
 }
 
-void Table::update(const String* key, const Value& value) { // FIX : why not put this in assign?
-	UInt32 hash = key->calcHash();
-	Bucket* bucket = find(key, hash);
-	if (bucket->key == 0) {
-		if (loadCount >= calcMaxLoad(buckets.size())) {
-			rebuild(n + 2);
-			assert(loadCount < calcMaxLoad(buckets.size()));
-			bucket = find(key, hash);
-			assert(bucket->key == 0);
-		}
-		++loadCount;
-		bucket->key = key;
-	}
-//	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
-		bucket->type = static_cast<Byte>(value.type);
-		bucket->var = value.var;
-//	}
-//	b->value.hash16 = hash;
-}
-
 Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
-	Table::Bucket* bucket;
-	while ((bucket = &buckets[i])->key != 0 && !bucket->key->isEqualTo(*key)) {
+	Bucket* bucket;
+	while ((bucket = &buckets[i])->keyExists() && !bucket->key->isEqualTo(*key)) {
 		i = (i + 1) & mask;
 	}
 	return &buckets[i];
@@ -725,7 +731,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].key != 0 && buckets[i].exists()) {
+		if (buckets[i].valueExists()) {
 			UInt32 j = buckets[i].key->calcHash() & mask;
 			while (newBuckets[j].key != 0) {
 				j = (j + 1) & mask;
@@ -751,7 +757,7 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 
 bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
 	const Table::Bucket* bucket = properties.lookup(name);
-	if (bucket != 0) { *v = Value(*bucket); return true; }
+	if (bucket != 0) { *v = bucket->getValue(); return true; }
 	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 }
 
@@ -763,7 +769,7 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 Enumerator* UserObject::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-		list->add(b->key);
+		list->add(b->getKey());
 	}
 	if (prototype != 0) {
 		Enumerator* protoEnum = prototype->getEnumerator(engine);
@@ -795,7 +801,7 @@ CodeDefinition::CodeDefinition() : source(0), selfName(0) { }
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
 	if (bucket == 0) return false;
-	index = Value(*bucket).toInt();
+	index = bucket->getValue().toInt();
 	return true;
 }
 
@@ -834,10 +840,10 @@ bool Array::setProperty(Engine& engine, const String* name, const Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		// FIX : error if not int!
 		UInt32 newLength = v.toInt(); // fix : to unsigned int
-		if (newLength < lengthProperty) {
+		if (newLength < lengthProperty) { // FIX : optimize: if onyl removing a few items, loop through them and remove instead of looping through all
 			for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 				UInt32 i;
-				const String* key = b->key;
+				const String* key = b->getKey();
 				const Char* const e = key->end();
 				const Char* p = parseUnsignedInt(key->begin(), e, i);
 				if (p == e && i >= newLength) {
@@ -983,7 +989,7 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 Enumerator* Arguments::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-		list->add(b->key);
+		list->add(b->getKey());
 	}
 	for (UInt32 i = 0; i < argumentsCount; ++i)
 		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
@@ -2242,7 +2248,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
-								xr = ExpressionResult(ExpressionResult::INDEXED, Value(*bucket));
+								xr = ExpressionResult(ExpressionResult::INDEXED, bucket->getValue());
 							}
 						}
 						break;
@@ -2292,7 +2298,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 		Value index;
 		const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 		if (bucket != 0) {
-			index = Value(*bucket);
+			index = bucket->getValue();
 		} else {
 			codeDef->varNames.append(name);
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
@@ -2630,7 +2636,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					Value localIndex = Value::NONEXISTENT;
 					const Table::Bucket* bucket = codeDef->nameIndexes.lookup(exceptionVarName);
 					if (bucket != 0) {
-						localIndex = Value(*bucket);
+						localIndex = bucket->getValue();
 						codeDef->nameIndexes.erase(exceptionVarName);
 					}
 					completeForwardBranch(catchPoint);
@@ -2880,7 +2886,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
 	 // FIX : .getObject?
 	if (bucket != 0) {
-		codeDef = reinterpret_cast<CodeDefinition*>(Value(*bucket).asObject());
+		codeDef = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
 	} else {
 		codeDef = engine.getHeap().manage(new CodeDefinition());
 		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);
