@@ -380,23 +380,23 @@ class Value {
 	friend class Table;
 	public:		Value()
 				#if !defined(NDEBUG)
-						: t(BAD_TYPE)
+						: type(BAD_TYPE)
 				#endif
 						{ }
-				explicit Value(bool b) : t(BOOLEAN_TYPE) { u.b = b; }
-				explicit Value(Int32 i) : t(NUMBER_TYPE) { u.d = i; }
-				explicit Value(UInt32 ui) : t(NUMBER_TYPE) { u.d = ui; }
-				explicit Value(double d) : t(NUMBER_TYPE) { u.d = d; }
-				explicit Value(const String* s) : t(STRING_TYPE) { u.s = s; }
-				explicit Value(Object* o) : t(OBJECT_TYPE) { u.o = o; }
+				explicit Value(bool boolean) : type(BOOLEAN_TYPE) { var.boolean = boolean; }
+				explicit Value(Int32 number) : type(NUMBER_TYPE) { var.number = number; }
+				explicit Value(UInt32 number) : type(NUMBER_TYPE) { var.number = number; }
+				explicit Value(double number) : type(NUMBER_TYPE) { var.number = number; }
+				explicit Value(const String* string) : type(STRING_TYPE) { var.string = string; }
+				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
 	
-				bool exists() const { return t != NONEXISTENT_TYPE; }
-				bool isObject() const { return t == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
-				bool isNumber() const { return t == NUMBER_TYPE; }
-				bool isString() const { return t == STRING_TYPE; }
-				Object* asObject() const { return (t == OBJECT_TYPE ? u.o : 0); }
+				bool exists() const { return type != NONEXISTENT_TYPE; }
+				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
+				bool isNumber() const { return type == NUMBER_TYPE; }
+				bool isString() const { return type == STRING_TYPE; }
+				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
-				const String* getString() const { assert(t == STRING_TYPE); return u.s; }
+				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
 				bool toBool() const;
 				Int32 toInt() const;
@@ -425,16 +425,16 @@ class Value {
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
-				} t;
+				} type;
 				union Union {
-					bool b;
-					double d;
-					const String* s;
-					Object* o;
-				} u;
+					bool boolean;
+					double number;
+					const String* string;
+					Object* object;
+				} var;
 
-				explicit Value(InternalType type) throw() : t(type) { }
-				explicit Value(InternalType type, Union u) throw() : t(type), u(u) { }
+				explicit Value(InternalType type) throw() : type(type) { }
+				explicit Value(InternalType type, const Union& var) throw() : type(type), var(var) { }
 				bool compareStrictly(const Value& y) const;
 				static const String* TYPE_STRINGS[7];
 	

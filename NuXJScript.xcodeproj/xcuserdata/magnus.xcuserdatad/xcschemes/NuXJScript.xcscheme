@@ -60,7 +60,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-s goodTests.js"
+            argument = "-s allBenches.js"
             isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -245,17 +245,17 @@ static struct BadFunction : public Function { // FIX : .length?! and all the oth
 
 const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
-const String* Value::typeOfString() const { return (t == OBJECT_TYPE ? u.o->typeOfString() : TYPE_STRINGS[static_cast<int>(t)]); }
-Function* Value::getFunction() const { return (t != OBJECT_TYPE ? &BAD_FUNCTION : u.o->getFunction()); }
+const String* Value::typeOfString() const { return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]); }
+Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : var.object->getFunction()); }
 
 bool Value::toBool() const {
-	switch (t) {
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
-		case BOOLEAN_TYPE: return u.b;
-		case NUMBER_TYPE: return (u.d != 0.0);
-		case STRING_TYPE: return (!u.s->empty());
+		case BOOLEAN_TYPE: return var.boolean;
+		case NUMBER_TYPE: return (var.number != 0.0);
+		case STRING_TYPE: return (!var.string->empty());
 		case OBJECT_TYPE: return true;
 	}
 }
@@ -292,14 +292,14 @@ static double stringToDouble(const String& s) {
 }
 
 double Value::toDouble() const {
-	switch (t) {
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
-		case BOOLEAN_TYPE: return u.b ? 1.0 : 0.0;
-		case NUMBER_TYPE: return u.d;
-		case STRING_TYPE: return stringToDouble(*u.s);
+		case BOOLEAN_TYPE: return var.boolean ? 1.0 : 0.0;
+		case NUMBER_TYPE: return var.number;
+		case STRING_TYPE: return stringToDouble(*var.string);
 	}
 }
 
@@ -316,72 +316,72 @@ Int32 Value::toInt() const {
 }
 
 const String* Value::toString(GCHeap& heap) const {
-	switch (t) {
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return &UNDEFINED_STRING;
 		case NULL_TYPE: return &NULL_STRING;
-		case BOOLEAN_TYPE: return u.b ? &TRUE_STRING : &FALSE_STRING;
-		case NUMBER_TYPE: return String::fromDouble(heap, u.d);
-		case STRING_TYPE: return u.s;
+		case BOOLEAN_TYPE: return var.boolean ? &TRUE_STRING : &FALSE_STRING;
+		case NUMBER_TYPE: return String::fromDouble(heap, var.number);
+		case STRING_TYPE: return var.string;
 case OBJECT_TYPE: return heap.manage(new String("<object>"));
 	}
 }
 
 Object* Value::toObject(GCHeap& heap) const {
-	switch (t) {
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: /* FIX */ return 0;
 		case NUMBER_TYPE: /* FIX */ return 0;
-		case STRING_TYPE: return const_cast<String*>(u.s); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
-		case OBJECT_TYPE: return u.o;
+		case STRING_TYPE: return const_cast<String*>(var.string); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
+		case OBJECT_TYPE: return var.object;
 	}
 }
 
 bool Value::operator==(const Value& r) const {
-	if (t != r.t) return false;
-	switch (t) {
+	if (type != r.type) return false;
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return true;
-		case BOOLEAN_TYPE: return u.b == r.u.b;
-		case NUMBER_TYPE: return u.d == r.u.d;
-		case STRING_TYPE: return u.s->isEqualTo(*r.u.s);
-		case OBJECT_TYPE: return u.o == r.u.o;
+		case BOOLEAN_TYPE: return var.boolean == r.var.boolean;
+		case NUMBER_TYPE: return var.number == r.var.number;
+		case STRING_TYPE: return var.string->isEqualTo(*r.var.string);
+		case OBJECT_TYPE: return var.object == r.var.object;
 	}
 }
 
 bool Value::operator<(const Value& r) const {
-	if (t < r.t) return true;
-	if (t > r.t) return false;
-	switch (t) {
+	if (type < r.type) return true;
+	if (type > r.type) return false;
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
 		case NULL_TYPE:
 		case NONEXISTENT_TYPE: return false;
-		case BOOLEAN_TYPE: return u.b < r.u.b;
-		case NUMBER_TYPE: return u.d < r.u.d;
-		case STRING_TYPE: return u.s->isLessThan(*r.u.s);
-		case OBJECT_TYPE: return u.o < r.u.o;
+		case BOOLEAN_TYPE: return var.boolean < r.var.boolean;
+		case NUMBER_TYPE: return var.number < r.var.number;
+		case STRING_TYPE: return var.string->isLessThan(*r.var.string);
+		case OBJECT_TYPE: return var.object < r.var.object;
 	}
 }
 
 bool Value::compareStrictly(const Value& r) const {
-	assert(r.t == t);
-	switch (t) {
+	assert(r.type == type);
+	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return true;
 		case NULL_TYPE: return true;
-		case BOOLEAN_TYPE: return u.b == r.u.b;
-		case NUMBER_TYPE: return u.d == r.u.d;
-		case STRING_TYPE: return u.s->isEqualTo(*r.u.s);
-		case OBJECT_TYPE: return u.o == r.u.o;
+		case BOOLEAN_TYPE: return var.boolean == r.var.boolean;
+		case NUMBER_TYPE: return var.number == r.var.number;
+		case STRING_TYPE: return var.string->isEqualTo(*r.var.string);
+		case OBJECT_TYPE: return var.object == r.var.object;
 	}
 }
 
-bool Value::isStrictlyEqualTo(const Value& r) const { return (t == r.t ? compareStrictly(r) : false); }
+bool Value::isStrictlyEqualTo(const Value& r) const { return (type == r.type ? compareStrictly(r) : false); }
 
 /*
 				undefined	null	boolean				number			string				object
@@ -393,23 +393,23 @@ bool Value::isStrictlyEqualTo(const Value& r) const { return (t == r.t ? compare
 	object		FALSE		FALSE	FALSE				prim(l) == r	prim(l) == r		l === r
 */
 bool Value::isEqualTo(const Value& r) const {
-	if (t == r.t) {
+	if (type == r.type) {
 		return compareStrictly(r);
-	} else if (t < r.t) {	// Symmetrical operation, flip for simpler logic.
+	} else if (type < r.type) {	// Symmetrical operation, flip for simpler logic.
 		return r.isEqualTo(*this);
 	} else {
-		switch (t) {
+		switch (type) {
 			case NULL_TYPE: return true;
 			case BOOLEAN_TYPE: return false;
-			case NUMBER_TYPE: return (r.t == BOOLEAN_TYPE && u.d == (r.u.b ? 1.0 : 0.0));
-			case STRING_TYPE: return (r.t >= BOOLEAN_TYPE && stringToDouble(*u.s) == (r.t == BOOLEAN_TYPE ? (r.u.b ? 1.0 : 0.0) : r.u.d));
+			case NUMBER_TYPE: return (r.type == BOOLEAN_TYPE && var.number == (r.var.boolean ? 1.0 : 0.0));
+			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*var.string) == (r.type == BOOLEAN_TYPE ? (r.var.boolean ? 1.0 : 0.0) : r.var.number));
 			default: return false;
 		}
 	}
 }
 
 bool Value::isLessThan(const Value& y) const {
-	if (t == STRING_TYPE && y.t == STRING_TYPE) return u.s->isLessThan(*y.u.s);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return var.string->isLessThan(*y.var.string);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber < otherNumber;
@@ -423,7 +423,7 @@ bool Value::isLessThan(const Value& y) const {
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
-	if (t == STRING_TYPE && y.t == STRING_TYPE) return !y.u.s->isLessThan(*u.s);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.var.string->isLessThan(*var.string);
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber <= otherNumber;
@@ -437,7 +437,7 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 }
 
 Value Value::add(GCHeap& heap, const Value& y) const {
-	if (t == STRING_TYPE || y.t == STRING_TYPE) {
+	if (type == STRING_TYPE || y.type == STRING_TYPE) {
 		const String* ls = toString(heap);
 		const String* rs = y.toString(heap);
 		if (rs->empty()) return Value(ls);
@@ -448,9 +448,9 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 }
 
 void Value::markIn(GCHeap& heap) const {
-	switch (t) {
-		case STRING_TYPE: heap.mark(u.s); break;
-		case OBJECT_TYPE: heap.mark(u.o); break;
+	switch (type) {
+		case STRING_TYPE: heap.mark(var.string); break;
+		case OBJECT_TYPE: heap.mark(var.object); break;
 		default: break;
 	}
 }
@@ -677,7 +677,7 @@ void Table::markIn(GCHeap& heap) {
 				b.value.markIn(heap);/*
 				switch (b.type) {
 					case Value::STRING_TYPE: heap.mark(b.valueUnion.s); break;
-					case Value::OBJECT_TYPE: heap.mark(b.valueUnion.o); break;
+					case Value::OBJECT_TYPE: heap.mark(b.valueUnion.object); break;
 					default: break;
 				}*/
 				rebuildLoadCount++;
