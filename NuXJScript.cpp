@@ -750,8 +750,8 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 }
 
 bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
-	const Table::Bucket* b = properties.lookup(name);
-	if (b != 0) { *v = Value(*b); return true; }
+	const Table::Bucket* bucket = properties.lookup(name);
+	if (bucket != 0) { *v = Value(*bucket); return true; }
 	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 }
 
@@ -793,9 +793,9 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < lis
 CodeDefinition::CodeDefinition() : source(0), selfName(0) { }
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
-	const Table::Bucket* b = nameIndexes.lookup(name);
-	if (b == 0) return false;
-	index = Value(*b).toInt();
+	const Table::Bucket* bucket = nameIndexes.lookup(name);
+	if (bucket == 0) return false;
+	index = Value(*bucket).toInt();
 	return true;
 }
 
@@ -2240,9 +2240,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						const String* name = String::newHashedString(heap, b, p);
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 						if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-							const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
-							if (b != 0) {
-								xr = ExpressionResult(ExpressionResult::INDEXED, Value(*b));
+							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
+							if (bucket != 0) {
+								xr = ExpressionResult(ExpressionResult::INDEXED, Value(*bucket));
 							}
 						}
 						break;
@@ -2290,9 +2290,9 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Value index;
-		const Table::Bucket* b = codeDef->nameIndexes.lookup(name);
-		if (b != 0) {
-			index = Value(*b);
+		const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
+		if (bucket != 0) {
+			index = Value(*bucket);
 		} else {
 			codeDef->varNames.append(name);
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
@@ -2630,7 +2630,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					Value localIndex = Value::NONEXISTENT;
 					const Table::Bucket* bucket = codeDef->nameIndexes.lookup(exceptionVarName);
 					if (bucket != 0) {
-						localIndex = Value(*b);
+						localIndex = Value(*bucket);
 						codeDef->nameIndexes.erase(exceptionVarName);
 					}
 					completeForwardBranch(catchPoint);
@@ -2877,10 +2877,10 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	const String* sourceCode = argv[0].toString(engine.getHeap());
 	CodeDefinition* codeDef;
 	
-	const Table::Bucket* b = functionDefCache.lookup(sourceCode);
+	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
 	 // FIX : .getObject?
-	if (b != 0) {
-		codeDef = reinterpret_cast<CodeDefinition*>(Value(*b).asObject());
+	if (bucket != 0) {
+		codeDef = reinterpret_cast<CodeDefinition*>(Value(*bucket).asObject());
 	} else {
 		codeDef = engine.getHeap().manage(new CodeDefinition());
 		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);

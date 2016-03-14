@@ -738,8 +738,8 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 					return parent->setProperty(engine, name, v);
 				}
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) {
-					const Table::Bucket* b = vars.lookup(name);
-					if (b != 0) { *v = Value(*b); return true; }
+					const Table::Bucket* bucket = vars.lookup(name);
+					if (bucket != 0) { *v = Value(*bucket); return true; }
 					return parent->getProperty(engine, name, v);
 				}
 				virtual bool deleteProperty(Engine& engine, const String* name) {
