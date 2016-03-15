@@ -42,6 +42,7 @@
 //			alt 1 is regarding functions in themselves to be either script or native
 //			alt 2 is regarding code to be either script or native
 //			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
+//				check futures/promises in C++11, is that something useful for chaining?
 //		arguments container
 //			missing callee
 //				that is, if we don't slaughter the whole stupid non-strict argument object and go for the simpler strict version
@@ -53,11 +54,10 @@
 //		proper error exceptions (TypeError etc)
 //		(new) Object(v) should convert v to number, string object etc
 //		toPrimitive also for native function arguments like sqrt etc, how?
+//			stubs
 //		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
-//		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
-//		support -0.0 (use std::signbit? or whatever...) add to operation matrix test
-//		I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
+//		perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
 //
 //	Compiler
 //
@@ -67,6 +67,9 @@
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
 //		instanceof operator
+//		support -0.0 (use std::signbit? or whatever...) add to operation matrix test
+//		with statement, it's actually not too bad... check http://stackoverflow.com/questions/61552/are-there-legitimate-uses-for-javascripts-with-statement
+//		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
 //
 //	GC
 //
@@ -203,6 +206,7 @@
 //		string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
 //		are we comparing NaN correctly? e.g. NaN !== NaN
 //			yes
+//		I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -468,24 +472,29 @@ class Enumerator : public Object {
 };
 
 class Table {
-	public:		class Bucket {
+	public:		enum {
+					KEY_EXISTS = 1
+					, VALUE_EXISTS = 2
+					, READ_ONLY = 4
+					, DONT_ENUM = 8
+					, DONT_DELETE = 16
+				};
+
+				class Bucket {
 					friend class Table;
-					public:		Bucket() : key(0), flags(0) { };
+					
+					public:		Bucket() : flags(0) { };
 								Value getValue() const { return Value(static_cast<Value::Type>(type), var); }
 								const String* getKey() const { return key; }
-					protected:	enum {
-									KEY_EXISTS_MASK = 1
-									, VALUE_EXISTS_MASK = 2
-									, WRITABLE_MASK = 4
-									, ENUMERABLE_MASK = 8
-									, CONFIGURABLE_MASK = 16
-								};
-								Byte flags;
+								bool enumerate() const { return ((flags & DONT_ENUM) == 0); }
+								
+					protected:	Byte flags;
 								Byte type;
+								UInt16 hash16;
 								const String* key;
 								Value::Variable var;
 								bool keyExists() const { return flags != 0; }
-								bool valueExists() const { return ((flags & VALUE_EXISTS_MASK) != 0); }
+								bool valueExists() const { return ((flags & VALUE_EXISTS) != 0); }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);
@@ -493,9 +502,10 @@ class Table {
 				const Bucket* getFirst() const;
 				const Bucket* getNext(const Bucket* bucket) const;
 				// FIX : we need a better way to lookup & update in one, right now it needs separate lookup and assign (see EvalVarsObject)
+				// suggestion: lookup returns non-const Bucket (but it's immutable by client anyhow), rename assign to update and it takes Bucket*, insert(?) works like lookup but creates key if it doesn't exist (never returns 0)
 				const Bucket* lookup(const String* key) const; // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
-				void assign(const String* key, const Value& value); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
-				void erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				bool assign(const String* key, const Value& value, Byte flags = 0); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				bool erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void markIn(GCHeap& heap);
 
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
@@ -582,6 +592,7 @@ class UserObject : public Object {
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
+				bool defineProperty(const String* name, const Value& v, Byte attributes) { return properties.assign(name, v, attributes); }
 				
 	protected:	Table properties;
 				Object* prototype;
@@ -604,15 +615,30 @@ class Array : public UserObject {
 	protected:	UInt32 lengthProperty;
 };
 
-class Function : public UserObject {
-	public:		typedef UserObject super;
-
+// It is quite rare that we access the object data of a function so we improve memory usage and performance by creating this on first access.
+class Function : public Object {
+	public:		typedef Object super;
+				
+				Function();
 				virtual Function* asFunction();
 				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual bool hasProperty(Engine& engine, const String* name) { return getUserObject(engine)->hasProperty(engine, name); }
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) { return getUserObject(engine)->getProperty(engine, name, v); }
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return getUserObject(engine)->setProperty(engine, name, v); }
+				virtual bool deleteProperty(Engine& engine, const String* name) { return getUserObject(engine)->deleteProperty(engine, name); }
+				virtual Enumerator* getEnumerator(Engine& engine) { return getUserObject(engine)->getEnumerator(engine); }
+	
+	protected:	virtual UserObject* getUserObject(Engine& engine);
+				UserObject* userObject;
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(userObject);
+					super::gcMark(heap);
+				}
 };
 
 class EvalFunction : public Function {
@@ -696,14 +722,13 @@ class Closure : public Function {
 	public:		typedef Function super;
 				
 				Closure(CodeDefinition* codeDef, Object* environment);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v); // for .length and .prototype
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // for .prototype
-				virtual bool deleteProperty(Engine& engine, const String* name); // for .prototype
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 
-	protected:	CodeDefinition* const codeDef;
+	protected:	virtual UserObject* getUserObject(Engine& engine);
+	
+				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				Value prototype; // created on-demand for .prototype
 

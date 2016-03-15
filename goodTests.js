@@ -1118,11 +1118,45 @@ mandelbrot();
 (function() {
 	print("*** prototypes ***");
 
+	function sort(a) {
+		for (i = 0; i < a.length - 1; ++i) {
+			for (j = i + 1; j < a.length; ++j) {
+				if (a[j] < a[i]) {
+					a[i] = [ a[j], a[j] = a[i] ][0];
+				}
+			}
+		}
+		return a;
+	}
+	var a = sort([ "pok", "adf", "viusdh", "oqritj", "qthreguajf", "avpok", "pok" ]);
+	for (var i = 0; i < a.length; ++i) print(a[i]);
+
+	function contents(o) {
+		var keys = [ ];
+		for (var i in o) {
+			keys[keys.length] = i;
+		}
+		sort(keys);
+		var s = "{ ";
+		for (var i = 0; i < keys.length; ++i) {
+			s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : " }"); 
+		}
+		return s;
+	}
+
+	print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
+
 	function ChainA(a, b, c, d) { this.shadowProperty = "ChainA value"; this.toString = function() { return this.shadowProperty; }; };
 	ChainA.prototype.rootProperty = "Root value";
+	print(typeof ChainA.prototype.constructor);
+	ChainA.prototype.constructor = 12345;
 	print(ChainA.prototype.constructor);
+	print(contents(ChainA.prototype));
 	print(delete ChainA.prototype.constructor);
 	print(delete ChainA.prototype);
+	ChainA.prototype.constructor = 12345;
+	print(contents(ChainA.prototype));
+
 	function ChainB() { this.chainAProperty = this.shadowProperty = "ChainB value"; };
 	ChainB.prototype = new ChainA();
 	function ChainC() { this.chainBProperty = this.shadowProperty = "ChainC value"; };
@@ -1167,34 +1201,6 @@ mandelbrot();
 	print('shadowProperty' in chain);
 	print(chain.shadowProperty);
 	print(chain);
-
-	function sort(a) {
-		for (i = 0; i < a.length - 1; ++i) {
-			for (j = i + 1; j < a.length; ++j) {
-				if (a[j] < a[i]) {
-					a[i] = [ a[j], a[j] = a[i] ][0];
-				}
-			}
-		}
-		return a;
-	}
-	var a = sort([ "pok", "adf", "viusdh", "oqritj", "qthreguajf", "avpok", "pok" ]);
-	for (var i = 0; i < a.length; ++i) print(a[i]);
-
-	function contents(o) {
-		var keys = [ ];
-		for (var i in o) {
-			keys[keys.length] = i;
-		}
-		sort(keys);
-		var s = "{ ";
-		for (var i = 0; i < keys.length; ++i) {
-			s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : " }"); 
-		}
-		return s;
-	}
-
-	print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
 
 	ChainB.prototype.toString = undefined;
 	chain = new ChainC;

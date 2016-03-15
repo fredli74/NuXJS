@@ -230,6 +230,7 @@ const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
 const String PROTOTYPE_STRING("prototype");
+const String CONSTRUCTOR_STRING("constructor");
 const String VALUE_OF_STRING("valueOf");
 const String TO_STRING_STRING("toString");
 const String EVAL_STRING("eval");
@@ -643,7 +644,7 @@ Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
 
 /* --- Table --- */
 
-UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 3) - 1); }
+UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 4) - 1); }
 
 Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
 
@@ -662,7 +663,7 @@ const Table::Bucket* Table::lookup(const String* key) const {
 	return (bucket->valueExists() ? bucket : 0);
 }
 
-void Table::assign(const String* key, const Value& value) {
+bool Table::assign(const String* key, const Value& value, Byte flags) {
 	assert(value.exists());
 	UInt32 hash = key->calcHash();
 	Bucket* bucket = find(key, hash);
@@ -674,23 +675,30 @@ void Table::assign(const String* key, const Value& value) {
 			assert(!bucket->keyExists());
 		}
 		++loadCount;
+		bucket->flags = KEY_EXISTS | VALUE_EXISTS | flags;
+		bucket->hash16 = static_cast<UInt16>(hash);
 		bucket->key = key;
-		bucket->flags = Bucket::KEY_EXISTS_MASK | Bucket::VALUE_EXISTS_MASK;
-	}
-//	if ((b->hashAndFlags & WRITABLE_MASK) != 0) {
 		bucket->type = static_cast<Byte>(value.type);
 		bucket->var = value.var;
-		bucket->flags |= Bucket::VALUE_EXISTS_MASK;
-//	}
-//	b->value.hash16 = hash;
+	} else if ((bucket->flags & READ_ONLY) != 0) {
+		return false;
+	} else {
+		bucket->flags |= KEY_EXISTS | VALUE_EXISTS | flags;
+		bucket->type = static_cast<Byte>(value.type);
+		bucket->var = value.var;
+	}
+	return true;
 }
 
-void Table::erase(const String* key) {
-	UInt32 hash = key->calcHash();
-	Bucket* bucket = find(key, hash);
+bool Table::erase(const String* key) {
+	Bucket* bucket = find(key, key->calcHash());
 	if (bucket->valueExists()) {
-		bucket->flags = Bucket::KEY_EXISTS_MASK;
+		if ((bucket->flags & DONT_DELETE) != 0) {
+			return false;
+		}
+		bucket->flags = KEY_EXISTS;
 	}
+	return true;
 }
 
 void Table::markIn(GCHeap& heap) {
@@ -719,8 +727,16 @@ void Table::markIn(GCHeap& heap) {
 Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	UInt32 mask = (buckets.size() - 1);
 	UInt32 i = hash & mask;
+	UInt16 hash16 = static_cast<UInt16>(hash);
 	Bucket* bucket;
-	while ((bucket = &buckets[i])->keyExists() && !bucket->key->isEqualTo(*key)) {
+	while ((bucket = &buckets[i])->keyExists()) {
+		if (bucket->hash16 == hash16 && bucket->key->isEqualTo(*key)) {
+			if (i != (hash & mask)) {
+				std::swap(buckets[i], buckets[(i - 1) & mask]);
+				i = (i - 1) & mask;
+			}
+			break;
+		}
 		i = (i + 1) & mask;
 	}
 	return &buckets[i];
@@ -731,12 +747,13 @@ UInt32 Table::rebuild(UInt32 newN) {
 	UInt32 newLoadCount = 0;
 	UInt32 mask = (1U << newN) - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
-		if (buckets[i].valueExists()) {
-			UInt32 j = buckets[i].key->calcHash() & mask;
-			while (newBuckets[j].key != 0) {
+		const Bucket& bucket = buckets[i];
+		if (bucket.valueExists()) {
+			UInt32 j = bucket.key->calcHash() & mask;
+			while (newBuckets[j].keyExists()) {
 				j = (j + 1) & mask;
 			}
-			newBuckets[j] = buckets[i];
+			newBuckets[j] = bucket;
 			++newLoadCount;
 		}
 	}
@@ -757,19 +774,24 @@ bool UserObject::setProperty(Engine& engine, const String* name, const Value& v)
 
 bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
 	const Table::Bucket* bucket = properties.lookup(name);
-	if (bucket != 0) { *v = bucket->getValue(); return true; }
-	return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
+	if (bucket != 0) {
+		*v = bucket->getValue();
+		return true;
+	} else {
+		return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
+	}
 }
 
 bool UserObject::deleteProperty(Engine& engine, const String* name) {
-	properties.erase(name);
-	return true;
+	return properties.erase(name);
 }
 
 Enumerator* UserObject::getEnumerator(Engine& engine) {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-		list->add(b->getKey());
+		if (b->enumerate()) {
+			list->add(b->getKey());
+		}
 	}
 	if (prototype != 0) {
 		Enumerator* protoEnum = prototype->getEnumerator(engine);
@@ -805,16 +827,25 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	return true;
 }
 
-/* --- Object support --- */
+/* --- Function --- */
 
+Function::Function() : userObject(0) { }
 Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
+UserObject* Function::getUserObject(Engine& engine) {
+	if (userObject == 0) {
+		userObject = engine.getHeap().manage(new UserObject(&engine.objectPrototype)); // FIX : functionPrototype
+	}
+	return userObject;
+}
 
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
+
+/* --- Object support --- */
 
 class ObjectConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
@@ -913,36 +944,15 @@ class FunctionConstructor : public Function {
 Closure::Closure(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment), prototype(Value::NONEXISTENT) { }
 CodeDefinition* Closure::getDefinition() const { return codeDef; }
 Object* Closure::getEnvironment() const { return environment; }
-
-bool Closure::getProperty(Engine& engine, const String* name, Value* v) {
-	if (name->isEqualTo(LENGTH_STRING)) {
-		*v = Value(codeDef->getArgumentsCount());
-		return true;
-	} else if (name->isEqualTo(PROTOTYPE_STRING)) {
-		if (!prototype.exists()) {
-			prototype = Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
-			// FIX : prototype should have a 'constructor' member, but it is not enumerable but still deletable, sigh
-		}
-		*v = prototype;
-		return true;
-	} else {
-		return super::getProperty(engine, name, v);
+UserObject* Closure::getUserObject(Engine& engine) {
+	if (userObject == 0) {
+		userObject = super::getUserObject(engine);
+		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount()), Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
+		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
+		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(this), Table::DONT_ENUM);
+		userObject->defineProperty(&PROTOTYPE_STRING, Value(prototype), Table::DONT_ENUM | Table::DONT_DELETE);
 	}
-}
-
-bool Closure::setProperty(Engine& engine, const String* name, const Value& v) {
-	if (name->isEqualTo(LENGTH_STRING)) {
-		return false;
-	} else if (name->isEqualTo(PROTOTYPE_STRING)) {
-		prototype = v;
-		return true;
-	} else {
-		return super::setProperty(engine, name, v);
-	}
-}
-
-bool Closure::deleteProperty(Engine& engine, const String* name) {
-	return (!name->isEqualTo(PROTOTYPE_STRING) && !name->isEqualTo(LENGTH_STRING) && super::deleteProperty(engine, name));
+	return userObject;
 }
 
 Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {

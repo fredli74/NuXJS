@@ -1546,9 +1546,20 @@ Infinity: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 ({valueOf:function(){return null}}): 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
 *** prototypes ***
-undefined
+adf
+avpok
+oqritj
+pok
+pok
+qthreguajf
+viusdh
+{ asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
+function
+12345
+{ rootProperty: Root value }
 true
 false
+{ constructor: 12345, rootProperty: Root value }
 damaged.sdfnkdan=o3htieofd
 delete Object.prototype.sdfnkdan=true
 ChainC value
@@ -1580,16 +1591,8 @@ true
 false
 undefined
 <object>
-adf
-avpok
-oqritj
-pok
-pok
-qthreguajf
-viusdh
-{ asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }
 true
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }
 true
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, rootProperty: Root value, toString: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, toString: undefined }
