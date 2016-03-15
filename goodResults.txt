@@ -1,4 +1,4 @@
-*** comments ***
+*** parser ***
 0
 1234.5
 *** numbers ***
@@ -148,15 +148,6 @@ this too
 true
 true
 false
-true
-added to built-in
-undefined
-patched
-patched
-patched
-patched
-patched
-patched
 true
 6
 8
@@ -1554,14 +1545,12 @@ pok
 qthreguajf
 viusdh
 { asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
-function
+typeof ChainA.prototype.constructor: function
 12345
 { rootProperty: Root value }
-true
-false
+delete ChainA.prototype.constructor: true
+delete ChainA.prototype: false
 { constructor: 12345, rootProperty: Root value }
-damaged.sdfnkdan=o3htieofd
-delete Object.prototype.sdfnkdan=true
 ChainC value
 ChainC value
 ChainB value

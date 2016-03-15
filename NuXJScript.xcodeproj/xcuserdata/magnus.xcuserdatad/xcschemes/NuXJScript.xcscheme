@@ -61,6 +61,14 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-s goodTests.js"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-gc 100000 benchmarks/chess_bm.js"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "crash20160315.js"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -5,6 +5,7 @@
 *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 
 *) Unicode in identifiers are not allowed
+	FIX : why not?
 
 *) Although based mainly on ECMAScript 5, custom properties are not supported (getters, setters etc)
 

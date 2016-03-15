@@ -91,6 +91,7 @@
 // Compiler
 //
 //		better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
+//			should pass char* in exception probably, as it is now new Compilers are created for each function compiling and the Compiler owns the char*, which means in a throw we lose the correct char*
 //		safe-kept variables aren't resetted on early exits, e.g.
 //			b: switch (x) { case 1: switch(x) { case 2: break b } }
 //			won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
@@ -619,31 +620,18 @@ class Array : public UserObject {
 class Function : public Object {
 	public:		typedef Object super;
 				
-				Function();
 				virtual Function* asFunction();
 				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* className() const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual bool hasProperty(Engine& engine, const String* name) { return getUserObject(engine)->hasProperty(engine, name); }
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) { return getUserObject(engine)->getProperty(engine, name, v); }
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return getUserObject(engine)->setProperty(engine, name, v); }
-				virtual bool deleteProperty(Engine& engine, const String* name) { return getUserObject(engine)->deleteProperty(engine, name); }
-				virtual Enumerator* getEnumerator(Engine& engine) { return getUserObject(engine)->getEnumerator(engine); }
-	
-	protected:	virtual UserObject* getUserObject(Engine& engine);
-				UserObject* userObject;
-
-				virtual void gcMark(GCHeap& heap) {
-					heap.mark(userObject);
-					super::gcMark(heap);
-				}
 };
 
 class EvalFunction : public Function {
-	public:		EvalFunction(bool direct) : direct(direct) { }
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+	public:		typedef Function super;
+				EvalFunction(bool direct) : direct(direct) { }
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
 				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
@@ -657,7 +645,7 @@ class EvalFunction : public Function {
 };
 
 class FunctionFrame;
-class Closure;
+class UserFunction;
 
 class Engine {
 	friend class String; // FIX : to access stringPrototype only
@@ -672,13 +660,13 @@ class Engine {
 	protected:	GCHeap& gcHeap;
 				UserObject stringPrototype;
 	public:		UserObject objectPrototype; // FIX : make private? put where really?
-	protected:	Closure* functionPrototype; // FIX : do we ned to allocate this one?
+	protected:	UserFunction* functionPrototype; // FIX : do we ned to allocate this one?
 				Array arrayPrototype;
 				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
-				Closure* toPrimitiveValueFunction; // Created with script code for simplicity
-				Closure* toStringFunction; // Created with script code for simplicity
+				UserFunction* toPrimitiveValueFunction; // Created with script code for simplicity
+				UserFunction* toStringFunction; // Created with script code for simplicity
 };
 
 // This is an Object so that we can store it as a constant and also in Table
@@ -717,25 +705,30 @@ class CodeDefinition : public Object {
 				}
 };
 
-// FIX : name -> UserFunction ?
-class Closure : public Function {
+// It is quite rare that we access the object data of a function so we improve memory usage and performance by creating this on first access.
+class UserFunction : public Function {
 	public:		typedef Function super;
 				
-				Closure(CodeDefinition* codeDef, Object* environment);
+				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual bool hasProperty(Engine& engine, const String* name) { return createUserObject(engine)->hasProperty(engine, name); }
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) { return createUserObject(engine)->getProperty(engine, name, v); }
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return createUserObject(engine)->setProperty(engine, name, v); }
+				virtual bool deleteProperty(Engine& engine, const String* name) { return createUserObject(engine)->deleteProperty(engine, name); }
+				virtual Enumerator* getEnumerator(Engine& engine) { return createUserObject(engine)->getEnumerator(engine); }
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
-
-	protected:	virtual UserObject* getUserObject(Engine& engine);
+	
+	protected:	UserObject* createUserObject(Engine& engine);
 	
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
-				Value prototype; // created on-demand for .prototype
+				UserObject* userObject;
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
 					heap.mark(environment);
-					prototype.markIn(heap);
+					heap.mark(userObject);
 					super::gcMark(heap);
 				}
 };
@@ -788,14 +781,14 @@ class Arguments;
 class FunctionFrame : public Frame {
 	public:		typedef Frame super;
 
-				FunctionFrame(Closure* function, Int32 argc, const Value* argv);
+				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
 				void updatedCode();
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
-	protected:	Closure* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
+	protected:	UserFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
 				Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
@@ -985,10 +978,10 @@ class Processor : public GCItem {
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(Function* completion);
-				void chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
+				void chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void chain(const CodeWord* ip, Frame* frame, Object* thisValue); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
-	// FIX :			void call(Closure* func, Int32 argc, const Value* argv, Object* thisValue);
+	// FIX :			void call(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue);
 				void push(const Value& v); // FIX : wow, this feels low level, public really?
 				void pop(Int32 count = 1);
 				void resetTimeOut(Int32 clockCycles);
@@ -1049,6 +1042,7 @@ class Compiler : public GCItem {
 				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				void compile(const String& source);
+				const Char* getStopPoint() const { return p; }
 
 	protected:	struct ExpressionResult;
 				struct Scope;

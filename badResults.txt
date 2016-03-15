@@ -1,52 +1,152 @@
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Syntax error
+Line: 1
 Exception: Syntax error
+Compilation error: Syntax error
+Line: 1
 Exception: Syntax error
+Compilation error: Illegal l-value
+Line: 1
 Exception: Illegal l-value
+Compilation error: Syntax error
+Line: 1
 Exception: Syntax error
+Compilation error: Missing */
+Line: 1
 Exception: Missing */
+Compilation error: Unterminated string
+Line: 1
 Exception: Unterminated string
+Compilation error: Unterminated string
+Line: 1
 Exception: Unterminated string
+Compilation error: Unterminated string
+Line: 1
 Exception: Unterminated string
+Compilation error: Illegal escape character
+Line: 1
 Exception: Illegal escape character
+Compilation error: Expected ')'
+Line: 1
 Exception: Expected ')'
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected ',' or ')'
+Line: 1
 Exception: Expected ',' or ')'
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Illegal use of reserved keyword
+Line: 1
 Exception: Illegal use of reserved keyword
+Compilation error: Illegal use of reserved keyword
+Line: 1
 Exception: Illegal use of reserved keyword
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected ',' or ')'
+Line: 1
 Exception: Expected ',' or ')'
+Compilation error: Expected '{'
+Line: 1
 Exception: Expected '{'
+Compilation error: Expected '('
+Line: 1
 Exception: Expected '('
+Compilation error: Expected ')'
+Line: 1
 Exception: Expected ')'
+Compilation error: Expected ',' or ')'
+Line: 1
 Exception: Expected ',' or ')'
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected '{'
+Line: 1
 Exception: Expected '{'
+Compilation error: Expected '}'
+Line: 1
 Exception: Expected '}'
+Compilation error: Invalid number
+Line: 1
 Exception: Invalid number
+Compilation error: Invalid number
+Line: 1
 Exception: Invalid number
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Duplicate label
+Line: 1
 Exception: Duplicate label
+Compilation error: Undefined label
+Line: 1
 Exception: Undefined label
+Compilation error: Undefined label
+Line: 1
 Exception: Undefined label
+Compilation error: Illegal label for continue
+Line: 1
 Exception: Illegal label for continue
+Compilation error: Illegal break
+Line: 1
 Exception: Illegal break
+Compilation error: Illegal continue
+Line: 1
 Exception: Illegal continue
+Compilation error: Expected '{'
+Line: 1
 Exception: Expected '{'
+Compilation error: Expected '}'
+Line: 1
 Exception: Expected '}'
+Compilation error: Expected 'catch' or 'finally'
+Line: 1
 Exception: Expected 'catch' or 'finally'
+Compilation error: Expected identifier
+Line: 1
 Exception: Expected identifier
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected 'case', 'default' or '}'
+Line: 1
 Exception: Expected 'case', 'default' or '}'
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Illegal l-value
+Line: 1
 Exception: Illegal l-value
+Compilation error: Expected ';'
+Line: 1
 Exception: Expected ';'
+Compilation error: Illegal l-value
+Line: 1
 Exception: Illegal l-value
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
@@ -54,22 +154,58 @@ Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
 Exception: Unhandled exception: runtime error
+Compilation error: Illegal return
+Line: 1
 Exception: Illegal return
 Exception: Unhandled exception: runtime error
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected ':'
+Line: 1
 Exception: Expected ':'
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected ',' or '}'
+Line: 1
 Exception: Expected ',' or '}'
+Compilation error: Expected property name
+Line: 1
 Exception: Expected property name
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected ',' or ']'
+Line: 1
 Exception: Expected ',' or ']'
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Expected ',' or ']'
+Line: 1
 Exception: Expected ',' or ']'
+Compilation error: Expected expression
+Line: 1
 Exception: Expected expression
+Compilation error: Illegal l-value
+Line: 1
 Exception: Illegal l-value

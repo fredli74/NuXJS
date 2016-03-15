@@ -829,18 +829,10 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 /* --- Function --- */
 
-Function::Function() : userObject(0) { }
 Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::className() const { return &F_UNCTION_STRING; }
-UserObject* Function::getUserObject(Engine& engine) {
-	if (userObject == 0) {
-		userObject = engine.getHeap().manage(new UserObject(&engine.objectPrototype)); // FIX : functionPrototype
-	}
-	return userObject;
-}
-
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
@@ -917,6 +909,14 @@ class ArrayConstructor : public Function {
 					}
 					return Value(array);
 				}
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value* v) {
+					if (name->isEqualTo(PROTOTYPE_STRING)) {
+						*v = Value(&engine.arrayPrototype);
+						return true;
+					} else {
+						return false;
+					}
+				}
 };
 
 static ArrayConstructor ARRAY_OBJECT; // for array literals
@@ -939,14 +939,15 @@ class FunctionConstructor : public Function {
 };
 #endif
 
-/* --- Closure --- */
+/* --- UserFunction --- */
 
-Closure::Closure(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment), prototype(Value::NONEXISTENT) { }
-CodeDefinition* Closure::getDefinition() const { return codeDef; }
-Object* Closure::getEnvironment() const { return environment; }
-UserObject* Closure::getUserObject(Engine& engine) {
+UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment), userObject(0) { }
+CodeDefinition* UserFunction::getDefinition() const { return codeDef; }
+Object* UserFunction::getEnvironment() const { return environment; }
+
+UserObject* UserFunction::createUserObject(Engine& engine) {
 	if (userObject == 0) {
-		userObject = super::getUserObject(engine);
+		userObject = engine.getHeap().manage(new UserObject(&engine.objectPrototype)); // FIX : functionPrototype
 		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount()), Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
 		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
 		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(this), Table::DONT_ENUM);
@@ -955,7 +956,7 @@ UserObject* Closure::getUserObject(Engine& engine) {
 	return userObject;
 }
 
-Value Closure::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 	return Value();
@@ -1008,7 +1009,7 @@ Enumerator* Arguments::getEnumerator(Engine& engine) {
 
 /* --- FunctionFrame --- */
 
-FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
+FunctionFrame::FunctionFrame(UserFunction* function, Int32 argc, const Value* argv)
 		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
 		, indexed(codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc))
 		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
@@ -1020,15 +1021,20 @@ FunctionFrame::FunctionFrame(Closure* function, Int32 argc, const Value* argv)
 	}
 }
 
+// FIX : this one must GO! Q&D crap
 void FunctionFrame::updatedCode() {
-	Int32 oldVarsCount = indexedPointer - indexed.begin();
-	UInt32 oldSize = indexed.size();
-	UInt32 newSize = codeDef->getVarsCount() + passedArgumentsCount;
-	// FIX : ugly and slow
-	indexed.resize(newSize);
-	indexedPointer = indexed.begin() + codeDef->getVarsCount();
-	std::copy(indexed.begin(), indexed.begin() + oldSize, indexedPointer - oldVarsCount);
-	std::fill(indexed.begin(), indexedPointer - oldVarsCount, Value::UNDEFINED); // FIX : optimize
+	const Int32 oldVarsCount = indexedPointer - indexed.begin();
+	const Int32 oldArgsCount = indexed.end() - indexedPointer;
+	const Int32 newVarsCount = codeDef->getVarsCount();
+	const Int32 newArgsCount = std::max(codeDef->getArgumentsCount(), passedArgumentsCount);
+	assert(newVarsCount >= oldVarsCount);
+	assert(newArgsCount >= oldArgsCount);
+	QuickArray<Value> newIndexed(newVarsCount + newArgsCount);
+	std::fill(newIndexed.begin(), newIndexed.begin() + (newVarsCount - oldVarsCount), Value::UNDEFINED);
+	std::copy(indexed.begin(), indexed.end(), newIndexed.begin() + (newVarsCount - oldVarsCount));
+	std::fill(newIndexed.end() - (newArgsCount - oldArgsCount), newIndexed.end(), Value::UNDEFINED);
+	indexed.swap(newIndexed);
+	indexedPointer = indexed.begin() + newVarsCount;
 }
 
 bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
@@ -1168,7 +1174,7 @@ void Processor::chain(Function* completion) {
 	chain(chainCallStub);
 }
 
-void Processor::chain(Closure* func, Int32 argc, const Value* argv, Object* thisValue) {
+void Processor::chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	csp->returnIP = ip;
@@ -1377,7 +1383,7 @@ bool Processor::privateRun() {
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject(); // FIX : .getObject?
 				assert(o != 0);
-				push(Value(heap.manage(new Closure(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.manage(new UserFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case ADD_PROPERTY_OP: {
@@ -1753,16 +1759,16 @@ bool Compiler::token(const char* t, bool eatLeadingWhite) {
 }
 
 void Compiler::token() {
-	while (!eof() && *p >= 'a' && *p <= 'z') ++p;
+	while (!eof() && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) {
+		++p;
+	}
 }
 
 const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
 	const Char* b = p;
 	if (!eof() && isLeadingIdentifierChar(*p)) {
 		++p;
-		while (!eof() && (isLeadingIdentifierChar(*p) || (*p >= '0' && *p <= '9'))) {
-			++p;
-		}
+		token();
 		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0) {
 			syntaxError("Illegal use of reserved keyword");
 		}
@@ -2917,7 +2923,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
-//	functionPrototype = gcHeap.protect(new Closure);
+//	functionPrototype = gcHeap.protect(new UserFunction);
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
 	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
 //	FunctionConstructor* functionObject = gcHeap.manage(new FunctionConstructor());
@@ -2977,7 +2983,7 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 		*/
 supressStdErr = true;
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}"));
-		toPrimitiveValueFunction = gcHeap.protect(new Closure(codeDef, globals));
+		toPrimitiveValueFunction = gcHeap.protect(new UserFunction(codeDef, globals));
 	}
 	{
 		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
@@ -2985,7 +2991,7 @@ supressStdErr = true;
 		gcHeap.protect(&compiler);
 		// FIX : isb+'' right at the end here? + converts with toPrimitiveValue
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}"));
-		toStringFunction = gcHeap.protect(new Closure(codeDef, globals));
+		toStringFunction = gcHeap.protect(new UserFunction(codeDef, globals));
 supressStdErr = false;
 	}
 }
@@ -3020,7 +3026,7 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	heap.protect(&globals);
 	CodeDefinition globalCode;
 	heap.protect(&globalCode);
-	Closure globalClosure(&globalCode, &globals);
+	UserFunction globalClosure(&globalCode, &globals);
 	heap.protect(&globalClosure);
 	FunctionFrame globalFrame(&globalClosure, 0, 0);
 	heap.protect(&globalFrame);
@@ -3085,7 +3091,24 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 				heap.protect(&codeDef);
 				Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
 				heap.protect(&compiler);
-				compiler.compile(source);
+				try {
+					compiler.compile(source);
+				}
+				catch (Exception& x) {
+					std::cout << "Compilation error: " << x.what() << std::endl;
+					int lineNumber = 1;
+					const Char* stopPoint = compiler.getStopPoint();
+					const Char* p = source.begin();
+					while (p < stopPoint) {
+						assert(p != source.end());
+						if (*p == '\n') {
+							++lineNumber;
+						}
+						++p;
+					}
+					std::cout << "Line: " << lineNumber << std::endl;
+					throw;
+				}
 				globalFrame.updatedCode();
 				processor.chain(globalCode.getCodePointer(), &globalFrame, &globalFrame);
 				
@@ -3094,13 +3117,13 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 				do {
 					processor.resetTimeOut(gcRate);
 					done = !processor.run();
-					
+				
 					UInt32 sweptCount = heap.gc();
 					if (!supressStdErr) {
 						std::cerr << "\tGC swept: " << sweptCount << std::endl;
 						std::cerr << "\tGC kept: " << heap.size() << std::endl;
 					}
-					
+				
 					if (done) {
 						if (!supressStdErr) {
 							std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
