@@ -937,13 +937,12 @@ good toString
 NaN
 valueOf = 1234
 5678
-valueOf = 1234
+5678
 9012
-undefined
 toString = "abcd"
 efgh
 true
-undefined
+number
 true
 true
 *** eval ***
@@ -1556,7 +1555,7 @@ ChainC value
 ChainB value
 Root value
 true
-<object>
+ChainC value
 true
 true
 true
@@ -1564,22 +1563,22 @@ ChainB value
 true
 true
 ChainB value
-<object>
+ChainB value
 ChainB value
 undefined
 ChainB value
 Root value
-<object>
+ChainB value
 true
 ChainA value
 true
 ChainA value
-<object>
+ChainA value
 true
 true
 false
 undefined
-<object>
+undefined
 { chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }
 true
 { chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value, toString: undefined }

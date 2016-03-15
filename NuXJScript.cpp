@@ -11,6 +11,38 @@
 
 	bool supressStdErr = false; // FIX : drop
 
+// MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
+static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
+#ifdef _MSC_VER
+#include <float.h>
+static bool isNaN(double d) { return _isnan(d); }
+/*
+	Ecma rules
+			-inf	-y		0		+y		+inf	NaN
+			-------------------------------------------
+	-inf   |NaN		NaN		NaN		NaN		NaN		NaN
+	-x	   |-x		-x%y	NaN		-x%y	-x		NaN
+	0	   |0		0		NaN		0		0		NaN
+	+x	   |+x		x%y		NaN		x%y		+x		NaN
+	+inf   |NaN		NaN		NaN		NaN		NaN		NaN
+	NaN	   |NaN		NaN		NaN		NaN		NaN		NaN
+
+	MSVC fmod
+			-inf	-y		0		+y		+inf	NaN
+			-------------------------------------------
+	-inf   |NaN		NaN		NaN		NaN		NaN		NaN		!_finite
+	-x	   |NaN*	-x%y	NaN		-x%y	NaN*	NaN		_finite
+	0	   |NaN*	0		NaN		0		NaN*	NaN		_finite
+	+x	   |NaN*	x%y		NaN		x%y		NaN*	NaN		_finite
+	+inf   |NaN		NaN		NaN		NaN		NaN		NaN		!_finite
+	NaN	   |NaN		NaN		NaN		NaN		NaN		NaN		!_finite
+			!_f		_f		_f		_f		!_f		!_f
+*/
+static double modulo(double x, double y) { return (!_finite(y) && !_isnan(y) && _finite(x) ? x : fmod(x, y)); }
+#else
+static bool isNaN(double d) { return d != d; }
+#endif
+
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
 static int strncmp(const Char* a, const char* b, UInt32 n) {
 	UInt32 i = 0;
@@ -76,9 +108,6 @@ static int findLiteralToken(int n /* string length */, const Char* s /* zero-ter
 	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
-
-static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
-static bool isNaN(double d) { return d != d; }
 
 // FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
 
@@ -590,7 +619,7 @@ const String* String::fromDouble(GCHeap& heap, double d) {
 	if (isNaN(d)) return &NAN_STRING;
 	double x = fabs(d);
 	if (x <= EPSILON) return &ZERO_STRING;
-	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING;
+	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING; // FIX : put in doubleToString for consistency
 	Char buffer[32];
 	std::pair<Char*, Char*> r = doubleToString(buffer, d);
 	return heap.manage(new String(r.first, r.second));
@@ -1292,7 +1321,7 @@ bool Processor::privateRun() {
 			case SUB_OP:	poppush(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
 			case MUL_OP:	poppush(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
 			case DIV_OP:	poppush(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
-			case MOD_OP:	poppush(Value(fmod(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case MOD_OP:	poppush(Value(modulo(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
 			case OR_OP:		poppush(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
 			case XOR_OP:	poppush(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
 			case AND_OP:	poppush(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
