@@ -16,6 +16,8 @@ static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
 #include <float.h>
 static bool isNaN(double d) { return _isnan(d); }
+static bool isFinite(double d) { return _isfinite(d); }
+
 /*
 	Ecma rules
 			-inf	-y		0		+y		+inf	NaN
@@ -40,7 +42,10 @@ static bool isNaN(double d) { return _isnan(d); }
 */
 static double modulo(double x, double y) { return (!_finite(y) && !_isnan(y) && _finite(x) ? x : fmod(x, y)); }
 #else
+static double modulo(double x, double y) { return fmod(x, y); }
+// FIX : if c++11 use std::isnan and std::isfinite
 static bool isNaN(double d) { return d != d; }
+static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); };
 #endif
 
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
@@ -236,14 +241,18 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 
 /* --- String constants --- */
 
-// FIX : sort, merge to few lines, or maybe even do some smart array based construction?
+// FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
 const String EMPTY_STRING("");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
 const String O_BJECT_STRING("Object");
 const String A_RRAY_STRING("Array");
 const String BOOLEAN_STRING("boolean");
+const String B_OOLEAN_STRING("Boolean");
+const String BRACKET_OBJECT_STRING("[object ");
+const String END_BRACKET_STRING("]");
 const String NUMBER_STRING("number");
+const String N_UMBER_STRING("Number");
 const String STRING_STRING("string");
 const String S_TRING_STRING("String");
 const String FUNCTION_STRING("function");
@@ -259,9 +268,9 @@ const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
 const String PROTOTYPE_STRING("prototype");
+const String CLASS_STRING("class");
+const String VALUE_STRING("value");
 const String CONSTRUCTOR_STRING("constructor");
-const String VALUE_OF_STRING("valueOf");
-const String TO_STRING_STRING("toString");
 const String EVAL_STRING("eval");
 
 /* --- Value --- */
@@ -275,8 +284,13 @@ static struct BadFunction : public Function { // FIX : .length?! and all the oth
 
 const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
-const String* Value::typeOfString() const { return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]); }
-Function* Value::getFunction() const { return (type != OBJECT_TYPE ? &BAD_FUNCTION : var.object->getFunction()); }
+const String* Value::typeOfString() const {
+	return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]);
+}
+
+Function* Value::getFunction() const {
+	return (type != OBJECT_TYPE ? &BAD_FUNCTION : var.object->getFunction());
+}
 
 bool Value::toBool() const {
 	switch (type) {
@@ -284,7 +298,7 @@ bool Value::toBool() const {
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return var.boolean;
-		case NUMBER_TYPE: return (var.number != 0.0);
+		case NUMBER_TYPE: return (var.number != 0.0 && !isNaN(var.number));
 		case STRING_TYPE: return (!var.string->empty());
 		case OBJECT_TYPE: return true;
 	}
@@ -338,8 +352,8 @@ Int32 Value::toInt() const {
 	int i = static_cast<Int32>(v);
 	if (i == v) {
 		return i;
-	} else if (isNaN(v) || fabs(v) == std::numeric_limits<double>::infinity()) {
-		return 0; // FIX : faster test for weird numbers?
+	} else if (!isFinite(v)) {
+		return 0;
 	} else {
 		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
 	}
@@ -353,18 +367,20 @@ const String* Value::toString(GCHeap& heap) const {
 		case BOOLEAN_TYPE: return var.boolean ? &TRUE_STRING : &FALSE_STRING;
 		case NUMBER_TYPE: return String::fromDouble(heap, var.number);
 		case STRING_TYPE: return var.string;
-case OBJECT_TYPE: return heap.manage(new String("<object>"));
+		case OBJECT_TYPE: { // Default implementation if you don't want to go through the customizable toString() script function. But normally you would.
+			return heap.manage(new String(String(BRACKET_OBJECT_STRING, *var.object->getClassName()), END_BRACKET_STRING));
+		}
 	}
 }
 
-Object* Value::toObject(GCHeap& heap) const {
+Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
-		case BOOLEAN_TYPE: /* FIX */ return 0;
-		case NUMBER_TYPE: /* FIX */ return 0;
-		case STRING_TYPE: return const_cast<String*>(var.string); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
+		case BOOLEAN_TYPE: return new WrapperObject(&B_OOLEAN_STRING, *this, &engine.booleanPrototype);
+		case NUMBER_TYPE: return new WrapperObject(&N_UMBER_STRING, *this, &engine.numberPrototype);
+		case STRING_TYPE: return (requestExtensible ? new WrapperObject(&S_TRING_STRING, *this, &engine.stringPrototype) : static_cast<Object*>(const_cast<String*>(var.string))); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case OBJECT_TYPE: return var.object;
 	}
 }
@@ -499,12 +515,12 @@ struct QuickConstants {
 		try {
 			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
 			for (int i = 0; i < 127; ++i) {
-				Char buf[1] = { i };
+				Char buf[1] = { static_cast<Char>(i) };
 				ascii[i] = Value(new String(buf, buf + 1));
 			}
 			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
 				Char buffer[32];
-				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32);
+				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32); // FIX : newHashedString
 				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]->calcHash();
 			}
 		}
@@ -541,7 +557,8 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 }
 
 const String* String::typeOfString() const { return &STRING_STRING; }
-const String* String::className() const { return &S_TRING_STRING; }
+const String* String::getClassName() const { return &S_TRING_STRING; }
+Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
 
 bool String::getProperty(Engine& engine, const String* name, Value* v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
@@ -664,12 +681,15 @@ static struct EmptyEnumerator : public Enumerator { const String* nextPropertyNa
 Function* Object::asFunction() { return 0; }
 Function* Object::getFunction() { return &BAD_FUNCTION; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
-const String* Object::className() const { return &O_BJECT_STRING; }
+const String* Object::getClassName() const { return &O_BJECT_STRING; }
+Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
+Value Object::getInternalValue() { return Value::UNDEFINED; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
+Value Object::toPrimitive(Engine& engine, Processor& processor, bool requiresString) { return Value::UNDEFINED; } // FIX : what to do here?
 
 /* --- Table --- */
 
@@ -796,6 +816,8 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 UserObject::UserObject(Object* prototype) : prototype(prototype) { }
 
+Object* UserObject::getPrototype(Engine& engine) const { return prototype; }
+
 bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
@@ -834,6 +856,22 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 	return list;
 }
 
+Value UserObject::toPrimitive(Engine& engine, Processor& processor, bool requiresString) {
+	Value thisValue(this);
+	processor.chain(requiresString ? engine.toStringFunction : engine.toPrimitiveValueFunction
+			, 1, &thisValue, engine.getGlobals());
+	return Value();
+}
+
+/* --- WrapperObject --- */
+
+WrapperObject::WrapperObject(const String* className, const Value& value, Object* prototype)
+	: className(className), wrapped(value), super(prototype) {
+}
+
+const String* WrapperObject::getClassName() const { return className; }
+Value WrapperObject::getInternalValue() { return wrapped; }
+
 /* --- RangeEnumerator --- */
 
 RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
@@ -861,7 +899,8 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
-const String* Function::className() const { return &F_UNCTION_STRING; }
+const String* Function::getClassName() const { return &F_UNCTION_STRING; }
+Object* Function::getPrototype(Engine& engine) const { return engine.functionPrototype; }
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
@@ -890,7 +929,7 @@ bool Array::getProperty(Engine& engine, const String* name, Value* v) {
 
 bool Array::setProperty(Engine& engine, const String* name, const Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
-		// FIX : error if not int!
+		// FIX : error if not UInt32!
 		UInt32 newLength = v.toInt(); // fix : to unsigned int
 		if (newLength < lengthProperty) { // FIX : optimize: if onyl removing a few items, loop through them and remove instead of looping through all
 			for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
@@ -928,7 +967,8 @@ class ArrayConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 					Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
-					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
+					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING)
+							&& argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
 						array->setProperty(engine, &LENGTH_STRING, argv[0]);
 					} else {
 						GCHeap& heap = engine.getHeap();
@@ -987,7 +1027,6 @@ UserObject* UserFunction::createUserObject(Engine& engine) {
 
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
-	--processor.vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 	return Value();
 }
 
@@ -998,7 +1037,7 @@ Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount) : frame(frame)
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
-const String* Arguments::className() const { return &A_RGUMENTS_STRING; }
+const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
 
 Value* Arguments::findProperty(const String* name) {
 	if (name->isEqualTo(LENGTH_STRING)) {
@@ -1187,6 +1226,7 @@ void Processor::updateInternals() {
 
 void Processor::chain(const CodeWord* stub) {
 	++csp; // FIX : overflow check
+	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = 0;
 	csp->thisValue = 0;
@@ -1206,16 +1246,19 @@ void Processor::chain(Function* completion) {
 void Processor::chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	++csp; // FIX : overflow check
+	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = thisValue;
 	ip = func->getDefinition()->getCodePointer();
 	updateInternals();
+	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
 void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisValue) {
 	this->frame = frame;
 	++csp; // FIX : overflow check
+	assert(csp < cstackEnd);
 	csp->returnIP = this->ip;
 	csp->frame = this->frame;
 	csp->thisValue = thisValue;
@@ -1229,6 +1272,7 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	f->mergeEvalVars(engine.getHeap(), codeDef);
 	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
+	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = frame;
 	csp->thisValue = csp[-1].thisValue;
@@ -1276,28 +1320,30 @@ bool Processor::privateRun() {
 			case WRITE_NAMED_OP:	frame->setProperty(engine, constants[operand()].getString(), vsp[0]);
 									break;
 									
-			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(heap)) == 0) error();
+			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) error();
 									if (!o->getProperty(engine, vsp[0].getString(), vsp - 1))
 										vsp[-1] = Value::UNDEFINED; // FIX : is this right?
 									pop(1);
 									break;
 			
-			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(heap)) == 0) error();
+			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) error();
 									o->setProperty(engine, vsp[-1].getString(), vsp[0]);
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
 
 			case TO_PRIMITIVE_OP:
-				if (vsp[0].isObject()) {
-					engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+				if ((o = vsp[0].asObject()) != 0) {
+					Value* returnPointer = vsp;
+					*returnPointer = o->toPrimitive(engine, *this, false);
 				}
 				break;
 
 			case TO_STRING_OP:
 				if (!vsp[0].isString()) {
-					if (vsp[0].isObject()) {
-						engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					if ((o = vsp[0].asObject()) != 0) {
+						Value* returnPointer = vsp;
+						*returnPointer = o->toPrimitive(engine, *this, true);
 					} else {
 						vsp[0] = Value(vsp[0].toString(heap));
 					}
@@ -1346,6 +1392,7 @@ bool Processor::privateRun() {
 
 			case JSR_OP:	offset = operand();
 							++csp; // FIX : bounds check? or reserve?
+							assert(csp < cstackEnd);
 							csp->returnIP = ip;
 							csp->frame = frame;
 							csp->thisValue = csp[-1].thisValue;
@@ -1357,7 +1404,7 @@ bool Processor::privateRun() {
 							updateInternals();
 							break;
 
-			case RETURN_TO_HOST_OP:
+			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
 							ip = (csp--)->returnIP;
 							assert(csp >= cstackStart - 1);
 							result = vsp[0];
@@ -1368,7 +1415,7 @@ bool Processor::privateRun() {
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand();
-				Object* thisObject = vsp[-n - 1].toObject(heap);
+				Object* thisObject = vsp[-n - 1].toObject(engine, true);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT);
 				thisObject->getProperty(engine, vsp[-n].toString(heap), &v);
@@ -1425,7 +1472,7 @@ bool Processor::privateRun() {
 			
 			case FRAME_OP: push(Value(frame)); break;
 			case DELETE_OP: {
-				o = vsp[-1].toObject(heap);
+				o = vsp[-1].toObject(engine, false);
 				if (o == 0) error();
 				poppush(Value(o->deleteProperty(engine, vsp[0].getString())));
 				break;
@@ -1444,6 +1491,7 @@ bool Processor::privateRun() {
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
 			case CATCH_FRAME_OP: {
 				++csp;
+				assert(csp < cstackEnd);
 				csp->returnIP = 0;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, constants[operand()].getString(), vsp[0]));
 				pop(1);
@@ -1466,7 +1514,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case GET_ENUMERATOR_OP: {
-				o = vsp[0].toObject(heap);
+				o = vsp[0].toObject(engine, false);
 				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(engine)));
 				break;
 			}
@@ -1531,8 +1579,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const Value* constants = codeDef.getConstantsPointer();
 	for (UInt32 offset = 0; offset < codeDef.getCodeSize();) {
 		Processor::Opcode opcode = static_cast<Processor::Opcode>(code[offset]);
-		if (opcode < 0 || opcode >= sizeof (OP_STRINGS) / sizeof (*OP_STRINGS)) opcode = Processor::INVALID_OP;
-		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode];
+		if (opcode < 0 || opcode >= Processor::OP_COUNT) opcode = Processor::INVALID_OP;
+		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode - Processor::INVALID_OP];
 		++offset;
 		switch (opcode) {
 			case Processor::JT_OP:
@@ -2943,13 +2991,114 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	return Value();
 }
 
-const String FROM_CHAR_CODE_STRING("fromCharCode");
+/* FIX : funny C++11 thing
+#include <functional>
+
+
+typedef std::function<Value (Engine&, Processor&, Int32, const Value*, Object*)> NativeFunction;
+
+		mathObject->setProperty(*this, &SQRT_STRING, newNativeFunction(gcHeap, [](Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+			return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+		}));
+		
+*/
+
+typedef Value (*NativeFunction)(Engine&, Processor&, Int32, const Value*, Object*);
+
+template<class F> struct FunctorAdapter : public Function {
+	FunctorAdapter(const F& f) : f(f) { }
+	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+		return f(engine, processor, argc, argv, thisValue);
+	}
+	F f;
+};
+
+// FIX : only toDouble?
+template<class F> struct UnaryNativeFunction : public Function {
+	UnaryNativeFunction(const F& f) : f(f) { }
+	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+	}
+	const F f;
+};
+
+template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
+
+Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc >= 2) {
+		Object* o = argv[0].toObject(engine, false);
+		if (o != 0) {
+			const String* s = argv[1].toString(engine.getHeap());
+			if (s->isEqualTo(PROTOTYPE_STRING)) {
+				return Value(o->getPrototype(engine));
+			} else if (s->isEqualTo(CLASS_STRING)) {
+				return Value(o->getClassName());
+			} else if (s->isEqualTo(VALUE_STRING)) {
+				return o->getInternalValue();
+			}
+		}
+	}
+	return Value::UNDEFINED;
+}
+
+Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc >= 2) {
+		const String* const className = argv[0].toString(engine.getHeap());
+		const Value internalValue = argv[1];
+		Object* prototype = (argc >= 3 ? argv[2].toObject(engine, false) : 0);
+		if (prototype == 0) {
+			prototype = &engine.objectPrototype;
+		}
+		return Value(engine.getHeap().manage(new WrapperObject(className, internalValue, prototype)));
+	}
+	return Value::UNDEFINED;
+}
+/*
+Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc >= 3) {
+		Object* o = argv[0].toObject(engine, false);
+		if (o != 0) {
+			Object* prototype = (argc >= 3 ? argv[2].toObject(engine, false) : 0);
+		if (prototype == 0) {
+			prototype = &engine.objectPrototype;
+		}
+		return Value(engine.getHeap().manage(new WrapperObject(className, internalValue, prototype)));
+	}
+	return Value::UNDEFINED;
+}*/
+/*
+Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	Char c;
+	if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
+	String* s = engine.getHeap().manage(new String(argc));
+	for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
+	return Value(s);
+}*/
+// UnaryNativeFunction< std::function<double (double)> > NATIVE_SQRT_FUNCTION([](double d) { return sqrt(d); });
+
+Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
+	return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(engine.getHeap().manage(new String(&c, &c + 1))));
+}
+
+const String SQRT_STRING("sqrt");
+UnaryNativeFunction<double (*)(double)> NATIVE_SQRT_FUNCTION(sqrt);
+const String FLOOR_STRING("floor");
+UnaryNativeFunction<double (*)(double)> NATIVE_FLOOR_FUNCTION(floor);
+const String IS_NAN_STRING("isNaN");
+UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
+const String IS_FINITE_STRING("isFinite");
+UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
-		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0) {
+		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0)
+		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
+		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
+		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
 	assert(heap.belongs(globals));
+	gcHeap.protect(&booleanPrototype);
+	gcHeap.protect(&numberPrototype);
 	gcHeap.protect(&stringPrototype);
-	stringPrototype.setProperty(*this, &FROM_CHAR_CODE_STRING, Value(gcHeap.manage(new FromCharCodeFunction())));
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
 //	functionPrototype = gcHeap.protect(new UserFunction);
@@ -2969,28 +3118,6 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 	globals->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	globals->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
 	
-	{
-		UserObject* mathObject = gcHeap.manage(new UserObject(&objectPrototype));
-		static const String M_ATH_STRING("Math");
-		globals->setProperty(*this, &M_ATH_STRING, Value(mathObject));
-
-		static struct SqrtFunction : public Function { // FIX : .length?! and all the others?!
-			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-				return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
-			}
-		} SQRT_FUNCTION;
-		static const String SQRT_STRING("sqrt");
-		mathObject->setProperty(*this, &SQRT_STRING, Value(&SQRT_FUNCTION));
-
-		static struct FloorFunction : public Function { // FIX : .length?! and all the others?!
-			virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-				return (argc >= 1 ? Value(floor(argv[0].toDouble())) : Value::NOT_A_NUMBER);
-			}
-		} FLOOR_FUNCTION;
-		static const String FLOOR_STRING("floor");
-		mathObject->setProperty(*this, &FLOOR_STRING, Value(&FLOOR_FUNCTION));
-	}
-
 	{
 		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
 		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
@@ -3025,6 +3152,57 @@ supressStdErr = false;
 	}
 }
 
+void Engine::setupStandardLibrary(const String& librarySourceCode) {
+	UserObject* supportObject = gcHeap.manage(new UserObject(&objectPrototype));
+	// FIX : no new String?
+	globals->setProperty(*this, gcHeap.manage(new String("support")), Value(supportObject));
+	UserObject* prototypesObject = gcHeap.manage(new UserObject(&objectPrototype));
+	supportObject->setProperty(*this, gcHeap.manage(new String("prototypes")), Value(prototypesObject));
+	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, getInternalProperty));
+	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, createWrapper));
+	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
+	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
+	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
+
+	UserObject* nativesObject = gcHeap.manage(new UserObject(&objectPrototype));
+	supportObject->setProperty(*this, gcHeap.manage(new String("natives")), Value(nativesObject));
+	nativesObject->setProperty(*this, gcHeap.manage(new String("fromCharCode")), newNativeFunction<NativeFunction>(gcHeap, fromCharCode));
+	nativesObject->setProperty(*this, &IS_NAN_STRING, Value(&IS_NAN_FUNCTION));
+	nativesObject->setProperty(*this, &IS_FINITE_STRING, Value(&IS_FINITE_FUNCTION));
+	nativesObject->setProperty(*this, &SQRT_STRING, Value(&NATIVE_SQRT_FUNCTION));
+	nativesObject->setProperty(*this, &FLOOR_STRING, Value(&NATIVE_FLOOR_FUNCTION));
+
+	prototypesObject->setProperty(*this, &O_BJECT_STRING, Value(&objectPrototype));
+	prototypesObject->setProperty(*this, &S_TRING_STRING, Value(&stringPrototype));
+	prototypesObject->setProperty(*this, &B_OOLEAN_STRING, Value(&booleanPrototype));
+	prototypesObject->setProperty(*this, &N_UMBER_STRING, Value(&numberPrototype));
+	prototypesObject->setProperty(*this, &A_RRAY_STRING, Value(&arrayPrototype));
+
+	// FIX : all this boilerplating... build a function object or something instead?
+
+	CodeDefinition* code = gcHeap.manage(new CodeDefinition());
+	gcHeap.protect(code); // FIX : necessary? can we unprotect?
+	{
+		Compiler compiler(gcHeap, code, Compiler::FOR_EVAL);
+		gcHeap.protect(&compiler);
+		compiler.compile(librarySourceCode);
+	}
+	{
+		Value vstack[128];
+		Processor::CStackEntry cstack[128];
+		Processor processor(*this, cstack, cstack + 128, vstack, vstack + 128);
+		gcHeap.protect(&processor);
+		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
+		processor.chain(RETURN_TO_HOST_STUB);
+		UserFunction* localFunction = gcHeap.manage(new UserFunction(code, globals));
+		FunctionFrame* localFrame = gcHeap.manage(new FunctionFrame(localFunction, 0, 0));
+		processor.chain(code->getCodePointer(), localFrame, globals);
+		bool needsMoreTime = processor.run();
+		assert(!needsMoreTime);
+	}
+	gcHeap.gc();
+}
+
 #include <fstream>
 #include <memory>
 
@@ -3055,14 +3233,30 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	heap.protect(&globals);
 	CodeDefinition globalCode;
 	heap.protect(&globalCode);
-	UserFunction globalClosure(&globalCode, &globals);
+	UserFunction globalClosure(&globalCode, &globals); // FIX : yuck!
 	heap.protect(&globalClosure);
 	FunctionFrame globalFrame(&globalClosure, 0, 0);
 	heap.protect(&globalFrame);
 	
 	Engine engine(heap, &globalFrame);
 	
-	globals.setProperty(engine, &S_TRING_STRING, Value(&EMPTY_STRING));
+supressStdErr = true;
+	try {
+		std::wifstream stdlibStream("stdlib.js");
+		String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()));
+		stdlibStream.close();
+		engine.setupStandardLibrary(source);
+	}
+	catch (const std::exception& x) {
+		std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
+		return 1;
+	}
+	catch (...) {
+		std::cerr << "exception setting up standard lib" << std::endl;
+		return 1;
+	}
+supressStdErr = false;
+	
 	PrintFunction printFunction;
 	globals.setProperty(engine, &PRINT_STRING, Value(heap.protect(&printFunction)));
 	GCFunction gcFunction;

@@ -7,6 +7,7 @@
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
+//			ok, one thought: normally an array only contains a cotninuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal UserObject (accessed as through a proxy now)
 //		basic library (math, string, array ops)
 //		for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
 //			done, but not for strings and arguments objects
@@ -130,6 +131,7 @@
 //		PRE_EQ_OP isn't actually necessary, we could just backup ip once if isObject and retry the EQ after toPrimitive (same applies to TO_PRIMITIVE_OP actually, but that's a bigger story considering the virtually impossible task of "primitivizing" two stack elements at once for binary operators)
 //			alternatively have two opcodes, swap on type < (like in isEqualTo today) and save CPU on isEqualTo as operands are already sorted
 //		.length is very common, special opcode?
+//		arguments and <self name>, couldn't they be indexed variables too instead of accessed through slow READ_NAMED? Either created only when present in code or allocated on demand?
 //
 //	Compiler
 //
@@ -151,6 +153,7 @@
 //		simple constants pre-calculations
 //		let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
 //		also would be good if a["ko"] or a[3423] didn't create a TO_STRING_OP
+//		instead of flushing/discarding results of statements directly, couldn't we keep them until the next statement? i.e. eliminating stuff like "WRITE_INDEXED #-1", "POP", "READ_INDEXED #-1" (except when branch targets of course)
 //
 //	GC
 //
@@ -381,6 +384,7 @@ class GCHeap {
 class String;
 class Object;
 class Function;
+class Engine;
 class Value {
 	friend class Table;
 	public:		Value()
@@ -404,10 +408,10 @@ class Value {
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
 				bool toBool() const;
-				Int32 toInt() const;
+				Int32 toInt() const; // FIX : name toInt32
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
-				Object* toObject(GCHeap& heap) const;
+				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool operator==(const Value& r) const; // FIX : kill these two?
 				bool operator<(const Value& r) const;
 				bool isStrictlyEqualTo(const Value& r) const;
@@ -450,6 +454,7 @@ class Engine;
 class Enumerator;
 class Function;
 class Processor;
+class UserObject;
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 class Object : public GCItem {
 	public:		typedef GCItem super;
@@ -457,12 +462,15 @@ class Object : public GCItem {
 				virtual Function* asFunction(); // FIX : needed?
 				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeOfString() const;
-				virtual const String* className() const;
+				virtual const String* getClassName() const;
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual Value getInternalValue();
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString); // FIX : drop again, never overriden
 };
 
 class Enumerator : public Object {
@@ -480,7 +488,12 @@ class Table {
 					, DONT_ENUM = 8
 					, DONT_DELETE = 16
 				};
-
+				
+				/*
+					The only reason why Bucket doesn't contain the Value class, but rather holds it's own Byte type and
+					Variable union, is memory. This solution makes it possible to squeeze in key flags and a truncated
+					16-bit hash (for even quicker value lookup) in the same space as a Value.
+				*/
 				class Bucket {
 					friend class Table;
 					
@@ -547,7 +560,8 @@ class String : public Object, public QuickArray<Char> {
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
-				virtual const String* className() const;
+				virtual const String* getClassName() const;
+				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				UInt32 calcHash() const;
@@ -588,11 +602,13 @@ class StringListEnumerator : public Enumerator {
 class UserObject : public Object {
 	public:		typedef Object super;
 				
-				UserObject(Object* prototype = 0);
+				UserObject(Object* prototype = 0); // FIX : not = 0 ?
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
+				virtual Object* getPrototype(Engine& engine) const;
 				bool defineProperty(const String* name, const Value& v, Byte attributes) { return properties.assign(name, v, attributes); }
 				
 	protected:	Table properties;
@@ -603,6 +619,15 @@ class UserObject : public Object {
 					heap.mark(prototype);
 					super::gcMark(heap);
 				}
+};
+
+class WrapperObject : public UserObject {
+	public:		typedef UserObject super;
+				WrapperObject(const String* className, const Value& value, Object* prototype);
+				virtual const String* getClassName() const;
+				virtual Value getInternalValue();
+	protected:	const String* const className;
+				const Value wrapped;
 };
 
 class Array : public UserObject {
@@ -616,14 +641,15 @@ class Array : public UserObject {
 	protected:	UInt32 lengthProperty;
 };
 
-// It is quite rare that we access the object data of a function so we improve memory usage and performance by creating this on first access.
 class Function : public Object {
 	public:		typedef Object super;
 				
 				virtual Function* asFunction();
 				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
-				virtual const String* className() const;
+				virtual const String* getClassName() const;
+				virtual Object* getPrototype(Engine& engine) const;
+				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 };
@@ -647,22 +673,22 @@ class EvalFunction : public Function {
 class FunctionFrame;
 class UserFunction;
 
-class Engine {
-	friend class String; // FIX : to access stringPrototype only
-	friend class ArrayConstructor; // FIX : to access arrayPrototype only
-	friend class FunctionConstructor; // FIX : - " -
-	friend class Processor;
-	
+class Engine {	
 	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
 				GCHeap& getHeap() const { return gcHeap; }
 				FunctionFrame* getGlobals() const { return globals; }
+				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				UserObject stringPrototype;
+				FunctionFrame* const globals;
+				
+	// FIX : public? v
 	public:		UserObject objectPrototype; // FIX : make private? put where really?
-	protected:	UserFunction* functionPrototype; // FIX : do we ned to allocate this one?
+				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
+				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
+				WrapperObject stringPrototype;
+				UserFunction* functionPrototype; // FIX : do we ned to allocate this one?
 				Array arrayPrototype;
-				FunctionFrame* globals;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				UserFunction* toPrimitiveValueFunction; // Created with script code for simplicity
@@ -865,7 +891,7 @@ class Arguments : public UserObject {
 	public:		typedef UserObject super;
 
 				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
-				virtual const String* className() const;
+				virtual const String* getClassName() const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -906,6 +932,7 @@ class Exception : public std::exception, public GCItem {
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
+// FIX : Processor -> Interpreter
 class Processor : public GCItem {
 	public:		typedef GCItem super;
 
@@ -928,7 +955,7 @@ class Processor : public GCItem {
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list?
 
 	public:		enum Opcode {	// FIX : sort
-					INVALID_OP
+					INVALID_OP = -1 // FIX : why?!
 					, POP_OP										// stack: value ->
 					, REPUSH_OP										// stack: value -> value, value
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
@@ -973,6 +1000,7 @@ class Processor : public GCItem {
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
 					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string
+					, OP_COUNT
 				};
 
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);

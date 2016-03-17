@@ -1,11 +1,17 @@
 age
 name
+valueOf
+toString
 zxcv
 qwerty
 asdf
+valueOf
+toString
 
 zxcv
 asdf
+valueOf
+toString
 
 
 zxcv
@@ -13,24 +19,38 @@ zxcv
 zxcv
 qwerty
 asdf
+valueOf
+toString
 qwerty 3
+qwerty
+toString 3
 asdf 3
 zxcv
 asdf
-qwerty
+valueOf 3
 zxcv 3
+valueOf
+toString
 qwerty 3
 qwerty 4
+zxcv 4
+valueOf 3 4
+valueOf 4
 qwerty
+toString 3
+toString 4
 asdf 3 4
 qwerty 3 4
 asdf 3
 asdf 4
 zxcv
 zxcv 3 4
-zxcv 3
+toString 3 4
 asdf
-zxcv 4
+zxcv 3
+valueOf 3
+valueOf
+toString
 
 extra
 0
