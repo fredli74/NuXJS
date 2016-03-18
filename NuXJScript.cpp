@@ -16,7 +16,7 @@ static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
 #include <float.h>
 static bool isNaN(double d) { return _isnan(d); }
-static bool isFinite(double d) { return _isfinite(d); }
+static bool isFinite(double d) { return _finite(d); }
 
 /*
 	Ecma rules
