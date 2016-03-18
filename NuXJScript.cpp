@@ -3199,7 +3199,6 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 				return v;
 			}
 		*/
-supressStdErr = true;
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}"));
 		toPrimitiveValueFunction = gcHeap.protect(new UserFunction(codeDef, globals));
 	}
@@ -3210,7 +3209,6 @@ supressStdErr = true;
 		// FIX : isb+'' right at the end here? + converts with toPrimitiveValue
 		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}"));
 		toStringFunction = gcHeap.protect(new UserFunction(codeDef, globals));
-supressStdErr = false;
 	}
 }
 
@@ -3286,6 +3284,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	};
 
 int main(int argc, const char* argv[]) {
+supressStdErr = true;
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
 /*std::cerr << "Value size: " << sizeof (Value) << std::endl;
@@ -3303,7 +3302,6 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	
 	Engine engine(heap, &globalFrame);
 	
-supressStdErr = true;
 	try {
 		std::wifstream stdlibStream("stdlib.js");
 		String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()));
