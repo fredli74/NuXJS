@@ -470,7 +470,6 @@ class Object : public GCItem {
 				virtual Object* getPrototype(Engine& engine);
 				virtual Value getInternalValue();
 //				virtual UserObject* toUserObject();
-				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -545,9 +544,9 @@ class Table {
 	String is immutable and it will never contain any references to other objects. Therefore it is ok to not place them
 	in a heap. (See GCItem for more info.)
 	
-	The ECMAScript String object on the other hand is represented by a mutable WrapperObject.
+	The ECMAScript String object on the other hand is represented by an extensible StringWrapper.
 */
-class String : public Object, public QuickArray<Char> {
+class String : public virtual Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
 
@@ -556,7 +555,7 @@ class String : public Object, public QuickArray<Char> {
 				static const String* fromDouble(GCHeap& heap, double d);
 
 				String();
-				String(const String& o);
+// FIX : neeeded?				String(const String& o);
 				String(const Char* b, const Char* e);
 				String(const String& l, const String& r);
 				explicit String(const std::wstring& s);
@@ -569,6 +568,7 @@ class String : public Object, public QuickArray<Char> {
 				virtual Object* getPrototype(Engine& engine);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Value getInternalValue() { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
@@ -604,8 +604,25 @@ class StringListEnumerator : public Enumerator {
 				}
 };
 
+class MergingEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+				MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, Object* rightObject);
+				virtual const String* nextPropertyName();
+
+	protected:	Engine& engine;
+				Enumerator* const leftEnumerator;
+				Object* const rightObject;
+				Enumerator* const rightEnumerator;
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(leftEnumerator);
+					heap.mark(rightObject);
+					heap.mark(rightEnumerator);
+					super::gcMark(heap);
+				}
+};
+
 // Name ExtensibleObject ? ScriptObject ?
-class UserObject : public Object {
+class UserObject : public virtual Object {
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0); // FIX : not = 0 ?
@@ -634,8 +651,19 @@ class WrapperObject : public UserObject {
 				virtual Value getInternalValue();
 	protected:	const String* const className;
 				const Value wrapped;
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(className);
+					wrapped.markIn(heap);
+					super::gcMark(heap);
+				}
 };
-
+/*
+class StringWrapper : public UserObject {
+	public:		typedef UserObject super;
+				StringWrapper(const String* s, Object* prototype) : UserObject(prototype), wrapped(*s) { }
+	protected:	const String* const wrapped;
+};
+*/
 class Array : public UserObject {
 	public:		typedef UserObject super;
 	
@@ -748,7 +776,6 @@ class UserFunction : public Function {
 				
 				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -1141,7 +1168,7 @@ class Compiler : public GCItem {
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
-				std::map<Value, Int32> definedConstants;
+				std::map<Value, Int32> definedConstants; // FIX : drop map dependency, increases code size
 				QuickVector<CodeWord> funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;

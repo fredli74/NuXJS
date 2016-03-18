@@ -548,7 +548,7 @@ QuickConstants QUICK_CONSTANTS;
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e) : QArray(e - b), hash(0) { std::copy(b, e, begin()); }
-String::String(const String& o) : QArray(o), hash(o.hash) { }
+// FIX : needed ? String::String(const String& o) : QArray(o), hash(o.hash) { }
 String::String(const std::wstring& s) : QArray(s.size()), hash(0) { std::copy(s.begin(), s.end(), begin()); }
 
 String::String(const String& l, const String& r) : QArray(l.size() + r.size()), hash(0) {
@@ -615,7 +615,9 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-Enumerator* String::getEnumerator(Engine& engine) { return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size())); }
+Enumerator* String::getEnumerator(Engine& engine) {
+	return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size()));
+}
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	String* o = heap.manage(new String(b, e));
@@ -684,7 +686,6 @@ const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Engine& engine) { return &engine.objectPrototype; }
 Value Object::getInternalValue() { return Value::UNDEFINED; }
-bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
@@ -844,15 +845,6 @@ Enumerator* UserObject::getEnumerator(Engine& engine) {
 			list->add(b->getKey());
 		}
 	}
-	if (prototype != 0) {
-		Enumerator* protoEnum = prototype->getEnumerator(engine);
-		const String* s;
-		while ((s = protoEnum->nextPropertyName()) != 0) {
-			if (properties.lookup(s) == 0) {
-				list->add(s);
-			}
-		}
-	}
 	return list;
 }
 
@@ -882,6 +874,29 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 StringListEnumerator::StringListEnumerator(UInt32 initialCapacity) : list(initialCapacity), nextIndex(0) { }
 void StringListEnumerator::add(const String* s) { list.append(s); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
+
+/* --- MergingEnumerator --- */
+
+MergingEnumerator::MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, Object* rightObject)
+		: engine(engine)
+		, leftEnumerator(leftEnumerator)
+		, rightObject(rightObject)
+		, rightEnumerator(rightObject->getEnumerator(engine)) {
+}
+
+const String* MergingEnumerator::nextPropertyName() {
+	const String* name = rightEnumerator->nextPropertyName();
+	if (name == 0) {
+		do {
+			name = leftEnumerator->nextPropertyName();
+			Value v;
+			if (name != 0 && !rightObject->getProperty(engine, name, &v)) {
+				return name;
+			}
+		} while (name != 0);
+	}
+	return name;
+}
 
 /* --- CodeDef --- */
 
@@ -1027,10 +1042,6 @@ Object* UserFunction::getEnvironment() const {
 Value UserFunction::getInternalValue() {
 	const String* s = codeDef->getSource();
 	return (s != 0 ? Value(s) : Value::UNDEFINED);
-}
-
-bool UserFunction::hasProperty(Engine& engine, const String* name) {
-	return createUserObject(engine)->hasProperty(engine, name);
 }
 
 bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) {
@@ -1547,7 +1558,7 @@ bool Processor::privateRun() {
 			case IN_OP: {
 				o = vsp[0].asObject();
 				if (o == 0) error(); // FIX : TypeError
-				vsp[-1] = Value(o->hasProperty(engine, vsp[-1].getString()));
+				vsp[-1] = Value(o->getProperty(engine, vsp[-1].getString(), &vsp[-1]));
 				pop(1);
 				break;				
 			}
@@ -1560,7 +1571,14 @@ bool Processor::privateRun() {
 			}
 			case GET_ENUMERATOR_OP: {
 				o = vsp[0].toObject(engine, false);
-				vsp[0] = Value((o == 0 ? &EMPTY_ENUMERATOR : o->getEnumerator(engine)));
+				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
+				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
+				Enumerator* enumerator = &EMPTY_ENUMERATOR;
+				while (o != 0) {
+					enumerator = heap.manage(new MergingEnumerator(engine, enumerator, o));
+					o = o->getPrototype(engine);
+				}
+				vsp[0] = Value(enumerator);
 				break;
 			}
 			case NEXT_PROPERTY_OP: {
@@ -3101,7 +3119,13 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 		if (prototype == 0) {
 			prototype = &engine.objectPrototype;
 		}
-		return Value(engine.getHeap().manage(new WrapperObject(className, internalValue, prototype)));
+/*		StringWrapper* p = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
+		
+		Object* o = (className->isEqualTo(S_TRING_STRING)
+				? static_cast<Object*>(new StringWrapper(internalValue.toString(engine.getHeap()), prototype))
+				: static_cast<Object*>(new WrapperObject(className, internalValue, prototype)));*/
+		Object* o = new WrapperObject(className, internalValue, prototype);
+		return Value(engine.getHeap().manage(o));
 	}
 	return Value::UNDEFINED;
 }

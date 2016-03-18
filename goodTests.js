@@ -167,6 +167,7 @@ line string");*/
 print("line\nfeed\ttab\'single quotes\'\n\"double quotes\" back\\slash  \b\b xxx \f \x40 \rcr");
 print("\u1234"[0] === String.fromCharCode(1234));
 print("\u1234"[0] === String.fromCharCode(0x1234));
+
 // FIX : charCodeAt instead
 
 print("*** objects ***")
@@ -636,19 +637,6 @@ print('');
 (function() { print(typeof arguments); eval("function arguments(a,b,c,d) { }"); print(arguments.length) })();
 
 print("*** value conversion ***");
-/*
-String comparison can be forced by: "" + a == "" + b.
-Numeric comparison can be forced by: +a == +b.
-Boolean comparison can be forced by: !a == !b.
-NOTE 2 The equality operators maintain the following invariants:
- 
-A != B is equivalent to !(A == B).
-A == B is equivalent to B == A, except in the order of evaluation of A and B.
- 
-new String("a") == "a" and "a" == new String("a")are both true.
-new String("a") == new String("a") is false.
- 
-*/
 
 // Valids:
 print(+"");
@@ -1303,4 +1291,28 @@ mandelbrot();
 		try { print("myNumber: " + (+myNumber)); } catch (x) { print("exception: " + x); }
 		try { print("myString: " + (''+myString)); } catch (x) { print("exception: " + x); }
 	}
+	
+	{
+/*
+FIX:
+
+String comparison can be forced by: "" + a == "" + b.
+Numeric comparison can be forced by: +a == +b.
+Boolean comparison can be forced by: !a == !b.
+NOTE 2 The equality operators maintain the following invariants:
+ 
+A != B is equivalent to !(A == B).
+A == B is equivalent to B == A, except in the order of evaluation of A and B.
+ 
+new String("a") == "a" and "a" == new String("a")are both true.
+new String("a") == new String("a") is false.
+ 
+*/
+		print('3 in new String("pokpokpko"): '+(3 in new String("pokpokpko")));
+		// FIX : (new String("pokpokpokok")).hasOwnProperty(3)
+		var s = '';
+		for (var i in new String("abcdefghijklmn")) s += i + ",";
+		print('for (var i in new String("abcdefghijklmn")): '+s);
+ 	}
+	
 })();
