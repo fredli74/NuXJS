@@ -3,6 +3,8 @@
 //	Run-time
 //
 //		count (and run-time check) necessary value stack depth for functions
+//			alternative have a low-rate check with a margin + make certain there is never a possibility to push more than x per instruction
+//			also implement a max recursion on compiler to not overload stack (function in function in function etc)
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
@@ -132,6 +134,7 @@
 //			alternatively have two opcodes, swap on type < (like in isEqualTo today) and save CPU on isEqualTo as operands are already sorted
 //		.length is very common, special opcode?
 //		arguments and <self name>, couldn't they be indexed variables too instead of accessed through slow READ_NAMED? Either created only when present in code or allocated on demand?
+//		"get parent index" opcode, it is very common to access variables one level up (two levels up not so much), and parent frame never changes in a closure so...
 //
 //	Compiler
 //
@@ -456,6 +459,7 @@ class Function;
 class Processor;
 class UserObject;
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
+// InternalObject ?
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
@@ -463,8 +467,9 @@ class Object : public GCItem {
 				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Engine& engine);
 				virtual Value getInternalValue();
+//				virtual UserObject* toUserObject();
 				virtual bool hasProperty(Engine& engine, const String* name);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
@@ -521,7 +526,7 @@ class Table {
 				bool assign(const String* key, const Value& value, Byte flags = 0); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				bool erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				void markIn(GCHeap& heap);
-
+				
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
 				void update(const String* key, const Value& value);
 				Bucket* find(const String* key, UInt32 hash) const;
@@ -537,10 +542,10 @@ class Table {
 	implementation regards both as Objects for efficiency (e.g. for quickly retrieving properties like the character
 	elements and "length").
 	
-	String is immutable, meaning that it will never contain any references to other objects. Therefore it is ok to not
-	place them in a heap. (See GCItem for more info.)
+	String is immutable and it will never contain any references to other objects. Therefore it is ok to not place them
+	in a heap. (See GCItem for more info.)
 	
-	The ECMAScript String object on the other hand is represented by a mutable UserObject.
+	The ECMAScript String object on the other hand is represented by a mutable WrapperObject.
 */
 class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
@@ -561,7 +566,7 @@ class String : public Object, public QuickArray<Char> {
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Engine& engine);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				UInt32 calcHash() const;
@@ -599,6 +604,7 @@ class StringListEnumerator : public Enumerator {
 				}
 };
 
+// Name ExtensibleObject ? ScriptObject ?
 class UserObject : public Object {
 	public:		typedef Object super;
 				
@@ -608,7 +614,7 @@ class UserObject : public Object {
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getEnumerator(Engine& engine);
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Engine& engine);
 				bool defineProperty(const String* name, const Value& v, Byte attributes) { return properties.assign(name, v, attributes); }
 				
 	protected:	Table properties;
@@ -641,6 +647,10 @@ class Array : public UserObject {
 	protected:	UInt32 lengthProperty;
 };
 
+/*
+	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
+	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
+*/
 class Function : public Object {
 	public:		typedef Object super;
 				
@@ -648,7 +658,7 @@ class Function : public Object {
 				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Engine& engine);
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
@@ -684,10 +694,10 @@ class Engine {
 				
 	// FIX : public? v
 	public:		UserObject objectPrototype; // FIX : make private? put where really?
+				UserFunction* functionPrototype;
 				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject stringPrototype;
-				UserFunction* functionPrototype; // FIX : do we ned to allocate this one?
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
@@ -710,6 +720,7 @@ class CodeDefinition : public Object {
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : constants.begin()); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
 				UInt32 getCodeSize() const { return code.size(); }
+				const String* getSource() const { return source; }
 
 	protected:	QuickVector<CodeWord> code;
 				QuickVector<Value> constants;
@@ -718,7 +729,7 @@ class CodeDefinition : public Object {
 				QuickVector<const String*> argumentNames;
 				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
 				const String* source;
-				const String* selfName;				
+				const String* selfName;
 
 				virtual void gcMark(GCHeap& heap) {
 					for (Value* it = constants.begin(); it != constants.end(); ++it) it->markIn(heap);
@@ -737,13 +748,15 @@ class UserFunction : public Function {
 				
 				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual bool hasProperty(Engine& engine, const String* name) { return createUserObject(engine)->hasProperty(engine, name); }
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) { return createUserObject(engine)->getProperty(engine, name, v); }
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v) { return createUserObject(engine)->setProperty(engine, name, v); }
-				virtual bool deleteProperty(Engine& engine, const String* name) { return createUserObject(engine)->deleteProperty(engine, name); }
-				virtual Enumerator* getEnumerator(Engine& engine) { return createUserObject(engine)->getEnumerator(engine); }
+				virtual bool hasProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Object* getPrototype(Engine& engine);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
+				virtual Value getInternalValue();
 	
 	protected:	UserObject* createUserObject(Engine& engine);
 	
@@ -898,8 +911,8 @@ class Arguments : public UserObject {
 				virtual Enumerator* getEnumerator(Engine& engine);
 
 	protected:	Value* findProperty(const String* name);
-				FunctionFrame* frame;
-				UInt32 argumentsCount;
+				FunctionFrame* const frame;
+				UInt32 const argumentsCount;
 				Value lengthProperty;
 				QuickArray<Byte, 8> deletedArguments;
 
@@ -1010,14 +1023,14 @@ class Processor : public GCItem {
 				void chain(const CodeWord* ip, Frame* frame, Object* thisValue); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
 	// FIX :			void call(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void push(const Value& v); // FIX : wow, this feels low level, public really?
-				void pop(Int32 count = 1);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
 void error(); // FIX
 				
-	protected:	void poppush(const Value& v);
+	protected:	void push(const Value& v);
+				void pop(Int32 count = 1);
+				void poppush(const Value& v);
 				Int32 operand();
 				void updateInternals();
 				bool privateRun();
@@ -1103,9 +1116,9 @@ class Compiler : public GCItem {
 				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
-				CodeDefinition* functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd);
+				void functionDefinition(const String* functionName, const String* selfName = 0); // selfName is only for named function expressions
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
-				ExpressionResult declareIdentifier();
+				ExpressionResult declareIdentifier(const String* name);
 				ExpressionResult varDeclaration();
 				void flushXR(ExpressionResult& evalXR);
 				void varDeclarations();

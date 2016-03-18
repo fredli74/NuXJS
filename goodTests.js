@@ -385,6 +385,15 @@ print("hasf: " + ("f" in this)); // hasf: false
 print("hasf: " + ("f" in this)); // hasf: false
 (function f() { print(f.length); function f(a,b,c,d) { }; print(f.length); })(); // 4, 4
 
+print("typeof(function(){}): "+typeof(function(){}));
+print("typeof(Function.prototype): "+typeof(Function.prototype));
+print("Function.prototype.isPrototypeOf(function(){}): "+Function.prototype.isPrototypeOf(function(){}));
+print("Function.prototype.isPrototypeOf(Function.prototype): "+Function.prototype.isPrototypeOf(Function.prototype));
+// fix : print("Function instanceof Object: "+(Function instanceof Object));
+// fix : print("Function instanceof Function: "+(Function instanceof Function));
+// fix : print("(function(){}) instanceof Function: "+((function(){}) instanceof Function));
+print("Function.prototype.length: "+Function.prototype.length);
+
 print("*** for statement ***")
 
 s = "";

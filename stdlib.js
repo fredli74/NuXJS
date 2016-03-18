@@ -12,7 +12,28 @@ function toObject(v) {
 Object = function() { return {}; }
 Object.prototype = support.prototypes.Object;
 Object.prototype.valueOf = function() { return this; }
-Object.prototype.toString = function() { return '[object ' + support.getInternalProperty(this, 'class') + ']' }
+Object.prototype.toLocaleString = Object.prototype.toString = function() {
+	return '[object ' + support.getInternalProperty(this, 'class') + ']'
+};
+
+Object.prototype.isPrototypeOf = function(v) {
+	while ((v = support.getInternalProperty(v, 'prototype')) != null) {
+		if (v == this) return true;
+	}
+	return false;
+};
+
+Function = function(body) {
+	var source = '(', n = arguments.length - 1;
+	for (var i = 0; i < n; ++i) sources += arguments[i] + (i < n - 1 ? ',' : ')');
+	if (n >= 0) source += arguments[n];
+	return support.compileFunction(source);
+};
+Function.prototype = support.prototypes.Function;
+Function.prototype.toString = function() { // FIX : <- generic, make a factory function
+	if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
+	return support.getInternalProperty(this, 'value');
+};
 
 Boolean = function(v) {
 	return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);

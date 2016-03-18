@@ -558,7 +558,7 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 
 const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::getClassName() const { return &S_TRING_STRING; }
-Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
+Object* String::getPrototype(Engine& engine) { return &engine.stringPrototype; }
 
 bool String::getProperty(Engine& engine, const String* name, Value* v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
@@ -682,7 +682,7 @@ Function* Object::asFunction() { return 0; }
 Function* Object::getFunction() { return &BAD_FUNCTION; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
-Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
+Object* Object::getPrototype(Engine& engine) { return &engine.objectPrototype; }
 Value Object::getInternalValue() { return Value::UNDEFINED; }
 bool Object::hasProperty(Engine& engine, const String* name) { Value v; return getProperty(engine, name, &v); }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
@@ -816,7 +816,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 UserObject::UserObject(Object* prototype) : prototype(prototype) { }
 
-Object* UserObject::getPrototype(Engine& engine) const { return prototype; }
+Object* UserObject::getPrototype(Engine& engine) { return prototype; }
 
 bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
 	properties.assign(name, v);
@@ -900,7 +900,7 @@ Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
-Object* Function::getPrototype(Engine& engine) const { return engine.functionPrototype; }
+Object* Function::getPrototype(Engine& engine) { return engine.functionPrototype; }
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
@@ -1010,14 +1010,56 @@ class FunctionConstructor : public Function {
 
 /* --- UserFunction --- */
 
-UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment), userObject(0) { }
-CodeDefinition* UserFunction::getDefinition() const { return codeDef; }
-Object* UserFunction::getEnvironment() const { return environment; }
+UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment)
+		: codeDef(codeDef)
+		, environment(environment)
+		, userObject(0) {
+}
+
+CodeDefinition* UserFunction::getDefinition() const {
+	return codeDef;
+}
+
+Object* UserFunction::getEnvironment() const {
+	return environment;
+}
+
+Value UserFunction::getInternalValue() {
+	const String* s = codeDef->getSource();
+	return (s != 0 ? Value(s) : Value::UNDEFINED);
+}
+
+bool UserFunction::hasProperty(Engine& engine, const String* name) {
+	return createUserObject(engine)->hasProperty(engine, name);
+}
+
+bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) {
+	return createUserObject(engine)->getProperty(engine, name, v);
+}
+
+bool UserFunction::setProperty(Engine& engine, const String* name, const Value& v) {
+	return createUserObject(engine)->setProperty(engine, name, v);
+}
+
+bool UserFunction::deleteProperty(Engine& engine, const String* name) {
+	return createUserObject(engine)->deleteProperty(engine, name);
+}
+
+Enumerator* UserFunction::getEnumerator(Engine& engine) {
+	return createUserObject(engine)->getEnumerator(engine);
+}
+
+Object* UserFunction::getPrototype(Engine& engine) {
+	return createUserObject(engine)->getPrototype(engine);
+}
 
 UserObject* UserFunction::createUserObject(Engine& engine) {
 	if (userObject == 0) {
-		userObject = engine.getHeap().manage(new UserObject(&engine.objectPrototype)); // FIX : functionPrototype
-		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount()), Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
+		Object* usePrototype = (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
+				: static_cast<Object*>(engine.functionPrototype));
+		userObject = engine.getHeap().manage(new UserObject(usePrototype));
+		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount())
+				, Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
 		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
 		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(this), Table::DONT_ENUM);
 		userObject->defineProperty(&PROTOTYPE_STRING, Value(prototype), Table::DONT_ENUM | Table::DONT_DELETE);
@@ -1032,8 +1074,11 @@ Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 
 /* --- Arguments --- */
 
-Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount) : frame(frame)
-		, argumentsCount(argumentsCount), lengthProperty(argumentsCount), deletedArguments(argumentsCount + 1) {
+Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount)
+		: frame(frame)
+		, argumentsCount(argumentsCount)
+		, lengthProperty(argumentsCount)
+		, deletedArguments(argumentsCount + 1) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
@@ -2267,15 +2312,19 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	return true;
 }
 
-CodeDefinition* Compiler::functionDefinition(const Char* selfNameBegin, const Char* selfNameEnd) {
+void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	CodeDefinition* func = heap.manage(new CodeDefinition());
-	if (selfNameBegin != selfNameEnd) {
-		func->selfName = String::newHashedString(heap, selfNameBegin, selfNameEnd);
-	}
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
+	const Char* b = p;
 	p = funcCompiler.compile(p, e);
-	return func;
+	QuickArray<Char, 256> sourceCodeString(9 + functionName->size() + (p - b));
+	static const char* FUNCTION_SPACE = "function ";
+	std::copy(b, p, std::copy(functionName->begin(), functionName->end()
+			, std::copy(FUNCTION_SPACE, FUNCTION_SPACE + 9, sourceCodeString.begin())));
+	func->source = heap.manage(new String(sourceCodeString.begin(), sourceCodeString.end()));
+	func->selfName = selfName;
+	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
@@ -2301,7 +2350,8 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 				case FUNCTION_LITERAL: {
 					white();
 					const Char* b = identifier(false, false);
-					emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(b, p)));
+					const String* name = String::newHashedString(heap, b, p);
+					functionDefinition(name, name);
 					xr = ExpressionResult(ExpressionResult::PUSHED);
 					break;
 				}
@@ -2383,9 +2433,7 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 	}
 }
 
-Compiler::ExpressionResult Compiler::declareIdentifier() {
-	const Char* b = identifier(true, false);
-	const String* name = String::newHashedString(heap, b, p);
+Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Value index;
@@ -2404,7 +2452,8 @@ Compiler::ExpressionResult Compiler::declareIdentifier() {
 }
 
 Compiler::ExpressionResult Compiler::varDeclaration() {
-	ExpressionResult lxr(declareIdentifier());
+	const Char* b = identifier(true, false);
+	ExpressionResult lxr(declareIdentifier(String::newHashedString(heap, b, p)));
 	if (token("=", true)) {
 		rvalueExpression(COMMA_PREC);
 		makeAssignment(lxr);
@@ -2505,8 +2554,10 @@ void Compiler::semicolon() {
 
 void Compiler::functionStatement() {
 	outputCode = &funcInitCode;
-	ExpressionResult lxr(declareIdentifier());
-	emitWithConstant(Processor::GEN_FUNC_OP, Value(functionDefinition(p, p)));
+	const Char* b = identifier(true, false);
+	const String* name = String::newHashedString(heap, b, p);
+	ExpressionResult lxr(declareIdentifier(name));
+	functionDefinition(name);
 	makeAssignment(lxr);
 	emit(Processor::POP_OP);
 	outputCode = &codeDef->code;
@@ -3026,11 +3077,12 @@ template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Val
 
 Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	if (argc >= 2) {
-		Object* o = argv[0].toObject(engine, false);
+		Object* o = argv[0].asObject();
 		if (o != 0) {
 			const String* s = argv[1].toString(engine.getHeap());
 			if (s->isEqualTo(PROTOTYPE_STRING)) {
-				return Value(o->getPrototype(engine));
+				Object* p = o->getPrototype(engine);
+				return (p == 0 ? Value::NUL : Value(p));
 			} else if (s->isEqualTo(CLASS_STRING)) {
 				return Value(o->getClassName());
 			} else if (s->isEqualTo(VALUE_STRING)) {
@@ -3056,16 +3108,19 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 /*
 Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	if (argc >= 3) {
-		Object* o = argv[0].toObject(engine, false);
+		Object* o = argv[0].asObject();
 		if (o != 0) {
-			Object* prototype = (argc >= 3 ? argv[2].toObject(engine, false) : 0);
+			UserObject* userObject = 
+			const String* name = argv[1].toString(engine.getHeap());
+			
 		if (prototype == 0) {
 			prototype = &engine.objectPrototype;
 		}
 		return Value(engine.getHeap().manage(new WrapperObject(className, internalValue, prototype)));
 	}
 	return Value::UNDEFINED;
-}*/
+}
+*/
 /*
 Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	Char c;
@@ -3096,12 +3151,19 @@ Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(glo
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
 	assert(heap.belongs(globals));
+	CodeDefinition* emptyCode = gcHeap.manage(new CodeDefinition());
+	{
+		Compiler compiler(gcHeap, emptyCode, Compiler::FOR_FUNCTION);
+		gcHeap.protect(&compiler); // FIX : really necessary? i don't think so, who is doing any gc now?
+		compiler.compile(String("() { }")); // FIX : constant opcodes
+	}
+	/// FIX : emptyCode->source
+	functionPrototype = gcHeap.protect(new UserFunction(emptyCode, globals));
 	gcHeap.protect(&booleanPrototype);
 	gcHeap.protect(&numberPrototype);
 	gcHeap.protect(&stringPrototype);
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
-//	functionPrototype = gcHeap.protect(new UserFunction);
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
 	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
 //	FunctionConstructor* functionObject = gcHeap.manage(new FunctionConstructor());
@@ -3173,6 +3235,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	nativesObject->setProperty(*this, &FLOOR_STRING, Value(&NATIVE_FLOOR_FUNCTION));
 
 	prototypesObject->setProperty(*this, &O_BJECT_STRING, Value(&objectPrototype));
+	prototypesObject->setProperty(*this, &F_UNCTION_STRING, Value(functionPrototype));
 	prototypesObject->setProperty(*this, &S_TRING_STRING, Value(&stringPrototype));
 	prototypesObject->setProperty(*this, &B_OOLEAN_STRING, Value(&booleanPrototype));
 	prototypesObject->setProperty(*this, &N_UMBER_STRING, Value(&numberPrototype));

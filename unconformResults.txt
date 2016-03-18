@@ -1,17 +1,23 @@
 age
 name
 valueOf
+toLocaleString
 toString
+isPrototypeOf
 zxcv
 qwerty
 asdf
 valueOf
+toLocaleString
 toString
+isPrototypeOf
 
 zxcv
 asdf
 valueOf
+toLocaleString
 toString
+isPrototypeOf
 
 
 zxcv
@@ -20,26 +26,38 @@ zxcv
 qwerty
 asdf
 valueOf
+toLocaleString
 toString
+isPrototypeOf
 qwerty 3
+toLocaleString 3
 qwerty
 toString 3
+isPrototypeOf 3
 asdf 3
 zxcv
 asdf
 valueOf 3
 zxcv 3
+toLocaleString
 valueOf
 toString
+isPrototypeOf
+toLocaleString 3
 qwerty 3
+toLocaleString 3 4
 qwerty 4
 zxcv 4
-valueOf 3 4
-valueOf 4
 qwerty
+isPrototypeOf 3 4
+valueOf 3 4
 toString 3
-toString 4
+isPrototypeOf 3
+toLocaleString 4
+valueOf 4
 asdf 3 4
+toString 4
+isPrototypeOf 4
 qwerty 3 4
 asdf 3
 asdf 4
@@ -50,7 +68,9 @@ asdf
 zxcv 3
 valueOf 3
 valueOf
+toLocaleString
 toString
+isPrototypeOf
 
 extra
 0
