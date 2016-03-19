@@ -69,7 +69,7 @@ iterate(@revs, >{
 	err = try(>{
 		if (rev !== void) {
 			print('Checking out ' # rev # '...');
-			pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h');
+			pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h stdlib.js');
 			print('Building...');
 			pipe(BUILD_CPP_COMMAND);
 			print('Done.');
