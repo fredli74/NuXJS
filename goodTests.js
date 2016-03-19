@@ -589,7 +589,9 @@ print(b());
 print(b());
 print(b());
 
-print("*** arguments ***")
+print("*** arguments ***");
+
+(function() { print(delete arguments); print(typeof arguments); })();
 
 f=function() { var a = arguments; var arguments; var b = arguments; var arguments = 3; var c = arguments; print(a==b); print(typeof a); print(c) }; f();
 
@@ -1145,12 +1147,12 @@ mandelbrot();
 	ChainA.prototype.rootProperty = "Root value";
 	print("typeof ChainA.prototype.constructor: " + typeof ChainA.prototype.constructor);
 	ChainA.prototype.constructor = 12345;
-	print(ChainA.prototype.constructor);
-	print(contents(ChainA.prototype));
+	print("ChainA.prototype.constructor: " + ChainA.prototype.constructor);
+	print("contents(ChainA.prototype): " + contents(ChainA.prototype));
 	print("delete ChainA.prototype.constructor: " + delete ChainA.prototype.constructor);
 	print("delete ChainA.prototype: " + delete ChainA.prototype);
 	ChainA.prototype.constructor = 12345;
-	print(contents(ChainA.prototype));
+	print("contents(ChainA.prototype): " + contents(ChainA.prototype));
 
 	function ChainB() { this.chainAProperty = this.shadowProperty = "ChainB value"; };
 	ChainB.prototype = new ChainA();
@@ -1166,37 +1168,37 @@ mandelbrot();
 	print("delete Object.prototype.sdfnkdan="+(delete Object.prototype.sdfnkdan));
 */
 	var chain = new ChainC();
-	print(chain.shadowProperty);
-	print(chain.chainBProperty);
-	print(chain.chainAProperty);
-	print(chain.rootProperty);
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("chain.chainBProperty: " + chain.chainBProperty);
+	print("chain.chainAProperty: " + chain.chainAProperty);
+	print("chain.rootProperty: " + chain.rootProperty);
 	print('rootProperty' in chain);
-	print(chain);
-	print('shadowProperty' in chain);
-	print(delete chain.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(delete chain.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(chain);
+	print("chain: " + chain);
+	print("'shadowProperty' in chain: " + ('shadowProperty' in chain));
+	print("delete chain.shadowProperty: " + delete chain.shadowProperty);
+	print("'shadowProperty' in chain: " + ('shadowProperty' in chain));
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("delete chain.shadowProperty: " + delete chain.shadowProperty);
+	print("'shadowProperty' in chain: " + ('shadowProperty' in chain));
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("chain: " + chain);
 	
 	var chain = new ChainB();
-	print(chain.shadowProperty);
-	print(chain.chainBProperty);
-	print(chain.chainAProperty);
-	print(chain.rootProperty);
-	print(chain);
-	print(delete chain.shadowProperty);
-	print(chain.shadowProperty);
-	print(delete chain.shadowProperty);
-	print(chain.shadowProperty);
-	print(chain);
-	print('shadowProperty' in chain);
-	print(delete ChainB.prototype.shadowProperty);
-	print('shadowProperty' in chain);
-	print(chain.shadowProperty);
-	print(chain);
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("chain.chainBProperty: " + chain.chainBProperty);
+	print("chain.chainAProperty: " + chain.chainAProperty);
+	print("chain.rootProperty: " + chain.rootProperty);
+	print("chain: " + chain);
+	print("delete chain.shadowProperty: " + delete chain.shadowProperty);
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("delete chain.shadowProperty: " + delete chain.shadowProperty);
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("chain: " + chain);
+	print("'shadowProperty' in chain: " + ('shadowProperty' in chain));
+	print("delete ChainB.prototype.shadowProperty: " + delete ChainB.prototype.shadowProperty);
+	print("'shadowProperty' in chain: " + ('shadowProperty' in chain));
+	print("chain.shadowProperty: " + chain.shadowProperty);
+	print("chain: " + chain);
 
 	ChainB.prototype.toString = undefined;
 	chain = new ChainC;
@@ -1320,4 +1322,19 @@ new String("a") == new String("a") is false.
  		for (i in { somethingElse: 'test' }) print(i); // should print 'somethingElse'
  	}
 	
+})();
+
+(function() {
+	print("*** stdlib ***");
+
+	function testReadOnlyConstant(constant) {
+		print("typeof " + constant + ": " + eval("typeof " + constant));
+		print(constant + ": " + eval(constant));
+		print("delete " + constant + ": " + eval("delete " + constant));
+		print("typeof " + constant + ": " + eval("typeof " + constant));
+	};
+
+	testReadOnlyConstant("NaN");
+	testReadOnlyConstant("Infinity");
+	testReadOnlyConstant("undefined");
 })();

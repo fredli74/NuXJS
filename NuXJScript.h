@@ -53,7 +53,6 @@
 //		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
 //			actually, any \ that isn't escape is valid, \ is just swallowed see http://www.ecma-international.org/ecma-262/6.0/index.html#sec-literals-string-literals
 //			also \<cr>|<crlf>|<lf>|<ls>|<ps> is valid and should continue string on next line
-//		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 //		proper error exceptions (TypeError etc)
 //		(new) Object(v) should convert v to number, string object etc
 //		toPrimitive also for native function arguments like sqrt etc, how?
@@ -214,6 +213,7 @@
 //		are we comparing NaN correctly? e.g. NaN !== NaN
 //			yes
 //		I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
+//		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -480,7 +480,8 @@ class Object : public GCItem {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const; // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString); // FIX : drop again, never overriden
 
 				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
@@ -578,7 +579,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Value getInternalValue() const { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
@@ -640,10 +641,11 @@ class UserObject : public virtual Object {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
 				
 	protected:	Table properties;
 				Object* prototype;
@@ -659,7 +661,7 @@ class WrapperObject : public UserObject {
 	public:		typedef UserObject super;
 				WrapperObject(const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
-				virtual Value getInternalValue();
+				virtual Value getInternalValue() const;
 	protected:	const String* const className;
 				const Value wrapped;
 				virtual void gcMark(GCHeap& heap) {
@@ -677,7 +679,7 @@ class StringWrapper : public UserObject {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 	protected:	const String* const wrapped;
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(wrapped);
@@ -733,15 +735,14 @@ class Frame;
 class UserFunction;
 
 class Engine {	
-	public:		Engine(GCHeap& heap, Object* globals, Frame* rootFrame); // FIX : we only need rootFrame for eval, but do we really, investigate
+	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard UserObject, there is some performance benefit to having them indexed just like a regular function.
+				// FIX : the only problem with a standard FunctionFrame for globals is that it's got arguments. It shouldn't have arguments.
 				GCHeap& getHeap() const { return gcHeap; }
-				Object* getGlobals() const { return globals; }
-				Frame* getRootFrame() const { return rootFrame; }
+				Frame* getGlobals() const { return globals; }
 				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				Object* const globals;
-				Frame* const rootFrame;
+				Frame* const globals;
 				
 	// FIX : public? v
 	public:		UserObject objectPrototype; // FIX : make private? put where really?
@@ -802,7 +803,7 @@ class UserFunction : public Function {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
@@ -872,6 +873,7 @@ class FunctionFrame : public Frame {
 
 				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
 				void updatedCode();
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -902,6 +904,7 @@ class FunctionFrame : public Frame {
 	codeDef pointer (for constants etc).
 	
 	FIX : I think we can use a FunctionFrame now for simplicity, if we just empty codeDef->nameIndexes first.
+	Well, it shouldn't have arguments either. Like the global frame.
 */
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
@@ -958,7 +961,7 @@ class Arguments : public UserObject {
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
 	protected:	Value* findProperty(const String* name) const;
 				FunctionFrame* const frame;

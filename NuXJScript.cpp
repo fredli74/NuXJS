@@ -614,7 +614,7 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-Enumerator* String::getEnumerator(Engine& engine) const {
+Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size()));
 }
 
@@ -688,7 +688,8 @@ Value Object::getInternalValue() const { return Value::UNDEFINED; }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) const { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
-Enumerator* Object::getEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
+Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
+bool Object::isPropertyEnumerable(Engine& engine, const String* name) const { return hasProperty(engine, name); }
 bool Object::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	return setProperty(engine, name, v);
 }
@@ -857,14 +858,19 @@ bool UserObject::deleteProperty(Engine& engine, const String* name) {
 	return properties.erase(name);
 }
 
-Enumerator* UserObject::getEnumerator(Engine& engine) const {
+Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-		if (b->enumerate()) {
-			list->add(b->getKey());
+	for (const Table::Bucket* bucket = properties.getFirst(); bucket != 0; bucket = properties.getNext(bucket)) {
+		if (bucket->enumerate()) {
+			list->add(bucket->getKey());
 		}
 	}
 	return list;
+}
+
+bool UserObject::isPropertyEnumerable(Engine& engine, const String* name) const {
+	const Table::Bucket* bucket = properties.lookup(name);
+	return (bucket != 0 && bucket->enumerate());
 }
 
 Value UserObject::toPrimitive(Engine& engine, Processor& processor, bool requiresString) {
@@ -887,7 +893,7 @@ WrapperObject::WrapperObject(const String* className, const Value& value, Object
 }
 
 const String* WrapperObject::getClassName() const { return className; }
-Value WrapperObject::getInternalValue() { return wrapped; }
+Value WrapperObject::getInternalValue() const { return wrapped; }
 
 /* --- StringWrapper --- */
 
@@ -896,7 +902,7 @@ StringWrapper::StringWrapper(const String* string, Object* prototype)
 }
 
 const String* StringWrapper::getClassName() const {
-	return &STRING_STRING;
+	return &S_TRING_STRING;
 }
 
 Value StringWrapper::getInternalValue() const {
@@ -925,8 +931,8 @@ bool StringWrapper::deleteProperty(Engine& engine, const String* name) {
 	}
 }
 
-Enumerator* StringWrapper::getEnumerator(Engine& engine) const {
-	return engine.getHeap().manage(new MergingEnumerator(engine, super::getEnumerator(engine), wrapped));
+Enumerator* StringWrapper::getPropertyEnumerator(Engine& engine) const {
+	return engine.getHeap().manage(new MergingEnumerator(engine, super::getPropertyEnumerator(engine), wrapped));
 }
 
 /* --- RangeEnumerator --- */
@@ -946,7 +952,7 @@ MergingEnumerator::MergingEnumerator(Engine& engine, Enumerator* leftEnumerator,
 		: engine(engine)
 		, leftEnumerator(leftEnumerator)
 		, rightObject(rightObject)
-		, rightEnumerator(rightObject->getEnumerator(engine)) {
+		, rightEnumerator(rightObject->getPropertyEnumerator(engine)) {
 }
 
 const String* MergingEnumerator::nextPropertyName() {
@@ -954,7 +960,7 @@ const String* MergingEnumerator::nextPropertyName() {
 	if (name == 0) {
 		do {
 			name = leftEnumerator->nextPropertyName();
-			if (name != 0 && !rightObject->hasProperty(engine, name)) {
+			if (name != 0 && !rightObject->isPropertyEnumerable(engine, name)) {
 				return name;
 			}
 		} while (name != 0);
@@ -1118,8 +1124,8 @@ bool UserFunction::deleteProperty(Engine& engine, const String* name) {
 	return createUserObject(engine)->deleteProperty(engine, name);
 }
 
-Enumerator* UserFunction::getEnumerator(Engine& engine) const {
-	return createUserObject(engine)->getEnumerator(engine);
+Enumerator* UserFunction::getPropertyEnumerator(Engine& engine) const {
+	return createUserObject(engine)->getPropertyEnumerator(engine);
 }
 
 Object* UserFunction::getPrototype(Engine& engine) const {
@@ -1186,7 +1192,7 @@ bool Arguments::deleteProperty(Engine& engine, const String* name) {
 	else return (deletedArguments[p - frame->getIndexedPointer() + 1] = true);
 }
 
-Enumerator* Arguments::getEnumerator(Engine& engine) const {
+Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 		list->add(b->getKey());
@@ -1224,6 +1230,13 @@ void FunctionFrame::updatedCode() {
 	std::fill(newIndexed.end() - (newArgsCount - oldArgsCount), newIndexed.end(), Value::UNDEFINED);
 	indexed.swap(newIndexed);
 	indexedPointer = indexed.begin() + newVarsCount;
+}
+
+bool FunctionFrame::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	Int32 index;
+	if (codeDef->lookupNameIndex(name, index)) return false;
+	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
+	else return environment->defineProperty(engine, name, v, attributes);
 }
 
 bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) const {
@@ -1266,7 +1279,7 @@ bool FunctionFrame::setProperty(Engine& engine, const String* name, const Value&
 bool FunctionFrame::deleteProperty(Engine& engine, const String* name) {
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) return false;
-	else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) return false;
+	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
 	else return environment->deleteProperty(engine, name);
 }
 
@@ -1389,7 +1402,7 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisValue) {
 
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 --vsp;
-	Frame* f = (directCall ? frame : engine.getRootFrame());
+	Frame* f = (directCall ? frame : engine.getGlobals());
 	f->mergeEvalVars(engine.getHeap(), codeDef);
 	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
@@ -3232,7 +3245,7 @@ UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 const String IS_FINITE_STRING("isFinite");
 UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, Object* globals, Frame* rootFrame) : gcHeap(heap), globals(globals), rootFrame(rootFrame), evalFunction(false)
+Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
 		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0)
 		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
@@ -3385,10 +3398,10 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	heap.protect(&globalCode);
 	UserFunction globalClosure(&globalCode, &globals); // FIX : yuck!
 	heap.protect(&globalClosure);
-	FunctionFrame rootFrame(&globalClosure, 0, 0);
-	heap.protect(&rootFrame);
+	FunctionFrame globalsFrame(&globalClosure, 0, 0);
+	heap.protect(&globalsFrame);
 	
-	Engine engine(heap, &globals, &rootFrame);
+	Engine engine(heap, &globalsFrame);
 	
 	try {
 		std::wifstream stdlibStream("stdlib.js");
@@ -3481,8 +3494,8 @@ supressStdErr = false;
 					std::cout << "Line: " << lineNumber << std::endl;
 					throw;
 				}
-				rootFrame.updatedCode();
-				processor.chain(globalCode.getCodePointer(), &rootFrame, &globals);
+				globalsFrame.updatedCode();
+				processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
 				
 				bool done = false;
 				clock_t start = ::clock();	
