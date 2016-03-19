@@ -1,4 +1,3 @@
-Array = function() { };
 seed = 2463534242;
 myrand = function() {
 	var y = seed;
@@ -7,7 +6,7 @@ myrand = function() {
 	y ^=  (y << 5);
 	return (seed = y);
 };
-var memory = new Array();
+var memory = [ ];
 for (var i = 0; i < 50; ++i) {
 	for (var j = 0; j < 20000; ++j) memory[j] = myrand() >>> 0;
 }
