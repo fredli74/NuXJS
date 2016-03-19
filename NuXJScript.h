@@ -410,7 +410,7 @@ class Value {
 				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
-				bool toBool() const;
+				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const;
@@ -453,6 +453,13 @@ class Value {
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
+struct Attributes {
+	Attributes() : readOnly(false), dontEnum(false), dontDelete(false) { }
+	bool readOnly;
+	bool dontEnum;
+	bool dontDelete;
+};
+
 class Engine;
 class Enumerator;
 class Function;
@@ -469,7 +476,7 @@ class Object : public GCItem {
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Value getInternalValue() const;
-//				virtual UserObject* toUserObject();
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const; // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
@@ -636,7 +643,7 @@ class UserObject : public virtual Object {
 				virtual Enumerator* getEnumerator(Engine& engine) const;
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
 				virtual Object* getPrototype(Engine& engine) const;
-				bool defineProperty(const String* name, const Value& v, Byte attributes) { return properties.assign(name, v, attributes); }
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				
 	protected:	Table properties;
 				Object* prototype;
@@ -722,17 +729,19 @@ class EvalFunction : public Function {
 				}
 };
 
-class FunctionFrame;
+class Frame;
 class UserFunction;
 
 class Engine {	
-	public:		Engine(GCHeap& heap, FunctionFrame* globals); // FIX : globals, "FunctionFrame" YUCK!! Call it "rootFrame"? or just use cstackStart
+	public:		Engine(GCHeap& heap, Object* globals, Frame* rootFrame); // FIX : we only need rootFrame for eval, but do we really, investigate
 				GCHeap& getHeap() const { return gcHeap; }
-				FunctionFrame* getGlobals() const { return globals; }
+				Object* getGlobals() const { return globals; }
+				Frame* getRootFrame() const { return rootFrame; }
 				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				FunctionFrame* const globals;
+				Object* const globals;
+				Frame* const rootFrame;
 				
 	// FIX : public? v
 	public:		UserObject objectPrototype; // FIX : make private? put where really?

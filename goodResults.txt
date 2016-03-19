@@ -634,35 +634,19 @@ continues to 2
 8
 9
 *** for in ***
-valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
-valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
-valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
-isPrototypeOf
-valueOf
-toLocaleString
-toString
-isPrototypeOf
+0,1,2,3,4,5,6,7,
+0,1,2,3,4,5,6,7,
+0,1,2,3,4,5,6,7,
+100
 0
 1
 2
 3
-8
-valueOf
-toLocaleString
-toString
-isPrototypeOf
+4
 0
 1
 2
 3
-tick 
-valueOf
-tick 
-toLocaleString
-tick 
-toString
-tick 
-isPrototypeOf
 tick 
 0
 tick 
@@ -708,19 +692,11 @@ undefined
 0
 b
 
-valueOf
-toLocaleString
-toString
-isPrototypeOf
 0
 1
 2
 3
 
-valueOf
-toLocaleString
-toString
-isPrototypeOf
 0
 1
 2
@@ -1020,8 +996,8 @@ undefined
 123
 11
 - for in
-123
-123
+undefined
+1
 123
 123
 built
@@ -1081,7 +1057,7 @@ ohboy
 18
 18
 anotherGlobal in this: false
-anotherGlobal in this: true
+anotherGlobal in this: false
 2
 tick 101
 101
@@ -1572,13 +1548,13 @@ pok
 pok
 qthreguajf
 viusdh
-{ asdf: poqker, goiegjf: odisjv, isPrototypeOf: undefined, kjscnv: oeriuf, kzxcjvn: oaierjf, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
 typeof ChainA.prototype.constructor: function
 12345
-{ isPrototypeOf: undefined, rootProperty: Root value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ rootProperty: Root value }
 delete ChainA.prototype.constructor: true
 delete ChainA.prototype: false
-{ constructor: 12345, isPrototypeOf: undefined, rootProperty: Root value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ constructor: 12345, rootProperty: Root value }
 ChainC value
 ChainC value
 ChainB value
@@ -1608,26 +1584,26 @@ true
 false
 undefined
 [object Object]
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, isPrototypeOf: undefined, rootProperty: Root value, shadowProperty: ChainC value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value }
 true
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, isPrototypeOf: undefined, rootProperty: Root value, shadowProperty: ChainC value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value, shadowProperty: ChainC value }
 true
-{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, isPrototypeOf: undefined, rootProperty: Root value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
+{ chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, rootProperty: Root value }
 *** wrappers ***
-Boolean(): undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined
-Number(): undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, error
-String(): error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error
+Boolean(): [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean], [object Boolean]/[object Boolean]
+Number(): [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], [object Number]/[object Number], error
+String(): [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], [object string]/[object string], error
 Object(): [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object]
 Array(): error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error
 delete String.prototype.test: true
 typeof breakOuts[0]: object
 typeof breakOuts[0].s: string
-breakOuts[0]: undefined
+breakOuts[0]: [object String]
 breakOuts[0].s: asdf
-breakOuts[1]: undefined
+breakOuts[1]: [object String]
 breakOuts[1].s: qwerty
-exception: TypeError
-exception: TypeError
-exception: TypeError
+myBoolean: [object Object]
+myNumber: NaN
+myString: [object Object]
 3 in new String("pokpokpko"): true
-for (var i in new String("abcdefghijklmn")): valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,8,9,10,11,12,13,
+for (var i in new String("abcdefghijklmn")): 0,1,2,3,4,5,6,7,8,9,10,11,12,13,

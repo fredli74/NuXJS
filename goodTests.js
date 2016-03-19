@@ -1314,5 +1314,10 @@ new String("a") == new String("a") is false.
 		for (var i in new String("abcdefghijklmn")) s += i + ",";
 		print('for (var i in new String("abcdefghijklmn")): '+s);
  	}
+
+ 	{
+ 		for (i in { valueOf: 'test' }) print(i); // should print 'valueOf'
+ 		for (i in { somethingElse: 'test' }) print(i); // should print 'somethingElse'
+ 	}
 	
 })();

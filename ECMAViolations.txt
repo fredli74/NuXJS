@@ -9,6 +9,8 @@
 
 *) Although based mainly on ECMAScript 5, custom properties are not supported (getters, setters etc)
 
+	Nah, I redefine that. It is based on ECMAScript 3, feature-wise etc, but where ECMAScript 3 is incompatible with 5, compatibility with 5 is preferred.
+
 *) No RegExp support. Including literals etc.
 
 *) implicit valueOf and toString conversions are done earlier than in ECMA standard and not necessarily in the same order or number of times. E.g. v[o]++ in Ecmascript means two calls to toString() but one in NuXJScript.

@@ -1,3 +1,15 @@
+var natives = support.natives;
+
+var isNaN = function(v) { return natives.isNaN(+v); };
+var isFinite = function(v) { return natives.isFinite(+v); };
+function toInteger(v) {
+	return (isNaN(v = +v) ? 0.0 : (!isFinite(v) ? v : sign(v) * natives.floor(abs(v))));
+};
+var abs = function(v) { return ((v = +v) < 0 ? -v : v); }
+var sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
+var alphaDigits = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+
 function toObject(v) {
 	switch (typeof v) {
 		case "object":
@@ -9,107 +21,128 @@ function toObject(v) {
 	throw "type error"; // FIX
 }
 
-Object = function() { return {}; }
-Object.prototype = support.prototypes.Object;
-Object.prototype.valueOf = function() { return this; }
-Object.prototype.toLocaleString = Object.prototype.toString = function() {
-	return '[object ' + support.getInternalProperty(this, 'class') + ']'
-};
-
-Object.prototype.isPrototypeOf = function(v) {
-	while ((v = support.getInternalProperty(v, 'prototype')) != null) {
-		if (v == this) return true;
+function defineProperties(object, attribs, props) {
+	var readOnly = attribs['readOnly'];
+	var dontEnum = attribs['dontEnum'];
+	var dontDelete = attribs['dontDelete'];
+	for (p in props) {
+		support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
 	}
-	return false;
-};
+}
 
-Function = function(body) {
-	var source = '(', n = arguments.length - 1;
-	for (var i = 0; i < n; ++i) sources += arguments[i] + (i < n - 1 ? ',' : ')');
-	if (n >= 0) source += arguments[n];
-	return support.compileFunction(source);
-};
-Function.prototype = support.prototypes.Function;
-Function.prototype.toString = function() { // FIX : <- generic, make a factory function
-	if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
-	return support.getInternalProperty(this, 'value');
-};
+defineProperties(this, { dontEnum: true }, {
+	Object: function() { return {}; },
+	Function: function(body) {
+		var source = '(', n = arguments.length - 1;
+		for (var i = 0; i < n; ++i) sources += arguments[i] + (i < n - 1 ? ',' : ')');
+		if (n >= 0) source += arguments[n];
+		return support.compileFunction(source);
+	},
+	Boolean: function(v) {
+		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
+	},
+	Number: function(v) {
+		v = (arguments.length ? +v : 0);
+		//if (support.calledAsConstructor()) {
+			return support.createWrapper('Number', v, support.prototypes.Number);
+	},
+	String: function(v) {
+		v = (arguments.length ? '' + v : '');
+		return support.createWrapper('String', v, support.prototypes.String);
+	},
+	isNaN: isNaN,
+	isFinite: isFinite,
+	Math: support.createWrapper('Math', undefined)
+});
 
-Boolean = function(v) {
-	return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
-};
-Boolean.prototype = support.prototypes.Boolean;
-Boolean.prototype.valueOf = function() {
-	if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
-	return support.getInternalProperty(this, 'value');
-};
-Boolean.prototype.toString = function() {
-	if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
-	return '' + support.getInternalProperty(this, 'value');
-};
-
-var natives = support.natives;
-var NaN = this.NaN = support.NaN;
-var Infinity = this.Infinity = support.Infinity;
-var undefined = this.undefined = support.undefined;
-var isNaN = this.isNaN = function(v) { return natives.isNaN(+v); };
-var isFinite = this.isFinite = function(v) { return natives.isFinite(+v); };
-
-Math = support.createWrapper('Math', undefined);
-var abs = Math.abs = function(v) { return ((v = +v) < 0 ? -v : v); }
-Math.floor = function(v) { return natives.floor(+v); }
-var sign = Math.sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
-Math.sqrt = function(v) { return natives.sqrt(+v); }
-
-function toInteger(v) {
-	return (isNaN(v = +v) ? 0.0 : (!isFinite(v) ? v : sign(v) * natives.floor(abs(v))));
-};
-
-Number = function(v) {
-	v = (arguments.length ? +v : 0);
-	//if (support.calledAsConstructor()) {
-		return support.createWrapper('Number', v, support.prototypes.Number);
-};
-Number.prototype = support.prototypes.Number;
-Number.prototype.valueOf = function() {
-	if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
-	return support.getInternalProperty(this, 'value');
-};
-var alphaDigits = "0123456789abcdefghijklmnopqrstuvwxyz";
-Number.prototype.toString = function(radix) {
-	if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
-	var n = support.getInternalProperty(this, 'value');
-	var r;
-	if (radix === void 0 || !natives.isFinite(n)) {
-		return '' + n;
-	} else if ((r = toInteger(radix)) != radix || r < 2 || r > 36) {
-		throw "range error"; // fix
-	} else {
-		var v = toInteger(abs(n)); // TODO : fraction?
-		var s = '';
-		do {
-			s = alphaDigits[v % r] + s;
-			v = natives.floor(v / r);
-		} while (v > 0);
-		return (n < 0 ? '-' : '') + s;
+defineProperties(Object.prototype = support.prototypes.Object, { dontEnum: true }, {
+	valueOf: function() {
+		return this;
+	},
+	toString: function() {
+		return '[object ' + support.getInternalProperty(this, 'class') + ']'
+	},
+	isPrototypeOf: function(v) {
+		while ((v = support.getInternalProperty(v, 'prototype')) != null) {
+			if (v == this) return true;
+		}
+		return false;
 	}
-};
+});
+defineProperties(Object.prototype, { dontEnum: true }, {
+	toLocaleString: Object.prototype.toString
+});
 
-String = function(v) {
-	v = (arguments.length ? '' + v : '');
-	return support.createWrapper('String', v, support.prototypes.String);
-};
-String.prototype = support.prototypes.String;
-String.prototype.valueOf = function() {
-	if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
-	return support.getInternalProperty(this, 'value');
-}
-String.fromCharCode = function() {
-	var s = '', l = arguments.length;
-	for (var i = 0; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
-	return s;
-}
-String.prototype.toString = function() {
-	if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
-	return support.getInternalProperty(this, 'value');
-}
+defineProperties(Function.prototype = support.prototypes.Function, { dontEnum: true }, {
+	toString: function() { // FIX : <- generic, make a factory function
+		if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
+		return support.getInternalProperty(this, 'value');
+	}
+});
+
+defineProperties(Boolean.prototype = support.prototypes.Boolean, { dontEnum: true }, {
+	valueOf: function() {
+		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		return support.getInternalProperty(this, 'value');
+	},
+	toString: function() {
+		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		return '' + support.getInternalProperty(this, 'value');
+	}
+});
+
+defineProperties(this, { readOnly: true, dontEnum: true, dontDelete: true }, {
+	NaN: support.NaN, Infinity: support.Infinity, undefined: support.undefined
+});
+
+defineProperties(Math, { dontEnum: true }, {
+	abs: abs,
+	floor: function(v) { return natives.floor(+v); },
+	sign: sign,
+	sqrt: function(v) { return natives.sqrt(+v); }
+});
+
+defineProperties(Number.prototype = support.prototypes.Number, { dontEnum: true }, {
+	valueOf: function() {
+		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
+		return support.getInternalProperty(this, 'value');
+	},
+	toString: function(radix) {
+		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
+		var n = support.getInternalProperty(this, 'value');
+		var r;
+		if (radix === void 0 || !natives.isFinite(n)) {
+			return '' + n;
+		} else if ((r = toInteger(radix)) != radix || r < 2 || r > 36) {
+			throw "range error"; // fix
+		} else {
+			var v = toInteger(abs(n)); // TODO : fraction?
+			var s = '';
+			do {
+				s = alphaDigits[v % r] + s;
+				v = natives.floor(v / r);
+			} while (v > 0);
+			return (n < 0 ? '-' : '') + s;
+		}
+	}
+});
+
+defineProperties(String.prototype = support.prototypes.String, { dontEnum: true }, {
+	valueOf: function() {
+		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
+		return support.getInternalProperty(this, 'value');
+	},
+	toString: function() {
+		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
+		return support.getInternalProperty(this, 'value');
+	}
+});
+
+defineProperties(String, { dontEnum: true }, {
+	fromCharCode: function() {
+		var s = '', l = arguments.length;
+		for (var i = 0; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
+		return s;
+	}
+});
+

@@ -572,9 +572,8 @@ bool String::getProperty(Engine& engine, const String* name, Value* v) const {
 		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
 		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
 		return true;
-	} else {
-		return engine.stringPrototype.getProperty(engine, name, v);
 	}
+	return false;
 }
 
 // FIX : speed up by skipping when string is really long
@@ -690,6 +689,9 @@ bool Object::getProperty(Engine& engine, const String* name, Value* v) const { r
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
+bool Object::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	return setProperty(engine, name, v);
+}
 Value Object::toPrimitive(Engine& engine, Processor& processor, bool requiresString) { return Value::UNDEFINED; } // FIX : what to do here?
 bool Object::hasProperty(Engine& engine, const String* name) const {
 	Value dummy;
@@ -872,6 +874,12 @@ Value UserObject::toPrimitive(Engine& engine, Processor& processor, bool require
 	return Value();
 }
 
+bool UserObject::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	return properties.assign(name, v, (attributes.readOnly ? Table::READ_ONLY : 0)
+			| (attributes.dontEnum ? Table::DONT_ENUM : 0)
+			| (attributes.dontDelete ? Table::DONT_DELETE : 0));
+}
+
 /* --- WrapperObject --- */
 
 WrapperObject::WrapperObject(const String* className, const Value& value, Object* prototype)
@@ -898,17 +906,15 @@ Value StringWrapper::getInternalValue() const {
 bool StringWrapper::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (wrapped->getProperty(engine, name, v)) {
 		return true;
-	} else {
-		return super::getProperty(engine, name, v);
 	}
+	return super::getProperty(engine, name, v);
 }
 
 bool StringWrapper::setProperty(Engine& engine, const String* name, const Value& v) {
 	if (wrapped->hasProperty(engine, name)) {
 		return false;
-	} else {
-		return super::setProperty(engine, name, v);
 	}
+	return super::setProperty(engine, name, v);
 }
 
 bool StringWrapper::deleteProperty(Engine& engine, const String* name) {
@@ -995,9 +1001,8 @@ bool Array::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		*v = Value(lengthProperty);
 		return true;
-	} else {
-		return super::getProperty(engine, name, v);
 	}
+	return super::getProperty(engine, name, v);
 }
 
 bool Array::setProperty(Engine& engine, const String* name, const Value& v) {
@@ -1055,9 +1060,8 @@ class ArrayConstructor : public Function {
 					if (name->isEqualTo(PROTOTYPE_STRING)) {
 						*v = Value(&engine.arrayPrototype);
 						return true;
-					} else {
-						return false;
 					}
+					return false;
 				}
 };
 
@@ -1127,11 +1131,14 @@ UserObject* UserFunction::createUserObject(Engine& engine) const {
 		Object* usePrototype = (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
 				: static_cast<Object*>(engine.functionPrototype));
 		userObject = engine.getHeap().manage(new UserObject(usePrototype));
-		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount())
-				, Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
 		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
-		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(const_cast<UserFunction*>(this)), Table::DONT_ENUM);
-		userObject->defineProperty(&PROTOTYPE_STRING, Value(prototype), Table::DONT_ENUM | Table::DONT_DELETE);
+		Attributes attributes;
+		attributes.dontEnum = true;
+		prototype->defineProperty(engine, &CONSTRUCTOR_STRING, Value(const_cast<UserFunction*>(this)), attributes);
+		attributes.dontDelete = true;
+		userObject->defineProperty(engine, &PROTOTYPE_STRING, Value(prototype), attributes);
+		attributes.readOnly = true;
+		userObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
 	}
 	return userObject;
 }
@@ -1326,7 +1333,7 @@ Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip +
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error() {
-	static const String ERROR_STRING("runtime error");
+	static const String ERROR_STRING("runtime error"); // FIX : not thread-safe
 	throw Exception(engine.getHeap(), Value(&ERROR_STRING));
 }
 
@@ -1382,7 +1389,7 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisValue) {
 
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 --vsp;
-	Frame* f = (directCall ? frame : engine.getGlobals());
+	Frame* f = (directCall ? frame : engine.getRootFrame());
 	f->mergeEvalVars(engine.getHeap(), codeDef);
 	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
@@ -1436,7 +1443,7 @@ bool Processor::privateRun() {
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) error();
 									if (!o->getPropertyDeep(engine, vsp[0].getString(), vsp - 1))
-										vsp[-1] = Value::UNDEFINED; // FIX : is this right?
+										vsp[-1] = Value::UNDEFINED;
 									pop(1);
 									break;
 			
@@ -3184,22 +3191,23 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 	}
 	return Value::UNDEFINED;
 }
-/*
+
 Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 3) {
+	bool success = false;
+	if (argc >= 2) {
 		Object* o = argv[0].asObject();
 		if (o != 0) {
-			UserObject* userObject = 
-			const String* name = argv[1].toString(engine.getHeap());
-			
-		if (prototype == 0) {
-			prototype = &engine.objectPrototype;
+			Attributes attributes;
+			attributes.readOnly = (argc >= 4 && argv[3].toBool());
+			attributes.dontEnum = (argc >= 5 && argv[4].toBool());
+			attributes.dontDelete = (argc >= 6 && argv[5].toBool());
+			success = o->defineProperty(engine, argv[1].toString(engine.getHeap())
+					, (argc >= 3 ? argv[2] : Value::UNDEFINED), attributes);
 		}
-		return Value(engine.getHeap().manage(new WrapperObject(className, internalValue, prototype)));
 	}
-	return Value::UNDEFINED;
+	return Value(success);
 }
-*/
+
 /*
 Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	Char c;
@@ -3224,7 +3232,7 @@ UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 const String IS_FINITE_STRING("isFinite");
 UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, FunctionFrame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
+Engine::Engine(GCHeap& heap, Object* globals, Frame* rootFrame) : gcHeap(heap), globals(globals), rootFrame(rootFrame), evalFunction(false)
 		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0)
 		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
@@ -3299,6 +3307,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	supportObject->setProperty(*this, gcHeap.manage(new String("prototypes")), Value(prototypesObject));
 	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, getInternalProperty));
 	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, createWrapper));
+	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, defineProperty));
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
@@ -3376,10 +3385,10 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	heap.protect(&globalCode);
 	UserFunction globalClosure(&globalCode, &globals); // FIX : yuck!
 	heap.protect(&globalClosure);
-	FunctionFrame globalFrame(&globalClosure, 0, 0);
-	heap.protect(&globalFrame);
+	FunctionFrame rootFrame(&globalClosure, 0, 0);
+	heap.protect(&rootFrame);
 	
-	Engine engine(heap, &globalFrame);
+	Engine engine(heap, &globals, &rootFrame);
 	
 	try {
 		std::wifstream stdlibStream("stdlib.js");
@@ -3472,8 +3481,8 @@ supressStdErr = false;
 					std::cout << "Line: " << lineNumber << std::endl;
 					throw;
 				}
-				globalFrame.updatedCode();
-				processor.chain(globalCode.getCodePointer(), &globalFrame, &globalFrame);
+				rootFrame.updatedCode();
+				processor.chain(globalCode.getCodePointer(), &rootFrame, &globals);
 				
 				bool done = false;
 				clock_t start = ::clock();	
