@@ -243,6 +243,7 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 
 // FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
 const String EMPTY_STRING("");
+const String ANONYMOUS_STRING("anonymous");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
 const String O_BJECT_STRING("Object");
@@ -1093,9 +1094,10 @@ class FunctionConstructor : public Function {
 
 /* --- UserFunction --- */
 
-UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment)
+UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment, Object* thisValueForConstructor)
 		: codeDef(codeDef)
 		, environment(environment)
+		, thisValueForConstructor(thisValueForConstructor)
 		, userObject(0) {
 }
 
@@ -1112,6 +1114,7 @@ Value UserFunction::getInternalValue() const {
 	return (s != 0 ? Value(s) : Value::UNDEFINED);
 }
 
+// FIX : how can we create a proxy easier, shorter and safer? as it is now it is easy to forget to add relevant methods here when we add them to Object
 bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) const {
 	return createUserObject(engine)->getProperty(engine, name, v);
 }
@@ -1126,6 +1129,14 @@ bool UserFunction::deleteProperty(Engine& engine, const String* name) {
 
 Enumerator* UserFunction::getPropertyEnumerator(Engine& engine) const {
 	return createUserObject(engine)->getPropertyEnumerator(engine);
+}
+
+bool UserFunction::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	return createUserObject(engine)->defineProperty(engine, name, v, attributes);
+}
+
+bool UserFunction::isPropertyEnumerable(Engine& engine, const String* name) const {
+	return createUserObject(engine)->isPropertyEnumerable(engine, name);
 }
 
 Object* UserFunction::getPrototype(Engine& engine) const {
@@ -1151,6 +1162,11 @@ UserObject* UserFunction::createUserObject(Engine& engine) const {
 
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
+	return Value();
+}
+
+Value UserFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	processor.chain(this, argc, argv, (thisValueForConstructor != 0 ? thisValueForConstructor : thisValue));
 	return Value();
 }
 
@@ -2412,14 +2428,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	CodeDefinition* func = heap.manage(new CodeDefinition());
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
-	const Char* b = p;
-	p = funcCompiler.compile(p, e);
-	QuickArray<Char, 256> sourceCodeString(9 + functionName->size() + (p - b));
-	static const char* FUNCTION_SPACE = "function ";
-	std::copy(b, p, std::copy(functionName->begin(), functionName->end()
-			, std::copy(FUNCTION_SPACE, FUNCTION_SPACE + 9, sourceCodeString.begin())));
-	func->source = heap.manage(new String(sourceCodeString.begin(), sourceCodeString.end()));
-	func->selfName = selfName;
+	p = funcCompiler.compileFunction(p, e, *functionName, selfName);
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 }
 
@@ -3014,32 +3023,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
-	if (compilingFor == FOR_FUNCTION) {
-		expectToken("(", true);
-		white();
-		while (!token(")", false)) {
-			if (eof()) {
-				syntaxError(codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
-			}
-			if (codeDef->argumentNames.size() != 0) {
-				if (!token(",", false)) {
-					syntaxError("Expected ',' or ')'");
-				}
-				white();
-			}
-			const Char* b = identifier(true, false);
-			const String* name = String::newHashedString(heap, b, p);
-			codeDef->nameIndexes.assign(name, Value(static_cast<Int32>(codeDef->argumentNames.size())));
-			codeDef->argumentNames.append(name);
-			white();
-		}
-		expectToken("{", true);
-	}
+
 	ExpressionResult evalXR;
 	statementList(0, evalXR);
-	if (compilingFor == FOR_FUNCTION) {
-		expectToken("}", false);
-	}
 	if (compilingFor != FOR_EVAL) {
 		evalXR = discard(evalXR);
 	}
@@ -3062,6 +3048,41 @@ if (!supressStdErr) {
 	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
 }
+	return p;
+}
+
+const Char* Compiler::compileFunction(const Char* b, const Char* e, const String& functionName, const String* selfName) {
+	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
+	p = b;
+	this->e = e;
+	expectToken("(", true);
+	white();
+	while (!token(")", false)) {
+		if (eof()) {
+			syntaxError(codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+		}
+		if (codeDef->argumentNames.size() != 0) {
+			if (!token(",", false)) {
+				syntaxError("Expected ',' or ')'");
+			}
+			white();
+		}
+		const Char* b = identifier(true, false);
+		const String* name = String::newHashedString(heap, b, p);
+		codeDef->nameIndexes.assign(name, Value(static_cast<Int32>(codeDef->argumentNames.size())));
+		codeDef->argumentNames.append(name);
+		white();
+	}
+	expectToken("{", true);
+	compile(p, e); // FIX: ugly as it sets p and e again, although it doesn't hurt
+	expectToken("}", false);
+
+	QuickArray<Char, 256> sourceCodeString(9 + functionName.size() + (p - b));
+	static const char* FUNCTION_SPACE = "function ";
+	std::copy(b, p, std::copy(functionName.begin(), functionName.end()
+			, std::copy(FUNCTION_SPACE, FUNCTION_SPACE + 9, sourceCodeString.begin())));
+	codeDef->source = heap.manage(new String(sourceCodeString.begin(), sourceCodeString.end()));
+	codeDef->selfName = selfName;
 	return p;
 }
 
@@ -3221,6 +3242,19 @@ Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Val
 	return Value(success);
 }
 
+Value compileFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc >= 1) {
+		GCHeap& heap = engine.getHeap();
+		const String* source = argv[0].toString(heap);
+		CodeDefinition* codeDef = heap.manage(new CodeDefinition());
+		Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
+		heap.protect(&compiler);
+		compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? *argv[1].toString(heap) : ANONYMOUS_STRING);
+		return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals(), argc >= 3 ? argv[2].toObject(engine, true) : 0)));
+	}
+	return Value::UNDEFINED;
+}
+
 /*
 Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	Char c;
@@ -3244,6 +3278,7 @@ const String IS_NAN_STRING("isNaN");
 UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 const String IS_FINITE_STRING("isFinite");
 UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
+const String EMPTY_SOURCE_CODE("() { }");
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
 		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0)
@@ -3255,7 +3290,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 	{
 		Compiler compiler(gcHeap, emptyCode, Compiler::FOR_FUNCTION);
 		gcHeap.protect(&compiler); // FIX : really necessary? i don't think so, who is doing any gc now?
-		compiler.compile(String("() { }")); // FIX : constant opcodes
+		compiler.compileFunction(EMPTY_SOURCE_CODE.begin(), EMPTY_SOURCE_CODE.end(), ANONYMOUS_STRING); // FIX : constant opcodes
 	}
 	/// FIX : emptyCode->source
 	functionPrototype = gcHeap.protect(new UserFunction(emptyCode, globals));
@@ -3299,7 +3334,8 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 				return v;
 			}
 		*/
-		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}"));
+		String sourceCode("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}");
+		compiler.compileFunction(sourceCode.begin(), sourceCode.end(), ANONYMOUS_STRING);
 		toPrimitiveValueFunction = gcHeap.protect(new UserFunction(codeDef, globals));
 	}
 	{
@@ -3307,7 +3343,8 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
 		gcHeap.protect(&compiler);
 		// FIX : isb+'' right at the end here? + converts with toPrimitiveValue
-		compiler.compile(String("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}"));
+		String sourceCode("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}");
+		compiler.compileFunction(sourceCode.begin(), sourceCode.end(), ANONYMOUS_STRING);
 		toStringFunction = gcHeap.protect(new UserFunction(codeDef, globals));
 	}
 }
@@ -3321,6 +3358,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, getInternalProperty));
 	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, createWrapper));
 	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, defineProperty));
+	supportObject->setProperty(*this, gcHeap.manage(new String("compileFunction")), newNativeFunction<NativeFunction>(gcHeap, compileFunction));
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);

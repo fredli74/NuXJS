@@ -97,6 +97,7 @@
 //		safe-kept variables aren't resetted on early exits, e.g.
 //			b: switch (x) { case 1: switch(x) { case 2: break b } }
 //			won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
+//		max recursion on compiler for sandboxed mode
 //
 // Other
 //
@@ -798,12 +799,15 @@ class CodeDefinition : public Object {
 class UserFunction : public Function {
 	public:		typedef Function super;
 				
-				UserFunction(CodeDefinition* codeDef, Object* environment);
+				UserFunction(CodeDefinition* codeDef, Object* environment, Object* thisValueForConstructor = 0); // The optional thisValueForConstructor allows script code to differentiate between a regular call and a "new" construction call. If called via "new", "this" will point to this object (and hence the script code must create a new object and return it).
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
@@ -814,6 +818,7 @@ class UserFunction : public Function {
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				mutable UserObject* userObject;
+				Object* const thisValueForConstructor;
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
@@ -1135,6 +1140,7 @@ class Compiler : public GCItem {
 				
 				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
+				const Char* compileFunction(const Char* b, const Char* e, const String& functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
 				const Char* getStopPoint() const { return p; }
 

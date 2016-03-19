@@ -34,9 +34,13 @@ defineProperties(this, { dontEnum: true }, {
 	Object: function() { return {}; },
 	Function: function(body) {
 		var source = '(', n = arguments.length - 1;
-		for (var i = 0; i < n; ++i) sources += arguments[i] + (i < n - 1 ? ',' : ')');
+		for (var i = 0; i < n; ++i) {
+			source += arguments[i];
+			if (i < n - 1) s += ',';
+		}
+		source += ') { ';
 		if (n >= 0) source += arguments[n];
-		return support.compileFunction(source);
+		return support.compileFunction(source + ' }', 'anonymous');
 	},
 	Boolean: function(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
