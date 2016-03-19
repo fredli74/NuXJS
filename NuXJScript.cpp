@@ -558,9 +558,9 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 
 const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::getClassName() const { return &S_TRING_STRING; }
-Object* String::getPrototype(Engine& engine) { return &engine.stringPrototype; }
+Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
 
-bool String::getProperty(Engine& engine, const String* name, Value* v) {
+bool String::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		*v = Value(static_cast<Int32>(size()));
 		return true;
@@ -615,7 +615,7 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
-Enumerator* String::getEnumerator(Engine& engine) {
+Enumerator* String::getEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size()));
 }
 
@@ -684,13 +684,31 @@ Function* Object::asFunction() { return 0; }
 Function* Object::getFunction() { return &BAD_FUNCTION; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
-Object* Object::getPrototype(Engine& engine) { return &engine.objectPrototype; }
-Value Object::getInternalValue() { return Value::UNDEFINED; }
-bool Object::getProperty(Engine& engine, const String* name, Value* v) { return false; }
+Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
+Value Object::getInternalValue() const { return Value::UNDEFINED; }
+bool Object::getProperty(Engine& engine, const String* name, Value* v) const { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
-Enumerator* Object::getEnumerator(Engine& engine) { return &EMPTY_ENUMERATOR; }
+Enumerator* Object::getEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 Value Object::toPrimitive(Engine& engine, Processor& processor, bool requiresString) { return Value::UNDEFINED; } // FIX : what to do here?
+bool Object::hasProperty(Engine& engine, const String* name) const {
+	Value dummy;
+	return getProperty(engine, name, &dummy);
+}
+bool Object::hasPropertyDeep(Engine& engine, const String* name) const {
+	Value dummy;
+	return getPropertyDeep(engine, name, &dummy);
+}
+bool Object::getPropertyDeep(Engine& engine, const String* name, Value* v) const {
+	const Object* o = this;
+	do {
+		if (o->getProperty(engine, name, v)) {
+			return true;
+		}
+		o = o->getPrototype(engine);
+	} while (o != 0);
+	return false;
+}
 
 /* --- Table --- */
 
@@ -817,28 +835,27 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 UserObject::UserObject(Object* prototype) : prototype(prototype) { }
 
-Object* UserObject::getPrototype(Engine& engine) { return prototype; }
+Object* UserObject::getPrototype(Engine& engine) const { return prototype; }
 
 bool UserObject::setProperty(Engine& engine, const String* name, const Value& v) {
 	properties.assign(name, v);
 	return true;
 }
 
-bool UserObject::getProperty(Engine& engine, const String* name, Value* v) {
+bool UserObject::getProperty(Engine& engine, const String* name, Value* v) const {
 	const Table::Bucket* bucket = properties.lookup(name);
 	if (bucket != 0) {
 		*v = bucket->getValue();
 		return true;
-	} else {
-		return (prototype != 0 ? prototype->getProperty(engine, name, v) : false);
 	}
+	return false;
 }
 
 bool UserObject::deleteProperty(Engine& engine, const String* name) {
 	return properties.erase(name);
 }
 
-Enumerator* UserObject::getEnumerator(Engine& engine) {
+Enumerator* UserObject::getEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 		if (b->enumerate()) {
@@ -864,6 +881,48 @@ WrapperObject::WrapperObject(const String* className, const Value& value, Object
 const String* WrapperObject::getClassName() const { return className; }
 Value WrapperObject::getInternalValue() { return wrapped; }
 
+/* --- StringWrapper --- */
+
+StringWrapper::StringWrapper(const String* string, Object* prototype)
+		: wrapped(string), super(prototype) {
+}
+
+const String* StringWrapper::getClassName() const {
+	return &STRING_STRING;
+}
+
+Value StringWrapper::getInternalValue() const {
+	return Value(wrapped);
+}
+
+bool StringWrapper::getProperty(Engine& engine, const String* name, Value* v) const {
+	if (wrapped->getProperty(engine, name, v)) {
+		return true;
+	} else {
+		return super::getProperty(engine, name, v);
+	}
+}
+
+bool StringWrapper::setProperty(Engine& engine, const String* name, const Value& v) {
+	if (wrapped->hasProperty(engine, name)) {
+		return false;
+	} else {
+		return super::setProperty(engine, name, v);
+	}
+}
+
+bool StringWrapper::deleteProperty(Engine& engine, const String* name) {
+	if (wrapped->hasProperty(engine, name)) {
+		return false;
+	} else {
+		return super::deleteProperty(engine, name);
+	}
+}
+
+Enumerator* StringWrapper::getEnumerator(Engine& engine) const {
+	return engine.getHeap().manage(new MergingEnumerator(engine, super::getEnumerator(engine), wrapped));
+}
+
 /* --- RangeEnumerator --- */
 
 RangeEnumerator::RangeEnumerator(GCHeap& heap, Int32 from, Int32 count) : heap(heap), index(from), to(from + count) { }
@@ -877,7 +936,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < lis
 
 /* --- MergingEnumerator --- */
 
-MergingEnumerator::MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, Object* rightObject)
+MergingEnumerator::MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject)
 		: engine(engine)
 		, leftEnumerator(leftEnumerator)
 		, rightObject(rightObject)
@@ -889,8 +948,7 @@ const String* MergingEnumerator::nextPropertyName() {
 	if (name == 0) {
 		do {
 			name = leftEnumerator->nextPropertyName();
-			Value v;
-			if (name != 0 && !rightObject->getProperty(engine, name, &v)) {
+			if (name != 0 && !rightObject->hasProperty(engine, name)) {
 				return name;
 			}
 		} while (name != 0);
@@ -915,7 +973,7 @@ Function* Function::asFunction() { return this; }
 Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
-Object* Function::getPrototype(Engine& engine) { return engine.functionPrototype; }
+Object* Function::getPrototype(Engine& engine) const { return engine.functionPrototype; }
 Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	return call(engine, processor, argc, argv, thisValue);
 }
@@ -933,7 +991,7 @@ static ObjectConstructor OBJECT_OBJECT; // for object literals
 
 Array::Array(Object* prototype) : super(prototype), lengthProperty(0) { }
 
-bool Array::getProperty(Engine& engine, const String* name, Value* v) {
+bool Array::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		*v = Value(lengthProperty);
 		return true;
@@ -993,7 +1051,7 @@ class ArrayConstructor : public Function {
 					}
 					return Value(array);
 				}
-	public:		virtual bool getProperty(Engine& engine, const String* name, Value* v) {
+	public:		virtual bool getProperty(Engine& engine, const String* name, Value* v) const {
 					if (name->isEqualTo(PROTOTYPE_STRING)) {
 						*v = Value(&engine.arrayPrototype);
 						return true;
@@ -1039,12 +1097,12 @@ Object* UserFunction::getEnvironment() const {
 	return environment;
 }
 
-Value UserFunction::getInternalValue() {
+Value UserFunction::getInternalValue() const {
 	const String* s = codeDef->getSource();
 	return (s != 0 ? Value(s) : Value::UNDEFINED);
 }
 
-bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) {
+bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) const {
 	return createUserObject(engine)->getProperty(engine, name, v);
 }
 
@@ -1056,15 +1114,15 @@ bool UserFunction::deleteProperty(Engine& engine, const String* name) {
 	return createUserObject(engine)->deleteProperty(engine, name);
 }
 
-Enumerator* UserFunction::getEnumerator(Engine& engine) {
+Enumerator* UserFunction::getEnumerator(Engine& engine) const {
 	return createUserObject(engine)->getEnumerator(engine);
 }
 
-Object* UserFunction::getPrototype(Engine& engine) {
+Object* UserFunction::getPrototype(Engine& engine) const {
 	return createUserObject(engine)->getPrototype(engine);
 }
 
-UserObject* UserFunction::createUserObject(Engine& engine) {
+UserObject* UserFunction::createUserObject(Engine& engine) const {
 	if (userObject == 0) {
 		Object* usePrototype = (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
 				: static_cast<Object*>(engine.functionPrototype));
@@ -1072,7 +1130,7 @@ UserObject* UserFunction::createUserObject(Engine& engine) {
 		userObject->defineProperty(&LENGTH_STRING, Value(codeDef->getArgumentsCount())
 				, Table::READ_ONLY | Table::DONT_ENUM | Table::DONT_DELETE);
 		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
-		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(this), Table::DONT_ENUM);
+		prototype->defineProperty(&CONSTRUCTOR_STRING, Value(const_cast<UserFunction*>(this)), Table::DONT_ENUM);
 		userObject->defineProperty(&PROTOTYPE_STRING, Value(prototype), Table::DONT_ENUM | Table::DONT_DELETE);
 	}
 	return userObject;
@@ -1095,17 +1153,17 @@ Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount)
 
 const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
 
-Value* Arguments::findProperty(const String* name) {
+Value* Arguments::findProperty(const String* name) const {
 	if (name->isEqualTo(LENGTH_STRING)) {
-		return (deletedArguments[0] ? 0 : &lengthProperty);
+		return (deletedArguments[0] ? 0 : const_cast<Value*>(&lengthProperty));
 	}
 	UInt32 i;
 	const Char* q = parseUnsignedInt(name->begin(), name->end(), i);
 	return (q == name->end() && i < argumentsCount && !deletedArguments[i + 1] ? frame->getIndexedPointer() + i : 0);
 }
 
-bool Arguments::getProperty(Engine& engine, const String* name, Value* v) {
-	Value* p = findProperty(name);
+bool Arguments::getProperty(Engine& engine, const String* name, Value* v) const {
+	const Value* p = findProperty(name);
 	return (p == 0 ? super::getProperty(engine, name, v) : (*v = *p, true));
 }
 
@@ -1115,13 +1173,13 @@ bool Arguments::setProperty(Engine& engine, const String* name, const Value& v) 
 }
 
 bool Arguments::deleteProperty(Engine& engine, const String* name) {
-	Value* p = findProperty(name);
+	const Value* p = findProperty(name);
 	if (p == 0) return super::deleteProperty(engine, name);
 	else if (p == &lengthProperty) return (deletedArguments[0] = true);
 	else return (deletedArguments[p - frame->getIndexedPointer() + 1] = true);
 }
 
-Enumerator* Arguments::getEnumerator(Engine& engine) {
+Enumerator* Arguments::getEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
 	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 		list->add(b->getKey());
@@ -1161,7 +1219,7 @@ void FunctionFrame::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
-bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
+bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) const {
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
@@ -1169,7 +1227,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) {
 		return true;
 	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
 		if (!argumentsValue.exists()) {
-			Object* o = engine.getHeap().manage(new Arguments(this, passedArgumentsCount));
+			Object* o = engine.getHeap().manage(new Arguments(const_cast<FunctionFrame*>(this), passedArgumentsCount));
 			argumentsValue = Value(o);
 		}
 		*v = argumentsValue;
@@ -1223,7 +1281,7 @@ EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) 
 		, parentFrame(parentFrame), indexed(evalFunctionDef->getVarsCount()) {
 	indexedPointer = indexed.end();
 }
-bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) { return parentFrame->getProperty(engine, name, v); }
+bool EvalFrame::getProperty(Engine& engine, const String* name, Value* v) const { return parentFrame->getProperty(engine, name, v); }
 bool EvalFrame::setProperty(Engine& engine, const String* name, const Value& v) { return parentFrame->setProperty(engine, name, v); }
 bool EvalFrame::deleteProperty(Engine& engine, const String* name) { return parentFrame->deleteProperty(engine, name); }
 void EvalFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(heap, evalFunctionDef); }
@@ -1236,7 +1294,7 @@ CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Va
 	indexedPointer = parentFrame->getIndexedPointer();
 }
 
-bool CatchFrame::getProperty(Engine& engine, const String* name, Value* v) {
+bool CatchFrame::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (name->isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
 	else return parentFrame->getProperty(engine, name, v);
 }
@@ -1377,7 +1435,7 @@ bool Processor::privateRun() {
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) error();
-									if (!o->getProperty(engine, vsp[0].getString(), vsp - 1))
+									if (!o->getPropertyDeep(engine, vsp[0].getString(), vsp - 1))
 										vsp[-1] = Value::UNDEFINED; // FIX : is this right?
 									pop(1);
 									break;
@@ -1474,7 +1532,7 @@ bool Processor::privateRun() {
 				Object* thisObject = vsp[-n - 1].toObject(engine, true);
 				if (thisObject == 0) error();
 				Value v(Value::NONEXISTENT);
-				thisObject->getProperty(engine, vsp[-n].toString(heap), &v);
+				thisObject->getPropertyDeep(engine, vsp[-n].toString(heap), &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = v.getFunction()->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n + 1;
@@ -1558,7 +1616,7 @@ bool Processor::privateRun() {
 			case IN_OP: {
 				o = vsp[0].asObject();
 				if (o == 0) error(); // FIX : TypeError
-				vsp[-1] = Value(o->getProperty(engine, vsp[-1].getString(), &vsp[-1]));
+				vsp[-1] = Value(o->hasPropertyDeep(engine, vsp[-1].getString()));
 				pop(1);
 				break;				
 			}
@@ -3119,12 +3177,9 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 		if (prototype == 0) {
 			prototype = &engine.objectPrototype;
 		}
-/*		StringWrapper* p = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
-		
 		Object* o = (className->isEqualTo(S_TRING_STRING)
 				? static_cast<Object*>(new StringWrapper(internalValue.toString(engine.getHeap()), prototype))
-				: static_cast<Object*>(new WrapperObject(className, internalValue, prototype)));*/
-		Object* o = new WrapperObject(className, internalValue, prototype);
+				: static_cast<Object*>(new WrapperObject(className, internalValue, prototype)));
 		return Value(engine.getHeap().manage(o));
 	}
 	return Value::UNDEFINED;

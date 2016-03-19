@@ -127,8 +127,7 @@ adhb
 10
 line
 feed	tab'single quotes'
-"double quotes" back\slash   xxx  @ 
-cr
+"double quotes" back\slash   xxx  @ cr
 false
 true
 *** objects ***
@@ -635,19 +634,35 @@ continues to 2
 8
 9
 *** for in ***
-0,1,2,3,4,5,6,7,
-0,1,2,3,4,5,6,7,
-0,1,2,3,4,5,6,7,
-100
+valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
+valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
+valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,
+isPrototypeOf
+valueOf
+toLocaleString
+toString
+isPrototypeOf
 0
 1
 2
 3
-4
+8
+valueOf
+toLocaleString
+toString
+isPrototypeOf
 0
 1
 2
 3
+tick 
+valueOf
+tick 
+toLocaleString
+tick 
+toString
+tick 
+isPrototypeOf
 tick 
 0
 tick 
@@ -693,11 +708,19 @@ undefined
 0
 b
 
+valueOf
+toLocaleString
+toString
+isPrototypeOf
 0
 1
 2
 3
 
+valueOf
+toLocaleString
+toString
+isPrototypeOf
 0
 1
 2
@@ -1591,18 +1614,20 @@ true
 true
 { chainAProperty: ChainB value, chainBProperty: ChainC value, constructor: 12345, isPrototypeOf: undefined, rootProperty: Root value, toLocaleString: undefined, toString: undefined, valueOf: undefined }
 *** wrappers ***
-Boolean(): false/false, false/false, false/false, false/false, true/true, true/true, true/true, true/true, false/false, false/false, true/true, true/true, true/true
-Number(): 0/0, NaN/NaN, 0/0, 0/0, 1/1, 1.2345/1.2345, 12/12, Infinity/Infinity, NaN/NaN, 0/0, NaN/NaN, NaN/NaN, error
-String(): /, undefined/undefined, null/null, false/false, true/true, 1.2345/1.2345, 12/12, Infinity/Infinity, NaN/NaN, /, xyzzy/xyzzy, [object Object]/[object Object], error
+Boolean(): undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined
+Number(): undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, undefined/undefined, error
+String(): error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error
 Object(): [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object], [object Object]/[object Object]
 Array(): error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error, error/error
 delete String.prototype.test: true
 typeof breakOuts[0]: object
 typeof breakOuts[0].s: string
-breakOuts[0]: zxcv
+breakOuts[0]: undefined
 breakOuts[0].s: asdf
-breakOuts[1]: zxcv
+breakOuts[1]: undefined
 breakOuts[1].s: qwerty
 exception: TypeError
 exception: TypeError
 exception: TypeError
+3 in new String("pokpokpko"): true
+for (var i in new String("abcdefghijklmn")): valueOf,toLocaleString,toString,isPrototypeOf,0,1,2,3,4,5,6,7,8,9,10,11,12,13,

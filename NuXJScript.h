@@ -467,14 +467,18 @@ class Object : public GCItem {
 				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine);
-				virtual Value getInternalValue();
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual Value getInternalValue() const;
 //				virtual UserObject* toUserObject();
-				virtual bool getProperty(Engine& engine, const String* name, Value* v); // don't touch v if you return false
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const; // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Enumerator* getEnumerator(Engine& engine) const;
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString); // FIX : drop again, never overriden
+
+				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
+				bool hasProperty(Engine& engine, const String* name) const;
+				bool hasPropertyDeep(Engine& engine, const String* name) const;
 };
 
 class Enumerator : public Object {
@@ -565,10 +569,10 @@ class String : public virtual Object, public QuickArray<Char> {
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
-				virtual Enumerator* getEnumerator(Engine& engine);
-				virtual Value getInternalValue() { return Value(this); }
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
+				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Value getInternalValue() const { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
@@ -606,12 +610,12 @@ class StringListEnumerator : public Enumerator {
 
 class MergingEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, Object* rightObject);
+				MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
 				virtual const String* nextPropertyName();
 
 	protected:	Engine& engine;
 				Enumerator* const leftEnumerator;
-				Object* const rightObject;
+				const Object* const rightObject;
 				Enumerator* const rightEnumerator;
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(leftEnumerator);
@@ -626,12 +630,12 @@ class UserObject : public virtual Object {
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0); // FIX : not = 0 ?
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Enumerator* getEnumerator(Engine& engine) const;
 				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
-				virtual Object* getPrototype(Engine& engine);
+				virtual Object* getPrototype(Engine& engine) const;
 				bool defineProperty(const String* name, const Value& v, Byte attributes) { return properties.assign(name, v, attributes); }
 				
 	protected:	Table properties;
@@ -657,18 +661,28 @@ class WrapperObject : public UserObject {
 					super::gcMark(heap);
 				}
 };
-/*
+
 class StringWrapper : public UserObject {
 	public:		typedef UserObject super;
-				StringWrapper(const String* s, Object* prototype) : UserObject(prototype), wrapped(*s) { }
+				StringWrapper(const String* string, Object* prototype);
+				virtual const String* getClassName() const;
+				virtual Value getInternalValue() const;
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getEnumerator(Engine& engine) const;
 	protected:	const String* const wrapped;
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(wrapped);
+					super::gcMark(heap);
+				}
 };
-*/
+
 class Array : public UserObject {
 	public:		typedef UserObject super;
 	
 				Array(Object* prototype = 0);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 
@@ -686,7 +700,7 @@ class Function : public Object {
 				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine);
+				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
@@ -776,20 +790,20 @@ class UserFunction : public Function {
 				
 				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine);
-				virtual Object* getPrototype(Engine& engine);
+				virtual Enumerator* getEnumerator(Engine& engine) const;
+				virtual Object* getPrototype(Engine& engine) const;
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
-				virtual Value getInternalValue();
+				virtual Value getInternalValue() const;
 	
-	protected:	UserObject* createUserObject(Engine& engine);
+	protected:	UserObject* createUserObject(Engine& engine) const;
 	
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
-				UserObject* userObject;
+				mutable UserObject* userObject;
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
@@ -823,7 +837,7 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 					if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
 					return parent->setProperty(engine, name, v);
 				}
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) {
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const {
 					const Table::Bucket* bucket = vars.lookup(name);
 					if (bucket != 0) { *v = bucket->getValue(); return true; }
 					return parent->getProperty(engine, name, v);
@@ -849,7 +863,7 @@ class FunctionFrame : public Frame {
 
 				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
 				void updatedCode();
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
@@ -857,7 +871,7 @@ class FunctionFrame : public Frame {
 	protected:	UserFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
-				Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
+				mutable Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
 				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
@@ -884,7 +898,7 @@ class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
 				EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
@@ -910,7 +924,7 @@ class CatchFrame : public Frame {
 	public:		typedef Frame super;
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
@@ -932,12 +946,12 @@ class Arguments : public UserObject {
 
 				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
-				virtual bool getProperty(Engine& engine, const String* name, Value* v);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getEnumerator(Engine& engine);
+				virtual Enumerator* getEnumerator(Engine& engine) const;
 
-	protected:	Value* findProperty(const String* name);
+	protected:	Value* findProperty(const String* name) const;
 				FunctionFrame* const frame;
 				UInt32 const argumentsCount;
 				Value lengthProperty;
