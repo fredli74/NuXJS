@@ -139,9 +139,10 @@ defineProperties(String.prototype = support.prototypes.String, { dontEnum: true 
 });
 
 defineProperties(String, { dontEnum: true }, {
-	fromCharCode: function() {
-		var s = '', l = arguments.length;
-		for (var i = 0; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
+	fromCharCode: function(v) {
+		var l;
+		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
 		return s;
 	}
 });
