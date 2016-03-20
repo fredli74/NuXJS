@@ -273,6 +273,7 @@ const String CLASS_STRING("class");
 const String VALUE_STRING("value");
 const String CONSTRUCTOR_STRING("constructor");
 const String EVAL_STRING("eval");
+const String NATIVE_FUNCTION_STRING("function() { [native code] }");
 
 /* --- Value --- */
 
@@ -287,10 +288,6 @@ const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &
 
 const String* Value::typeOfString() const {
 	return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]);
-}
-
-Function* Value::getFunction() const {
-	return (type != OBJECT_TYPE ? &BAD_FUNCTION : var.object->getFunction());
 }
 
 bool Value::toBool() const {
@@ -680,8 +677,6 @@ void GCList::claim(GCItem* item) throw() {
 
 static struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
 
-Function* Object::asFunction() { return 0; }
-Function* Object::getFunction() { return &BAD_FUNCTION; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
@@ -691,6 +686,13 @@ bool Object::setProperty(Engine& engine, const String* name, const Value& v) { r
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 bool Object::isPropertyEnumerable(Engine& engine, const String* name) const { return hasProperty(engine, name); }
+Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	processor.error(); // FIX : error string, type should be TypeError
+	return Value();
+}
+Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return call(engine, processor, argc, argv, thisValue);
+}
 bool Object::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	return setProperty(engine, name, v);
 }
@@ -982,14 +984,10 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 /* --- Function --- */
 
-Function* Function::asFunction() { return this; }
-Function* Function::getFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
+Value Function::getInternalValue() const { return Value(&NATIVE_FUNCTION_STRING); }
 Object* Function::getPrototype(Engine& engine) const { return engine.functionPrototype; }
-Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return call(engine, processor, argc, argv, thisValue);
-}
 
 /* --- Object support --- */
 
@@ -1094,10 +1092,9 @@ class FunctionConstructor : public Function {
 
 /* --- UserFunction --- */
 
-UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment, Object* thisValueForConstructor)
+UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment)
 		: codeDef(codeDef)
 		, environment(environment)
-		, thisValueForConstructor(thisValueForConstructor)
 		, userObject(0) {
 }
 
@@ -1162,11 +1159,6 @@ UserObject* UserFunction::createUserObject(Engine& engine) const {
 
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
-	return Value();
-}
-
-Value UserFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	processor.chain(this, argc, argv, (thisValueForConstructor != 0 ? thisValueForConstructor : thisValue));
 	return Value();
 }
 
@@ -1570,15 +1562,18 @@ bool Processor::privateRun() {
 				Value v(Value::NONEXISTENT);
 				thisObject->getPropertyDeep(engine, vsp[-n].toString(heap), &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = v.getFunction()->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				Object* f = v.asObject();
+				if (f == 0) error(); // FIX : TypeError
+				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n + 1;
 				break;
 			}
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Function* f = vsp[-n].getFunction();
-				if (f == &engine.evalFunction) f = &engine.evalDirectFunction;
+				Object* f = vsp[-n].asObject();
+				if (f == 0) error(); // FIX : TypeError
+				if (f == &engine.evalFunction) f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				break;
@@ -1586,13 +1581,16 @@ bool Processor::privateRun() {
 			case CALL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = vsp[-n].getFunction()->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				Object* f = vsp[-n].asObject();
+				if (f == 0) error(); // FIX : TypeError
+				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				break;
 			}
 			case NEW_OP: {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
-				Function* f = vsp[-n].getFunction();
+				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct
+				if (f == 0) error(); // FIX : TypeError
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v);
 				Object* prototype = v.asObject();
@@ -3250,7 +3248,7 @@ Value compileFunction(Engine& engine, Processor& processor, Int32 argc, const Va
 		Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
 		heap.protect(&compiler);
 		compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? *argv[1].toString(heap) : ANONYMOUS_STRING);
-		return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals(), argc >= 3 ? argv[2].toObject(engine, true) : 0)));
+		return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals())));
 	}
 	return Value::UNDEFINED;
 }

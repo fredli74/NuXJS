@@ -408,7 +408,6 @@ class Value {
 				bool isNumber() const { return type == NUMBER_TYPE; }
 				bool isString() const { return type == STRING_TYPE; }
 				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
-				Function* getFunction() const; // returns a stub function that throws if value is not Function object
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
@@ -471,12 +470,13 @@ class UserObject;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
-				virtual Function* asFunction(); // FIX : needed?
-				virtual Function* getFunction(); // returns a stub function that throws if Object is not function
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Value getInternalValue() const;
+				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const; // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
@@ -706,14 +706,10 @@ class Array : public UserObject {
 class Function : public Object {
 	public:		typedef Object super;
 				
-				virtual Function* asFunction();
-				virtual Function* getFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
+				virtual Value getInternalValue() const;
 				virtual Object* getPrototype(Engine& engine) const;
-				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) = 0;
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 };
 
 class EvalFunction : public Function {
@@ -799,9 +795,8 @@ class CodeDefinition : public Object {
 class UserFunction : public Function {
 	public:		typedef Function super;
 				
-				UserFunction(CodeDefinition* codeDef, Object* environment, Object* thisValueForConstructor = 0); // The optional thisValueForConstructor allows script code to differentiate between a regular call and a "new" construction call. If called via "new", "this" will point to this object (and hence the script code must create a new object and return it).
+				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
@@ -818,7 +813,6 @@ class UserFunction : public Function {
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				mutable UserObject* userObject;
-				Object* const thisValueForConstructor;
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
