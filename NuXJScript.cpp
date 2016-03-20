@@ -239,6 +239,37 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 	return std::pair<Char*, Char*>(bp, ep);
 }
 
+static const Char* eatStringWhite(const Char* p, const Char* e) {
+	while (p < e) {
+		switch (*p) {
+			case '\t': case '\n': case '\v': case '\f': case '\r': case ' ': break; // FIX : support U+00A0	NO-BREAK SPACE	<NBSP>, U+2028	LINE SEPARATOR	<LS>, U+2029	PARAGRAPH SEPARATOR, U+FEFF	ZERO WIDTH NO-BREAK SPACE	 ?
+			default: return p;
+		}
+		++p;
+	}
+	return p;
+}
+
+static double stringToDouble(const String& s) {
+	double v = 0.0;
+	const Char* p = s.begin();
+	const Char* e = s.end();
+	p = eatStringWhite(p, e);
+	if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
+		UInt32 u;
+		const Char* b = p + 2;
+		p = parseHex(b, e, u);
+		if (p == b) {
+			return NaN();
+		}
+		v = u;
+	} else {
+		p = parseDouble(p, e, v);
+	}
+	p = eatStringWhite(p, e);
+	return (p == e ? v : NaN());
+}
+
 /* --- String constants --- */
 
 // FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
@@ -277,13 +308,6 @@ const String NATIVE_FUNCTION_STRING("function() { [native code] }");
 
 /* --- Value --- */
 
-static struct BadFunction : public Function { // FIX : .length?! and all the others?!
-	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-		processor.error(); // FIX : error string, type should be TypeError
-		return Value();
-	}
-} BAD_FUNCTION;
-
 const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
 
 const String* Value::typeOfString() const {
@@ -300,37 +324,6 @@ bool Value::toBool() const {
 		case STRING_TYPE: return (!var.string->empty());
 		case OBJECT_TYPE: return true;
 	}
-}
-
-static const Char* eatStringWhite(const Char* p, const Char* e) {
-	while (p < e) {
-		switch (*p) {
-			case '\t': case '\n': case '\v': case '\f': case '\r': case ' ': break; // FIX : support U+00A0	NO-BREAK SPACE	<NBSP>, U+2028	LINE SEPARATOR	<LS>, U+2029	PARAGRAPH SEPARATOR, U+FEFF	ZERO WIDTH NO-BREAK SPACE	 ?
-			default: return p;
-		}
-		++p;
-	}
-	return p;
-}
-
-static double stringToDouble(const String& s) {
-	double v = 0.0;
-	const Char* p = s.begin();
-	const Char* e = s.end();
-	p = eatStringWhite(p, e);
-	if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
-		UInt32 u;
-		const Char* b = p + 2;
-		p = parseHex(b, e, u);
-		if (p == b) {
-			return NaN();
-		}
-		v = u;
-	} else {
-		p = parseDouble(p, e, v);
-	}
-	p = eatStringWhite(p, e);
-	return (p == e ? v : NaN());
 }
 
 double Value::toDouble() const {
@@ -1589,7 +1582,7 @@ bool Processor::privateRun() {
 			}
 			case NEW_OP: {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
-				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct
+				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) error(); // FIX : TypeError
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v);
