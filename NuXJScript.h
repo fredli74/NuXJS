@@ -60,6 +60,7 @@
 //		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 //		perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
+//		exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
 //
 //	Compiler
 //
@@ -402,6 +403,7 @@ class Value {
 				explicit Value(double number) : type(NUMBER_TYPE) { var.number = number; }
 				explicit Value(const String* string) : type(STRING_TYPE) { var.string = string; }
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
+				// FIX : Value from (heap and) const char* ?
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; }
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
@@ -478,16 +480,17 @@ class Object : public GCItem {
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const; // don't touch v if you return false
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
-				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString); // FIX : drop again, never overriden
 
+				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
 				bool hasProperty(Engine& engine, const String* name) const;
 				bool hasPropertyDeep(Engine& engine, const String* name) const;
+				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };
 
 class Enumerator : public Object {
@@ -643,7 +646,6 @@ class UserObject : public virtual Object {
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual Value toPrimitive(Engine& engine, Processor& processor, bool requiresString);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
@@ -750,7 +752,7 @@ class Engine {
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
-				UserFunction* toPrimitiveValueFunction; // Created with script code for simplicity
+				UserFunction* toPrimitiveFunction; // Created with script code for simplicity
 				UserFunction* toStringFunction; // Created with script code for simplicity
 };
 
@@ -792,32 +794,67 @@ class CodeDefinition : public Object {
 };
 
 // It is quite rare that we access the object data of a function so we improve memory usage and performance by creating this on first access.
-class UserFunction : public Function {
+// gaaah, these names!
+class ExtensibleFunction : public Function {
 	public:		typedef Function super;
 				
-				UserFunction(CodeDefinition* codeDef, Object* environment);
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				ExtensibleFunction();
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
-				virtual Object* getPrototype(Engine& engine) const;
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
-				virtual Value getInternalValue() const;
 	
 	protected:	UserObject* createUserObject(Engine& engine) const;
+	// FIX : or simply pass in constructor, if we are to use this in the future for native functions that you want to be able to extend!?
+				virtual Int32 getLengthProperty(Engine& engine) const = 0; // FIX : in the future this might be a good idea to have in Object for performance
 	
-				CodeDefinition* const codeDef;
-				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				mutable UserObject* userObject;
 
 				virtual void gcMark(GCHeap& heap) {
+					heap.mark(userObject);
+					super::gcMark(heap);
+				}
+};
+
+class UserFunction : public ExtensibleFunction {
+	public:		typedef ExtensibleFunction super;
+				
+				UserFunction(CodeDefinition* codeDef, Object* environment);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value getInternalValue() const;
+				CodeDefinition* getDefinition() const;
+				Object* getEnvironment() const;
+	
+	protected:	virtual Int32 getLengthProperty(Engine& engine) const; // FIX : in the future this might be a good idea to have in Object for performance
+	
+				CodeDefinition* const codeDef;
+				Object* const environment; // Usually the global object or the frame of the context that created this function.
+				
+				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
 					heap.mark(environment);
-					heap.mark(userObject);
+					super::gcMark(heap);
+				}
+};
+
+class SpecialConstructorFunction : public ExtensibleFunction {
+	public:		typedef ExtensibleFunction super;
+
+	public:		SpecialConstructorFunction(Object* constructorFunction, Object* regularFunction);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+	
+	protected:	Object* const constructorFunction;
+				Object* const regularFunction;
+				virtual Int32 getLengthProperty(Engine& engine) const; // FIX : in the future this might be a good idea to have in Object for performance
+
+				virtual void gcMark(GCHeap& heap) {
+					heap.mark(constructorFunction);
+					heap.mark(regularFunction);
 					super::gcMark(heap);
 				}
 };

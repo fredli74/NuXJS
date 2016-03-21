@@ -9,7 +9,6 @@ var abs = function(v) { return ((v = +v) < 0 ? -v : v); }
 var sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
 var alphaDigits = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-
 function toObject(v) {
 	switch (typeof v) {
 		case "object":
@@ -21,17 +20,50 @@ function toObject(v) {
 	throw "type error"; // FIX
 }
 
-function defineProperties(object, attribs, props) {
-	var readOnly = attribs['readOnly'];
-	var dontEnum = attribs['dontEnum'];
-	var dontDelete = attribs['dontDelete'];
-	for (p in props) {
-		support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
-	}
+function isPrimitive(v) {
+	var v;
+	return (((t = typeof v) !== "object" || v === null) && t !== "function");
 }
 
+support.toPrimitive = function(o) {
+	var f, v;
+	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
+			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
+		throw("error"); // FIX
+	}
+	return v;
+}
+
+support.toString = function(o) {
+	var f, v;
+	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
+			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
+		throw("error"); // FIX
+	}
+	return '' + v;
+}
+
+function defineProperties(object, attribs, props) {
+	var readOnly = attribs['readOnly'], dontEnum = attribs['dontEnum'], dontDelete = attribs['dontDelete'];
+	for (p in props) support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
+	return object;
+}
+/*
+function createClass(constructorFunction, regularFunction, props) {
+	return defineProperties(support.specialConstructor(constructorFunction, regularFunction), { dontEnum }, { ;
+}
+*/
 defineProperties(this, { dontEnum: true }, {
-	Object: function() { return {}; },
+	Object: function(v) {
+		switch (typeof v) {
+			case "object":
+			case "function": if (v !== null) return v;
+			case "undefined": return { };
+			case "boolean": return new Boolean(v);
+			case "number": return new Number(v);
+			case "string": return new String(v);
+		}
+	},
 	Function: function(body) {
 		var source = '(', n = arguments.length - 1;
 		for (var i = 0; i < n; ++i) {
@@ -42,57 +74,27 @@ defineProperties(this, { dontEnum: true }, {
 		if (n >= 0) source += arguments[n];
 		return support.compileFunction(source + ' }', 'anonymous');
 	},
-	Boolean: function(v) {
-		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
-	},
-	Number: function(v) {
-		v = (arguments.length ? +v : 0);
-		//if (support.calledAsConstructor()) {
-			return support.createWrapper('Number', v, support.prototypes.Number);
-	},
-	String: function(v) {
-		v = (arguments.length ? '' + v : '');
-		return support.createWrapper('String', v, support.prototypes.String);
-	},
+	Boolean: support.specialConstructor(function(v) {
+			return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
+		}, function(v) {
+			return !!v;
+		}
+	),
+	Number: support.specialConstructor(function(v) {
+			return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
+		}, function(v) {
+			return (arguments.length ? +v : 0);
+		}
+	),
+	String: support.specialConstructor(function(v) {
+			return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
+		}, function(v) {
+			return (arguments.length ? '' + v : '');
+		}
+	),
 	isNaN: isNaN,
 	isFinite: isFinite,
 	Math: support.createWrapper('Math', undefined)
-});
-
-defineProperties(Object.prototype = support.prototypes.Object, { dontEnum: true }, {
-	valueOf: function() {
-		return this;
-	},
-	toString: function() {
-		return '[object ' + support.getInternalProperty(this, 'class') + ']'
-	},
-	isPrototypeOf: function(v) {
-		while ((v = support.getInternalProperty(v, 'prototype')) != null) {
-			if (v == this) return true;
-		}
-		return false;
-	}
-});
-defineProperties(Object.prototype, { dontEnum: true }, {
-	toLocaleString: Object.prototype.toString
-});
-
-defineProperties(Function.prototype = support.prototypes.Function, { dontEnum: true }, {
-	toString: function() { // FIX : <- generic, make a factory function
-		if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
-		return support.getInternalProperty(this, 'value');
-	}
-});
-
-defineProperties(Boolean.prototype = support.prototypes.Boolean, { dontEnum: true }, {
-	valueOf: function() {
-		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
-		return support.getInternalProperty(this, 'value');
-	},
-	toString: function() {
-		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
-		return '' + support.getInternalProperty(this, 'value');
-	}
 });
 
 defineProperties(this, { readOnly: true, dontEnum: true, dontDelete: true }, {
@@ -106,7 +108,51 @@ defineProperties(Math, { dontEnum: true }, {
 	sqrt: function(v) { return natives.sqrt(+v); }
 });
 
-defineProperties(Number.prototype = support.prototypes.Number, { dontEnum: true }, {
+support.defineProperty(Object, 'prototype', support.prototypes.Object, true, true, true);
+defineProperties(Object.prototype, { dontEnum: true }, {
+	constructor: Object,
+	valueOf: function() {
+		return this;
+	},
+	toString: function() {
+		return '[object ' + support.getInternalProperty(this, 'class') + ']'
+	},
+	isPrototypeOf: function(v) {
+		while (v = support.getInternalProperty(v, 'prototype')) {
+			if (v == this) return true;
+		}
+		return false;
+	}
+});
+defineProperties(Object.prototype, { dontEnum: true }, {
+	toLocaleString: Object.prototype.toString
+});
+
+support.defineProperty(Function, 'prototype', support.prototypes.Function, true, true, true);
+defineProperties(Function.prototype, { dontEnum: true }, {
+	constructor: Function,
+	toString: function() { // FIX : <- generic, make a factory function
+		if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
+		return support.getInternalProperty(this, 'value');
+	}
+});
+
+support.defineProperty(Boolean, 'prototype', support.prototypes.Boolean, true, true, true);
+defineProperties(Boolean.prototype, { dontEnum: true }, {
+	constructor: Boolean,
+	valueOf: function() {
+		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		return support.getInternalProperty(this, 'value');
+	},
+	toString: function() {
+		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		return '' + support.getInternalProperty(this, 'value');
+	}
+});
+
+support.defineProperty(Number, 'prototype', support.prototypes.Number, true, true, true);
+defineProperties(Number.prototype, { dontEnum: true }, {
+	constructor: Number,
 	valueOf: function() {
 		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
 		return support.getInternalProperty(this, 'value');
@@ -131,7 +177,9 @@ defineProperties(Number.prototype = support.prototypes.Number, { dontEnum: true 
 	}
 });
 
-defineProperties(String.prototype = support.prototypes.String, { dontEnum: true }, {
+support.defineProperty(String, 'prototype', support.prototypes.String, true, true, true);
+defineProperties(String.prototype, { dontEnum: true }, {
+	constructor: String,
 	valueOf: function() {
 		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
 		return support.getInternalProperty(this, 'value');

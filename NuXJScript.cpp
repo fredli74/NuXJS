@@ -689,7 +689,6 @@ Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const 
 bool Object::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	return setProperty(engine, name, v);
 }
-Value Object::toPrimitive(Engine& engine, Processor& processor, bool requiresString) { return Value::UNDEFINED; } // FIX : what to do here?
 bool Object::hasProperty(Engine& engine, const String* name) const {
 	Value dummy;
 	return getProperty(engine, name, &dummy);
@@ -707,6 +706,12 @@ bool Object::getPropertyDeep(Engine& engine, const String* name, Value* v) const
 		o = o->getPrototype(engine);
 	} while (o != 0);
 	return false;
+}
+Value Object::getPropertyDeep(Engine& engine, const char* name) const {
+	Value v;
+	String s(name);
+	getPropertyDeep(engine, &s, &v);
+	return v;
 }
 
 /* --- Table --- */
@@ -869,13 +874,6 @@ bool UserObject::isPropertyEnumerable(Engine& engine, const String* name) const 
 	return (bucket != 0 && bucket->enumerate());
 }
 
-Value UserObject::toPrimitive(Engine& engine, Processor& processor, bool requiresString) {
-	Value thisValue(this);
-	processor.chain(requiresString ? engine.toStringFunction : engine.toPrimitiveValueFunction
-			, 1, &thisValue, engine.getGlobals());
-	return Value();
-}
-
 bool UserObject::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	return properties.assign(name, v, (attributes.readOnly ? Table::READ_ONLY : 0)
 			| (attributes.dontEnum ? Table::DONT_ENUM : 0)
@@ -980,7 +978,10 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 Value Function::getInternalValue() const { return Value(&NATIVE_FUNCTION_STRING); }
-Object* Function::getPrototype(Engine& engine) const { return engine.functionPrototype; }
+Object* Function::getPrototype(Engine& engine) const {
+	return (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
+			: static_cast<Object*>(engine.functionPrototype));
+}
 
 /* --- Object support --- */
 
@@ -1083,76 +1084,89 @@ class FunctionConstructor : public Function {
 };
 #endif
 
+/* --- ExtensibleFunction --- */
+
+ExtensibleFunction::ExtensibleFunction() : userObject(0) { }
+
+// FIX : how can we create a proxy easier, shorter and safer? as it is now it is easy to forget to add relevant methods here when we add them to Object
+bool ExtensibleFunction::getProperty(Engine& engine, const String* name, Value* v) const {
+	return createUserObject(engine)->getProperty(engine, name, v);
+}
+
+bool ExtensibleFunction::setProperty(Engine& engine, const String* name, const Value& v) {
+	return createUserObject(engine)->setProperty(engine, name, v);
+}
+
+bool ExtensibleFunction::deleteProperty(Engine& engine, const String* name) {
+	return createUserObject(engine)->deleteProperty(engine, name);
+}
+
+Enumerator* ExtensibleFunction::getPropertyEnumerator(Engine& engine) const {
+	return createUserObject(engine)->getPropertyEnumerator(engine);
+}
+
+bool ExtensibleFunction::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	return createUserObject(engine)->defineProperty(engine, name, v, attributes);
+}
+
+bool ExtensibleFunction::isPropertyEnumerable(Engine& engine, const String* name) const {
+	return createUserObject(engine)->isPropertyEnumerable(engine, name);
+}
+
+UserObject* ExtensibleFunction::createUserObject(Engine& engine) const {
+	if (userObject == 0) {
+		userObject = engine.getHeap().manage(new UserObject(getPrototype(engine)));
+		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
+		Attributes attributes;
+		attributes.dontEnum = true;
+		prototype->defineProperty(engine, &CONSTRUCTOR_STRING, Value(const_cast<ExtensibleFunction*>(this)), attributes);
+		attributes.dontDelete = true;
+		userObject->defineProperty(engine, &PROTOTYPE_STRING, Value(prototype), attributes);
+		attributes.readOnly = true;
+		userObject->defineProperty(engine, &LENGTH_STRING, Value(getLengthProperty(engine)), attributes);
+	}
+	return userObject;
+}
+
 /* --- UserFunction --- */
 
-UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment)
-		: codeDef(codeDef)
-		, environment(environment)
-		, userObject(0) {
-}
+UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
 
-CodeDefinition* UserFunction::getDefinition() const {
-	return codeDef;
-}
-
-Object* UserFunction::getEnvironment() const {
-	return environment;
-}
+CodeDefinition* UserFunction::getDefinition() const { return codeDef; }
+Object* UserFunction::getEnvironment() const { return environment; }
 
 Value UserFunction::getInternalValue() const {
 	const String* s = codeDef->getSource();
 	return (s != 0 ? Value(s) : Value::UNDEFINED);
 }
 
-// FIX : how can we create a proxy easier, shorter and safer? as it is now it is easy to forget to add relevant methods here when we add them to Object
-bool UserFunction::getProperty(Engine& engine, const String* name, Value* v) const {
-	return createUserObject(engine)->getProperty(engine, name, v);
-}
-
-bool UserFunction::setProperty(Engine& engine, const String* name, const Value& v) {
-	return createUserObject(engine)->setProperty(engine, name, v);
-}
-
-bool UserFunction::deleteProperty(Engine& engine, const String* name) {
-	return createUserObject(engine)->deleteProperty(engine, name);
-}
-
-Enumerator* UserFunction::getPropertyEnumerator(Engine& engine) const {
-	return createUserObject(engine)->getPropertyEnumerator(engine);
-}
-
-bool UserFunction::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
-	return createUserObject(engine)->defineProperty(engine, name, v, attributes);
-}
-
-bool UserFunction::isPropertyEnumerable(Engine& engine, const String* name) const {
-	return createUserObject(engine)->isPropertyEnumerable(engine, name);
-}
-
-Object* UserFunction::getPrototype(Engine& engine) const {
-	return createUserObject(engine)->getPrototype(engine);
-}
-
-UserObject* UserFunction::createUserObject(Engine& engine) const {
-	if (userObject == 0) {
-		Object* usePrototype = (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
-				: static_cast<Object*>(engine.functionPrototype));
-		userObject = engine.getHeap().manage(new UserObject(usePrototype));
-		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
-		Attributes attributes;
-		attributes.dontEnum = true;
-		prototype->defineProperty(engine, &CONSTRUCTOR_STRING, Value(const_cast<UserFunction*>(this)), attributes);
-		attributes.dontDelete = true;
-		userObject->defineProperty(engine, &PROTOTYPE_STRING, Value(prototype), attributes);
-		attributes.readOnly = true;
-		userObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
-	}
-	return userObject;
-}
+Int32 UserFunction::getLengthProperty(Engine& engine) const { return codeDef->getArgumentsCount(); }
 
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 	return Value();
+}
+
+
+/* --- SpecialConstructorFunction --- */
+
+SpecialConstructorFunction::SpecialConstructorFunction(Object* constructorFunction, Object* regularFunction)
+		: constructorFunction(constructorFunction)
+		, regularFunction(regularFunction) {
+}
+
+Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return regularFunction->call(engine, processor, argc, argv, thisValue);
+}
+
+Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return constructorFunction->call(engine, processor, argc, argv, thisValue);
+}
+
+Int32 SpecialConstructorFunction::getLengthProperty(Engine& engine) const {
+	Value v;
+	constructorFunction->getProperty(engine, &LENGTH_STRING, &v);
+	return v.toInt();
 }
 
 /* --- Arguments --- */
@@ -1469,16 +1483,14 @@ bool Processor::privateRun() {
 
 			case TO_PRIMITIVE_OP:
 				if ((o = vsp[0].asObject()) != 0) {
-					Value* returnPointer = vsp;
-					*returnPointer = o->toPrimitive(engine, *this, false);
+					engine.toPrimitiveFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
 			case TO_STRING_OP:
 				if (!vsp[0].isString()) {
 					if ((o = vsp[0].asObject()) != 0) {
-						Value* returnPointer = vsp;
-						*returnPointer = o->toPrimitive(engine, *this, true);
+						engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					} else {
 						vsp[0] = Value(vsp[0].toString(heap));
 					}
@@ -1491,7 +1503,7 @@ bool Processor::privateRun() {
 						std::swap(vsp[-1], vsp[0]);
 					}
 					if (vsp[-1].isString() || vsp[-1].isNumber()) {
-						engine.toPrimitiveValueFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+						engine.toPrimitiveFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
 				}
 				break;
@@ -3217,6 +3229,17 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 	return Value::UNDEFINED;
 }
 
+Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	if (argc >= 2) {
+		Object* constructorFunction = argv[0].toObject(engine, false);
+		Object* regularFunction = argv[1].toObject(engine, false);
+		if (constructorFunction != 0 && regularFunction != 0) {
+			return Value(engine.getHeap().manage(new SpecialConstructorFunction(constructorFunction, regularFunction)));
+		}
+	}
+	return Value::UNDEFINED;
+}
+
 Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	bool success = false;
 	if (argc >= 2) {
@@ -3272,7 +3295,7 @@ UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 const String EMPTY_SOURCE_CODE("() { }");
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
-		, evalDirectFunction(true), functionPrototype(0), toPrimitiveValueFunction(0), toStringFunction(0)
+		, evalDirectFunction(true), functionPrototype(0), toPrimitiveFunction(0), toStringFunction(0)
 		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
@@ -3305,39 +3328,6 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 	globals->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	globals->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	globals->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
-	
-	{
-		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
-		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
-		gcHeap.protect(&compiler);
-		// FIX : throw what?
-		// full source:
-		/*
-			function toPrimitiveValue(o) {
-				var v;
-				function convertWith(m) {
-					var t;
-					return (typeof (o[m]) === "function" && ((v = o[m]()) === null || ((t = typeof(v)) !== 'object' && t !== 'function')));
-				}
-				if (!convertWith("valueOf") && !convertWith("toString")) {
-					throw("error");
-				}
-				return v;
-			}
-		*/
-		String sourceCode("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('valueOf')&&!a('toString'))throw'error';return b}");
-		compiler.compileFunction(sourceCode.begin(), sourceCode.end(), ANONYMOUS_STRING);
-		toPrimitiveValueFunction = gcHeap.protect(new UserFunction(codeDef, globals));
-	}
-	{
-		CodeDefinition* codeDef = gcHeap.manage(new CodeDefinition());
-		Compiler compiler(gcHeap, codeDef, Compiler::FOR_FUNCTION);
-		gcHeap.protect(&compiler);
-		// FIX : isb+'' right at the end here? + converts with toPrimitiveValue
-		String sourceCode("(c){function a(a){var d;return'function'===typeof c[a]&&(null===(b=c[a]())||'object'!==(d=typeof b)&&'function'!==d)}var b;if(!a('toString')&&!a('valueOf'))throw'error';return b+''}");
-		compiler.compileFunction(sourceCode.begin(), sourceCode.end(), ANONYMOUS_STRING);
-		toStringFunction = gcHeap.protect(new UserFunction(codeDef, globals));
-	}
 }
 
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
@@ -3350,6 +3340,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, createWrapper));
 	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, defineProperty));
 	supportObject->setProperty(*this, gcHeap.manage(new String("compileFunction")), newNativeFunction<NativeFunction>(gcHeap, compileFunction));
+	supportObject->setProperty(*this, gcHeap.manage(new String("specialConstructor")), newNativeFunction<NativeFunction>(gcHeap, specialConstructor));
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
@@ -3392,6 +3383,19 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		assert(!needsMoreTime);
 	}
 	gcHeap.gc();
+
+	// FIX: UserFunction cast sucks! call() instead of chain() in Processor so that we can have arbitrary object
+	toPrimitiveFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toPrimitive").asObject());
+	if (toPrimitiveFunction == 0) {
+	// FIX : all these gcHeap.manage(new String()) ... could be a utility function!
+		throw Exception(gcHeap, Value(gcHeap.manage(new String("Standard library is missing support.toPrimitive"))));
+	}
+		
+	// FIX : .toString is really a bad name!
+	toStringFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toString").asObject());
+	if (toStringFunction == 0) {
+		throw Exception(gcHeap, Value(gcHeap.manage(new String("Standard library is missing support.toString"))));
+	}
 }
 
 #include <fstream>

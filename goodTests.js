@@ -845,6 +845,12 @@ var o={koko:"koko"};
 print("koko" in o);
 print(v in o);
 
+var a = [];
+a["5.0"]=2384;
+a["5"]=9812;
+print(a[new String("5.0")]);
+print(a[new Number("5.0")]);
+
 print("*** eval ***");
 
 print(eval("3"))
@@ -1214,35 +1220,53 @@ mandelbrot();
 	print("*** wrappers ***");
 
 	if (true) {
-		var constants = [ undefined, null, false, true, 1.2345, 12, +Infinity, NaN, '', 'xyzzy', { "i am": "object" }, [ 'i', 'am', 'array' ] ];
-		var constructorNames = [ 'Boolean', 'Number', 'String', 'Object', 'Array' ];
+		var constants = [
+			undefined, null, false, true, 1.2345, 12, +Infinity, NaN, '', 'xyzzy'
+			, { "i am": "object" }, [ 'i', 'am', 'array' ]
+		];
+		var constructorNames = [ 'Boolean', 'Number', 'String', 'Object'/*, 'Array'*/ ];
+		var testArguments = [ 'true', '3.4567', -99.99, 123.4, 5.678 ];
 		for (var j = 0; j < constructorNames.length; ++j) {
-			var constructor = eval(constructorNames[j]);
-			var s = '';
-			for (var i = -1; i < constants.length; ++i) {
-				if (s) s += ', ';
-				try {
-					var o = (i < 0 ? new constructor() : new constructor(constants[i]));
+			var name = constructorNames[j];
+			var constructor = this[name];
+			for (var k = 0; k < 2; ++k) {
+				var s = '';
+				for (var i = -1; i < constants.length; ++i) {
+					if (s) s += ', ';
 					try {
-						s += o.valueOf();
-					}
-					catch (x) {
-						s += 'error';
-					}
-					s += "/";
-					try {
-						s += o.toString();
+						var o = (k === 0 ?
+								(i < 0 ? new constructor() : new constructor(constants[i]))
+								: (i < 0 ? constructor() : constructor(constants[i])));
+						try {
+							s += (typeof o)[0] + '_' + o.valueOf();
+						}
+						catch (x) {
+							s += 'error';
+						}
+						s += "/";
+						try {
+							s += (typeof o)[0] + '_' + o.toString();
+						}
+						catch (x) {
+							s += 'error';
+						}
 					}
 					catch (x) {
 						s += 'error';
 					}
 				}
-				catch (x) {
-					s += 'error';
-				}
+				print((k === 0 ? 'new ' : '') + name + '(): ' + s);
 			}
-			print(constructorNames[j] + '(): ' + s);
 		}
+	}
+
+	{
+		var o0 = new Object();
+		var o1 = new Object();
+		print("o0 === o1: " + (o0 === o1));
+		o0 = new Object();
+		o1 = new Object(o0);
+		print("o0 === o1: " + (o0 === o1));
 	}
 
 	/*
@@ -1326,15 +1350,80 @@ new String("a") == new String("a") is false.
 
 (function() {
 	print("*** stdlib ***");
-
-	function testReadOnlyConstant(constant) {
-		print("typeof " + constant + ": " + eval("typeof " + constant));
-		print(constant + ": " + eval(constant));
-		print("delete " + constant + ": " + eval("delete " + constant));
-		print("typeof " + constant + ": " + eval("typeof " + constant));
+	
+// FIX : drop
+/*	function printAndEval(s) {
+		var v;
+		print(s + ": " + (v = eval(s)));
+		return v;
+	};
+*/
+	function analyzeFlags(object, property) {
+		var dontEnum = true;
+		for (var p in object) {
+			if (p === property) {
+				dontEnum = false;
+				break;
+			}
+		}
+		var valueWas = object[property];
+		var testObject = { };
+		object[property] = testObject;
+		var valueIs = object[property];
+		var readOnly = (valueIs !== testObject);
+		var deleted = delete object[property];
+		var dontDelete = (property in object);
+		print(property + " : " + (dontEnum ? "dontEnum," : "") + (readOnly ? "readOnly," : "")
+				+ (dontDelete ? "dontDelete," : "") + " (deleted:" + deleted + ')');
+		object[property] = valueWas;
+	};
+	
+	var readOnlyConstants = [ "NaN", "Infinity", "undefined" ];
+	for (var i = 0; i < readOnlyConstants.length; ++i) {
+		var constant = readOnlyConstants[i];
+		print(constant + ": " + this[constant]);
+		analyzeFlags(this, constant);
+	/*	printAndEval(constant);
+		printAndEval("typeof " + constant);
+		printAndEval("delete " + constant);
+		printAndEval("typeof " + constant);
+		printAndEval(constant + " = 192837465");
+		printAndEval(constant);*/
 	};
 
-	testReadOnlyConstant("NaN");
-	testReadOnlyConstant("Infinity");
-	testReadOnlyConstant("undefined");
+	var builtInConstructors = [ "Object", "Boolean", "Number", "String", "Function" ];
+	for (var i = 0; i < builtInConstructors.length; ++i) {
+		var constructor = builtInConstructors[i];
+/* FIX : drop
+		print(constructor);
+		printAndEval("typeof " + constructor);
+		var copy = eval(constructor);
+		printAndEval(constructor + " = 192837465");
+		printAndEval(constructor);
+		printAndEval("delete " + constructor);
+		printAndEval("typeof " + constructor);
+		eval(constructor + " = copy");
+		printAndEval("typeof " + constructor);
+		printAndEval(constructor + ".length");
+		printAndEval("delete " + constructor + ".length");
+		printAndEval(constructor + ".length");
+		eval(constructor + ".length = 938");
+		printAndEval(constructor + ".length");
+		var prototypeWas = eval(constructor + ".prototype");
+		eval(constructor + ".prototype = { 'wrong': 'prototype' }");
+		printAndEval(constructor + ".prototype === prototypeWas");
+		printAndEval("delete " + constructor + ".prototype");
+		printAndEval(constructor + ".prototype === prototypeWas");
+		printAndEval("typeof " + constructor + ".prototype.constructor");
+		printAndEval(constructor + ".prototype.constructor === " + constructor);*/
+		print(constructor + ": " + typeof this[constructor]);
+		analyzeFlags(this, constructor);
+		print(constructor + ".prototype: " + this[constructor].prototype);
+		analyzeFlags(this[constructor], 'prototype');
+		print(constructor + ".prototype.constructor: " + typeof this[constructor].prototype.constructor);
+		analyzeFlags(this[constructor].prototype, 'constructor');
+		print(this[constructor].prototype.constructor === this[constructor]);
+		print(constructor + ".length: " + this[constructor].length);
+		analyzeFlags(this[constructor], 'length');
+	}
 })();
