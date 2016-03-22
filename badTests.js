@@ -154,3 +154,11 @@ return "a" // is not acceptable in global scope
 
 (a=5)+=6
 
+(null).asdf = 3 // not valid object
+
+(void 0).asdf = 3 // not valid object
+
+delete (void 0).asdf // not valid object
+
+delete (null).asdf // not valid object
+

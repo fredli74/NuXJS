@@ -477,6 +477,10 @@ print(delete "constant is always ok");
 
 (function() { var x=new(function(){}); x.a="a"; var b=function(){}; b.prototype=x; var c=new b; c.a="b"; print(c.a); delete c.a; print(c.a) })();
 
+print('delete "asdf".qwer: ' + (delete "asdf".qwer));
+print('delete (123).qwer: ' + (delete (123).qwer));
+print('delete (false).qwer: ' + (delete (false).qwer));
+
 print("*** break & continue ***")
 
 { var i = 0; while (++i < 5) { print("before " + i); if (i > 2) continue; print("after " + i) } }
@@ -1378,11 +1382,15 @@ new String("a") == new String("a") is false.
 		object[property] = valueWas;
 	};
 	
-	var readOnlyConstants = [ "NaN", "Infinity", "undefined" ];
+	var readOnlyConstants = [
+		[ this, "NaN" ], [ this, "Infinity" ], [ this, "undefined" ]
+		, [ Number, "MAX_VALUE" ], [ Number, "MIN_VALUE" ], [ Number, "NaN" ], [ Number, "NEGATIVE_INFINITY" ], [ Number, "POSITIVE_INFINITY" ]
+	];
 	for (var i = 0; i < readOnlyConstants.length; ++i) {
-		var constant = readOnlyConstants[i];
-		print(constant + ": " + this[constant]);
-		analyzeFlags(this, constant);
+		var base = readOnlyConstants[i][0];
+		var constant = readOnlyConstants[i][1];
+		print(constant + ": " + base[constant]);
+		analyzeFlags(base, constant);
 	/*	printAndEval(constant);
 		printAndEval("typeof " + constant);
 		printAndEval("delete " + constant);
@@ -1391,7 +1399,7 @@ new String("a") == new String("a") is false.
 		printAndEval(constant);*/
 	};
 
-	var builtInConstructors = [ "Object", "Boolean", "Number", "String", "Function" ];
+	var builtInConstructors = [ "Object", "Boolean", "Number", "String", "Function", "Error" ];
 	for (var i = 0; i < builtInConstructors.length; ++i) {
 		var constructor = builtInConstructors[i];
 /* FIX : drop
@@ -1426,4 +1434,75 @@ new String("a") == new String("a") is false.
 		print(constructor + ".length: " + this[constructor].length);
 		analyzeFlags(this[constructor], 'length');
 	}
+
+	// FIX : test that all functions in all standard library objects are not constructable and that they don't have prototype fields
+
+	{
+		var x = Object(true);
+		print("x: " + x);
+		print("x instanceof Boolean: " + (x instanceof Boolean));
+		var realBoolean = Boolean;
+		Boolean = function(b) { print("custom Boolean call"); return realBoolean(!b) };
+		x = new Boolean(true);
+		print("x: " + x);
+		print("x instanceof Boolean: " + (x instanceof Boolean));
+		print("x instanceof realBoolean: " + (x instanceof realBoolean));
+		realBoolean.prototype.capture = function() { return this; };
+		Boolean.prototype.capture = function() { return this; };
+		x = (true).capture();
+		delete realBoolean.prototype.capture;
+		delete Boolean.prototype.capture;
+		print("x: " + x);
+		print("x instanceof Boolean: " + (x instanceof Boolean));
+		print("x instanceof realBoolean: " + (x instanceof realBoolean));
+		x = Object(true);
+		print("x: " + x);
+		print("x instanceof Boolean: " + (x instanceof Boolean));
+		print("x instanceof realBoolean: " + (x instanceof realBoolean));
+	
+		var x = Object(1.2345);
+		print("x: " + x);
+		print("x instanceof Number: " + (x instanceof Number));
+		var realNumber = Number;
+		Number = function(b) { print("custom Number call"); return realNumber(!b) };
+		x = new Number(1.2345);
+		print("x: " + x);
+		print("x instanceof Number: " + (x instanceof Number));
+		print("x instanceof realNumber: " + (x instanceof realNumber));
+		realNumber.prototype.capture = function() { return this; };
+		Number.prototype.capture = function() { return this; };
+		x = (1.2345).capture();
+		delete realNumber.prototype.capture;
+		delete Number.prototype.capture;
+		print("x: " + x);
+		print("x instanceof Number: " + (x instanceof Number));
+		print("x instanceof realNumber: " + (x instanceof realNumber));
+		x = Object(1.2345);
+		print("x: " + x);
+		print("x instanceof Number: " + (x instanceof Number));
+		print("x instanceof realNumber: " + (x instanceof realNumber));
+	
+		var x = Object("strongbad");
+		print("x: " + x);
+		print("x instanceof String: " + (x instanceof String));
+		var realString = String;
+		String = function(b) { print("custom String call"); return realString(!b) };
+		x = new String("strongbad");
+		print("x: " + x);
+		print("x instanceof String: " + (x instanceof String));
+		print("x instanceof realString: " + (x instanceof realString));
+		realString.prototype.capture = function() { return this; };
+		String.prototype.capture = function() { return this; };
+		x = ("strongbad").capture();
+		delete realString.prototype.capture;
+		delete String.prototype.capture;
+		print("x: " + x);
+		print("x instanceof String: " + (x instanceof String));
+		print("x instanceof realString: " + (x instanceof realString));
+		x = Object("strongbad");
+		print("x: " + x);
+		print("x instanceof String: " + (x instanceof String));
+		print("x instanceof realString: " + (x instanceof realString));
+	}
 })();
+

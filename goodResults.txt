@@ -309,12 +309,15 @@ true
 *** delete statement ***
 true
 true
-false
+true
 false
 false
 true
 b
 a
+delete "asdf".qwer: true
+delete (123).qwer: true
+delete (false).qwer: true
 *** break & continue ***
 before 1
 after 1
@@ -1625,6 +1628,16 @@ Infinity: Infinity
 Infinity : dontEnum,readOnly,dontDelete, (deleted:false)
 undefined: undefined
 undefined : dontEnum,readOnly,dontDelete, (deleted:false)
+MAX_VALUE: 1.797693134862e+308
+MAX_VALUE : dontEnum,readOnly,dontDelete, (deleted:false)
+MIN_VALUE: 0
+MIN_VALUE : dontEnum,readOnly,dontDelete, (deleted:false)
+NaN: NaN
+NaN : dontEnum,readOnly,dontDelete, (deleted:false)
+NEGATIVE_INFINITY: -Infinity
+NEGATIVE_INFINITY : dontEnum,readOnly,dontDelete, (deleted:false)
+POSITIVE_INFINITY: Infinity
+POSITIVE_INFINITY : dontEnum,readOnly,dontDelete, (deleted:false)
 Object: function
 Object : dontEnum, (deleted:true)
 Object.prototype: [object Object]
@@ -1663,10 +1676,55 @@ String.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
 Function: function
 Function : dontEnum, (deleted:true)
-Function.prototype: function anonymous() { }
+Function.prototype: function() { [native code] }
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 Function.prototype.constructor: function
 constructor : dontDelete, (deleted:true)
 true
 Function.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
+Error: function
+Error : dontEnum, (deleted:true)
+Error.prototype: Error
+prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+Error.prototype.constructor: function
+constructor : dontDelete, (deleted:true)
+true
+Error.length: 1
+length : dontEnum,readOnly,dontDelete, (deleted:false)
+x: true
+x instanceof Boolean: true
+custom Boolean call
+x: [object Object]
+x instanceof Boolean: true
+x instanceof realBoolean: false
+x: true
+x instanceof Boolean: false
+x instanceof realBoolean: true
+x: true
+x instanceof Boolean: false
+x instanceof realBoolean: true
+x: 1.2345
+x instanceof Number: true
+custom Number call
+x: [object Object]
+x instanceof Number: true
+x instanceof realNumber: false
+x: 1.2345
+x instanceof Number: false
+x instanceof realNumber: true
+x: 1.2345
+x instanceof Number: false
+x instanceof realNumber: true
+x: strongbad
+x instanceof String: true
+custom String call
+x: [object Object]
+x instanceof String: true
+x instanceof realString: false
+x: strongbad
+x instanceof String: false
+x instanceof realString: true
+x: strongbad
+x instanceof String: false
+x instanceof realString: true

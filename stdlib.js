@@ -1,4 +1,26 @@
+/*
+	support: {
+		prototypes: {	// built-in prototype objects
+			object, function, string, boolean, number, array
+		},
+		natives: {		// built-in native functions (mainly math etc)
+			asin(), atan() etc..
+		},
+		defineProperty(object: object, property: string, value: any, readOnly: boolean, dontEnum: boolean, dontDelete: boolean): boolean
+		compileFunction(sourceCode: string, name: string): function
+		createWrapper(className: string, internalValue: any, prototype: object): object
+		specialConstructor(regularCall: function): function									// = exception on construction and no .prototype either
+		specialConstructor(regularCall: function, constructorCall: function): function
+		getInternalProperty(object: object, 'class'|'value'|'prototype'): any
+		undefined
+		NaN
+		Infinity
+	}
+*/
+
+var global = this;
 var natives = support.natives;
+var specialConstructor = support.specialConstructor;
 
 var isNaN = function(v) { return natives.isNaN(+v); };
 var isFinite = function(v) { return natives.isFinite(+v); };
@@ -8,17 +30,6 @@ function toInteger(v) {
 var abs = function(v) { return ((v = +v) < 0 ? -v : v); }
 var sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
 var alphaDigits = "0123456789abcdefghijklmnopqrstuvwxyz";
-
-function toObject(v) {
-	switch (typeof v) {
-		case "object":
-		case "function": if (v !== null) return v;
-		case "boolean": return new Boolean(v);
-		case "number": return new Number(v);
-		case "string": return new String(v);
-	}
-	throw "type error"; // FIX
-}
 
 function isPrimitive(v) {
 	var v;
@@ -48,116 +59,110 @@ function defineProperties(object, attribs, props) {
 	for (p in props) support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
 	return object;
 }
-/*
-function createClass(constructorFunction, regularFunction, props) {
-	return defineProperties(support.specialConstructor(constructorFunction, regularFunction), { dontEnum }, { ;
+
+function createError(name, message, prototype) {
+	var e;
+	(e = support.createWrapper('Error', name, prototype)).message = ('' + (message !== void 0 ? message : ''));
+	return e;
 }
-*/
-defineProperties(this, { dontEnum: true }, {
-	Object: function(v) {
-		switch (typeof v) {
-			case "object":
-			case "function": if (v !== null) return v;
-			case "undefined": return { };
-			case "boolean": return new Boolean(v);
-			case "number": return new Number(v);
-			case "string": return new String(v);
-		}
-	},
-	Function: function(body) {
-		var source = '(', n = arguments.length - 1;
-		for (var i = 0; i < n; ++i) {
-			source += arguments[i];
-			if (i < n - 1) s += ',';
-		}
-		source += ') { ';
-		if (n >= 0) source += arguments[n];
-		return support.compileFunction(source + ' }', 'anonymous');
-	},
-	Boolean: support.specialConstructor(function(v) {
-			return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
-		}, function(v) {
-			return !!v;
-		}
-	),
-	Number: support.specialConstructor(function(v) {
-			return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
-		}, function(v) {
-			return (arguments.length ? +v : 0);
-		}
-	),
-	String: support.specialConstructor(function(v) {
-			return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
-		}, function(v) {
-			return (arguments.length ? '' + v : '');
-		}
-	),
-	isNaN: isNaN,
-	isFinite: isFinite,
-	Math: support.createWrapper('Math', undefined)
-});
 
-defineProperties(this, { readOnly: true, dontEnum: true, dontDelete: true }, {
-	NaN: support.NaN, Infinity: support.Infinity, undefined: support.undefined
-});
+/* --- Object --- */
 
-defineProperties(Math, { dontEnum: true }, {
-	abs: abs,
-	floor: function(v) { return natives.floor(+v); },
-	sign: sign,
-	sqrt: function(v) { return natives.sqrt(+v); }
-});
-
+var Object = function(v) {
+	switch (typeof v) {
+		case "object":
+		case "function": if (v !== null) return v;
+		case "undefined": return { };
+		case "boolean": return new Boolean(v);
+		case "number": return new Number(v);
+		case "string": return new String(v);
+	}
+};
 support.defineProperty(Object, 'prototype', support.prototypes.Object, true, true, true);
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: function() {
+	valueOf: specialConstructor(function() {
 		return this;
-	},
-	toString: function() {
+	}),
+	toString: specialConstructor(function() {
 		return '[object ' + support.getInternalProperty(this, 'class') + ']'
-	},
-	isPrototypeOf: function(v) {
+	}),
+	isPrototypeOf: specialConstructor(function(v) {
 		while (v = support.getInternalProperty(v, 'prototype')) {
 			if (v == this) return true;
 		}
 		return false;
-	}
+	})
 });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	toLocaleString: Object.prototype.toString
 });
 
+/* --- Function --- */
+
+var Function = function(body) {
+	var source = '(', n = arguments.length - 1;
+	for (var i = 0; i < n; ++i) {
+		source += arguments[i];
+		if (i < n - 1) s += ',';
+	}
+	source += ') { ';
+	if (n >= 0) source += arguments[n];
+	return support.compileFunction(source + ' }', 'anonymous');
+};
 support.defineProperty(Function, 'prototype', support.prototypes.Function, true, true, true);
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
-	toString: function() { // FIX : <- generic, make a factory function
+	toString: specialConstructor(function() { // FIX : <- generic, make a factory function
 		if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
 		return support.getInternalProperty(this, 'value');
-	}
+	})
 });
 
+/* --- Boolean --- */
+
+var Boolean = specialConstructor(function(v) {
+		return !!v;
+	}, function(v) {
+		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
+	}
+);
 support.defineProperty(Boolean, 'prototype', support.prototypes.Boolean, true, true, true);
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
-	valueOf: function() {
+	valueOf: specialConstructor(function() {
 		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
 		return support.getInternalProperty(this, 'value');
-	},
-	toString: function() {
+	}),
+	toString: specialConstructor(function() {
 		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
 		return '' + support.getInternalProperty(this, 'value');
-	}
+	})
 });
 
-support.defineProperty(Number, 'prototype', support.prototypes.Number, true, true, true);
+/* --- Number --- */
+
+var Number = specialConstructor(function(v) {
+		return (arguments.length ? +v : 0);
+	}, function(v) {
+		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
+	}
+);
+defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
+	prototype: support.prototypes.Number,
+	MAX_VALUE: support.maxNumber,
+	MIN_VALUE: support.minNumber,
+	NaN: support.NaN,
+	NEGATIVE_INFINITY: -support.Infinity,
+	POSITIVE_INFINITY: support.Infinity
+});
 defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: function() {
+	valueOf: specialConstructor(function() {
 		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
 		return support.getInternalProperty(this, 'value');
-	},
-	toString: function(radix) {
+	}),
+	toString: specialConstructor(function(radix) {
 		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
 		var n = support.getInternalProperty(this, 'value');
 		var r;
@@ -174,28 +179,71 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 			} while (v > 0);
 			return (n < 0 ? '-' : '') + s;
 		}
-	}
+	})
 });
 
+/* --- String --- */
+
+var String = specialConstructor(function(v) {
+		return (arguments.length ? '' + v : '');
+	}, function(v) {
+		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
+	}
+);
 support.defineProperty(String, 'prototype', support.prototypes.String, true, true, true);
 defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
-	valueOf: function() {
+	valueOf: specialConstructor(function() {
 		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
 		return support.getInternalProperty(this, 'value');
-	},
-	toString: function() {
+	}),
+	toString: specialConstructor(function() {
 		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
 		return support.getInternalProperty(this, 'value');
-	}
+	})
 });
 
 defineProperties(String, { dontEnum: true }, {
-	fromCharCode: function(v) {
+	fromCharCode: specialConstructor(function(v) {
 		var l;
 		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
 		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
 		return s;
-	}
+	})
 });
 
+/* --- Set up globals --- */
+
+defineProperties(global, { dontEnum: true }, {
+	Object: Object,
+	Function: Function,
+	Boolean: Boolean,
+	Number: Number,
+	String: String,
+	Error: function(message) { return createError('Error', message, support.prototypes.Error); },
+	TypeError: function(message) { return createError('TypeError', message, support.prototypes.Error); },
+	RangeError: function(message) { return createError('RangeError', message, support.prototypes.Error); },
+	isNaN: specialConstructor(isNaN),
+	isFinite: specialConstructor(isFinite),
+	Math: support.createWrapper('Math', void 0)
+});
+
+defineProperties(global, { readOnly: true, dontEnum: true, dontDelete: true }, {
+	NaN: support.NaN, Infinity: support.Infinity, undefined: support.undefined
+});
+
+defineProperties(Math, { dontEnum: true }, {
+	abs: specialConstructor(abs),
+	floor: specialConstructor(function(v) { return natives.floor(+v); }),
+	sign: specialConstructor(sign),
+	sqrt: specialConstructor(function(v) { return natives.sqrt(+v); })
+});
+
+support.prototypes.Error = { };
+support.defineProperty(Error, 'prototype', support.prototypes.Error, true, true, true);
+defineProperties(Error.prototype, { dontEnum: true }, {
+	constructor: Error,
+	name: "Error",
+	message: "",
+	toString: specialConstructor(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
+});

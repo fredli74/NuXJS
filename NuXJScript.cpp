@@ -305,6 +305,11 @@ const String VALUE_STRING("value");
 const String CONSTRUCTOR_STRING("constructor");
 const String EVAL_STRING("eval");
 const String NATIVE_FUNCTION_STRING("function() { [native code] }");
+const String E_RROR_STRING("Error");
+const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
+	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
+};
+
 
 /* --- Value --- */
 
@@ -679,8 +684,12 @@ bool Object::setProperty(Engine& engine, const String* name, const Value& v) { r
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 bool Object::isPropertyEnumerable(Engine& engine, const String* name) const { return hasProperty(engine, name); }
+bool Object::hasInstance(Engine& engine, Processor& processor, Object* object) const {
+	processor.error(TYPE_ERROR);
+	return false;
+}
 Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	processor.error(); // FIX : error string, type should be TypeError
+	processor.error(TYPE_ERROR);
 	return Value();
 }
 Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -978,9 +987,24 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 Value Function::getInternalValue() const { return Value(&NATIVE_FUNCTION_STRING); }
-Object* Function::getPrototype(Engine& engine) const {
-	return (this == engine.functionPrototype ? static_cast<Object*>(&engine.objectPrototype)
-			: static_cast<Object*>(engine.functionPrototype));
+Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; };
+
+bool Function::hasInstance(Engine& engine, Processor& processor, Object* object) const {
+	if (object == 0) {
+		return false;
+	}
+	Value v;
+	Object* prototypeObject;
+	if (!getProperty(engine, &PROTOTYPE_STRING, &v) || (prototypeObject = v.asObject()) == 0) {
+		processor.error(TYPE_ERROR);
+		return false;
+	}
+	while ((object = object->getPrototype(engine)) != 0) {
+		if (object == prototypeObject) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /* --- Object support --- */
@@ -1090,42 +1114,44 @@ ExtensibleFunction::ExtensibleFunction() : userObject(0) { }
 
 // FIX : how can we create a proxy easier, shorter and safer? as it is now it is easy to forget to add relevant methods here when we add them to Object
 bool ExtensibleFunction::getProperty(Engine& engine, const String* name, Value* v) const {
-	return createUserObject(engine)->getProperty(engine, name, v);
+	return getUserObject(engine)->getProperty(engine, name, v);
 }
 
 bool ExtensibleFunction::setProperty(Engine& engine, const String* name, const Value& v) {
-	return createUserObject(engine)->setProperty(engine, name, v);
+	return getUserObject(engine)->setProperty(engine, name, v);
 }
 
 bool ExtensibleFunction::deleteProperty(Engine& engine, const String* name) {
-	return createUserObject(engine)->deleteProperty(engine, name);
+	return getUserObject(engine)->deleteProperty(engine, name);
 }
 
 Enumerator* ExtensibleFunction::getPropertyEnumerator(Engine& engine) const {
-	return createUserObject(engine)->getPropertyEnumerator(engine);
+	return getUserObject(engine)->getPropertyEnumerator(engine);
 }
 
 bool ExtensibleFunction::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
-	return createUserObject(engine)->defineProperty(engine, name, v, attributes);
+	return getUserObject(engine)->defineProperty(engine, name, v, attributes);
 }
 
 bool ExtensibleFunction::isPropertyEnumerable(Engine& engine, const String* name) const {
-	return createUserObject(engine)->isPropertyEnumerable(engine, name);
+	return getUserObject(engine)->isPropertyEnumerable(engine, name);
 }
 
-UserObject* ExtensibleFunction::createUserObject(Engine& engine) const {
+UserObject* ExtensibleFunction::getUserObject(Engine& engine) const {
 	if (userObject == 0) {
 		userObject = engine.getHeap().manage(new UserObject(getPrototype(engine)));
-		UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
-		Attributes attributes;
-		attributes.dontEnum = true;
-		prototype->defineProperty(engine, &CONSTRUCTOR_STRING, Value(const_cast<ExtensibleFunction*>(this)), attributes);
-		attributes.dontDelete = true;
-		userObject->defineProperty(engine, &PROTOTYPE_STRING, Value(prototype), attributes);
-		attributes.readOnly = true;
-		userObject->defineProperty(engine, &LENGTH_STRING, Value(getLengthProperty(engine)), attributes);
+		constructUserObject(engine);
 	}
 	return userObject;
+}
+
+void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
+	UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
+	Attributes attributes;
+	attributes.dontEnum = true;
+	prototype->defineProperty(engine, &CONSTRUCTOR_STRING, Value(const_cast<ExtensibleFunction*>(this)), attributes);
+	attributes.dontDelete = true;
+	forObject->defineProperty(engine, &PROTOTYPE_STRING, Value(prototype), attributes);
 }
 
 /* --- UserFunction --- */
@@ -1140,19 +1166,25 @@ Value UserFunction::getInternalValue() const {
 	return (s != 0 ? Value(s) : Value::UNDEFINED);
 }
 
-Int32 UserFunction::getLengthProperty(Engine& engine) const { return codeDef->getArgumentsCount(); }
-
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	processor.chain(this, argc, argv, thisValue);
 	return Value();
 }
 
+void UserFunction::constructUserObject(Engine& engine) const {
+	createPrototypeObject(engine, userObject);
+	Attributes attributes;
+	attributes.dontEnum = true;
+	attributes.dontDelete = true;
+	attributes.readOnly = true;
+	userObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
+}
 
 /* --- SpecialConstructorFunction --- */
 
-SpecialConstructorFunction::SpecialConstructorFunction(Object* constructorFunction, Object* regularFunction)
-		: constructorFunction(constructorFunction)
-		, regularFunction(regularFunction) {
+SpecialConstructorFunction::SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction)
+		: regularFunction(regularFunction), constructorFunction(constructorFunction) {
+	assert(regularFunction != 0);
 }
 
 Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -1160,13 +1192,44 @@ Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int
 }
 
 Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return constructorFunction->call(engine, processor, argc, argv, thisValue);
+	if (constructorFunction == 0) {
+		processor.error(TYPE_ERROR);
+		return Value();
+	} else {
+		return constructorFunction->call(engine, processor, argc, argv, thisValue);
+	}
 }
 
-Int32 SpecialConstructorFunction::getLengthProperty(Engine& engine) const {
+void SpecialConstructorFunction::constructUserObject(Engine& engine) const {
+	Object* lengthObject = regularFunction;
+	if (constructorFunction != 0) {
+		createPrototypeObject(engine, userObject);
+		lengthObject = constructorFunction;
+	}
+	Attributes attributes;
+	attributes.dontEnum = true;
+	attributes.readOnly = true;
+	attributes.dontDelete = true;
 	Value v;
-	constructorFunction->getProperty(engine, &LENGTH_STRING, &v);
-	return v.toInt();
+	if (lengthObject->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
+		userObject->defineProperty(engine, &LENGTH_STRING, v, attributes);
+	}
+}
+
+/* --- FunctionPrototypeFunction --- */
+
+Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	return Value::UNDEFINED;
+}
+
+Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
+
+void FunctionPrototypeFunction::constructUserObject(Engine& engine) const {
+	Attributes attributes; // FIX : constant for this common attribute?
+	attributes.dontEnum = true;
+	attributes.dontDelete = true;
+	attributes.readOnly = true;
+	userObject->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
 }
 
 /* --- Arguments --- */
@@ -1271,7 +1334,7 @@ bool FunctionFrame::getProperty(Engine& engine, const String* name, Value* v) co
 		*v = Value(selfFunction);
 		return true;
 	} else {
-		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster
+		return environment->getProperty(engine, name, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 	}
 }
 
@@ -1360,9 +1423,13 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -
 Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
-void Processor::error() {
-	static const String ERROR_STRING("runtime error"); // FIX : not thread-safe
-	throw Exception(engine.getHeap(), Value(&ERROR_STRING));
+void Processor::error(ErrorType errorType) {
+	assert(0 <= errorType && errorType < ERROR_TYPE_COUNT);
+	Object* errorObject = engine.getHeap().manage(new WrapperObject(&E_RROR_STRING, Value(&ERROR_NAMES[errorType])
+			, engine.errorPrototypes[errorType]));
+// FIX : which? both works!
+//	throwVirtualException(Value(errorObject)
+	throw Exception(engine.getHeap(), Value(errorObject));
 }
 
 void Processor::updateInternals() {
@@ -1431,10 +1498,16 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX
-		std::string s1("Unhandled exception: ");
-		std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
-		s1.append(s2.begin(), s2.end());
-		throw std::runtime_error(s1);
+		Object* o;
+		if ((o = exception.asObject()) != 0 && o->getClassName()->isEqualTo(E_RROR_STRING)) { // FIX : have special ErrorObjects and asError()?
+			std::wstring ws(o->getInternalValue().toString(engine.getHeap())->toStdString());
+			throw std::runtime_error(std::string(ws.begin(), ws.end()));
+		} else {
+			std::string s1("Unhandled exception: ");
+			std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
+			s1.append(s2.begin(), s2.end());
+			throw std::runtime_error(s1);
+		}
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
@@ -1462,20 +1535,28 @@ bool Processor::privateRun() {
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
-			case READ_NAMED_OP:		if (!frame->getProperty(engine, constants[operand()].getString(), ++vsp))
-										error(); // FIX : do we need to balance vsp on errors?
+			case READ_NAMED_OP:		if (!frame->getProperty(engine, constants[operand()].getString(), ++vsp)) {
+										error(REFERENCE_ERROR);
+									}
 									break;
 									
 			case WRITE_NAMED_OP:	frame->setProperty(engine, constants[operand()].getString(), vsp[0]);
 									break;
 									
-			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) error();
-									if (!o->getPropertyDeep(engine, vsp[0].getString(), vsp - 1))
+			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
+										error(TYPE_ERROR);
+										break;
+									}
+									if (!o->getPropertyDeep(engine, vsp[0].getString(), vsp - 1)) {
 										vsp[-1] = Value::UNDEFINED;
+									}
 									pop(1);
 									break;
 			
-			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) error();
+			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) {
+										error(TYPE_ERROR);
+										break;
+									}
 									o->setProperty(engine, vsp[-1].getString(), vsp[0]);
 									vsp[-2] = vsp[0];
 									pop(2);
@@ -1563,12 +1644,18 @@ bool Processor::privateRun() {
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand();
 				Object* thisObject = vsp[-n - 1].toObject(engine, true);
-				if (thisObject == 0) error();
+				if (thisObject == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				Value v(Value::NONEXISTENT);
 				thisObject->getPropertyDeep(engine, vsp[-n].toString(heap), &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Object* f = v.asObject();
-				if (f == 0) error(); // FIX : TypeError
+				if (f == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n + 1;
 				break;
@@ -1577,7 +1664,10 @@ bool Processor::privateRun() {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Object* f = vsp[-n].asObject();
-				if (f == 0) error(); // FIX : TypeError
+				if (f == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				if (f == &engine.evalFunction) f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
@@ -1587,7 +1677,10 @@ bool Processor::privateRun() {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Object* f = vsp[-n].asObject();
-				if (f == 0) error(); // FIX : TypeError
+				if (f == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				break;
@@ -1595,7 +1688,10 @@ bool Processor::privateRun() {
 			case NEW_OP: {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
-				if (f == 0) error(); // FIX : TypeError
+				if (f == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, &PROTOTYPE_STRING, &v);
 				Object* prototype = v.asObject();
@@ -1625,8 +1721,11 @@ bool Processor::privateRun() {
 			
 			case FRAME_OP: push(Value(frame)); break;
 			case DELETE_OP: {
-				o = vsp[-1].toObject(engine, false);
-				if (o == 0) error();
+				o = vsp[-1].toObject(engine, true);
+				if (o == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				poppush(Value(o->deleteProperty(engine, vsp[0].getString())));
 				break;
 			}
@@ -1654,10 +1753,23 @@ bool Processor::privateRun() {
 			case THROW_OP: throwVirtualException(vsp[0]); break;
 			case IN_OP: {
 				o = vsp[0].asObject();
-				if (o == 0) error(); // FIX : TypeError
+				if (o == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
 				vsp[-1] = Value(o->hasPropertyDeep(engine, vsp[-1].getString()));
 				pop(1);
-				break;				
+				break;
+			}
+			case INSTANCE_OF_OP: {
+				o = vsp[0].asObject();
+				if (o == 0) {
+					error(TYPE_ERROR);
+					break;
+				}
+				vsp[-1] = Value(o->hasInstance(engine, *this, vsp[-1].asObject()));
+				pop(1);
+				break;
 			}
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
@@ -1732,7 +1844,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
-		, "IN", "TYPEOF", "TYPEOF_NAMED"
+		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
 	const CodeWord* code = codeDef.getCodePointer();
@@ -1851,6 +1963,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
 	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP },
+	{ "instanceof", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false },
 	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, true }	// Important: must be last
 };
 
@@ -3230,11 +3343,11 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 }
 
 Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 2) {
-		Object* constructorFunction = argv[0].toObject(engine, false);
-		Object* regularFunction = argv[1].toObject(engine, false);
-		if (constructorFunction != 0 && regularFunction != 0) {
-			return Value(engine.getHeap().manage(new SpecialConstructorFunction(constructorFunction, regularFunction)));
+	if (argc >= 1) {
+		Object* regularFunction = argv[0].toObject(engine, false);
+		if (regularFunction != 0) {
+			Object* constructorFunction = (argc >= 2 ? argv[1].toObject(engine, false) : 0);
+			return Value(engine.getHeap().manage(new SpecialConstructorFunction(regularFunction, constructorFunction)));
 		}
 	}
 	return Value::UNDEFINED;
@@ -3292,27 +3405,28 @@ const String IS_NAN_STRING("isNaN");
 UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 const String IS_FINITE_STRING("isFinite");
 UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
-const String EMPTY_SOURCE_CODE("() { }");
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
-		, evalDirectFunction(true), functionPrototype(0), toPrimitiveFunction(0), toStringFunction(0)
+		, evalDirectFunction(true), toPrimitiveFunction(0), toStringFunction(0)
 		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
 	assert(heap.belongs(globals));
-	CodeDefinition* emptyCode = gcHeap.manage(new CodeDefinition());
-	{
-		Compiler compiler(gcHeap, emptyCode, Compiler::FOR_FUNCTION);
-		gcHeap.protect(&compiler); // FIX : really necessary? i don't think so, who is doing any gc now?
-		compiler.compileFunction(EMPTY_SOURCE_CODE.begin(), EMPTY_SOURCE_CODE.end(), ANONYMOUS_STRING); // FIX : constant opcodes
-	}
-	/// FIX : emptyCode->source
-	functionPrototype = gcHeap.protect(new UserFunction(emptyCode, globals));
+
+	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (WrapperObject*)(0));
+	
+	gcHeap.protect(&objectPrototype);
+	gcHeap.protect(&functionPrototype);
 	gcHeap.protect(&booleanPrototype);
 	gcHeap.protect(&numberPrototype);
 	gcHeap.protect(&stringPrototype);
-	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&arrayPrototype);
+	
+	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
+		Object* prototype = (i == 0 ? static_cast<Object*>(&objectPrototype) : static_cast<Object*>(errorPrototypes[0]));
+		errorPrototypes[i] = gcHeap.protect(new WrapperObject(&E_RROR_STRING, Value(&ERROR_NAMES[i]), prototype));
+	}
+	
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
 	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
 //	FunctionConstructor* functionObject = gcHeap.manage(new FunctionConstructor());
@@ -3344,6 +3458,8 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
+	supportObject->setProperty(*this, gcHeap.manage(new String("maxNumber")), Value(std::numeric_limits<double>::max()));
+	supportObject->setProperty(*this, gcHeap.manage(new String("minNumber")), Value(std::numeric_limits<double>::denorm_min()));
 
 	UserObject* nativesObject = gcHeap.manage(new UserObject(&objectPrototype));
 	supportObject->setProperty(*this, gcHeap.manage(new String("natives")), Value(nativesObject));
@@ -3354,7 +3470,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	nativesObject->setProperty(*this, &FLOOR_STRING, Value(&NATIVE_FLOOR_FUNCTION));
 
 	prototypesObject->setProperty(*this, &O_BJECT_STRING, Value(&objectPrototype));
-	prototypesObject->setProperty(*this, &F_UNCTION_STRING, Value(functionPrototype));
+	prototypesObject->setProperty(*this, &F_UNCTION_STRING, Value(&functionPrototype));
 	prototypesObject->setProperty(*this, &S_TRING_STRING, Value(&stringPrototype));
 	prototypesObject->setProperty(*this, &B_OOLEAN_STRING, Value(&booleanPrototype));
 	prototypesObject->setProperty(*this, &N_UMBER_STRING, Value(&numberPrototype));
@@ -3513,7 +3629,7 @@ supressStdErr = false;
 					compiler.compile(source);
 				}
 				catch (Exception& x) {
-					std::cout << "Compilation error: " << x.what() << std::endl;
+					std::cout << "SyntaxError: " << x.what() << std::endl;
 					int lineNumber = 1;
 					const Char* stopPoint = compiler.getStopPoint();
 					const Char* p = source.begin();
@@ -3560,12 +3676,18 @@ supressStdErr = false;
 			}
 		}
 		catch (const std::exception& x) {
-			std::cout << "Exception: " << x.what() << std::endl;
+			std::cout << "Exception: " << (strcmp(x.what(), "Syntax error") == 0 ? "SyntaxError" : x.what()) << std::endl;
 			source = EMPTY_STRING;
+			if (!interactive) {
+				return 1;
+			}
 		}
 		catch (...) {
 			std::cout << "Unknown exception" << std::endl;
 			source = EMPTY_STRING;
+			if (!interactive) {
+				return 1;
+			}
 		}
 	}
 	if (pauseBeforeQuit) std::wcin.get();

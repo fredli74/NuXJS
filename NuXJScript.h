@@ -4,6 +4,7 @@
 //
 //		count (and run-time check) necessary value stack depth for functions
 //			alternative have a low-rate check with a margin + make certain there is never a possibility to push more than x per instruction
+//				we should build a VM test routine that checks each opcode, how much it changes the stack and stuff
 //			also implement a max recursion on compiler to not overload stack (function in function in function etc)
 //		array object (length property support, optimized for numerical indexes?)
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
@@ -104,6 +105,10 @@
 //
 //		included in tests should be to config the gc to sweep after every instruction
 //		tedious to have to create string globals for constants strings (e.g. for setting properties), is the only alternative to new them?
+//		optional version without exceptions?!
+//			would work except for the compiler, how to abort compiler? longjump? I know it is ugly, but this woul be for embedded systems etc that disable exceptions. Would be nice to support them.
+//			... or I suppose we could change all methods to return a bool :(
+//		also, drop all STL dependencies, incl. std::string even, for simpler / older / stupid compiler compatibility and smaller footprint
 //
 // --- OPTIMIZE ---
 //
@@ -118,7 +123,7 @@
 //				might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
 //			another option would be to not require a frame *at all* for quick calls that doesn't have eval or sub-functions (is it possible?). Just allocate space on the value stack. But what to do with accepting too few arguments?
 //			third option: simply focus on making a fast mem pool instead
-//				oh snap, it's the gc that's the main performance problem, not the freeing... gotta look into that
+//				oh snap, it's the gc that's the main performance problem, not the allocation/freeing... gotta look into that
 //		could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 //		if we can guarantee that vsp is always at function entry level for each catch scope we should try a table-based exception handler, e.g.
 //			struct TryRange { Int32 offset; Int32 length; Int32 catchIndex; String* catchName; } // catchName != 0 then create temporary "catch frame"
@@ -130,6 +135,7 @@
 //		Make writes terminal and REPUSH in a = b = c type of expression...
 //		Don't lookup names in frame when not necessary. (And use hash table!)
 //		big array literals goes nuts with ADD_PROPERTY constants, should have an PUSH_ELEMENT or something instead
+//			or PUSH_ELEMENTS and PUSH_CONST_ELEMENTS and have a counter for both. PUSH_ELEMENTS allows us to push in batches of say max 32 elements on stack.
 //		not a big fan of the POST_INC_DEC_SHUFFLE_OP solution, feels ugly, but can't for the world come up with any simpler solutions!?
 //		PRE_EQ_OP isn't actually necessary, we could just backup ip once if isObject and retry the EQ after toPrimitive (same applies to TO_PRIMITIVE_OP actually, but that's a bigger story considering the virtually impossible task of "primitivizing" two stack elements at once for binary operators)
 //			alternatively have two opcodes, swap on type < (like in isEqualTo today) and save CPU on isEqualTo as operands are already sorted
@@ -153,6 +159,8 @@
 //			actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
 //		switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
 //		fast lookup of operators (some clever quick hashing)
+//			can't do normal quick-hashing since it requires string length... perhaps I can develop a quick hashing that matches beginning of strings only?
+//				it would be required to use && to never look beyond the max length of all "current candidates"
 //		couldn't we share identical strings in the same engine? any disadvantage to that?
 //		simple constants pre-calculations
 //		let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
@@ -485,6 +493,7 @@ class Object : public GCItem {
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
@@ -712,6 +721,7 @@ class Function : public Object {
 				virtual const String* getClassName() const;
 				virtual Value getInternalValue() const;
 				virtual Object* getPrototype(Engine& engine) const;
+				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 };
 
 class EvalFunction : public Function {
@@ -731,30 +741,6 @@ class EvalFunction : public Function {
 };
 
 class Frame;
-class UserFunction;
-
-class Engine {	
-	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard UserObject, there is some performance benefit to having them indexed just like a regular function.
-				// FIX : the only problem with a standard FunctionFrame for globals is that it's got arguments. It shouldn't have arguments.
-				GCHeap& getHeap() const { return gcHeap; }
-				Frame* getGlobals() const { return globals; }
-				void setupStandardLibrary(const String& librarySourceCode);
-
-	protected:	GCHeap& gcHeap;
-				Frame* const globals;
-				
-	// FIX : public? v
-	public:		UserObject objectPrototype; // FIX : make private? put where really?
-				UserFunction* functionPrototype;
-				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
-				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
-				WrapperObject stringPrototype;
-				Array arrayPrototype;
-				EvalFunction evalFunction;
-				EvalFunction evalDirectFunction;
-				UserFunction* toPrimitiveFunction; // Created with script code for simplicity
-				UserFunction* toStringFunction; // Created with script code for simplicity
-};
 
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
@@ -808,9 +794,10 @@ class ExtensibleFunction : public Function {
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 	
-	protected:	UserObject* createUserObject(Engine& engine) const;
+	protected:	UserObject* getUserObject(Engine& engine) const;
+				void createPrototypeObject(Engine& engine, Object* forObject) const;
+				virtual void constructUserObject(Engine& engine) const = 0;
 	// FIX : or simply pass in constructor, if we are to use this in the future for native functions that you want to be able to extend!?
-				virtual Int32 getLengthProperty(Engine& engine) const = 0; // FIX : in the future this might be a good idea to have in Object for performance
 	
 				mutable UserObject* userObject;
 
@@ -818,6 +805,12 @@ class ExtensibleFunction : public Function {
 					heap.mark(userObject);
 					super::gcMark(heap);
 				}
+};
+
+class FunctionPrototypeFunction : public ExtensibleFunction {
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Object* getPrototype(Engine& engine) const;
+	protected:	virtual void constructUserObject(Engine& engine) const;
 };
 
 class UserFunction : public ExtensibleFunction {
@@ -829,7 +822,7 @@ class UserFunction : public ExtensibleFunction {
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 	
-	protected:	virtual Int32 getLengthProperty(Engine& engine) const; // FIX : in the future this might be a good idea to have in Object for performance
+	protected:	virtual void constructUserObject(Engine& engine) const;
 	
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
@@ -841,22 +834,51 @@ class UserFunction : public ExtensibleFunction {
 				}
 };
 
+
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
-	public:		SpecialConstructorFunction(Object* constructorFunction, Object* regularFunction);
+	public:		SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 	
-	protected:	Object* const constructorFunction;
+	protected:	virtual void constructUserObject(Engine& engine) const;
 				Object* const regularFunction;
-				virtual Int32 getLengthProperty(Engine& engine) const; // FIX : in the future this might be a good idea to have in Object for performance
+				Object* const constructorFunction;
 
 				virtual void gcMark(GCHeap& heap) {
-					heap.mark(constructorFunction);
 					heap.mark(regularFunction);
+					heap.mark(constructorFunction);
 					super::gcMark(heap);
 				}
+};
+
+enum ErrorType {
+	GENERIC_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, ERROR_TYPE_COUNT
+};
+
+class Engine {
+	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard UserObject, there is some performance benefit to having them indexed just like a regular function.
+				// FIX : the only problem with a standard FunctionFrame for globals is that it's got arguments. It shouldn't have arguments.
+				GCHeap& getHeap() const { return gcHeap; }
+				Frame* getGlobals() const { return globals; }
+				void setupStandardLibrary(const String& librarySourceCode);
+
+	protected:	GCHeap& gcHeap;
+				Frame* const globals;
+				
+	// FIX : public? v
+	public:		UserObject objectPrototype; // FIX : make private? put where really?
+				FunctionPrototypeFunction functionPrototype;
+				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
+				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
+				WrapperObject stringPrototype;
+				WrapperObject* errorPrototypes[ERROR_TYPE_COUNT];
+				Array arrayPrototype;
+				EvalFunction evalFunction;
+				EvalFunction evalDirectFunction;
+				UserFunction* toPrimitiveFunction; // Created with script code for simplicity
+				UserFunction* toStringFunction; // Created with script code for simplicity			FIX : in the futrue I believe this might be merged into toPrimitiveFunction with hint: string (like in Ecmascript spec) cause I think TO_STRING_OP will be changed as non-string property keys should be allowed (for arrays)
 };
 
 class Frame : public Object {
@@ -922,7 +944,7 @@ class FunctionFrame : public Frame {
 				Object* environment;
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
 				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
-
+				
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(selfFunction);
 					for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
@@ -1012,6 +1034,13 @@ class Arguments : public UserObject {
 				}
 };
 
+/* 
+FIX: idea, have a simpler and therefore safer (no mem-alloc) Exception type and convert to full value string on demand instead?
+class Exception : public std::exception {
+	public:		virtual Value createValue(Engine& engine) = 0;
+};
+*/
+
 // FIX : test with very short max sz length
 class Exception : public std::exception, public GCItem {
 	public:		Exception(GCHeap& heap, const Value& value) throw() : value(value) { // FIX : not inline
@@ -1098,6 +1127,7 @@ class Processor : public GCItem {
 					, CATCH_FRAME_OP								// operand: const_index for exception variable name
 					, POP_FRAME_OP
 					, IN_OP											// stack: string, object -> boolean
+					, INSTANCE_OF_OP								// stack: object, function -> boolean
 					, TYPEOF_OP										// stack: value -> string
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
@@ -1115,7 +1145,7 @@ class Processor : public GCItem {
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
-void error(); // FIX
+				void error(ErrorType errorType);
 				
 	protected:	void push(const Value& v);
 				void pop(Int32 count = 1);
@@ -1240,8 +1270,9 @@ class Compiler : public GCItem {
 
 				virtual void gcMark(GCHeap& heap) {
 					heap.mark(codeDef);
-					for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it)
+					for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) { // FIX : template util for marking an iterator range
 						it->first.markIn(heap);
+					}
 					super::gcMark(heap);
 				}
 };
