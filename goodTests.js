@@ -1436,6 +1436,7 @@ new String("a") == new String("a") is false.
 	}
 
 	// FIX : test that all functions in all standard library objects are not constructable and that they don't have prototype fields
+//	var globalObjects = [ "Object", "Boolean", "Number", "String", "Function", "Error", "Math" ];
 
 	{
 		var x = Object(true);
