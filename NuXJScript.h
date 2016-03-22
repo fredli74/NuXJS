@@ -356,7 +356,7 @@ class GCItem {
 	public:		GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
-				virtual void gcMark(GCHeap& heap);
+				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 
 	protected:	GCList* _gcList;
@@ -383,6 +383,8 @@ class GCHeap {
 				UInt32 size() const;
 				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
+				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
+				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
 	protected:	GCList* currentList;
@@ -432,7 +434,7 @@ class Value {
 				bool isLessThan(const Value& r) const;
 				bool isLessThanOrEqualTo(const Value& r) const;
 				Value add(GCHeap& heap, const Value& r) const;
-				void markIn(GCHeap& heap) const;
+				void gcMark(GCHeap& heap) const;
 
 				static const Value NONEXISTENT;		// Used in tables for deleted entries. Never seen by script-code.
 				static const Value UNDEFINED;
@@ -475,6 +477,7 @@ class Enumerator;
 class Function;
 class Processor;
 class UserObject;
+
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
 class Object : public GCItem {
@@ -487,19 +490,50 @@ class Object : public GCItem {
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
+
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
-				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
 				bool hasProperty(Engine& engine, const String* name) const;
 				bool hasPropertyDeep(Engine& engine, const String* name) const;
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
+};
+
+/*
+	LazyObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
+	
+	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
+	2) Memory: until the user accesses or adds properties, LazyObjects are usually super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
+	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
+		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
+
+	This class is a template so you can re-use and apply this architecture on different super classes.
+*/
+template<class SUPER> class LazyObject : public SUPER {
+	public:		typedef SUPER super;
+				LazyObject();
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
+				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+
+	protected:	virtual Object* createCompleteObject(Engine& engine) const = 0;
+				Object* getCompleteObject(Engine& engine) const;
+				mutable Object* completeObject;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(completeObject);
+					super::gcMark(heap);
+				}
 };
 
 class Enumerator : public Object {
@@ -549,7 +583,7 @@ class Table {
 				const Bucket* lookup(const String* key) const; // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				bool assign(const String* key, const Value& value, Byte flags = 0); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
 				bool erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
-				void markIn(GCHeap& heap);
+				void gcMark(GCHeap& heap) const;
 				
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
 				void update(const String* key, const Value& value);
@@ -621,10 +655,8 @@ class StringListEnumerator : public Enumerator {
 	protected:	QuickVector<const String*> list;
 				UInt32 nextIndex;
 
-				virtual void gcMark(GCHeap& heap) {
-					for (UInt32 i = 0; i < list.size(); ++i) {
-						heap.mark(list[i]);
-					}
+				virtual void gcMark(GCHeap& heap) const {
+					heap.markViaPointers(list.begin(), list.end());
 					super::gcMark(heap);
 				}
 };
@@ -638,7 +670,8 @@ class MergingEnumerator : public Enumerator {
 				Enumerator* const leftEnumerator;
 				const Object* const rightObject;
 				Enumerator* const rightEnumerator;
-				virtual void gcMark(GCHeap& heap) {
+
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(leftEnumerator);
 					heap.mark(rightObject);
 					heap.mark(rightEnumerator);
@@ -662,8 +695,8 @@ class UserObject : public virtual Object {
 	protected:	Table properties;
 				Object* prototype;
 
-				virtual void gcMark(GCHeap& heap) {
-					properties.markIn(heap);
+				virtual void gcMark(GCHeap& heap) const {
+					properties.gcMark(heap);
 					heap.mark(prototype);
 					super::gcMark(heap);
 				}
@@ -676,9 +709,9 @@ class WrapperObject : public UserObject {
 				virtual Value getInternalValue() const;
 	protected:	const String* const className;
 				const Value wrapped;
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(className);
-					wrapped.markIn(heap);
+					wrapped.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -693,7 +726,7 @@ class StringWrapper : public UserObject {
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 	protected:	const String* const wrapped;
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(wrapped);
 					super::gcMark(heap);
 				}
@@ -731,11 +764,11 @@ class EvalFunction : public Function {
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
 				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
-				Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					functionDefCache = Table(); // Yeah we just empty everything on each gc sweep
-					functionDefCache.markIn(heap);
+					functionDefCache.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -768,49 +801,27 @@ class CodeDefinition : public Object {
 				const String* source;
 				const String* selfName;
 
-				virtual void gcMark(GCHeap& heap) {
-					for (Value* it = constants.begin(); it != constants.end(); ++it) it->markIn(heap);
-					nameIndexes.markIn(heap);
-					for (const String** it = varNames.begin(); it != varNames.end(); ++it) heap.mark(*it);
-					for (const String** it = argumentNames.begin(); it != argumentNames.end(); ++it) heap.mark(*it);
+				virtual void gcMark(GCHeap& heap) const {
+					heap.markViaReferences(constants.begin(), constants.end());
+					nameIndexes.gcMark(heap);
+					heap.markViaPointers(varNames.begin(), varNames.end());
+					heap.markViaPointers(argumentNames.begin(), argumentNames.end());
 					heap.mark(source);
 					heap.mark(selfName);
 					super::gcMark(heap);
 				}
 };
 
-// It is quite rare that we access the object data of a function so we improve memory usage and performance by creating this on first access.
-// gaaah, these names!
-class ExtensibleFunction : public Function {
-	public:		typedef Function super;
-				
-				ExtensibleFunction();
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
-				CodeDefinition* getDefinition() const;
-				Object* getEnvironment() const;
-	
-	protected:	UserObject* getUserObject(Engine& engine) const;
-				void createPrototypeObject(Engine& engine, Object* forObject) const;
-				virtual void constructUserObject(Engine& engine) const = 0;
-	// FIX : or simply pass in constructor, if we are to use this in the future for native functions that you want to be able to extend!?
-	
-				mutable UserObject* userObject;
-
-				virtual void gcMark(GCHeap& heap) {
-					heap.mark(userObject);
-					super::gcMark(heap);
-				}
+class ExtensibleFunction : public LazyObject<Function> {
+	public:		typedef LazyObject<Function> super;
+	protected:	void createPrototypeObject(Engine& engine, Object* forObject) const;				
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+	public:		typedef ExtensibleFunction super;
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Object* getPrototype(Engine& engine) const;
-	protected:	virtual void constructUserObject(Engine& engine) const;
+	protected:	virtual Object* createCompleteObject(Engine& engine) const;
 };
 
 class UserFunction : public ExtensibleFunction {
@@ -822,18 +833,17 @@ class UserFunction : public ExtensibleFunction {
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 	
-	protected:	virtual void constructUserObject(Engine& engine) const;
+	protected:	virtual Object* createCompleteObject(Engine& engine) const;
 	
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
 					heap.mark(environment);
 					super::gcMark(heap);
 				}
 };
-
 
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
@@ -842,11 +852,11 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 	
-	protected:	virtual void constructUserObject(Engine& engine) const;
+	protected:	virtual Object* createCompleteObject(Engine& engine) const;
 				Object* const regularFunction;
 				Object* const constructorFunction;
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(regularFunction);
 					heap.mark(constructorFunction);
 					super::gcMark(heap);
@@ -891,7 +901,7 @@ class Frame : public Object {
 	protected:	const CodeDefinition* const codeDef;
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
 					super::gcMark(heap);
 				}
@@ -918,9 +928,9 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 	protected:	Object* parent;
 				Table vars;
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(parent);
-					vars.markIn(heap);
+					vars.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -945,10 +955,10 @@ class FunctionFrame : public Frame {
 				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
 				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
 				
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(selfFunction);
-					for (Value* it = indexed.begin(); it != indexed.end(); ++it) it->markIn(heap);
-					argumentsValue.markIn(heap);
+					heap.markViaReferences(indexed.begin(), indexed.end());
+					argumentsValue.gcMark(heap);
 					heap.mark(environment);
 					heap.mark(evalVars);
 					super::gcMark(heap);
@@ -976,11 +986,9 @@ class EvalFrame : public Frame {
 	protected:	Frame* parentFrame;
 				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(parentFrame);
-					for (Value* it = indexed.begin(); it != indexed.end(); ++it) {
-						it->markIn(heap);
-					}
+					heap.markViaReferences(indexed.begin(), indexed.end());
 					super::gcMark(heap);
 				}
 };
@@ -1003,10 +1011,10 @@ class CatchFrame : public Frame {
 				const String* exceptionName;
 				Value exceptionValue;
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(parentFrame);
 					heap.mark(exceptionName);
-					exceptionValue.markIn(heap);
+					exceptionValue.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -1027,9 +1035,9 @@ class Arguments : public UserObject {
 				Value lengthProperty;
 				QuickArray<Byte, 8> deletedArguments;
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(frame);
-					lengthProperty.markIn(heap);
+					lengthProperty.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -1168,15 +1176,13 @@ public: // FIX : not public, just for some asserts now I think
 				CStackEntry* csp;
 				Value result;
 
-				virtual void gcMark(GCHeap& heap) {
-					for (Value* v = vstackStart; v != vsp + 1; ++v) {
-						v->markIn(heap);
-					}
+				virtual void gcMark(GCHeap& heap) const {
+					heap.markViaReferences(vstackStart, vsp + 1);
 					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
 						heap.mark(c->frame);
 						heap.mark(c->thisValue);
 					}
-					result.markIn(heap);
+					result.gcMark(heap);
 					super::gcMark(heap);
 				}
 
@@ -1268,10 +1274,10 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord>* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
 				bool acceptInOperator;
 
-				virtual void gcMark(GCHeap& heap) {
+				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
-					for (std::map<Value, Int32>::iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) { // FIX : template util for marking an iterator range
-						it->first.markIn(heap);
+					for (std::map<Value, Int32>::const_iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) {
+						it->first.gcMark(heap);
 					}
 					super::gcMark(heap);
 				}

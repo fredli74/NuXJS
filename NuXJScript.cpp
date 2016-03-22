@@ -489,7 +489,7 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 	return Value(toDouble() + y.toDouble());
 }
 
-void Value::markIn(GCHeap& heap) const {
+void Value::gcMark(GCHeap& heap) const {
 	switch (type) {
 		case STRING_TYPE: heap.mark(var.string); break;
 		case OBJECT_TYPE: heap.mark(var.object); break;
@@ -644,7 +644,7 @@ const String* String::fromDouble(GCHeap& heap, double d) {
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
 GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
-void GCItem::gcMark(GCHeap& heap) { }
+void GCItem::gcMark(GCHeap& heap) const { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 /* --- GCList --- */
@@ -782,7 +782,7 @@ bool Table::erase(const String* key) {
 	return true;
 }
 
-void Table::markIn(GCHeap& heap) {
+void Table::gcMark(GCHeap& heap) const {
 	UInt32 rebuildLoadCount = 0;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		const Bucket& bucket = buckets[i];
@@ -799,7 +799,7 @@ void Table::markIn(GCHeap& heap) {
 		}
 	}
 	if (rebuildLoadCount != loadCount) {
-		UInt32 check = rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
+		UInt32 check = const_cast<Table*>(this)->rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
 		(void)check;
 		assert(check == rebuildLoadCount);
 	}
@@ -1108,42 +1108,39 @@ class FunctionConstructor : public Function {
 };
 #endif
 
+/* --- LazyObject --- */
+
+template<class SUPER> LazyObject<SUPER>::LazyObject() : completeObject(0) { }
+
+template<class SUPER> bool LazyObject<SUPER>::getProperty(Engine& engine, const String* name, Value* v) const {
+	return getCompleteObject(engine)->getProperty(engine, name, v);
+}
+
+template<class SUPER> bool LazyObject<SUPER>::setProperty(Engine& engine, const String* name, const Value& v) {
+	return getCompleteObject(engine)->setProperty(engine, name, v);
+}
+
+template<class SUPER> bool LazyObject<SUPER>::deleteProperty(Engine& engine, const String* name) {
+	return getCompleteObject(engine)->deleteProperty(engine, name);
+}
+
+template<class SUPER> Enumerator* LazyObject<SUPER>::getPropertyEnumerator(Engine& engine) const {
+	return getCompleteObject(engine)->getPropertyEnumerator(engine);
+}
+
+template<class SUPER> bool LazyObject<SUPER>::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	return getCompleteObject(engine)->defineProperty(engine, name, v, attributes);
+}
+
+template<class SUPER> bool LazyObject<SUPER>::isPropertyEnumerable(Engine& engine, const String* name) const {
+	return getCompleteObject(engine)->isPropertyEnumerable(engine, name);
+}
+
+template<class SUPER> Object* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
+	return (completeObject == 0 ? completeObject = createCompleteObject(engine) : completeObject);
+}
+
 /* --- ExtensibleFunction --- */
-
-ExtensibleFunction::ExtensibleFunction() : userObject(0) { }
-
-// FIX : how can we create a proxy easier, shorter and safer? as it is now it is easy to forget to add relevant methods here when we add them to Object
-bool ExtensibleFunction::getProperty(Engine& engine, const String* name, Value* v) const {
-	return getUserObject(engine)->getProperty(engine, name, v);
-}
-
-bool ExtensibleFunction::setProperty(Engine& engine, const String* name, const Value& v) {
-	return getUserObject(engine)->setProperty(engine, name, v);
-}
-
-bool ExtensibleFunction::deleteProperty(Engine& engine, const String* name) {
-	return getUserObject(engine)->deleteProperty(engine, name);
-}
-
-Enumerator* ExtensibleFunction::getPropertyEnumerator(Engine& engine) const {
-	return getUserObject(engine)->getPropertyEnumerator(engine);
-}
-
-bool ExtensibleFunction::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
-	return getUserObject(engine)->defineProperty(engine, name, v, attributes);
-}
-
-bool ExtensibleFunction::isPropertyEnumerable(Engine& engine, const String* name) const {
-	return getUserObject(engine)->isPropertyEnumerable(engine, name);
-}
-
-UserObject* ExtensibleFunction::getUserObject(Engine& engine) const {
-	if (userObject == 0) {
-		userObject = engine.getHeap().manage(new UserObject(getPrototype(engine)));
-		constructUserObject(engine);
-	}
-	return userObject;
-}
 
 void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
 	UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
@@ -1171,13 +1168,15 @@ Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	return Value();
 }
 
-void UserFunction::constructUserObject(Engine& engine) const {
-	createPrototypeObject(engine, userObject);
+Object* UserFunction::createCompleteObject(Engine& engine) const {
+	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
+	createPrototypeObject(engine, object);
 	Attributes attributes;
 	attributes.dontEnum = true;
 	attributes.dontDelete = true;
 	attributes.readOnly = true;
-	userObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
+	object->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
+	return object;
 }
 
 /* --- SpecialConstructorFunction --- */
@@ -1200,10 +1199,11 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 	}
 }
 
-void SpecialConstructorFunction::constructUserObject(Engine& engine) const {
+Object* SpecialConstructorFunction::createCompleteObject(Engine& engine) const {
+	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
 	Object* lengthObject = regularFunction;
 	if (constructorFunction != 0) {
-		createPrototypeObject(engine, userObject);
+		createPrototypeObject(engine, object);
 		lengthObject = constructorFunction;
 	}
 	Attributes attributes;
@@ -1212,8 +1212,9 @@ void SpecialConstructorFunction::constructUserObject(Engine& engine) const {
 	attributes.dontDelete = true;
 	Value v;
 	if (lengthObject->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
-		userObject->defineProperty(engine, &LENGTH_STRING, v, attributes);
+		object->defineProperty(engine, &LENGTH_STRING, v, attributes);
 	}
+	return object;
 }
 
 /* --- FunctionPrototypeFunction --- */
@@ -1224,12 +1225,14 @@ Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int3
 
 Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
-void FunctionPrototypeFunction::constructUserObject(Engine& engine) const {
+Object* FunctionPrototypeFunction::createCompleteObject(Engine& engine) const {
+	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
 	Attributes attributes; // FIX : constant for this common attribute?
 	attributes.dontEnum = true;
 	attributes.dontDelete = true;
 	attributes.readOnly = true;
-	userObject->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
+	object->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
+	return object;
 }
 
 /* --- Arguments --- */
@@ -3217,7 +3220,7 @@ UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
 
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext)
-		const_cast<GCItem*>(item)->gcMark(*this);
+		item->gcMark(*this);
 	
 	{
 		UInt32 n = 0;
@@ -3238,20 +3241,9 @@ UInt32 GCHeap::gc() {
 void GCHeap::mark(const GCItem* item) {
 	if (item != 0 && item->_gcList == currentList) {
 		newList->claim(const_cast<GCItem*>(item));
-		const_cast<GCItem*>(item)->gcMark(*this);
+		item->gcMark(*this);
 	}
 }
-
-class FromCharCodeFunction : public Function { // FIX : .length?! and all the others?!
-	public:		typedef Function super;
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-					Char c;
-					if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
-					String* s = engine.getHeap().manage(new String(argc));
-					for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
-					return Value(s);
-				}
-};
 
 Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
 	if (argc < 1) return Value::UNDEFINED;
