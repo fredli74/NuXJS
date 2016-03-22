@@ -912,6 +912,13 @@ Value StringWrapper::getInternalValue() const {
 	return Value(wrapped);
 }
 
+bool StringWrapper::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	if (wrapped->hasProperty(engine, name)) {
+		return false;
+	}
+	return super::defineProperty(engine, name, v, attributes);
+}
+
 bool StringWrapper::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (wrapped->getProperty(engine, name, v)) {
 		return true;
@@ -936,6 +943,10 @@ bool StringWrapper::deleteProperty(Engine& engine, const String* name) {
 
 Enumerator* StringWrapper::getPropertyEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new MergingEnumerator(engine, super::getPropertyEnumerator(engine), wrapped));
+}
+
+bool StringWrapper::isPropertyEnumerable(Engine& engine, const String* name) const {
+	return wrapped->isPropertyEnumerable(engine, name) || super::isPropertyEnumerable(engine, name);
 }
 
 /* --- RangeEnumerator --- */

@@ -492,6 +492,7 @@ class Object : public GCItem {
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
+				// FIX: try to join defineProperty and setProperty, they really are the same thing, just try out performance
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
@@ -716,15 +717,20 @@ class WrapperObject : public UserObject {
 				}
 };
 
+// FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public UserObject {
 	public:		typedef UserObject super;
 				StringWrapper(const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual Value getInternalValue() const;
+
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+
 	protected:	const String* const wrapped;
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(wrapped);
