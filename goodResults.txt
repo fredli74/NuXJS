@@ -1599,12 +1599,12 @@ true
 *** wrappers ***
 new Boolean(): o_false/o_false, o_false/o_false, o_false/o_false, o_false/o_false, o_true/o_true, o_true/o_true, o_true/o_true, o_true/o_true, o_false/o_false, o_false/o_false, o_true/o_true, o_true/o_true, o_true/o_true
 Boolean(): b_false/b_false, b_false/b_false, b_false/b_false, b_false/b_false, b_true/b_true, b_true/b_true, b_true/b_true, b_true/b_true, b_false/b_false, b_false/b_false, b_true/b_true, b_true/b_true, b_true/b_true
-new Number(): o_0/o_0, o_NaN/o_NaN, o_0/o_0, o_0/o_0, o_1/o_1, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_0/o_0, o_NaN/o_NaN, o_NaN/o_NaN, error
-Number(): n_0/n_0, n_NaN/n_NaN, n_0/n_0, n_0/n_0, n_1/n_1, n_1.2345/n_1.2345, n_12/n_12, n_Infinity/n_Infinity, n_NaN/n_NaN, n_0/n_0, n_NaN/n_NaN, n_NaN/n_NaN, error
-new String(): o_/o_, o_undefined/o_undefined, o_null/o_null, o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], error
-String(): s_/s_, s_undefined/s_undefined, s_null/s_null, s_false/s_false, s_true/s_true, s_1.2345/s_1.2345, s_12/s_12, s_Infinity/s_Infinity, s_NaN/s_NaN, s_/s_, s_xyzzy/s_xyzzy, s_[object Object]/s_[object Object], error
-new Object(): o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], error/error
-Object(): o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], error/error
+new Number(): o_0/o_0, o_NaN/o_NaN, o_0/o_0, o_0/o_0, o_1/o_1, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_0/o_0, o_NaN/o_NaN, o_NaN/o_NaN, o_NaN/o_NaN
+Number(): n_0/n_0, n_NaN/n_NaN, n_0/n_0, n_0/n_0, n_1/n_1, n_1.2345/n_1.2345, n_12/n_12, n_Infinity/n_Infinity, n_NaN/n_NaN, n_0/n_0, n_NaN/n_NaN, n_NaN/n_NaN, n_NaN/n_NaN
+new String(): o_/o_, o_undefined/o_undefined, o_null/o_null, o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], o_i,am,array/o_i,am,array
+String(): s_/s_, s_undefined/s_undefined, s_null/s_null, s_false/s_false, s_true/s_true, s_1.2345/s_1.2345, s_12/s_12, s_Infinity/s_Infinity, s_NaN/s_NaN, s_/s_, s_xyzzy/s_xyzzy, s_[object Object]/s_[object Object], s_i,am,array/s_i,am,array
+new Object(): o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], o_i,am,array/o_i,am,array
+Object(): o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_[object Object]/o_[object Object], o_false/o_false, o_true/o_true, o_1.2345/o_1.2345, o_12/o_12, o_Infinity/o_Infinity, o_NaN/o_NaN, o_/o_, o_xyzzy/o_xyzzy, o_[object Object]/o_[object Object], o_i,am,array/o_i,am,array
 o0 === o1: false
 o0 === o1: true
 delete String.prototype.test: true
@@ -1614,9 +1614,9 @@ breakOuts[0]: zxcv
 breakOuts[0].s: asdf
 breakOuts[1]: zxcv
 breakOuts[1].s: qwerty
-exception: TypeError
-exception: TypeError
-exception: TypeError
+exception: TypeError: Boolean.prototype.valueOf is not generic
+exception: TypeError: Number.prototype.valueOf is not generic
+exception: TypeError: String.prototype.valueOf is not generic
 3 in new String("pokpokpko"): true
 for (var i in new String("abcdefghijklmn")): 0,1,2,3,4,5,6,7,8,9,10,11,12,13,
 valueOf
@@ -1691,6 +1691,42 @@ Error.prototype.constructor: function
 constructor : dontDelete, (deleted:true)
 true
 Error.length: 1
+length : dontEnum,readOnly,dontDelete, (deleted:false)
+RangeError: function
+RangeError : dontEnum, (deleted:true)
+RangeError.prototype: RangeError
+prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+RangeError.prototype.constructor: function
+constructor : dontDelete, (deleted:true)
+true
+RangeError.length: 1
+length : dontEnum,readOnly,dontDelete, (deleted:false)
+ReferenceError: function
+ReferenceError : dontEnum, (deleted:true)
+ReferenceError.prototype: ReferenceError
+prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+ReferenceError.prototype.constructor: function
+constructor : dontDelete, (deleted:true)
+true
+ReferenceError.length: 1
+length : dontEnum,readOnly,dontDelete, (deleted:false)
+SyntaxError: function
+SyntaxError : dontEnum, (deleted:true)
+SyntaxError.prototype: SyntaxError
+prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+SyntaxError.prototype.constructor: function
+constructor : dontDelete, (deleted:true)
+true
+SyntaxError.length: 1
+length : dontEnum,readOnly,dontDelete, (deleted:false)
+TypeError: function
+TypeError : dontEnum, (deleted:true)
+TypeError.prototype: TypeError
+prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+TypeError.prototype.constructor: function
+constructor : dontDelete, (deleted:true)
+true
+TypeError.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
 x: true
 x instanceof Boolean: true

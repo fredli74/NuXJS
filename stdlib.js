@@ -40,7 +40,7 @@ support.toPrimitive = function(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
-		throw("error"); // FIX
+		throw TypeError("Error converting object to primitive type");
 	}
 	return v;
 }
@@ -49,7 +49,7 @@ support.toString = function(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
-		throw("error"); // FIX
+		throw TypeError("Error converting object to primitive type");
 	}
 	return '' + v;
 }
@@ -58,6 +58,12 @@ function defineProperties(object, attribs, props) {
 	var readOnly = attribs['readOnly'], dontEnum = attribs['dontEnum'], dontDelete = attribs['dontDelete'];
 	for (p in props) support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
 	return object;
+}
+
+function checkClass(object, expectedClass, forFunction) {
+	if (support.getInternalProperty(object, 'class') !== expectedClass) {
+		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
+	}
 }
 
 /* --- Object --- */
@@ -108,7 +114,7 @@ defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true },
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
 	toString: specialConstructor(function() { // FIX : <- generic, make a factory function
-		if (support.getInternalProperty(this, 'class') !== 'Function') throw "TypeError" // FIX
+		checkClass(this, 'Function', 'toString');
 		return support.getInternalProperty(this, 'value');
 	})
 });
@@ -125,11 +131,11 @@ defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, 
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: specialConstructor(function() {
-		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		checkClass(this, 'Boolean', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
 	toString: specialConstructor(function() {
-		if (support.getInternalProperty(this, 'class') !== 'Boolean') throw "TypeError" // FIX
+		checkClass(this, 'Boolean', 'toString');
 		return '' + support.getInternalProperty(this, 'value');
 	})
 });
@@ -153,17 +159,17 @@ defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
 	valueOf: specialConstructor(function() {
-		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
+		checkClass(this, 'Number', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
 	toString: specialConstructor(function(radix) {
-		if (support.getInternalProperty(this, 'class') !== 'Number') throw "TypeError" // fix
+		checkClass(this, 'Number', 'toString');
 		var n = support.getInternalProperty(this, 'value');
 		var r;
 		if (radix === void 0 || !natives.isFinite(n)) {
 			return '' + n;
 		} else if ((r = toInteger(radix)) != radix || r < 2 || r > 36) {
-			throw "range error"; // fix
+			throw RangeError("illegal radix for toString()");
 		} else {
 			var v = toInteger(abs(n)); // TODO : fraction?
 			var s = '';
@@ -196,12 +202,53 @@ defineProperties(String, { dontEnum: true }, {
 defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
 	valueOf: specialConstructor(function() {
-		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
+		checkClass(this, 'String', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
 	toString: specialConstructor(function() {
-		if (support.getInternalProperty(this, 'class') !== 'String') throw "TypeError" // fix
+		checkClass(this, 'String', 'toString');
 		return support.getInternalProperty(this, 'value');
+	})
+});
+
+/* --- Array --- */
+
+var Array = function(v) {
+	var a = [ ], args, l;
+	if ((l = (args = arguments).length) === 1 && typeof v === 'number') {
+		if ((v >>> 0) !== v) throw RangeError("Invalid array length");
+		a.length = v;
+	} else {
+		for (var i = 0; i < l; ++i) a[i] = args[i];
+	}
+	return a;
+}
+defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
+defineProperties(Array.prototype, { dontEnum: true }, {
+	constructor: Array,
+	push: specialConstructor(function(item) {
+		var args, offset = this.length, end = (args = arguments).length + offset;
+		for (var i = offset; i < end; ++i) this[i] = args[i - offset];
+		return end;
+	}),
+	pop: specialConstructor(function() {
+		var v = void 0, l;
+		if ((l = this.length) > 0) {
+			v = this[l - 1];
+			--this.length;
+		}
+		return v;
+	}),
+	join: specialConstructor(function(separator) {
+		separator = (separator === void 0 ? ',' : '' + separator);
+		var s = (this[0] == void 0 ? '' : this[0]);
+		var l = this.length;
+		for (var i = 1; i < l; ++i) s += separator + (this[i] == null ? '' : this[i]);
+		return s;
+	}),
+	toString: specialConstructor(function() {
+		checkClass(this, 'Array', 'toString');
+		return this.join();
 	})
 });
 
@@ -213,6 +260,7 @@ defineProperties(global, { dontEnum: true }, {
 	Boolean: Boolean,
 	Number: Number,
 	String: String,
+	Array: Array,
 	isNaN: specialConstructor(isNaN),
 	isFinite: specialConstructor(isFinite),
 	Math: support.createWrapper('Math', void 0)

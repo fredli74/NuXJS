@@ -745,7 +745,9 @@ class StringWrapper : public UserObject {
 class Array : public UserObject {
 	public:		typedef UserObject super;
 	
-				Array(Object* prototype = 0);
+				Array(Object* prototype = 0); // FIX : not = 0 ?
+				virtual const String* getClassName() const;
+				// FIX : toString too?
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const String* name);

@@ -148,16 +148,16 @@ Exception: SyntaxError: Expected ';'
 Compilation error: ReferenceError: Illegal l-value
 Line: 1
 Exception: ReferenceError: Illegal l-value
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
 Compilation error: SyntaxError: Illegal return
 Line: 1
 Exception: SyntaxError: Illegal return
-Exception: TypeError
+Exception: Unhandled exception: TypeError
 Compilation error: SyntaxError: Expected property name
 Line: 1
 Exception: SyntaxError: Expected property name
@@ -209,7 +209,7 @@ Exception: SyntaxError: Expected expression
 Compilation error: ReferenceError: Illegal l-value
 Line: 1
 Exception: ReferenceError: Illegal l-value
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
-Exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError
+Exception: Unhandled exception: TypeError

@@ -1036,6 +1036,8 @@ static ObjectConstructor OBJECT_OBJECT; // for object literals
 
 Array::Array(Object* prototype) : super(prototype), lengthProperty(0) { }
 
+const String* Array::getClassName() const { return &A_RRAY_STRING; }
+
 bool Array::getProperty(Engine& engine, const String* name, Value* v) const {
 	if (name->isEqualTo(LENGTH_STRING)) {
 		*v = Value(lengthProperty);
@@ -1046,7 +1048,7 @@ bool Array::getProperty(Engine& engine, const String* name, Value* v) const {
 
 bool Array::setProperty(Engine& engine, const String* name, const Value& v) {
 	if (name->isEqualTo(LENGTH_STRING)) {
-		// FIX : error if not UInt32!
+		// FIX : error if not UInt32! but how if we are to go to exception-lessness?
 		UInt32 newLength = v.toInt(); // fix : to unsigned int
 		if (newLength < lengthProperty) { // FIX : optimize: if onyl removing a few items, loop through them and remove instead of looping through all
 			for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
@@ -1079,6 +1081,8 @@ bool Array::deleteProperty(Engine& engine, const String* name) {
 		return super::deleteProperty(engine, name);
 	}
 }
+
+// FIX : we should have GEN_ARRAY, GEN_OBJECT I think...
 
 class ArrayConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
@@ -1566,17 +1570,11 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 }
 
 void Processor::throwVirtualException(const Value& exception) {
-	if (catchers.empty()) { // FIX
-		Object* o;
-		if ((o = exception.asObject()) != 0 && o->getClassName()->isEqualTo(E_RROR_STRING)) { // FIX : have special ErrorObjects and asError()?
-			std::wstring ws(o->getInternalValue(engine.getHeap()).toString(engine.getHeap())->toStdString());
-			throw std::runtime_error(std::string(ws.begin(), ws.end()));
-		} else {
-			std::string s1("Unhandled exception: ");
-			std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
-			s1.append(s2.begin(), s2.end());
-			throw std::runtime_error(s1);
-		}
+	if (catchers.empty()) { // FIX: what exception to throw here?
+		std::string s1("Unhandled exception: ");
+		std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
+		s1.append(s2.begin(), s2.end());
+		throw std::runtime_error(s1);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
@@ -3475,7 +3473,8 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 		, evalDirectFunction(true), toPrimitiveFunction(0), toStringFunction(0)
 		, booleanPrototype(&B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
-		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
+		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
+		, arrayPrototype(&objectPrototype) {
 	assert(heap.belongs(globals));
 
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
@@ -3497,7 +3496,6 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 	objectObject->setProperty(*this, &PROTOTYPE_STRING, Value(&objectPrototype));
 	arrayObject->setProperty(*this, &PROTOTYPE_STRING, Value(&arrayPrototype));
 //	functionObject->setProperty(*this, &PROTOTYPE_STRING, Value(&functionPrototype));
-	globals->setProperty(*this, &O_BJECT_STRING, Value(objectObject));
 	globals->setProperty(*this, &A_RRAY_STRING, Value(arrayObject));
 //	globals->setProperty(*this, &F_UNCTION_STRING, Value(functionObject));
 	globals->setProperty(*this, &EVAL_STRING, Value(gcHeap.protect(&evalFunction)));
@@ -3743,7 +3741,7 @@ supressStdErr = false;
 			}
 		}
 		catch (const std::exception& x) {
-			std::cout << "Exception: " << (strcmp(x.what(), "Syntax error") == 0 ? "SyntaxError" : x.what()) << std::endl;
+			std::cout << "Exception: " << x.what() << std::endl;
 			source = EMPTY_STRING;
 			if (!interactive) {
 				return 1;

@@ -1399,7 +1399,10 @@ new String("a") == new String("a") is false.
 		printAndEval(constant);*/
 	};
 
-	var builtInConstructors = [ "Object", "Boolean", "Number", "String", "Function", "Error" ];
+	var builtInConstructors = [
+		"Object", "Boolean", "Number", "String", "Function"
+		, "Error", "RangeError", "ReferenceError", "SyntaxError", "TypeError" 
+	];
 	for (var i = 0; i < builtInConstructors.length; ++i) {
 		var constructor = builtInConstructors[i];
 /* FIX : drop
@@ -1436,7 +1439,7 @@ new String("a") == new String("a") is false.
 	}
 
 	// FIX : test that all functions in all standard library objects are not constructable and that they don't have prototype fields
-//	var globalObjects = [ "Object", "Boolean", "Number", "String", "Function", "Error", "Math" ];
+//	var globalObjects = [ "Object", "Boolean", "Number", "String", "Function", "Error", "Math" ]; <- rest of errors
 
 	{
 		var x = Object(true);
@@ -1505,5 +1508,7 @@ new String("a") == new String("a") is false.
 		print("x instanceof String: " + (x instanceof String));
 		print("x instanceof realString: " + (x instanceof realString));
 	}
+
+	// FIX : test errors
 })();
 
