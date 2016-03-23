@@ -1,215 +1,147 @@
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Syntax error
-Line: 1
-Exception: SyntaxError: Syntax error
-Compilation error: SyntaxError: Syntax error
-Line: 1
-Exception: SyntaxError: Syntax error
-Compilation error: ReferenceError: Illegal l-value
-Line: 1
-Exception: ReferenceError: Illegal l-value
-Compilation error: SyntaxError: Syntax error
-Line: 1
-Exception: SyntaxError: Syntax error
-Compilation error: SyntaxError: Missing */
-Line: 1
-Exception: SyntaxError: Missing */
-Compilation error: SyntaxError: Unterminated string
-Line: 1
-Exception: SyntaxError: Unterminated string
-Compilation error: SyntaxError: Unterminated string
-Line: 1
-Exception: SyntaxError: Unterminated string
-Compilation error: SyntaxError: Unterminated string
-Line: 1
-Exception: SyntaxError: Unterminated string
-Compilation error: SyntaxError: Illegal escape character
-Line: 1
-Exception: SyntaxError: Illegal escape character
-Compilation error: SyntaxError: Expected ')'
-Line: 1
-Exception: SyntaxError: Expected ')'
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected ',' or ')'
-Line: 1
-Exception: SyntaxError: Expected ',' or ')'
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Illegal use of reserved keyword
-Line: 1
-Exception: SyntaxError: Illegal use of reserved keyword
-Compilation error: SyntaxError: Illegal use of reserved keyword
-Line: 1
-Exception: SyntaxError: Illegal use of reserved keyword
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected ',' or ')'
-Line: 1
-Exception: SyntaxError: Expected ',' or ')'
-Compilation error: SyntaxError: Expected '{'
-Line: 1
-Exception: SyntaxError: Expected '{'
-Compilation error: SyntaxError: Expected '('
-Line: 1
-Exception: SyntaxError: Expected '('
-Compilation error: SyntaxError: Expected ')'
-Line: 1
-Exception: SyntaxError: Expected ')'
-Compilation error: SyntaxError: Expected ',' or ')'
-Line: 1
-Exception: SyntaxError: Expected ',' or ')'
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected '{'
-Line: 1
-Exception: SyntaxError: Expected '{'
-Compilation error: SyntaxError: Expected '}'
-Line: 1
-Exception: SyntaxError: Expected '}'
-Compilation error: SyntaxError: Invalid number
-Line: 1
-Exception: SyntaxError: Invalid number
-Compilation error: SyntaxError: Invalid number
-Line: 1
-Exception: SyntaxError: Invalid number
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Duplicate label
-Line: 1
-Exception: SyntaxError: Duplicate label
-Compilation error: SyntaxError: Undefined label
-Line: 1
-Exception: SyntaxError: Undefined label
-Compilation error: SyntaxError: Undefined label
-Line: 1
-Exception: SyntaxError: Undefined label
-Compilation error: SyntaxError: Illegal label for continue
-Line: 1
-Exception: SyntaxError: Illegal label for continue
-Compilation error: SyntaxError: Illegal break
-Line: 1
-Exception: SyntaxError: Illegal break
-Compilation error: SyntaxError: Illegal continue
-Line: 1
-Exception: SyntaxError: Illegal continue
-Compilation error: SyntaxError: Expected '{'
-Line: 1
-Exception: SyntaxError: Expected '{'
-Compilation error: SyntaxError: Expected '}'
-Line: 1
-Exception: SyntaxError: Expected '}'
-Compilation error: SyntaxError: Expected 'catch' or 'finally'
-Line: 1
-Exception: SyntaxError: Expected 'catch' or 'finally'
-Compilation error: SyntaxError: Expected identifier
-Line: 1
-Exception: SyntaxError: Expected identifier
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected 'case', 'default' or '}'
-Line: 1
-Exception: SyntaxError: Expected 'case', 'default' or '}'
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: ReferenceError: Illegal l-value
-Line: 1
-Exception: ReferenceError: Illegal l-value
-Compilation error: SyntaxError: Expected ';'
-Line: 1
-Exception: SyntaxError: Expected ';'
-Compilation error: ReferenceError: Illegal l-value
-Line: 1
-Exception: ReferenceError: Illegal l-value
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Compilation error: SyntaxError: Illegal return
-Line: 1
-Exception: SyntaxError: Illegal return
-Exception: Unhandled exception: TypeError
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected ':'
-Line: 1
-Exception: SyntaxError: Expected ':'
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected ',' or '}'
-Line: 1
-Exception: SyntaxError: Expected ',' or '}'
-Compilation error: SyntaxError: Expected property name
-Line: 1
-Exception: SyntaxError: Expected property name
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected ',' or ']'
-Line: 1
-Exception: SyntaxError: Expected ',' or ']'
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: SyntaxError: Expected ',' or ']'
-Line: 1
-Exception: SyntaxError: Expected ',' or ']'
-Compilation error: SyntaxError: Expected expression
-Line: 1
-Exception: SyntaxError: Expected expression
-Compilation error: ReferenceError: Illegal l-value
-Line: 1
-Exception: ReferenceError: Illegal l-value
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
-Exception: Unhandled exception: TypeError
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Syntax error
+!!!! Line: 1
+!!!! SyntaxError: Syntax error
+!!!! Line: 1
+!!!! ReferenceError: Illegal l-value
+!!!! Line: 1
+!!!! SyntaxError: Syntax error
+!!!! Line: 1
+!!!! SyntaxError: Missing */
+!!!! Line: 1
+!!!! SyntaxError: Unterminated string
+!!!! Line: 1
+!!!! SyntaxError: Unterminated string
+!!!! Line: 1
+!!!! SyntaxError: Unterminated string
+!!!! Line: 1
+!!!! SyntaxError: Illegal escape character
+!!!! Line: 1
+!!!! SyntaxError: Expected ')'
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or ')'
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Illegal use of reserved keyword
+!!!! Line: 1
+!!!! SyntaxError: Illegal use of reserved keyword
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or ')'
+!!!! Line: 1
+!!!! SyntaxError: Expected '{'
+!!!! Line: 1
+!!!! SyntaxError: Expected '('
+!!!! Line: 1
+!!!! SyntaxError: Expected ')'
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or ')'
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected '{'
+!!!! Line: 1
+!!!! SyntaxError: Expected '}'
+!!!! Line: 1
+!!!! SyntaxError: Invalid number
+!!!! Line: 1
+!!!! SyntaxError: Invalid number
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Duplicate label
+!!!! Line: 1
+!!!! SyntaxError: Undefined label
+!!!! Line: 1
+!!!! SyntaxError: Undefined label
+!!!! Line: 1
+!!!! SyntaxError: Illegal label for continue
+!!!! Line: 1
+!!!! SyntaxError: Illegal break
+!!!! Line: 1
+!!!! SyntaxError: Illegal continue
+!!!! Line: 1
+!!!! SyntaxError: Expected '{'
+!!!! Line: 1
+!!!! SyntaxError: Expected '}'
+!!!! Line: 1
+!!!! SyntaxError: Expected 'catch' or 'finally'
+!!!! Line: 1
+!!!! SyntaxError: Expected identifier
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected 'case', 'default' or '}'
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! ReferenceError: Illegal l-value
+!!!! Line: 1
+!!!! SyntaxError: Expected ';'
+!!!! Line: 1
+!!!! ReferenceError: Illegal l-value
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
+!!!! Line: 1
+!!!! SyntaxError: Illegal return
+!!!! TypeError
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected ':'
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or '}'
+!!!! Line: 1
+!!!! SyntaxError: Expected property name
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or ']'
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! SyntaxError: Expected ',' or ']'
+!!!! Line: 1
+!!!! SyntaxError: Expected expression
+!!!! Line: 1
+!!!! ReferenceError: Illegal l-value
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
+!!!! TypeError
