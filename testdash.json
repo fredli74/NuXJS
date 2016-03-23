@@ -4282,5 +4282,560 @@
 	},
 	"language/statements/for-in/12.6.4-2": {
 		"category": "tbd"
+	},
+	"language/statements/for-in/S12.6.4_A3.1": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/S12.6.4_A3": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/S12.6.4_A4.1": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/S12.6.4_A4": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/S12.6.4_A5.1": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A5": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A6": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A6.1": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A7_T1": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A7_T2": {
+		"category": "todo"
+	},
+	"language/statements/for-in/cptn-decl-abrupt-empty": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-decl-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-decl-skip-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-decl-zero-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-expr-abrupt-empty": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-expr-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-expr-skip-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/cptn-expr-zero-itr": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/head-const-bound-names-fordecl-tdz": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-const-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-decl-expr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-let-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-let-bound-names-fordecl-tdz": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-let-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-lhs-cover-non-asnmt-trgt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-lhs-invalid-asnmt-ptrn-ary": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-lhs-non-asnmt-trgt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-var-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/labeled-fn-stmt-lhs": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/labeled-fn-stmt-var": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/Array.prototype.Symbol.iterator": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/Array.prototype.entries": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/Array.prototype.keys": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-mapped": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-mapped-aliasing": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-mapped-mutation": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-unmapped": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-unmapped-aliasing": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/arguments-unmapped-mutation": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array-contract-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array-expand-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/array-key-get-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/body-dstr-assign": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/body-dstr-assign-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/body-put-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-label": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-label-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-label-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/break-label-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-label": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-label-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-label-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/continue-label-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-decl-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-decl-itr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-decl-no-itr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-expr-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-expr-itr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/cptn-expr-no-itr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/float32array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/float32array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/float64array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/float64array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generator": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generator-close-via-break": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generator-close-via-return": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generator-close-via-throw": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generator-next-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/generic-iterable": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-const-bound-names-fordecl-tdz": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-const-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-expr-obj-iterator-method": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-expr-primitive-iterator-method": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-expr-to-obj": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-let-bound-names-fordecl-tdz": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-let-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-lhs-cover": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-lhs-member": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-var-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-var-bound-names-in-stmt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-var-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int16array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int16array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int32array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int32array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int8array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/int8array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-as-proxy": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-close-get-method-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-close-non-object": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-close-via-break": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-close-via-return": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-close-via-throw": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-reference": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-result-done-attr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-result-type": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-result-value-attr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/iterator-next-result-value-attr-error": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/map": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/map-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/map-contract-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/map-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/map-expand-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/nested": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/return": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/return-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/return-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/return-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/set": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/set-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/set-contract-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/set-expand": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/set-expand-contract": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/string-astral": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/string-astral-truncated": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/string-bmp": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/throw": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/throw-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/throw-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint16array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint16array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint32array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint32array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint8array": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint8array-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint8clampedarray": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/uint8clampedarray-mutate": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-star": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-star-from-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-star-from-finally": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/yield-star-from-try": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-10-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-11-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-13-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-14-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-15-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-16-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.0-7-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-15-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-16-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-17-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-18-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-19-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-20-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-21-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-22-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-23-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-24-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-25-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-26-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-27-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-28-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-29-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-30-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-31-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-32-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-33-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-34-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-35-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-36-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-37-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-38-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-39-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-40-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-41-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.1-42-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-10-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-13-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-14-s": {
+		"category": "not_es3"
 	}
 }

@@ -3481,6 +3481,16 @@ struct Support {
 			return callObject->call(engine, processor, args.size(), args.begin(), (newThis == 0 ? engine.getGlobals() : newThis));
 		}
 	}
+	
+	static Value hasOwnProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
+		return (object != 0 ? Value(object->hasProperty(engine, argv[1].toString(engine.getHeap()))) : Value(false));
+	}
+
+	static Value isPropertyEnumerable(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
+		return (object != 0 ? Value(object->isPropertyEnumerable(engine, argv[1].toString(engine.getHeap()))) : Value(false));
+	}
 
 	/*
 	Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
@@ -3498,7 +3508,7 @@ struct Support {
 	}
 };
 
-struct {
+static struct {
 	String name;
 	UnaryNativeFunction<double (*)(double)> func;
 } NATIVE_MATH_FUNCTIONS[] = {
@@ -3506,13 +3516,21 @@ struct {
 	{ String("exp"), exp }, { String("floor"), floor }, { String("log"), log }, { String("sin"), sin },
 	{ String("sqrt"), sqrt }, { String("tan"), tan }
 };
-
 // TODO : atan2, pow, min, max, random
 
-const String IS_NAN_STRING("isNaN");
-UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
-const String IS_FINITE_STRING("isFinite");
-UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
+static struct {
+	String name;
+	FunctorAdapter<Value (*)(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) > func;
+} SUPPORT_FUNCTIONS[] = {
+	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
+	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
+	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
+	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
+	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }
+};
+
+static UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
+static UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
 		, evalDirectFunction(true), toPrimitiveFunction(0), toStringFunction(0)
@@ -3557,34 +3575,29 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	globals->setProperty(*this, gcHeap.manage(new String("support")), Value(supportObject));
 	UserObject* prototypesObject = gcHeap.manage(new UserObject(&objectPrototype));
 	supportObject->setProperty(*this, gcHeap.manage(new String("prototypes")), Value(prototypesObject));
-	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, Support::getInternalProperty));
-	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, Support::createWrapper));
-	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, Support::defineProperty));
-	supportObject->setProperty(*this, gcHeap.manage(new String("compileFunction")), newNativeFunction<NativeFunction>(gcHeap, Support::compileFunction));
-	supportObject->setProperty(*this, gcHeap.manage(new String("specialConstructor")), newNativeFunction<NativeFunction>(gcHeap, Support::specialConstructor));
-	supportObject->setProperty(*this, gcHeap.manage(new String("callWithArgs")), newNativeFunction<NativeFunction>(gcHeap, Support::callWithArgs));
+	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
+		supportObject->setProperty(*this, &SUPPORT_FUNCTIONS[i].name, Value(&SUPPORT_FUNCTIONS[i].func));
+	}
+	supportObject->setProperty(*this, gcHeap.manage(new String("isNaN")), Value(&IS_NAN_FUNCTION));
+	supportObject->setProperty(*this, gcHeap.manage(new String("isFinite")), Value(&IS_FINITE_FUNCTION));
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
 	supportObject->setProperty(*this, gcHeap.manage(new String("maxNumber")), Value(std::numeric_limits<double>::max()));
 	supportObject->setProperty(*this, gcHeap.manage(new String("minNumber")), Value(std::numeric_limits<double>::denorm_min()));
-
-	UserObject* nativesObject = gcHeap.manage(new UserObject(&objectPrototype));
-	supportObject->setProperty(*this, gcHeap.manage(new String("natives")), Value(nativesObject));
-	nativesObject->setProperty(*this, gcHeap.manage(new String("fromCharCode")), newNativeFunction<NativeFunction>(gcHeap, Support::fromCharCode));
-	nativesObject->setProperty(*this, &IS_NAN_STRING, Value(&IS_NAN_FUNCTION));
-	nativesObject->setProperty(*this, &IS_FINITE_STRING, Value(&IS_FINITE_FUNCTION));
+	
 	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
-		nativesObject->setProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, Value(&NATIVE_MATH_FUNCTIONS[i].func));
+		supportObject->setProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, Value(&NATIVE_MATH_FUNCTIONS[i].func));
 	}
 	
-	prototypesObject->setProperty(*this, &O_BJECT_STRING, Value(&objectPrototype));
-	prototypesObject->setProperty(*this, &F_UNCTION_STRING, Value(&functionPrototype));
-	prototypesObject->setProperty(*this, &S_TRING_STRING, Value(&stringPrototype));
-	prototypesObject->setProperty(*this, &B_OOLEAN_STRING, Value(&booleanPrototype));
-	prototypesObject->setProperty(*this, &N_UMBER_STRING, Value(&numberPrototype));
-	prototypesObject->setProperty(*this, &A_RRAY_STRING, Value(&arrayPrototype));
-
+	struct { const String* name; Object* object; } PROTOTYPES[] = {
+		{ &O_BJECT_STRING, &objectPrototype }, { &F_UNCTION_STRING, &functionPrototype },
+		{ &S_TRING_STRING, &stringPrototype }, { &B_OOLEAN_STRING, &booleanPrototype },
+		{ &N_UMBER_STRING, &numberPrototype }, { &A_RRAY_STRING, &arrayPrototype }
+	};
+	for (int i = 0; i < sizeof (PROTOTYPES) / sizeof (*PROTOTYPES); ++i) {
+		prototypesObject->setProperty(*this, PROTOTYPES[i].name, Value(PROTOTYPES[i].object));
+	}
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		prototypesObject->setProperty(*this, &ERROR_NAMES[i], Value(errorPrototypes[i]));
 	}

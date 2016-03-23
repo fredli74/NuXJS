@@ -3,15 +3,16 @@
 		prototypes: {	// built-in prototype objects
 			object, function, string, boolean, number, array
 		},
-		natives: {		// built-in native functions (mainly math etc)
-			asin(), atan() etc..
-		},
+		asin(), atan() etc..
+		isNaN(), isFinite()
 		defineProperty(object: object, property: string, value: any, readOnly: boolean, dontEnum: boolean, dontDelete: boolean): boolean
 		compileFunction(sourceCode: string, name: string): function
 		createWrapper(className: string, internalValue: any, prototype: object): object
 		specialConstructor(regularCall: function): function									// = exception on construction and no .prototype either
 		specialConstructor(regularCall: function, constructorCall: function): function
 		getInternalProperty(object: object, 'class'|'value'|'prototype'): any
+		hasOwnProperty(object: object, name: string): boolean
+		isPropertyEnumerable(object: object, name: string): boolean
 		undefined
 		NaN
 		Infinity
@@ -19,13 +20,12 @@
 */
 
 var global = this;
-var natives = support.natives;
 var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
-var isNaN = function(v) { return natives.isNaN(+v); };
-var isFinite = function(v) { return natives.isFinite(+v); };
+var isNaN = function(v) { return support.isNaN(+v); };
+var isFinite = function(v) { return support.isFinite(+v); };
 function toInteger(v) {
-	return (isNaN(v = +v) ? 0.0 : (!isFinite(v) ? v : sign(v) * natives.floor(abs(v))));
+	return (isNaN(v = +v) ? 0.0 : (!isFinite(v) ? v : sign(v) * support.floor(abs(v))));
 };
 var abs = function(v) { return ((v = +v) < 0 ? -v : v); }
 var sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
@@ -81,12 +81,10 @@ var Object = function(v) {
 defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: unconstructable(function() {
-		return this;
-	}),
-	toString: unconstructable(function() {
-		return '[object ' + support.getInternalProperty(this, 'class') + ']'
-	}),
+	valueOf: unconstructable(function() { return this; }),
+	toString: unconstructable(function() { return '[object ' + support.getInternalProperty(this, 'class') + ']' }),
+	hasOwnProperty: unconstructable(function(name) { return support.hasOwnProperty(this, '' + name) }),
+	propertyIsEnumerable: unconstructable(function(name) { return support.isPropertyEnumerable(this, '' + name) }),
 	isPrototypeOf: unconstructable(function(v) {
 		while (v = support.getInternalProperty(v, 'prototype')) {
 			if (v == this) return true;
@@ -177,7 +175,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		checkClass(this, 'Number', 'toString');
 		var n = support.getInternalProperty(this, 'value');
 		var r;
-		if (radix === void 0 || !natives.isFinite(n)) {
+		if (radix === void 0 || !support.isFinite(n)) {
 			return '' + n;
 		} else if ((r = toInteger(radix)) != radix || r < 2 || r > 36) {
 			throw RangeError("illegal radix for toString()");
@@ -186,7 +184,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 			var s = '';
 			do {
 				s = alphaDigits[v % r] + s;
-				v = natives.floor(v / r);
+				v = support.floor(v / r);
 			} while (v > 0);
 			return (n < 0 ? '-' : '') + s;
 		}
@@ -205,8 +203,8 @@ defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, {
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function(v) {
 		var l;
-		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
-		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
+		if ((l = arguments.length) === 1) return support.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < l; ++i) s += support.fromCharCode(arguments[i] & 65535);
 		return s;
 	})
 });
@@ -297,19 +295,19 @@ defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 
 defineProperties(Math, { dontEnum: true }, { // FIX : construction from array instead?
 	abs: unconstructable(abs),
-	acos: unconstructable(function(v) { return natives.acos(+v); }),
-	asin: unconstructable(function(v) { return natives.asin(+v); }),
-	atan: unconstructable(function(v) { return natives.atan(+v); }),
-	ceil: unconstructable(function(v) { return -natives.floor(-v); }),
-	cos: unconstructable(function(v) { return natives.cos(+v); }),
-	exp: unconstructable(function(v) { return natives.exp(+v); }),
-	floor: unconstructable(function(v) { return natives.floor(+v); }),
-	log: unconstructable(function(v) { return natives.log(+v); }),
-	round: unconstructable(function(v) { return natives.floor(v + 0.5); }), // FIX : -0 rule in ES262
-	sin: unconstructable(function(v) { return natives.sin(+v); }),
+	acos: unconstructable(function(v) { return support.acos(+v); }),
+	asin: unconstructable(function(v) { return support.asin(+v); }),
+	atan: unconstructable(function(v) { return support.atan(+v); }),
+	ceil: unconstructable(function(v) { return -support.floor(-v); }),
+	cos: unconstructable(function(v) { return support.cos(+v); }),
+	exp: unconstructable(function(v) { return support.exp(+v); }),
+	floor: unconstructable(function(v) { return support.floor(+v); }),
+	log: unconstructable(function(v) { return support.log(+v); }),
+	round: unconstructable(function(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
+	sin: unconstructable(function(v) { return support.sin(+v); }),
 	sign: unconstructable(sign), // FIX : not ES3 standard??
-	sqrt: unconstructable(function(v) { return natives.sqrt(+v); }),
-	tan: unconstructable(function(v) { return natives.tan(+v); })
+	sqrt: unconstructable(function(v) { return support.sqrt(+v); }),
+	tan: unconstructable(function(v) { return support.tan(+v); })
 
 	// trunc etc from ES6?
 });

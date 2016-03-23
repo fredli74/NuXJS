@@ -504,11 +504,11 @@ class Object : public GCItem {
 				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
 				virtual bool deleteProperty(Engine& engine, const String* name);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const; // default: hasProperty()
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
-				bool hasProperty(Engine& engine, const String* name) const;
+				bool hasProperty(Engine& engine, const String* name) const; // checks via getProperty()
 				bool hasPropertyDeep(Engine& engine, const String* name) const;
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };
