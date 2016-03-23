@@ -306,10 +306,13 @@ const String CONSTRUCTOR_STRING("constructor");
 const String EVAL_STRING("eval");
 const String NATIVE_FUNCTION_STRING("function() { [native code] }");
 const String E_RROR_STRING("Error");
+const String MESSAGE_STRING("message");
+const String NAME_STRING("name");
+const String FUNCTION_SPACE("function ");
+const String COLON_SPACE(": ");
 const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
 };
-
 
 /* --- Value --- */
 
@@ -363,9 +366,7 @@ const String* Value::toString(GCHeap& heap) const {
 		case BOOLEAN_TYPE: return var.boolean ? &TRUE_STRING : &FALSE_STRING;
 		case NUMBER_TYPE: return String::fromDouble(heap, var.number);
 		case STRING_TYPE: return var.string;
-		case OBJECT_TYPE: { // Default implementation if you don't want to go through the customizable toString() script function. But normally you would.
-			return heap.manage(new String(String(BRACKET_OBJECT_STRING, *var.object->getClassName()), END_BRACKET_STRING));
-		}
+		case OBJECT_TYPE: return var.object->toString(heap);
 	}
 }
 
@@ -554,6 +555,7 @@ String::String(const String& l, const String& r) : QArray(l.size() + r.size()), 
 
 const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::getClassName() const { return &S_TRING_STRING; }
+const String* String::toString(GCHeap& heap) const { return this; }
 Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
 
 bool String::getProperty(Engine& engine, const String* name, Value* v) const {
@@ -678,12 +680,17 @@ static struct EmptyEnumerator : public Enumerator { const String* nextPropertyNa
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
-Value Object::getInternalValue() const { return Value::UNDEFINED; }
+Value Object::getInternalValue(GCHeap& heap) const { return Value::UNDEFINED; }
 bool Object::getProperty(Engine& engine, const String* name, Value* v) const { return false; }
 bool Object::setProperty(Engine& engine, const String* name, const Value& v) { return false; }
 bool Object::deleteProperty(Engine& engine, const String* name) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 bool Object::isPropertyEnumerable(Engine& engine, const String* name) const { return hasProperty(engine, name); }
+
+const String* Object::toString(GCHeap& heap) const {
+	return heap.manage(new String(String(BRACKET_OBJECT_STRING, *getClassName()), END_BRACKET_STRING));
+}
+
 bool Object::hasInstance(Engine& engine, Processor& processor, Object* object) const {
 	processor.error(TYPE_ERROR);
 	return false;
@@ -896,7 +903,8 @@ WrapperObject::WrapperObject(const String* className, const Value& value, Object
 }
 
 const String* WrapperObject::getClassName() const { return className; }
-Value WrapperObject::getInternalValue() const { return wrapped; }
+const String* WrapperObject::toString(GCHeap& heap) const { return wrapped.toString(heap); }
+Value WrapperObject::getInternalValue(GCHeap& heap) const { return wrapped; }
 
 /* --- StringWrapper --- */
 
@@ -904,13 +912,9 @@ StringWrapper::StringWrapper(const String* string, Object* prototype)
 		: wrapped(string), super(prototype) {
 }
 
-const String* StringWrapper::getClassName() const {
-	return &S_TRING_STRING;
-}
-
-Value StringWrapper::getInternalValue() const {
-	return Value(wrapped);
-}
+const String* StringWrapper::getClassName() const { return &S_TRING_STRING; }
+const String* StringWrapper::toString(GCHeap& heap) const { return wrapped; }
+Value StringWrapper::getInternalValue(GCHeap& heap) const { return Value(wrapped); }
 
 bool StringWrapper::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	if (wrapped->hasProperty(engine, name)) {
@@ -997,7 +1001,8 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
-Value Function::getInternalValue() const { return Value(&NATIVE_FUNCTION_STRING); }
+const String* Function::toString(GCHeap& heap) const { return &NATIVE_FUNCTION_STRING; }
+Value Function::getInternalValue(GCHeap& heap) const { return Value(&NATIVE_FUNCTION_STRING); }
 Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; };
 
 bool Function::hasInstance(Engine& engine, Processor& processor, Object* object) const {
@@ -1147,8 +1152,12 @@ template<class SUPER> bool LazyObject<SUPER>::isPropertyEnumerable(Engine& engin
 	return getCompleteObject(engine)->isPropertyEnumerable(engine, name);
 }
 
-template<class SUPER> Object* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
-	return (completeObject == 0 ? completeObject = createCompleteObject(engine) : completeObject);
+template<class SUPER> UserObject* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
+	if (completeObject == 0) {
+		completeObject = engine.getHeap().manage(new UserObject(SUPER::getPrototype(engine)));
+		constructCompleteObject(engine);
+	}
+	return completeObject;
 }
 
 /* --- ExtensibleFunction --- */
@@ -1165,13 +1174,13 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 /* --- UserFunction --- */
 
 UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
-
+Value UserFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
 CodeDefinition* UserFunction::getDefinition() const { return codeDef; }
 Object* UserFunction::getEnvironment() const { return environment; }
 
-Value UserFunction::getInternalValue() const {
+const String* UserFunction::toString(GCHeap& heap) const {
 	const String* s = codeDef->getSource();
-	return (s != 0 ? Value(s) : Value::UNDEFINED);
+	return (s != 0 ? s : Object::toString(heap));
 }
 
 Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
@@ -1179,15 +1188,13 @@ Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	return Value();
 }
 
-Object* UserFunction::createCompleteObject(Engine& engine) const {
-	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
-	createPrototypeObject(engine, object);
+void UserFunction::constructCompleteObject(Engine& engine) const {
+	createPrototypeObject(engine, completeObject);
 	Attributes attributes;
 	attributes.dontEnum = true;
 	attributes.dontDelete = true;
 	attributes.readOnly = true;
-	object->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
-	return object;
+	completeObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
 }
 
 /* --- SpecialConstructorFunction --- */
@@ -1210,11 +1217,10 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 	}
 }
 
-Object* SpecialConstructorFunction::createCompleteObject(Engine& engine) const {
-	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
+void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 	Object* lengthObject = regularFunction;
 	if (constructorFunction != 0) {
-		createPrototypeObject(engine, object);
+		createPrototypeObject(engine, completeObject);
 		lengthObject = constructorFunction;
 	}
 	Attributes attributes;
@@ -1223,9 +1229,8 @@ Object* SpecialConstructorFunction::createCompleteObject(Engine& engine) const {
 	attributes.dontDelete = true;
 	Value v;
 	if (lengthObject->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
-		object->defineProperty(engine, &LENGTH_STRING, v, attributes);
+		completeObject->defineProperty(engine, &LENGTH_STRING, v, attributes);
 	}
-	return object;
 }
 
 /* --- FunctionPrototypeFunction --- */
@@ -1236,14 +1241,67 @@ Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int3
 
 Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
-Object* FunctionPrototypeFunction::createCompleteObject(Engine& engine) const {
-	UserObject* object = engine.getHeap().manage(new UserObject(getPrototype(engine)));
+void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 	Attributes attributes; // FIX : constant for this common attribute?
 	attributes.dontEnum = true;
 	attributes.dontDelete = true;
 	attributes.readOnly = true;
-	object->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
-	return object;
+	completeObject->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
+}
+
+/* --- Error --- */
+
+Error::Error(ErrorType type, const String* message)	: errorType(type), name(&ERROR_NAMES[errorType]), message(message) {
+	assert(0 <= errorType && errorType < ERROR_TYPE_COUNT);
+}
+
+const String* Error::getClassName() const { return &E_RROR_STRING; }
+Value Error::getInternalValue(GCHeap& heap) const { return Value(&ERROR_NAMES[errorType]); }
+Object* Error::getPrototype(Engine& engine) const { return engine.errorPrototypes[errorType]; }
+
+const String* Error::toString(GCHeap& heap) const {
+	return (message == 0 ? name : heap.manage(new String(String(*name, COLON_SPACE), *message))); // FIX : we really need operator+ :)
+}
+
+void Error::updateReflection(Engine& engine) {
+	Value v;
+	name = (getProperty(engine, &NAME_STRING, &v) ? v.toString(engine.getHeap()) : &ERROR_NAMES[errorType]);
+	message = (getProperty(engine, &MESSAGE_STRING, &v) ? v.toString(engine.getHeap()) : 0);
+}
+
+bool Error::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
+	const bool result = super::defineProperty(engine, name, v, attributes);
+	updateReflection(engine);
+	return result;
+}
+
+bool Error::setProperty(Engine& engine, const String* name, const Value& v) {
+	const bool result = super::setProperty(engine, name, v);
+	updateReflection(engine);
+	return result;
+}
+
+bool Error::deleteProperty(Engine& engine, const String* name) {
+	const bool result = super::deleteProperty(engine, name);
+	updateReflection(engine);
+	return result;
+}
+
+void Error::constructCompleteObject(Engine& engine) const {
+	if (message != 0) {
+		Attributes attributes;
+		attributes.dontEnum = true;
+		completeObject->defineProperty(engine, &MESSAGE_STRING, Value(message), attributes);
+	}
+}
+
+/* --- ErrorPrototype --- */
+
+ErrorPrototype::ErrorPrototype(ErrorType type) : super(type) { }
+
+Object* ErrorPrototype::getPrototype(Engine& engine) const {
+	return (errorType == GENERIC_ERROR ? static_cast<Object*>(&engine.objectPrototype)
+			: static_cast<Object*>(engine.errorPrototypes[GENERIC_ERROR]));
 }
 
 /* --- Arguments --- */
@@ -1438,12 +1496,9 @@ Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip +
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error(ErrorType errorType) {
-	assert(0 <= errorType && errorType < ERROR_TYPE_COUNT);
-	Object* errorObject = engine.getHeap().manage(new WrapperObject(&E_RROR_STRING, Value(&ERROR_NAMES[errorType])
-			, engine.errorPrototypes[errorType]));
 // FIX : which? both works!
 //	throwVirtualException(Value(errorObject)
-	throw Exception(engine.getHeap(), Value(errorObject));
+	throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(errorType))));
 }
 
 void Processor::updateInternals() {
@@ -1514,7 +1569,7 @@ void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX
 		Object* o;
 		if ((o = exception.asObject()) != 0 && o->getClassName()->isEqualTo(E_RROR_STRING)) { // FIX : have special ErrorObjects and asError()?
-			std::wstring ws(o->getInternalValue().toString(engine.getHeap())->toStdString());
+			std::wstring ws(o->getInternalValue(engine.getHeap()).toString(engine.getHeap())->toStdString());
 			throw std::runtime_error(std::string(ws.begin(), ws.end()));
 		} else {
 			std::string s1("Unhandled exception: ");
@@ -2016,13 +2071,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : h
 		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) {
 }
 
-void Compiler::syntaxError(const String& what) {
-	throw Exception(heap, Value(heap.manage(new String(what))));
-}
-
-void Compiler::syntaxError(const std::string& what) {
-	std::wstring ws(what.begin(), what.end());
-	syntaxError(String(ws));
+void Compiler::error(ErrorType errorType, const char* message) {
+	throw Exception(heap, Value(heap.manage(new Error(errorType, heap.manage(new String(message))))));
 }
 
 void Compiler::emit(Processor::Opcode op) {
@@ -2095,7 +2145,7 @@ void Compiler::white() {
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
 							p = std::search(p += 2, e, END_CHARS, END_CHARS + 2);
-							if (eof()) syntaxError("Missing */");
+							if (eof()) error(SYNTAX_ERROR, "Missing */");
 							p += 2;
 							break;
 						}
@@ -2134,11 +2184,11 @@ const Char* Compiler::identifier(bool required, bool acceptReservedKeywords) {
 		++p;
 		token();
 		if (!acceptReservedKeywords && findReservedKeyword(p - b, b) >= 0) {
-			syntaxError("Illegal use of reserved keyword");
+			error(SYNTAX_ERROR, "Illegal use of reserved keyword");
 		}
 	}
 	if (required && p == b) {
-		syntaxError("Expected identifier");
+		error(SYNTAX_ERROR, "Expected identifier");
 	}
 	return b;
 }
@@ -2171,12 +2221,12 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
 			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
 			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
-			if (p == b) syntaxError("Illegal escape character");
+			if (p == b) error(SYNTAX_ERROR, "Illegal escape character");
 			b = p;
 			*d++ = Char(l);
 		} else ++p;
 	}
-	if (eof() || *p != endChar) syntaxError("Unterminated string");
+	if (eof() || *p != endChar) error(SYNTAX_ERROR, "Unterminated string");
 	return std::copy(b, p++, d);
 }
 
@@ -2231,7 +2281,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
-		default: syntaxError("Illegal l-value"); // FIX : ECMA like the word "reference"
+		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
@@ -2251,7 +2301,7 @@ Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 
 void Compiler::expectToken(const char* token, bool eatLeadingWhite) {
 	if (!Compiler::token(token, eatLeadingWhite)) {
-		syntaxError(std::string("Expected '") + token + "'");
+		error(SYNTAX_ERROR, (std::string("Expected '") + token + "'").c_str());
 	}
 }
 
@@ -2268,11 +2318,11 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 	white();
 	while (!token(")", false)) {
 		if (eof()) {
-			syntaxError(count == 0 ? "Expected ')'" : "Expected ',' or ')'");
+			error(SYNTAX_ERROR, count == 0 ? "Expected ')'" : "Expected ',' or ')'");
 		}
 		if (count != 0) {
 			if (!token(",", false)) {
-				syntaxError("Expected ',' or ')'");
+				error(SYNTAX_ERROR, "Expected ',' or ')'");
 			}
 			white();
 		}
@@ -2292,7 +2342,7 @@ Value Compiler::stringOrNumberConstant() {
 				const Char* b = p += 2;
 				p = parseHex(b, e, u);
 				if (p == b) {
-					syntaxError("Invalid number");
+					error(SYNTAX_ERROR, "Invalid number");
 				}
 				return Value(u);
 			}
@@ -2303,7 +2353,7 @@ Value Compiler::stringOrNumberConstant() {
 			const Char* b = p;
 			p = parseDouble(p, e, d);
 			if (p == b) {
-				syntaxError("Invalid number");
+				error(SYNTAX_ERROR, "Invalid number");
 			}
 			return Value(d);
 		}
@@ -2332,7 +2382,7 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 			break;
 		}
 		if (!token(",", true)) {
-			syntaxError("Expected ',' or ']'");
+			error(SYNTAX_ERROR, "Expected ',' or ']'");
 		}
 		++index;
 	}
@@ -2352,7 +2402,7 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 		if (p == b) {
 			b = identifier(false, true);
 			if (p == b) {
-				syntaxError("Expected property name");
+				error(SYNTAX_ERROR, "Expected property name");
 			} else {
 				name = Value(String::newHashedString(heap, b, p));
 			}
@@ -2364,7 +2414,7 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 			break;
 		}
 		if (!token(",", true)) {
-			syntaxError("Expected ',' or '}'");
+			error(SYNTAX_ERROR, "Expected ',' or '}'");
 		}
 		white();
 	}
@@ -2558,7 +2608,13 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	CodeDefinition* func = heap.manage(new CodeDefinition());
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
-	p = funcCompiler.compileFunction(p, e, *functionName, selfName);
+	try {
+		p = funcCompiler.compileFunction(p, e, *functionName, selfName);
+	}
+	catch (const Exception& x) { // FIX : a bit Q & D ish
+		p = funcCompiler.getStopPoint();
+		throw;
+	}
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 }
 
@@ -2648,7 +2704,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	ExpressionResult xr;
 	if (!optionalExpression(xr, precedence)) {
-		syntaxError("Expected expression");
+		error(SYNTAX_ERROR, "Expected expression");
 	}
 	return xr;
 }
@@ -2781,7 +2837,7 @@ void Compiler::semicolon() {
 	white();
 	if (!eof() && *p != '}' && !token(";", false) && std::find(b, p, '\n') == p) {
 		p = b;
-		syntaxError("Syntax error");
+		error(SYNTAX_ERROR, "Syntax error");
 	}
 }
 
@@ -2818,7 +2874,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			String label(b, q);
 			for (Scope* s = firstScope; s != 0; s = s->next) {
 				if (!s->label.empty() && s->label.isEqualTo(label)) {
-					syntaxError("Duplicate label");
+					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
 			Scope newLabelScope(label, firstScope);
@@ -2852,11 +2908,11 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					s = s->next;
 				}
 				if (s == 0) {
-					syntaxError(!label.empty() ? "Undefined label"
+					error(SYNTAX_ERROR, !label.empty() ? "Undefined label"
 							: (isBreak ? "Illegal break" : "Illegal continue"));
 				}
 				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
-					syntaxError("Illegal label for continue");
+					error(SYNTAX_ERROR, "Illegal label for continue");
 				(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 				semicolon();
 				break;
@@ -2965,7 +3021,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			
 			case RETURN_STATEMENT: {
 				if (compilingFor != FOR_FUNCTION) {
-					syntaxError("Illegal return");
+					error(SYNTAX_ERROR, "Illegal return");
 				}
 				ExpressionResult returnXR;
 				optionalExpression(returnXR, LOWEST_PREC);
@@ -3048,7 +3104,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					expectToken("}", false);
 					flushXR(evalXR);
 				} else {
-					if (!gotCatch) syntaxError("Expected 'catch' or 'finally'");
+					if (!gotCatch) error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
 				}
 				emit(Processor::RETURN_OP);
 				
@@ -3089,7 +3145,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				white();
 				while (!token("}", false)) {
 					if (eof()) {
-						syntaxError("Expected '}'");
+						error(SYNTAX_ERROR, "Expected '}'");
 					}
 					else if (token("case", false)) {
 						flushXR(evalXR);
@@ -3103,15 +3159,15 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						outputCode = &codeDef->code;
 					} else if (token("default", false)) {
 						expectToken(":", true);
-						if (defaultPoint != INVALID_CODE_POINT) syntaxError("More than one 'default:'");
+						if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
 						flushXR(evalXR);
 						defaultPoint = markBackwardBranch();
 					} else if (firstStatement) {
-						syntaxError("Expected 'case', 'default' or '}'");
+						error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
 					} else {
 						const Char* b = p;
 						statement(&emptyLabelScope, &emptyLabelScope, evalXR);
-						if (b == p) syntaxError("Expected '}'");
+						if (b == p) error(SYNTAX_ERROR, "Expected '}'");
 					}
 					firstStatement = false;
 					white();
@@ -3189,11 +3245,11 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	white();
 	while (!token(")", false)) {
 		if (eof()) {
-			syntaxError(codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+			error(SYNTAX_ERROR, codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
 		}
 		if (codeDef->argumentNames.size() != 0) {
 			if (!token(",", false)) {
-				syntaxError("Expected ',' or ')'");
+				error(SYNTAX_ERROR, "Expected ',' or ')'");
 			}
 			white();
 		}
@@ -3206,12 +3262,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	expectToken("{", true);
 	compile(p, e); // FIX: ugly as it sets p and e again, although it doesn't hurt
 	expectToken("}", false);
-
-	QuickArray<Char, 256> sourceCodeString(9 + functionName.size() + (p - b));
-	static const char* FUNCTION_SPACE = "function ";
-	std::copy(b, p, std::copy(functionName.begin(), functionName.end()
-			, std::copy(FUNCTION_SPACE, FUNCTION_SPACE + 9, sourceCodeString.begin())));
-	codeDef->source = heap.manage(new String(sourceCodeString.begin(), sourceCodeString.end()));
+	codeDef->source = heap.manage(new String(String(FUNCTION_SPACE, functionName), String(b, p))); // FIX : operator+ would make things clearer :)
 	codeDef->selfName = selfName;
 	return p;
 }
@@ -3220,7 +3271,7 @@ void Compiler::compile(const String& source) {
 	compile(source.begin(), source.end());
 	white();
 	if (!eof()) {
-		syntaxError("Syntax error"); // FIX : better error?
+		error(SYNTAX_ERROR, "Syntax error"); // FIX : better error?
 	}
 }
 
@@ -3322,7 +3373,7 @@ Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, cons
 			} else if (s->isEqualTo(CLASS_STRING)) {
 				return Value(o->getClassName());
 			} else if (s->isEqualTo(VALUE_STRING)) {
-				return o->getInternalValue();
+				return o->getInternalValue(engine.getHeap());
 			}
 		}
 	}
@@ -3337,9 +3388,20 @@ Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Valu
 		if (prototype == 0) {
 			prototype = &engine.objectPrototype;
 		}
-		Object* o = (className->isEqualTo(S_TRING_STRING)
-				? static_cast<Object*>(new StringWrapper(internalValue.toString(engine.getHeap()), prototype))
-				: static_cast<Object*>(new WrapperObject(className, internalValue, prototype)));
+		Object* o = 0;
+		if (className->isEqualTo(S_TRING_STRING)) {
+			o = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
+		} else if (className->isEqualTo(E_RROR_STRING)) {
+			for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
+				if (prototype == engine.errorPrototypes[i]) {
+					o = new Error(static_cast<ErrorType>(i));
+					break;
+				}
+			}
+		}
+		if (o == 0) {
+			o = new WrapperObject(className, internalValue, prototype);
+		}
 		return Value(engine.getHeap().manage(o));
 	}
 	return Value::UNDEFINED;
@@ -3411,12 +3473,12 @@ UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
 		, evalDirectFunction(true), toPrimitiveFunction(0), toStringFunction(0)
-		, booleanPrototype(& B_OOLEAN_STRING, Value(false), &objectPrototype)
+		, booleanPrototype(&B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
 	assert(heap.belongs(globals));
 
-	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (WrapperObject*)(0));
+	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
 	
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&functionPrototype);
@@ -3426,8 +3488,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 	gcHeap.protect(&arrayPrototype);
 	
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		Object* prototype = (i == 0 ? static_cast<Object*>(&objectPrototype) : static_cast<Object*>(errorPrototypes[0]));
-		errorPrototypes[i] = gcHeap.protect(new WrapperObject(&E_RROR_STRING, Value(&ERROR_NAMES[i]), prototype));
+		errorPrototypes[i] = gcHeap.protect(new ErrorPrototype(static_cast<ErrorType>(i)));
 	}
 	
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
@@ -3479,6 +3540,9 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	prototypesObject->setProperty(*this, &N_UMBER_STRING, Value(&numberPrototype));
 	prototypesObject->setProperty(*this, &A_RRAY_STRING, Value(&arrayPrototype));
 
+	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
+		prototypesObject->setProperty(*this, &ERROR_NAMES[i], Value(errorPrototypes[i]));
+	}
 	// FIX : all this boilerplating... build a function object or something instead?
 
 	CodeDefinition* code = gcHeap.manage(new CodeDefinition());
@@ -3507,13 +3571,13 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	toPrimitiveFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toPrimitive").asObject());
 	if (toPrimitiveFunction == 0) {
 	// FIX : all these gcHeap.manage(new String()) ... could be a utility function!
-		throw Exception(gcHeap, Value(gcHeap.manage(new String("Standard library is missing support.toPrimitive"))));
+		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitive"))))));
 	}
 		
 	// FIX : .toString is really a bad name!
 	toStringFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toString").asObject());
 	if (toStringFunction == 0) {
-		throw Exception(gcHeap, Value(gcHeap.manage(new String("Standard library is missing support.toString"))));
+		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toString"))))));
 	}
 }
 
@@ -3632,7 +3696,7 @@ supressStdErr = false;
 					compiler.compile(source);
 				}
 				catch (Exception& x) {
-					std::cout << "SyntaxError: " << x.what() << std::endl;
+					std::cout << "Compilation error: " << x.what() << std::endl;
 					int lineNumber = 1;
 					const Char* stopPoint = compiler.getStopPoint();
 					const Char* p = source.begin();

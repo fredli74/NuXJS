@@ -60,12 +60,6 @@ function defineProperties(object, attribs, props) {
 	return object;
 }
 
-function createError(name, message, prototype) {
-	var e;
-	(e = support.createWrapper('Error', name, prototype)).message = ('' + (message !== void 0 ? message : ''));
-	return e;
-}
-
 /* --- Object --- */
 
 var Object = function(v) {
@@ -78,7 +72,7 @@ var Object = function(v) {
 		case "string": return new String(v);
 	}
 };
-support.defineProperty(Object, 'prototype', support.prototypes.Object, true, true, true);
+defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
 	valueOf: specialConstructor(function() {
@@ -110,7 +104,7 @@ var Function = function(body) {
 	if (n >= 0) source += arguments[n];
 	return support.compileFunction(source + ' }', 'anonymous');
 };
-support.defineProperty(Function, 'prototype', support.prototypes.Function, true, true, true);
+defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
 	toString: specialConstructor(function() { // FIX : <- generic, make a factory function
@@ -127,7 +121,7 @@ var Boolean = specialConstructor(function(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
 	}
 );
-support.defineProperty(Boolean, 'prototype', support.prototypes.Boolean, true, true, true);
+defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: specialConstructor(function() {
@@ -190,7 +184,15 @@ var String = specialConstructor(function(v) {
 		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
 	}
 );
-support.defineProperty(String, 'prototype', support.prototypes.String, true, true, true);
+defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
+defineProperties(String, { dontEnum: true }, {
+	fromCharCode: specialConstructor(function(v) {
+		var l;
+		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
+		return s;
+	})
+});
 defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
 	valueOf: specialConstructor(function() {
@@ -203,15 +205,6 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	})
 });
 
-defineProperties(String, { dontEnum: true }, {
-	fromCharCode: specialConstructor(function(v) {
-		var l;
-		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
-		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
-		return s;
-	})
-});
-
 /* --- Set up globals --- */
 
 defineProperties(global, { dontEnum: true }, {
@@ -220,9 +213,6 @@ defineProperties(global, { dontEnum: true }, {
 	Boolean: Boolean,
 	Number: Number,
 	String: String,
-	Error: function(message) { return createError('Error', message, support.prototypes.Error); },
-	TypeError: function(message) { return createError('TypeError', message, support.prototypes.Error); },
-	RangeError: function(message) { return createError('RangeError', message, support.prototypes.Error); },
 	isNaN: specialConstructor(isNaN),
 	isFinite: specialConstructor(isFinite),
 	Math: support.createWrapper('Math', void 0)
@@ -232,6 +222,8 @@ defineProperties(global, { readOnly: true, dontEnum: true, dontDelete: true }, {
 	NaN: support.NaN, Infinity: support.Infinity, undefined: support.undefined
 });
 
+/* --- Math --- */
+
 defineProperties(Math, { dontEnum: true }, {
 	abs: specialConstructor(abs),
 	floor: specialConstructor(function(v) { return natives.floor(+v); }),
@@ -239,11 +231,30 @@ defineProperties(Math, { dontEnum: true }, {
 	sqrt: specialConstructor(function(v) { return natives.sqrt(+v); })
 });
 
-support.prototypes.Error = { };
-support.defineProperty(Error, 'prototype', support.prototypes.Error, true, true, true);
-defineProperties(Error.prototype, { dontEnum: true }, {
-	constructor: Error,
-	name: "Error",
-	message: "",
-	toString: specialConstructor(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
-});
+/* --- Errors --- */
+
+function createErrorConstructor(name, prototype) {
+	return function(message) {
+		var e;
+		support.defineProperty(e = support.createWrapper('Error', name, prototype), 'message'
+				, (message !== void 0 ? '' + message : ''), false, true, false);
+		return e
+	}
+};
+
+(function() {
+	var ERROR_NAMES = [ 'Error', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError' ];
+
+	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
+		var name, constructor, prototype;
+		support.defineProperty(global, name = ERROR_NAMES[i]
+				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
+		support.defineProperty(constructor, 'prototype', prototype, true, true, true);
+		defineProperties(prototype, { dontEnum: true }, { constructor: constructor, name: name });
+	}
+
+	defineProperties(Error.prototype, { dontEnum: true }, {
+		message: "",
+		toString: specialConstructor(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
+	});
+})();

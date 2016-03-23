@@ -425,7 +425,7 @@ class Value {
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
 				double toDouble() const;
-				const String* toString(GCHeap& heap) const;
+				const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool operator==(const Value& r) const; // FIX : kill these two?
 				bool operator<(const Value& r) const;
@@ -485,8 +485,9 @@ class Object : public GCItem {
 				
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
+				virtual const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
+				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual Value getInternalValue() const;
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
@@ -527,9 +528,9 @@ template<class SUPER> class LazyObject : public SUPER {
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
 
-	protected:	virtual Object* createCompleteObject(Engine& engine) const = 0;
-				Object* getCompleteObject(Engine& engine) const;
-				mutable Object* completeObject;
+	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
+				UserObject* getCompleteObject(Engine& engine) const;
+				mutable UserObject* completeObject;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(completeObject);
@@ -625,10 +626,11 @@ class String : public virtual Object, public QuickArray<Char> {
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
+				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual Value getInternalValue() const { return Value(this); }
+				virtual Value getInternalValue(GCHeap& heap) const { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
@@ -707,7 +709,8 @@ class WrapperObject : public UserObject {
 	public:		typedef UserObject super;
 				WrapperObject(const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
-				virtual Value getInternalValue() const;
+				virtual const String* toString(GCHeap& heap) const;
+				virtual Value getInternalValue(GCHeap& heap) const;
 	protected:	const String* const className;
 				const Value wrapped;
 				virtual void gcMark(GCHeap& heap) const {
@@ -722,7 +725,8 @@ class StringWrapper : public UserObject {
 	public:		typedef UserObject super;
 				StringWrapper(const String* string, Object* prototype);
 				virtual const String* getClassName() const;
-				virtual Value getInternalValue() const;
+				virtual const String* toString(GCHeap& heap) const;
+				virtual Value getInternalValue(GCHeap& heap) const;
 
 				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
@@ -758,7 +762,8 @@ class Function : public Object {
 				
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
-				virtual Value getInternalValue() const;
+				virtual const String* toString(GCHeap& heap) const;
+				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 };
@@ -827,19 +832,20 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Object* getPrototype(Engine& engine) const;
-	protected:	virtual Object* createCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
 
 class UserFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				
 				UserFunction(CodeDefinition* codeDef, Object* environment);
+				virtual const String* toString(GCHeap& heap) const;
+				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual Value getInternalValue() const;
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 	
-	protected:	virtual Object* createCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
 	
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
@@ -854,11 +860,11 @@ class UserFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
-	public:		SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction);
+				SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
 	
-	protected:	virtual Object* createCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Object* const regularFunction;
 				Object* const constructorFunction;
 
@@ -871,6 +877,36 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 
 enum ErrorType {
 	GENERIC_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, ERROR_TYPE_COUNT
+};
+
+class Error : public LazyObject<Object> {
+	public:		typedef LazyObject<Object> super;
+				Error(ErrorType type, const String* message = 0);
+				virtual const String* getClassName() const;
+				virtual const String* toString(GCHeap& heap) const;
+				virtual Value getInternalValue(GCHeap& heap) const; // error type name
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
+				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const String* name);
+				
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				void updateReflection(Engine& engine);
+				
+				const ErrorType errorType;
+				const String* name; // may get updated by script code
+				const String* message; // may get updated by script code
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(name);
+					heap.mark(message);
+					super::gcMark(heap);
+				}
+};
+
+class ErrorPrototype : public Error {
+	public:		typedef Error super;
+				ErrorPrototype(ErrorType type);
+				virtual Object* getPrototype(Engine& engine) const;
 };
 
 class Engine {
@@ -889,7 +925,7 @@ class Engine {
 				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject stringPrototype;
-				WrapperObject* errorPrototypes[ERROR_TYPE_COUNT];
+				Error* errorPrototypes[ERROR_TYPE_COUNT];
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
@@ -1220,8 +1256,7 @@ class Compiler : public GCItem {
 	protected:	struct ExpressionResult;
 				struct Scope;
 
-				void syntaxError(const String& what);
-				void syntaxError(const std::string& what); // FIX : try to get rid of?
+				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode op);
 				void emitWithInt32(Processor::Opcode op, Int32 i);
 				int addConstant(const Value& constant);
