@@ -415,7 +415,7 @@ class Value {
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
 				// FIX : Value from (heap and) const char* ?
 	
-				bool exists() const { return type != NONEXISTENT_TYPE; }
+				bool exists() const { return type != NONEXISTENT_TYPE; } // FIX : I think NONEXISTENT_TYPE *can* and *should* disappear very soon, only used in "legacy code" now
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
 				bool isNumber() const { return type == NUMBER_TYPE; }
 				bool isString() const { return type == STRING_TYPE; }
@@ -489,8 +489,9 @@ class Object : public GCItem {
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				// FIX : all argc -> UInt32 maybe?
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
 				// FIX: try to join defineProperty and setProperty, they really are the same thing, just try out performance
@@ -773,7 +774,7 @@ class Function : public Object {
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(bool direct) : direct(direct) { }
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
 				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
@@ -832,7 +833,7 @@ class ExtensibleFunction : public LazyObject<Function> {
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
@@ -843,7 +844,7 @@ class UserFunction : public ExtensibleFunction {
 				UserFunction(CodeDefinition* codeDef, Object* environment);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 	
@@ -863,8 +864,8 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
 				SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction);
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue);
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Object* const regularFunction;
@@ -1123,7 +1124,7 @@ class Processor : public GCItem {
 				struct CStackEntry {
 					const CodeWord* returnIP;
 					Frame* frame; // doesn't change during function execution
-					Object* thisValue; // doesn't change during function execution
+					Object* thisObject; // doesn't change during function execution
 				};
 
 				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
@@ -1190,10 +1191,10 @@ class Processor : public GCItem {
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(Function* completion);
-				void chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue);
-				void chain(const CodeWord* ip, Frame* frame, Object* thisValue); // FIX : turn into enter global code or what?
+				void chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject);
+				void chain(const CodeWord* ip, Frame* frame, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
-	// FIX :			void call(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue);
+	// FIX :			void call(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
@@ -1224,7 +1225,7 @@ public: // FIX : not public, just for some asserts now I think
 					heap.markViaReferences(vstackStart, vsp + 1);
 					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
 						heap.mark(c->frame);
-						heap.mark(c->thisValue);
+						heap.mark(c->thisObject);
 					}
 					result.gcMark(heap);
 					super::gcMark(heap);

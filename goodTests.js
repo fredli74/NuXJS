@@ -1510,5 +1510,28 @@ new String("a") == new String("a") is false.
 	}
 
 	// FIX : test errors
+
+	{
+		print('-');
+		var global = this;
+		function test() { print(this.toString() + (this === global ? ' (global)' : '')); for (i = 0; i < arguments.length; ++i) print(arguments[i].toString()); print('-') }
+		test(1,2,3,4,5);
+		var o = { toString: function() { return "me" }, test: test };
+		o.test(6,7,8);
+		test.call(null, 9,10,11,12);
+		test.call(o, 9,10,11,12);
+		test.apply(null, [ 13,14,15,16 ]);
+		test.apply(o, [ 13,14,15,16 ]);
+		test.call(o);
+		test.apply(o);
+		test.call();
+		test.apply();
+		test.call("snuttelisnutt");
+		test.apply("snuttelisnutt");
+		(function() { test.apply(o, arguments); })(17,18,19,20);
+		test.apply(o, "snuttelisnutt");
+		try { test.apply(o, { 'wrong': 'type of object' }); } catch (e) { print(e); }
+	}
 })();
+
 

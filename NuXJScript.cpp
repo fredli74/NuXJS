@@ -349,7 +349,7 @@ double Value::toDouble() const {
 Int32 Value::toInt() const {
 	double v = toDouble();
 	int i = static_cast<Int32>(v);
-	if (i == v) {
+	if (i == v) { // FIX : <2^32 but with decimals will now go via slow fmod, right? unneccessary
 		return i;
 	} else if (!isFinite(v)) {
 		return 0;
@@ -695,12 +695,12 @@ bool Object::hasInstance(Engine& engine, Processor& processor, Object* object) c
 	processor.error(TYPE_ERROR);
 	return false;
 }
-Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	processor.error(TYPE_ERROR);
 	return Value();
 }
-Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return call(engine, processor, argc, argv, thisValue);
+Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	return call(engine, processor, argc, argv, thisObject);
 }
 bool Object::defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes) {
 	return setProperty(engine, name, v);
@@ -1026,8 +1026,8 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 /* --- Object support --- */
 
 class ObjectConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 					return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
 				}
 };
@@ -1085,8 +1085,8 @@ bool Array::deleteProperty(Engine& engine, const String* name) {
 // FIX : we should have GEN_ARRAY, GEN_OBJECT I think...
 
 class ArrayConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 					Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
 					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING)
 							&& argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
@@ -1112,8 +1112,8 @@ static ArrayConstructor ARRAY_OBJECT; // for array literals
 
 #if 0
 class FunctionConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisValue, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
+	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 					Array* array = engine.getHeap().manage(new Function(&engine.functionPrototype));
 					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
 						array->setProperty(engine, &LENGTH_STRING, argv[0]);
@@ -1187,8 +1187,8 @@ const String* UserFunction::toString(GCHeap& heap) const {
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	processor.chain(this, argc, argv, thisValue);
+Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	processor.chain(this, argc, argv, thisObject);
 	return Value();
 }
 
@@ -1208,16 +1208,16 @@ SpecialConstructorFunction::SpecialConstructorFunction(Object* regularFunction, 
 	assert(regularFunction != 0);
 }
 
-Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	return regularFunction->call(engine, processor, argc, argv, thisValue);
+Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	return regularFunction->call(engine, processor, argc, argv, thisObject);
 }
 
-Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	if (constructorFunction == 0) {
 		processor.error(TYPE_ERROR);
 		return Value();
 	} else {
-		return constructorFunction->call(engine, processor, argc, argv, thisValue);
+		return constructorFunction->call(engine, processor, argc, argv, thisObject);
 	}
 }
 
@@ -1239,7 +1239,7 @@ void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- FunctionPrototypeFunction --- */
 
-Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	return Value::UNDEFINED;
 }
 
@@ -1518,7 +1518,7 @@ void Processor::chain(const CodeWord* stub) {
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = 0;
-	csp->thisValue = 0;
+	csp->thisObject = 0;
 	ip = stub;
 	updateInternals();
 }
@@ -1532,25 +1532,25 @@ void Processor::chain(Function* completion) {
 	chain(chainCallStub);
 }
 
-void Processor::chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisValue) {
+void Processor::chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject) {
 	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = frame;
-	csp->thisValue = thisValue;
+	csp->thisObject = thisObject;
 	ip = func->getDefinition()->getCodePointer();
 	updateInternals();
 	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
-void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisValue) {
+void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
 	this->frame = frame;
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = this->ip;
 	csp->frame = this->frame;
-	csp->thisValue = thisValue;
+	csp->thisObject = thisObject;
 	this->ip = ip;
 	updateInternals();
 }
@@ -1564,7 +1564,7 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
 	csp->frame = frame;
-	csp->thisValue = csp[-1].thisValue;
+	csp->thisObject = csp[-1].thisObject;
 	ip = codeDef->getCodePointer();
 	updateInternals();
 }
@@ -1690,7 +1690,7 @@ bool Processor::privateRun() {
 							assert(csp < cstackEnd);
 							csp->returnIP = ip;
 							csp->frame = frame;
-							csp->thisValue = csp[-1].thisValue;
+							csp->thisObject = csp[-1].thisObject;
 							ip += offset;
 							break;
 
@@ -1770,7 +1770,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
-			case THIS_OP: push(Value(csp->thisValue)); break;
+			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject(); // FIX : .getObject?
@@ -1814,7 +1814,7 @@ bool Processor::privateRun() {
 				csp->returnIP = 0;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, constants[operand()].getString(), vsp[0]));
 				pop(1);
-				csp->thisValue = csp[-1].thisValue;
+				csp->thisObject = csp[-1].thisObject;
 				break;
 			}
 			case THROW_OP: throwVirtualException(vsp[0]); break;
@@ -3305,7 +3305,7 @@ void GCHeap::mark(const GCItem* item) {
 	}
 }
 
-Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
@@ -3333,7 +3333,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 
 typedef std::function<Value (Engine&, Processor&, Int32, const Value*, Object*)> NativeFunction;
 
-		mathObject->setProperty(*this, &SQRT_STRING, newNativeFunction(gcHeap, [](Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+		mathObject->setProperty(*this, &SQRT_STRING, newNativeFunction(gcHeap, [](Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 			return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 		}));
 		
@@ -3343,8 +3343,8 @@ typedef Value (*NativeFunction)(Engine&, Processor&, Int32, const Value*, Object
 
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
-	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-		return f(engine, processor, argc, argv, thisValue);
+	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		return f(engine, processor, argc, argv, thisObject);
 	}
 	F f;
 };
@@ -3352,7 +3352,7 @@ template<class F> struct FunctorAdapter : public Function {
 // FIX : only toDouble?
 template<class F> struct UnaryNativeFunction : public Function {
 	UnaryNativeFunction(const F& f) : f(f) { }
-	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F f;
@@ -3360,105 +3360,142 @@ template<class F> struct UnaryNativeFunction : public Function {
 
 template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
 
-Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 2) {
-		Object* o = argv[0].asObject();
-		if (o != 0) {
-			const String* s = argv[1].toString(engine.getHeap());
-			if (s->isEqualTo(PROTOTYPE_STRING)) {
-				Object* p = o->getPrototype(engine);
-				return (p == 0 ? Value::NUL : Value(p));
-			} else if (s->isEqualTo(CLASS_STRING)) {
-				return Value(o->getClassName());
-			} else if (s->isEqualTo(VALUE_STRING)) {
-				return o->getInternalValue(engine.getHeap());
-			}
-		}
-	}
-	return Value::UNDEFINED;
-}
-
-Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 2) {
-		const String* const className = argv[0].toString(engine.getHeap());
-		const Value internalValue = argv[1];
-		Object* prototype = (argc >= 3 ? argv[2].toObject(engine, false) : 0);
-		if (prototype == 0) {
-			prototype = &engine.objectPrototype;
-		}
-		Object* o = 0;
-		if (className->isEqualTo(S_TRING_STRING)) {
-			o = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
-		} else if (className->isEqualTo(E_RROR_STRING)) {
-			for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-				if (prototype == engine.errorPrototypes[i]) {
-					o = new Error(static_cast<ErrorType>(i));
-					break;
+struct Support {
+	static Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 2) {
+			Object* o = argv[0].asObject();
+			if (o != 0) {
+				const String* s = argv[1].toString(engine.getHeap());
+				if (s->isEqualTo(PROTOTYPE_STRING)) {
+					Object* p = o->getPrototype(engine);
+					return (p == 0 ? Value::NUL : Value(p));
+				} else if (s->isEqualTo(CLASS_STRING)) {
+					return Value(o->getClassName());
+				} else if (s->isEqualTo(VALUE_STRING)) {
+					return o->getInternalValue(engine.getHeap());
 				}
 			}
 		}
-		if (o == 0) {
-			o = new WrapperObject(className, internalValue, prototype);
+		return Value::UNDEFINED;
+	}
+
+	static Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 2) {
+			const String* const className = argv[0].toString(engine.getHeap());
+			const Value internalValue = argv[1];
+			Object* prototype = (argc >= 3 ? argv[2].toObject(engine, false) : 0);
+			if (prototype == 0) {
+				prototype = &engine.objectPrototype;
+			}
+			Object* o = 0;
+			if (className->isEqualTo(S_TRING_STRING)) {
+				o = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
+			} else if (className->isEqualTo(E_RROR_STRING)) {
+				for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
+					if (prototype == engine.errorPrototypes[i]) {
+						o = new Error(static_cast<ErrorType>(i));
+						break;
+					}
+				}
+			}
+			if (o == 0) {
+				o = new WrapperObject(className, internalValue, prototype);
+			}
+			return Value(engine.getHeap().manage(o));
 		}
-		return Value(engine.getHeap().manage(o));
+		return Value::UNDEFINED;
 	}
-	return Value::UNDEFINED;
-}
 
-Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 1) {
-		Object* regularFunction = argv[0].toObject(engine, false);
-		if (regularFunction != 0) {
-			Object* constructorFunction = (argc >= 2 ? argv[1].toObject(engine, false) : 0);
-			return Value(engine.getHeap().manage(new SpecialConstructorFunction(regularFunction, constructorFunction)));
+	static Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 1) {
+			Object* regularFunction = argv[0].toObject(engine, false);
+			if (regularFunction != 0) {
+				Object* constructorFunction = (argc >= 2 ? argv[1].toObject(engine, false) : 0);
+				return Value(engine.getHeap().manage(new SpecialConstructorFunction(regularFunction, constructorFunction)));
+			}
+		}
+		return Value::UNDEFINED;
+	}
+
+	static Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		bool success = false;
+		if (argc >= 2) {
+			Object* o = argv[0].asObject();
+			if (o != 0) {
+				Attributes attributes;
+				attributes.readOnly = (argc >= 4 && argv[3].toBool());
+				attributes.dontEnum = (argc >= 5 && argv[4].toBool());
+				attributes.dontDelete = (argc >= 6 && argv[5].toBool());
+				success = o->defineProperty(engine, argv[1].toString(engine.getHeap())
+						, (argc >= 3 ? argv[2] : Value::UNDEFINED), attributes);
+			}
+		}
+		return Value(success);
+	}
+
+	static Value compileFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 1) {
+			GCHeap& heap = engine.getHeap();
+			const String* source = argv[0].toString(heap);
+			CodeDefinition* codeDef = heap.manage(new CodeDefinition());
+			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
+			heap.protect(&compiler);
+			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? *argv[1].toString(heap) : ANONYMOUS_STRING);
+			return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals())));
+		}
+		return Value::UNDEFINED;
+	}
+
+	/* FIX : drop
+	Value callFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Object* newThis = (argc > 0 ? argv[0].toObject(engine, false) : 0);
+		return thisObject->call(engine, processor, std::max(argc - 1, 0), argv + std::min(1, argc)
+				, (newThis == 0 ? engine.getGlobals() : newThis));
+	}
+	*/
+
+	static Value callWithArgs(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Object* callObject = (argc > 0 ? argv[0].toObject(engine, false) : 0);
+		if (callObject == 0) {
+			processor.error(TYPE_ERROR); // FIX : ?
+			return Value();
+		} else {
+			Object* newThis = (argc > 1 ? argv[1].toObject(engine, false) : 0);
+			QuickArray<Value> args;
+			Object* arrayObject = (argc > 2 ? argv[2].toObject(engine, false) : 0);
+			if (arrayObject != 0) {
+				Value v;
+				if (arrayObject->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
+					Int32 length = v.toInt();
+					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
+					args.resize(length);
+					for (Int32 i = 0; i < length; ++i) {
+						args[i] = Value::UNDEFINED;
+						arrayObject->getProperty(engine, String::fromInt(engine.getHeap(), i + offset), &args[i]);
+					}
+				}
+			}
+			// FIX : we copy all arguments once to args, and then chain will copy them again to a frame object, couldn't we short-cut that somehow?
+			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
+			return callObject->call(engine, processor, args.size(), args.begin(), (newThis == 0 ? engine.getGlobals() : newThis));
 		}
 	}
-	return Value::UNDEFINED;
-}
 
-Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	bool success = false;
-	if (argc >= 2) {
-		Object* o = argv[0].asObject();
-		if (o != 0) {
-			Attributes attributes;
-			attributes.readOnly = (argc >= 4 && argv[3].toBool());
-			attributes.dontEnum = (argc >= 5 && argv[4].toBool());
-			attributes.dontDelete = (argc >= 6 && argv[5].toBool());
-			success = o->defineProperty(engine, argv[1].toString(engine.getHeap())
-					, (argc >= 3 ? argv[2] : Value::UNDEFINED), attributes);
-		}
+	/*
+	Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Char c;
+		if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
+		String* s = engine.getHeap().manage(new String(argc));
+		for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
+		return Value(s);
+	}*/
+	// UnaryNativeFunction< std::function<double (double)> > NATIVE_SQRT_FUNCTION([](double d) { return sqrt(d); });
+
+	static Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
+		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(engine.getHeap().manage(new String(&c, &c + 1))));
 	}
-	return Value(success);
-}
-
-Value compileFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	if (argc >= 1) {
-		GCHeap& heap = engine.getHeap();
-		const String* source = argv[0].toString(heap);
-		CodeDefinition* codeDef = heap.manage(new CodeDefinition());
-		Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
-		heap.protect(&compiler);
-		compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? *argv[1].toString(heap) : ANONYMOUS_STRING);
-		return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals())));
-	}
-	return Value::UNDEFINED;
-}
-
-/*
-Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	Char c;
-	if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
-	String* s = engine.getHeap().manage(new String(argc));
-	for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
-	return Value(s);
-}*/
-// UnaryNativeFunction< std::function<double (double)> > NATIVE_SQRT_FUNCTION([](double d) { return sqrt(d); });
-
-Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
-	Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
-	return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(engine.getHeap().manage(new String(&c, &c + 1))));
-}
+};
 
 const String SQRT_STRING("sqrt");
 UnaryNativeFunction<double (*)(double)> NATIVE_SQRT_FUNCTION(sqrt);
@@ -3512,11 +3549,12 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	globals->setProperty(*this, gcHeap.manage(new String("support")), Value(supportObject));
 	UserObject* prototypesObject = gcHeap.manage(new UserObject(&objectPrototype));
 	supportObject->setProperty(*this, gcHeap.manage(new String("prototypes")), Value(prototypesObject));
-	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, getInternalProperty));
-	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, createWrapper));
-	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, defineProperty));
-	supportObject->setProperty(*this, gcHeap.manage(new String("compileFunction")), newNativeFunction<NativeFunction>(gcHeap, compileFunction));
-	supportObject->setProperty(*this, gcHeap.manage(new String("specialConstructor")), newNativeFunction<NativeFunction>(gcHeap, specialConstructor));
+	supportObject->setProperty(*this, gcHeap.manage(new String("getInternalProperty")), newNativeFunction<NativeFunction>(gcHeap, Support::getInternalProperty));
+	supportObject->setProperty(*this, gcHeap.manage(new String("createWrapper")), newNativeFunction<NativeFunction>(gcHeap, Support::createWrapper));
+	supportObject->setProperty(*this, gcHeap.manage(new String("defineProperty")), newNativeFunction<NativeFunction>(gcHeap, Support::defineProperty));
+	supportObject->setProperty(*this, gcHeap.manage(new String("compileFunction")), newNativeFunction<NativeFunction>(gcHeap, Support::compileFunction));
+	supportObject->setProperty(*this, gcHeap.manage(new String("specialConstructor")), newNativeFunction<NativeFunction>(gcHeap, Support::specialConstructor));
+	supportObject->setProperty(*this, gcHeap.manage(new String("callWithArgs")), newNativeFunction<NativeFunction>(gcHeap, Support::callWithArgs));
 	supportObject->setProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
@@ -3525,7 +3563,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 
 	UserObject* nativesObject = gcHeap.manage(new UserObject(&objectPrototype));
 	supportObject->setProperty(*this, gcHeap.manage(new String("natives")), Value(nativesObject));
-	nativesObject->setProperty(*this, gcHeap.manage(new String("fromCharCode")), newNativeFunction<NativeFunction>(gcHeap, fromCharCode));
+	nativesObject->setProperty(*this, gcHeap.manage(new String("fromCharCode")), newNativeFunction<NativeFunction>(gcHeap, Support::fromCharCode));
 	nativesObject->setProperty(*this, &IS_NAN_STRING, Value(&IS_NAN_FUNCTION));
 	nativesObject->setProperty(*this, &IS_FINITE_STRING, Value(&IS_FINITE_FUNCTION));
 	nativesObject->setProperty(*this, &SQRT_STRING, Value(&NATIVE_SQRT_FUNCTION));
@@ -3584,7 +3622,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 
 	class PrintFunction : public Function {
 		public:		typedef Function super;
-					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						return Value::UNDEFINED;
@@ -3592,7 +3630,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	};
 	
 	struct GCFunction : public Function {
-		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisValue) {
+		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 			UInt32 sweptCount = engine.getHeap().gc();
 			return Value(static_cast<Int32>(sweptCount));
 		}

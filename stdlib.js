@@ -20,7 +20,7 @@
 
 var global = this;
 var natives = support.natives;
-var specialConstructor = support.specialConstructor;
+var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var isNaN = function(v) { return natives.isNaN(+v); };
 var isFinite = function(v) { return natives.isFinite(+v); };
@@ -55,8 +55,8 @@ support.toString = function(o) {
 }
 
 function defineProperties(object, attribs, props) {
-	var readOnly = attribs['readOnly'], dontEnum = attribs['dontEnum'], dontDelete = attribs['dontDelete'];
-	for (p in props) support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
+	var readOnly = attribs.readOnly, dontEnum = attribs.dontEnum, dontDelete = attribs.dontDelete;
+	for (var p in props) support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
 	return object;
 }
 
@@ -81,13 +81,13 @@ var Object = function(v) {
 defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: specialConstructor(function() {
+	valueOf: unconstructable(function() {
 		return this;
 	}),
-	toString: specialConstructor(function() {
+	toString: unconstructable(function() {
 		return '[object ' + support.getInternalProperty(this, 'class') + ']'
 	}),
-	isPrototypeOf: specialConstructor(function(v) {
+	isPrototypeOf: unconstructable(function(v) {
 		while (v = support.getInternalProperty(v, 'prototype')) {
 			if (v == this) return true;
 		}
@@ -113,7 +113,18 @@ var Function = function(body) {
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
-	toString: specialConstructor(function() { // FIX : <- generic, make a factory function
+	apply: unconstructable(function(thisArg, argArray) { // FIX : <- 100% native version in the future I think
+		var theClass;
+		if (argArray == null) argArray = [ ];
+		else if ((theClass = support.getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
+			throw TypeError("argument list for apply() has wrong type");
+		};
+		return support.callWithArgs(this, thisArg, argArray, 0);
+	}),
+	call: unconstructable(function(thisArg) { // FIX : <- 100% native version in the future I think
+		return support.callWithArgs(this, thisArg, arguments, 1);
+	}),
+	toString: unconstructable(function() { // FIX : <- generic, make a factory function
 		checkClass(this, 'Function', 'toString');
 		return support.getInternalProperty(this, 'value');
 	})
@@ -121,7 +132,7 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 
 /* --- Boolean --- */
 
-var Boolean = specialConstructor(function(v) {
+var Boolean = support.specialConstructor(function(v) {
 		return !!v;
 	}, function(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
@@ -130,11 +141,11 @@ var Boolean = specialConstructor(function(v) {
 defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
-	valueOf: specialConstructor(function() {
+	valueOf: unconstructable(function() {
 		checkClass(this, 'Boolean', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: specialConstructor(function() {
+	toString: unconstructable(function() {
 		checkClass(this, 'Boolean', 'toString');
 		return '' + support.getInternalProperty(this, 'value');
 	})
@@ -142,7 +153,7 @@ defineProperties(Boolean.prototype, { dontEnum: true }, {
 
 /* --- Number --- */
 
-var Number = specialConstructor(function(v) {
+var Number = support.specialConstructor(function(v) {
 		return (arguments.length ? +v : 0);
 	}, function(v) {
 		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
@@ -158,11 +169,11 @@ defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 });
 defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: specialConstructor(function() {
+	valueOf: unconstructable(function() {
 		checkClass(this, 'Number', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: specialConstructor(function(radix) {
+	toString: unconstructable(function(radix) {
 		checkClass(this, 'Number', 'toString');
 		var n = support.getInternalProperty(this, 'value');
 		var r;
@@ -184,7 +195,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 
 /* --- String --- */
 
-var String = specialConstructor(function(v) {
+var String = support.specialConstructor(function(v) {
 		return (arguments.length ? '' + v : '');
 	}, function(v) {
 		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
@@ -192,7 +203,7 @@ var String = specialConstructor(function(v) {
 );
 defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
-	fromCharCode: specialConstructor(function(v) {
+	fromCharCode: unconstructable(function(v) {
 		var l;
 		if ((l = arguments.length) === 1) return natives.fromCharCode(v & 65535);
 		for (var i = 0, s = ''; i < l; ++i) s += natives.fromCharCode(arguments[i] & 65535);
@@ -201,11 +212,11 @@ defineProperties(String, { dontEnum: true }, {
 });
 defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
-	valueOf: specialConstructor(function() {
+	valueOf: unconstructable(function() {
 		checkClass(this, 'String', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: specialConstructor(function() {
+	toString: unconstructable(function() {
 		checkClass(this, 'String', 'toString');
 		return support.getInternalProperty(this, 'value');
 	})
@@ -226,12 +237,12 @@ var Array = function(v) {
 defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
 defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
-	push: specialConstructor(function(item) {
+	push: unconstructable(function(item) {
 		var args, offset = this.length, end = (args = arguments).length + offset;
 		for (var i = offset; i < end; ++i) this[i] = args[i - offset];
 		return end;
 	}),
-	pop: specialConstructor(function() {
+	pop: unconstructable(function() {
 		var v = void 0, l;
 		if ((l = this.length) > 0) {
 			v = this[l - 1];
@@ -239,14 +250,14 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return v;
 	}),
-	join: specialConstructor(function(separator) {
+	join: unconstructable(function(separator) {
 		separator = (separator === void 0 ? ',' : '' + separator);
 		var s = (this[0] == void 0 ? '' : this[0]);
 		var l = this.length;
 		for (var i = 1; i < l; ++i) s += separator + (this[i] == null ? '' : this[i]);
 		return s;
 	}),
-	toString: specialConstructor(function() {
+	toString: unconstructable(function() {
 		checkClass(this, 'Array', 'toString');
 		return this.join();
 	})
@@ -261,8 +272,8 @@ defineProperties(global, { dontEnum: true }, {
 	Number: Number,
 	String: String,
 	Array: Array,
-	isNaN: specialConstructor(isNaN),
-	isFinite: specialConstructor(isFinite),
+	isNaN: unconstructable(isNaN),
+	isFinite: unconstructable(isFinite),
 	Math: support.createWrapper('Math', void 0)
 });
 
@@ -273,10 +284,10 @@ defineProperties(global, { readOnly: true, dontEnum: true, dontDelete: true }, {
 /* --- Math --- */
 
 defineProperties(Math, { dontEnum: true }, {
-	abs: specialConstructor(abs),
-	floor: specialConstructor(function(v) { return natives.floor(+v); }),
-	sign: specialConstructor(sign),
-	sqrt: specialConstructor(function(v) { return natives.sqrt(+v); })
+	abs: unconstructable(abs),
+	floor: unconstructable(function(v) { return natives.floor(+v); }),
+	sign: unconstructable(sign),
+	sqrt: unconstructable(function(v) { return natives.sqrt(+v); })
 });
 
 /* --- Errors --- */
@@ -303,6 +314,6 @@ function createErrorConstructor(name, prototype) {
 
 	defineProperties(Error.prototype, { dontEnum: true }, {
 		message: "",
-		toString: specialConstructor(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
+		toString: unconstructable(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
 	});
 })();
