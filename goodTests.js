@@ -1081,6 +1081,7 @@ mandelbrot();
 		'undefined', 'null', 'false', 'true', '0', '1', '-128', '1234.5678', '-1.0e+7', 'NaN', 'Infinity', '""', '"str"'
 		, '"-128"', '"1.0"', '"  +1234  "', '"string"', '"5tring"'
 		, '({valueOf:function(){return "-128"}})','({valueOf:function(){return null}})'
+		, 'new Boolean(true)', 'new Number(1234.5678)', 'new String("str")'
 	];
 
 	var values = [ ];

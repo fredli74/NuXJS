@@ -74,10 +74,12 @@ select, button { background: rgba(88, 88, 88, 0.42);color: rgba(255, 255, 255, 0
 		[ "", "" ],
 		[ "bad_test", "BAD TEST" ],
 		[ "by_design", "BY DESIGN" ],
-		[ "not_es3", "ES &gt;" ],
+		[ "not_es3", "ES &gt;3" ],
 		[ "tbd", "TBD" ],
 		[ "todo", "TODO" ],
 	];
+
+	const CATEGORIES_TO_IGNORE = { bad_test: true, by_design: true, not_es3: true, tbd: true };
 
 	var testFlagTemplate = "<select><option>";
 	for (var i = 0; i < CATEGORIES.length; i++) {
@@ -89,7 +91,7 @@ select, button { background: rgba(88, 88, 88, 0.42);color: rgba(255, 255, 255, 0
 	var ignoreList = $("#ignoredList");
 	var passedList = $("#passedList");
 	var failedList =  $("#failedList");
-	function whichList(test) { return (test.category ? ignoreList : test.passed ? passedList : failedList); };
+	function whichList(test) { return ((test.category in CATEGORIES_TO_IGNORE) ? ignoreList : test.passed ? passedList : failedList); };
 	function sortList(list) {
 		$(".test", list[0]).sort(function(a, b) {
 			if ( $(a).data("test").category === $(b).data("test").category )
@@ -129,7 +131,7 @@ select, button { background: rgba(88, 88, 88, 0.42);color: rgba(255, 255, 255, 0
 					var test = data.tests[n];
 
 					ranCount++;
-					if (test.category) ignoredCount++;
+					if (test.category in CATEGORIES_TO_IGNORE) ignoredCount++;
 					else if (test.passed) passedCount++;
 					else failedCount++;
 

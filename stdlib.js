@@ -283,11 +283,35 @@ defineProperties(global, { readOnly: true, dontEnum: true, dontDelete: true }, {
 
 /* --- Math --- */
 
-defineProperties(Math, { dontEnum: true }, {
+// FIX : more decimals needed? these are from ECMA-262
+defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
+	E: 2.7182818284590452354,
+	LN10: 2.302585092994046,
+	LN2: 0.6931471805599453,
+	LOG2E: 1.4426950408889634,
+	LOG10E: 0.4342944819032518,
+	PI: 3.1415926535897932,
+	SQRT1_2: 0.7071067811865476,
+	SQRT2: 1.4142135623730951
+});
+
+defineProperties(Math, { dontEnum: true }, { // FIX : construction from array instead?
 	abs: unconstructable(abs),
+	acos: unconstructable(function(v) { return natives.acos(+v); }),
+	asin: unconstructable(function(v) { return natives.asin(+v); }),
+	atan: unconstructable(function(v) { return natives.atan(+v); }),
+	ceil: unconstructable(function(v) { return -natives.floor(-v); }),
+	cos: unconstructable(function(v) { return natives.cos(+v); }),
+	exp: unconstructable(function(v) { return natives.exp(+v); }),
 	floor: unconstructable(function(v) { return natives.floor(+v); }),
-	sign: unconstructable(sign),
-	sqrt: unconstructable(function(v) { return natives.sqrt(+v); })
+	log: unconstructable(function(v) { return natives.log(+v); }),
+	round: unconstructable(function(v) { return natives.floor(v + 0.5); }), // FIX : -0 rule in ES262
+	sin: unconstructable(function(v) { return natives.sin(+v); }),
+	sign: unconstructable(sign), // FIX : not ES3 standard??
+	sqrt: unconstructable(function(v) { return natives.sqrt(+v); }),
+	tan: unconstructable(function(v) { return natives.tan(+v); })
+
+	// trunc etc from ES6?
 });
 
 /* --- Errors --- */
@@ -309,7 +333,15 @@ function createErrorConstructor(name, prototype) {
 		support.defineProperty(global, name = ERROR_NAMES[i]
 				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
 		support.defineProperty(constructor, 'prototype', prototype, true, true, true);
-		defineProperties(prototype, { dontEnum: true }, { constructor: constructor, name: name });
+		defineProperties(constructor, { readOnly: true, dontEnum: true, dontDelete: true }, {
+			prototype: prototype,
+			name: name // that is right we add a name here too, mainly for more Ecma-262 tests to pass (it is part of ES6 and actually applies to all function definitions)
+			// FIX : thinking of actually adding this to our engine in the future
+		});
+		defineProperties(prototype, { dontEnum: true }, {
+			constructor: constructor,
+			name: name
+		});
 	}
 
 	defineProperties(Error.prototype, { dontEnum: true }, {

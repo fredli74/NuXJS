@@ -3498,10 +3498,17 @@ struct Support {
 	}
 };
 
-const String SQRT_STRING("sqrt");
-UnaryNativeFunction<double (*)(double)> NATIVE_SQRT_FUNCTION(sqrt);
-const String FLOOR_STRING("floor");
-UnaryNativeFunction<double (*)(double)> NATIVE_FLOOR_FUNCTION(floor);
+struct {
+	String name;
+	UnaryNativeFunction<double (*)(double)> func;
+} NATIVE_MATH_FUNCTIONS[] = {
+	{ String("acos"), acos }, { String("asin"), asin }, { String("atan"), atan }, { String("cos"), cos },
+	{ String("exp"), exp }, { String("floor"), floor }, { String("log"), log }, { String("sin"), sin },
+	{ String("sqrt"), sqrt }, { String("tan"), tan }
+};
+
+// TODO : atan2, pow, min, max, random
+
 const String IS_NAN_STRING("isNaN");
 UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 const String IS_FINITE_STRING("isFinite");
@@ -3567,9 +3574,10 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	nativesObject->setProperty(*this, gcHeap.manage(new String("fromCharCode")), newNativeFunction<NativeFunction>(gcHeap, Support::fromCharCode));
 	nativesObject->setProperty(*this, &IS_NAN_STRING, Value(&IS_NAN_FUNCTION));
 	nativesObject->setProperty(*this, &IS_FINITE_STRING, Value(&IS_FINITE_FUNCTION));
-	nativesObject->setProperty(*this, &SQRT_STRING, Value(&NATIVE_SQRT_FUNCTION));
-	nativesObject->setProperty(*this, &FLOOR_STRING, Value(&NATIVE_FLOOR_FUNCTION));
-
+	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
+		nativesObject->setProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, Value(&NATIVE_MATH_FUNCTIONS[i].func));
+	}
+	
 	prototypesObject->setProperty(*this, &O_BJECT_STRING, Value(&objectPrototype));
 	prototypesObject->setProperty(*this, &F_UNCTION_STRING, Value(&functionPrototype));
 	prototypesObject->setProperty(*this, &S_TRING_STRING, Value(&stringPrototype));

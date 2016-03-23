@@ -91,6 +91,8 @@
 //			same problem with (0.003e3 == 3.0)
 //		I don't know but the "emulation" in arguments object feels a bit over the top (registering deleted items etc)
 //		Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
+//		function.name is actually not a bad idea, although standardized first in ES6 (in a very complex manner where x = function() also get a name)...
+//			good to have the name accessible for tracing/debugging (future stack-trace support?)
 //
 // Compiler
 //
@@ -109,6 +111,8 @@
 //			would work except for the compiler, how to abort compiler? longjump? I know it is ugly, but this woul be for embedded systems etc that disable exceptions. Would be nice to support them.
 //			... or I suppose we could change all methods to return a bool :(
 //		also, drop all STL dependencies, incl. std::string even, for simpler / older / stupid compiler compatibility and smaller footprint
+//		this ES-262 test fails, why exactly, the number looks right:
+//			if (+(Number.MAX_VALUE) !== 1.7976931348623157e308) {
 //
 // --- OPTIMIZE ---
 //

@@ -1,35 +1,4286 @@
 {
 	"annexB/language/expressions/object/__proto__": {
-		"category": "tbd"
+		"category": "not_es3"
 	},
 	"annexB/language/expressions/template-literal/legacy-octal-escape-sequence-non-strict": {
-		"category": "bad_test"
+		"category": "not_es3"
 	},
 	"annexB/language/statements/try/catch-redeclared-var-statement-captured": {
-		"category": "bad_test"
+		"category": "todo"
 	},
 	"annexB/language/statements/try/catch-redeclared-var-statement": {
-		"category": "by_design"
+		"category": "todo"
+	},
+	"language/comments/S7.4_A5": {
+		"category": "todo"
+	},
+	"language/comments/S7.4_A6": {
+		"category": "todo"
+	},
+	"language/computed-property-names/basics/number": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/basics/string": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/basics/symbol": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/accessor/getter-duplicates": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/accessor/getter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/accessor/setter-duplicates": {
+		"category": "not_es3"
 	},
 	"language/arguments-object/10.6-11-b-1": {
 		"category": "not_es3"
+	},
+	"language/expressions/array/11.1.4-0": {
+		"category": "todo"
+	},
+	"language/expressions/array/S11.1.4_A1.7": {
+		"category": "todo"
+	},
+	"language/expressions/array/S11.1.4_A1.6": {
+		"category": "todo"
+	},
+	"language/expressions/array/S11.1.4_A1.5": {
+		"category": "todo"
+	},
+	"language/expressions/array/S11.1.4_A1.4": {
+		"category": "todo"
+	},
+	"language/expressions/array/S11.1.4_A1.2": {
+		"category": "todo"
+	},
+	"language/expressions/array/11.1.4_5-6-1": {
+		"category": "tbd"
+	},
+	"language/expressions/array/11.1.4_4-5-1": {
+		"category": "tbd"
+	},
+	"language/expressions/addition/S9.3_A4.1_T2": {
+		"category": "tbd"
+	},
+	"language/expressions/addition/S11.6.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.10_T2": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/11.4.1-4.a-13": {
+		"category": "tbd"
+	},
+	"language/expressions/conditional/S11.12_A1": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T1": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T3": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T2": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T4": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T5": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A2.2_T6": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A3.4_T3": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A3.4_T4": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A5.1_T2": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A5.1_T4": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A5.1_T6": {
+		"category": "todo"
+	},
+	"language/literals/numeric/S7.8.3_A5.1_T8": {
+		"category": "todo"
+	},
+	"language/literals/numeric/binary": {
+		"category": "not_es3"
+	},
+	"language/literals/numeric/octal": {
+		"category": "not_es3"
+	},
+	"language/literals/string/7.8.4-1-s": {
+		"category": "tbd"
+	},
+	"language/literals/string/S7.8.4_A7.2_T6": {
+		"category": "todo"
 	},
 	"language/arguments-object/10.6-12-2": {
 		"category": "not_es3"
 	},
 	"language/arguments-object/10.6-13-a-1": {
-		"category": "not_es3"
+		"category": "tbd"
 	},
 	"language/arguments-object/10.6-13-a-2": {
-		"category": "tbd"
+		"category": "todo"
 	},
 	"language/arguments-object/10.6-13-a-3": {
 		"category": "todo"
 	},
+	"language/arguments-object/10.6-13-c-2-s": {
+		"category": "todo"
+	},
+	"language/arguments-object/mapped/Symbol.iterator": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/finally-block-let-declaration-only-shadows-outer-parameter-value-1": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/finally-block-let-declaration-only-shadows-outer-parameter-value-2": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/for-loop-block-let-declaration-only-shadows-outer-parameter-value-1": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/for-loop-block-let-declaration-only-shadows-outer-parameter-value-2": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/nested-block-let-declaration-only-shadows-outer-parameter-value-1": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/nested-block-let-declaration-only-shadows-outer-parameter-value-2": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/outermost-binding-updated-in-catch-block-nested-block-let-declaration-unseen-outside-of-block": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/try-block-let-declaration-only-shadows-outer-parameter-value-1": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/try-block-let-declaration-only-shadows-outer-parameter-value-2": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/verify-context-in-finally-block": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/verify-context-in-for-loop-block": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/verify-context-in-labelled-block": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/verify-context-in-try-block": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/x-after-break-to-label": {
+		"category": "not_es3"
+	},
+	"language/block-scope/leave/x-before-continue": {
+		"category": "not_es3"
+	},
+	"language/block-scope/return-from/block-const": {
+		"category": "not_es3"
+	},
+	"language/block-scope/return-from/block-let": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/catch-parameter-shadowing-let-declaration": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/const-declaration-shadowing-catch-parameter": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/const-declarations-shadowing-parameter-name-let-const-and-var-variables": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/dynamic-lookup-from-closure": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/dynamic-lookup-in-and-through-block-contexts": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/let-declaration-shadowing-catch-parameter": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/let-declarations-shadowing-parameter-name-let-const-and-var": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/lookup-from-closure": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/lookup-in-and-through-block-contexts": {
+		"category": "not_es3"
+	},
+	"language/block-scope/shadowing/parameter-name-shadowing-parameter-name-let-const-and-var": {
+		"category": "not_es3"
+	},
+	"language/block-scope/syntax/for-in/acquire-properties-from-array": {
+		"category": "not_es3"
+	},
+	"language/block-scope/syntax/for-in/acquire-properties-from-object": {
+		"category": "not_es3"
+	},
+	"language/block-scope/syntax/for-in/mixed-values-in-iteration": {
+		"category": "not_es3"
+	},
+	"language/block-scope/syntax/redeclaration-in-block/attempt-to-redeclare-function-declaration-with-function-declaration": {
+		"category": "tbd"
+	},
+	"language/block-scope/syntax/redeclaration-in-block/attempt-to-redeclare-function-declaration-with-var": {
+		"category": "tbd"
+	},
+	"language/block-scope/syntax/redeclaration-in-block/attempt-to-redeclare-var-with-function-declaration": {
+		"category": "tbd"
+	},
+	"language/computed-property-names/class/accessor/setter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-can-be-generator": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-can-be-getter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-can-be-setter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-duplicate-1": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-duplicate-2": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor-duplicate-3": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/constructor": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/generator": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/number": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/string": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/method/symbol": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/generator-constructor": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/generator-prototype": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/getter-constructor": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/getter-prototype": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/method-constructor": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/method-number": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/method-prototype": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/method-string": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/method-symbol": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/setter-constructor": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/class/static/setter-prototype": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/getter-duplicates": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/getter-super": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/getter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/setter-duplicates": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/setter-super": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/accessor/setter": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/method/generator": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/method/number": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/method/string": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/method/super": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/method/symbol": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/object/property/number-duplicates": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/to-name-side-effects/class": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/to-name-side-effects/numbers-class": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/to-name-side-effects/numbers-object": {
+		"category": "not_es3"
+	},
+	"language/computed-property-names/to-name-side-effects/object": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/call-define-values": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/call-returns-reference-error": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/class-definitions": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/default-parameters-always-provide-unmapped-arguments": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/destructuring": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/function-constructor": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/function-length": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/generators": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/method-definitions": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/param-ref-initialized": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/param-ref-uninitialized": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/replace-default-values": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/returns-abrupt-from-property-value": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/scope": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/variable-initial-value-as-parameter": {
+		"category": "not_es3"
+	},
+	"language/default-parameters/variable-initial-value-undefined": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/initialization-requires-object-coercible-null": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/initialization-requires-object-coercible-undefined": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/initialization-returns-normal-completion-for-empty-objects": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-elements-with-initializer": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-elements-with-object-patterns": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-elements-without-initializer": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-pattern-with-elisions": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-pattern-with-no-elements": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/array-rest-elements": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/object-pattern-with-no-property-list": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/property-list-bindings-elements": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/property-list-followed-by-a-single-comma": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/property-list-single-name-bindings": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/property-list-with-property-list": {
+		"category": "not_es3"
+	},
+	"language/destructuring/binding/syntax/recursive-array-and-object-patterns": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-11-s": {
+		"category": "not_es3"
+	},
+	"language/eval-code/10.4.2-1-5": {
+		"category": "todo"
+	},
+	"language/expressions/arrow-function/ArrowFunction_restricted-properties": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/binding-tests-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/binding-tests-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/binding-tests-3": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/capturing-closure-variables-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/capturing-closure-variables-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/cannot-override-this-with-thisArg": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/empty-function-body-returns-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/expression-body-implicit-return": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-arguments": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-bindings-overriden-by-formal-parameters-non-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-new.target": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-new.target-closure-returned": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-super-call-from-within-constructor": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-super-property": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-super-property-from-within-constructor": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-supercall-from-immediately-invoked-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/lexical-this": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/low-precedence-expression-body-no-parens": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/non-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/object-literal-return-requires-body-parens": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/prototype-rules": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/statement-body-requires-braces-must-return-explicitly": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/statement-body-requires-braces-must-return-explicitly-missing": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-arguments": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-concisebody-assignmentexpression": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-eval": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-lineterminator-concisebody-assignmentexpression": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-lineterminator-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-concisebody-assignmentexpression": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-formalparameters-arguments": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-formalparameters-eval": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-formalparameters-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-includes-rest-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-initialize-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-initialize-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-lineterminator-concisebody-assignmentexpression": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-lineterminator-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-rest-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/arrowparameters-cover-rest-lineterminator-concisebody-functionbody": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/syntax/variations": {
+		"category": "not_es3"
+	},
+	"language/expressions/arrow-function/throw-new": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/11.13.1-4-1": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/8.12.5-3-b_1": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/8.12.5-3-b_2": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/8.12.5-5-b_1": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/8.14.4-8-b_1": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/S11.13.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A5_T1": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A5_T2": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A5_T3": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A5_T4": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A5_T5": {
+		"category": "tbd"
+	},
+	"language/expressions/assignment/S11.13.1_A6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A6_T3": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A7_T1": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/S11.13.1_A7_T2": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/destructuring/array-elem-elision": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-assignment": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-in": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-order": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-simple-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-init-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-invalid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-undefined-hole": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-array-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-undefined-hole": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-nested-obj-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-const": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-prop-ref": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-prop-ref-no-get": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-prop-ref-user-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-put-unresolvable-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-target-identifier": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-target-simple-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-target-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-elem-target-yield-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-empty": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-iteration": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-after-element": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-after-elision": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-elision": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-iteration": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-undefined-hole": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-array-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-undefined-hole": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-nested-obj-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-const": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-prop-ref": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-prop-ref-no-get": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-prop-ref-user-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-put-unresolvable-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-rest-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/array-sparse": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-identifier-resolution": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-identifier-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-assignment": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-in": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-order": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-simple-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-init-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-put-const": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-put-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-put-unresolvable-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-id-simple-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-assignment": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-in": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-init-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-target-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-elem-target-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-identifier-resolution": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-name-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-name-evaluation-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-invalid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-array-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj-null": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj-undefined": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj-undefined-own": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-nested-obj-yield-ident-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-const": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-let": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-order": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-prop-ref": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-prop-ref-no-get": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-prop-ref-user-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/obj-prop-put-unresolvable-no-strict": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-const-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-const-bound-names-in-stmt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-const-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-expr-expr": {
+		"category": "todo"
+	},
+	"language/statements/for-in/head-let-bound-names-in-stmt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-let-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-lhs-cover": {
+		"category": "todo"
+	},
+	"language/statements/for-in/head-lhs-invalid-asnmt-ptrn-obj": {
+		"category": "todo"
+	},
+	"language/statements/for-in/head-lhs-member": {
+		"category": "todo"
+	},
+	"language/statements/for-in/head-var-bound-names-in-stmt": {
+		"category": "todo"
+	},
+	"language/statements/for-in/head-var-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/head-var-expr": {
+		"category": "todo"
+	},
+	"language/statements/for-in/labeled-fn-stmt-const": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/labeled-fn-stmt-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-const-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-const-bound-names-in-stmt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-const-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-decl-no-expr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-expr-no-expr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-let-bound-names-dup": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-let-bound-names-in-stmt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-let-bound-names-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-lhs-cover-non-asnmt-trgt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-lhs-invalid-asnmt-ptrn-ary": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-lhs-invalid-asnmt-ptrn-obj": {
+		"category": "not_es3"
+	},
+	"language/statements/for-in/S12.6.4_A1": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A14_T2": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A15": {
+		"category": "todo"
+	},
+	"language/statements/for-in/S12.6.4_A2": {
+		"category": "todo"
+	},
+	"language/statements/for-of/head-lhs-non-asnmt-trgt": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/head-var-no-expr": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/labeled-fn-stmt-const": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/labeled-fn-stmt-let": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/labeled-fn-stmt-lhs": {
+		"category": "not_es3"
+	},
+	"language/statements/for-of/labeled-fn-stmt-var": {
+		"category": "not_es3"
+	},
+	"language/arguments-object/10.6-14-c-1-s": {
+		"category": "todo"
+	},
+	"language/arguments-object/10.6-5-1": {
+		"category": "todo"
+	},
+	"language/arguments-object/10.6-6-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/10.6-6-2": {
+		"category": "tbd"
+	},
 	"language/arguments-object/10.6-7-1": {
-		"category": "by_design"
+		"category": "tbd"
 	},
 	"language/arguments-object/S10.6_A2": {
 		"category": "todo"
+	},
+	"language/arguments-object/S10.6_A3_T1": {
+		"category": "todo"
+	},
+	"language/arguments-object/S10.6_A4": {
+		"category": "todo"
+	},
+	"language/arguments-object/S10.6_A5_T1": {
+		"category": "todo"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-2": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-3": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-4": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-delete-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-delete-2": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-delete-3": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-delete-4": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-nonwritable-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-nonwritable-2": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-nonwritable-3": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-nonwritable-4": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-nonwritable-5": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-strict-delete-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-strict-delete-2": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-strict-delete-3": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-strict-delete-4": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonwritable-nonconfigurable-1": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonwritable-nonconfigurable-2": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonwritable-nonconfigurable-3": {
+		"category": "tbd"
+	},
+	"language/arguments-object/mapped/mapped-arguments-nonwritable-nonconfigurable-4": {
+		"category": "tbd"
+	},
+	"language/arguments-object/unmapped/Symbol.iterator": {
+		"category": "tbd"
+	},
+	"language/asi/S7.9.2_A1_T4": {
+		"category": "todo"
+	},
+	"language/asi/S7.9.2_A1_T5": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A2": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A3": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A4": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.1_T1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.2_T1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.3_T1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.4_T1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.6_T1": {
+		"category": "todo"
+	},
+	"language/asi/S7.9_A5.6_T2": {
+		"category": "todo"
+	},
+	"language/directive-prologue/10.1.1-14-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-15-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-16-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-17-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-18-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-19-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-2-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-22-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-25-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-26-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-27-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-28-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-2gs": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-30-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-5-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-5gs": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-8-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/10.1.1-8gs": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-1-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-10-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-11-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-12-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-13-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-14-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-15-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-2-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-4-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-4gs": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-5gs": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-8-s": {
+		"category": "not_es3"
+	},
+	"language/directive-prologue/14.1-9-s": {
+		"category": "not_es3"
+	},
+	"language/eval-code/10.4.2-1-4": {
+		"category": "todo"
+	},
+	"language/eval-code/10.4.2-3-c-1-s": {
+		"category": "not_es3"
+	},
+	"language/eval-code/10.4.2.1-4-s": {
+		"category": "not_es3"
+	},
+	"language/eval-code/S10.4.2.1_A1": {
+		"category": "not_es3"
+	},
+	"language/eval-code/non-definable-function-with-function": {
+		"category": "tbd"
+	},
+	"language/eval-code/non-definable-function-with-variable": {
+		"category": "tbd"
+	},
+	"language/eval-code/non-definable-global-function": {
+		"category": "tbd"
+	},
+	"language/eval-code/non-definable-global-generator": {
+		"category": "not_es3"
+	},
+	"language/expressions/addition/S11.6.1_A2.2_T2": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/fn-name-fn": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/fn-name-gen": {
+		"category": "todo"
+	},
+	"language/expressions/assignment/fn-name-lhs-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/fn-name-lhs-member": {
+		"category": "not_es3"
+	},
+	"language/expressions/assignment/destructuring/object-empty": {
+		"category": "not_es3"
+	},
+	"language/expressions/bitwise-and/S11.10.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/bitwise-not/S11.4.8_A1": {
+		"category": "todo"
+	},
+	"language/expressions/bitwise-or/S11.10.3_A1": {
+		"category": "todo"
+	},
+	"language/expressions/bitwise-xor/S11.10.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/call/11.2.3-3_3": {
+		"category": "tbd"
+	},
+	"language/expressions/call/11.2.3-3_4": {
+		"category": "tbd"
+	},
+	"language/expressions/call/11.2.3-3_6": {
+		"category": "tbd"
+	},
+	"language/expressions/call/11.2.3-3_7": {
+		"category": "not_es3"
+	},
+	"language/expressions/call/S11.2.3_A1": {
+		"category": "todo"
+	},
+	"language/expressions/class/name": {
+		"category": "not_es3"
+	},
+	"language/expressions/class/restricted-properties": {
+		"category": "not_es3"
+	},
+	"language/expressions/comma/S11.14_A1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T10": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T11": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T3": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T4": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T5": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T6": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T7": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T8": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A1_T9": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.10_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.10_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.10_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.10_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.10_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.11_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.11_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.11_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.11_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.11_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.1_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.1_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.1_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.1_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.1_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.2_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.2_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.2_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.2_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.2_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.3_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.3_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.3_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.3_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.3_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.4_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.4_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.4_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.4_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.4_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.5_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.5_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.5_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.5_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.5_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.6_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.6_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.6_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.6_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.6_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.7_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.7_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.7_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.7_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.7_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.8_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.8_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.8_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.8_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.8_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.9_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.9_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.9_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.9_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A5.9_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.10_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.11_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.1_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.2_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.3_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.4_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.5_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.6_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.7_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.8_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A6.9_T1": {
+		"category": "tbd"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.10_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.11_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.11_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.1_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.1_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.2_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.2_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.3_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.3_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.4_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.4_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.5_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.5_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.7_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.7_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.8_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.8_T2": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.9_T1": {
+		"category": "todo"
+	},
+	"language/expressions/compound-assignment/S11.13.2_A7.9_T2": {
+		"category": "todo"
+	},
+	"language/expressions/conditional/symbol-conditional-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/delete/11.4.1-4-a-3-s": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/11.4.1-4-a-4-s": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/11.4.1-4.a-1": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/11.4.1-4.a-10": {
+		"category": "todo"
+	},
+	"language/expressions/delete/11.4.1-4.a-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/delete/11.4.1-4.a-3": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/11.4.1-4.a-5": {
+		"category": "todo"
+	},
+	"language/expressions/delete/11.4.1-4.a-6": {
+		"category": "todo"
+	},
+	"language/expressions/delete/11.4.1-5-a-28-s": {
+		"category": "tbd"
+	},
+	"language/expressions/delete/S11.4.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/division/S11.5.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A3.2": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A3.3": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A7.2": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A7.3": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A7.8": {
+		"category": "todo"
+	},
+	"language/expressions/does-not-equals/S11.9.2_A7.9": {
+		"category": "todo"
+	},
+	"language/expressions/equals/S11.9.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/equals/S11.9.1_A7.2": {
+		"category": "todo"
+	},
+	"language/expressions/equals/S11.9.1_A7.3": {
+		"category": "todo"
+	},
+	"language/expressions/equals/S11.9.1_A7.8": {
+		"category": "todo"
+	},
+	"language/expressions/equals/S11.9.1_A7.9": {
+		"category": "todo"
+	},
+	"language/expressions/equals/coerce-symbol-to-prim-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/equals/coerce-symbol-to-prim-invocation": {
+		"category": "not_es3"
+	},
+	"language/expressions/equals/coerce-symbol-to-prim-return-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/equals/coerce-symbol-to-prim-return-prim": {
+		"category": "not_es3"
+	},
+	"language/expressions/equals/get-symbol-to-prim-err": {
+		"category": "tbd"
+	},
+	"language/expressions/equals/symbol-abstract-equality-comparison": {
+		"category": "not_es3"
+	},
+	"language/expressions/equals/symbol-strict-equality-comparison": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A1": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A10": {
+		"category": "todo"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A11": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A12": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A13": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A14": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A15": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A16": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A17": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A18": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A19": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A2": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A20": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A21": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A22": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A23": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A24": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A3": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A4": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A5": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A6": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A7": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A8": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/applying-the-exp-operator_A9": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/exp-assignment-operator": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/exp-operator-evaluation-order": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/exp-operator-precedence-unary-expression-semantics": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/exp-operator-precedence-update-expression-semantics": {
+		"category": "not_es3"
+	},
+	"language/expressions/exponentiation/exp-operator": {
+		"category": "not_es3"
+	},
+	"language/expressions/function/name": {
+		"category": "todo"
+	},
+	"language/expressions/generators/has-instance": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/implicit-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/invoke-as-constructor": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/length-property-descriptor": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/name": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/no-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/no-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-own-properties": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-property-descriptor": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-relation-to-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-typeof": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-uniqueness": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/prototype-value": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/return": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-expression-with-rhs": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-expression-without-rhs": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-function-expression-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-identifier-in-nested-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-literal-property-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-property-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-statement": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-as-yield-operand": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-newline": {
+		"category": "not_es3"
+	},
+	"language/expressions/generators/yield-star-before-newline": {
+		"category": "not_es3"
+	},
+	"language/expressions/greater-than/S11.8.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/greater-than-or-equal/S11.8.4_A1": {
+		"category": "todo"
+	},
+	"language/expressions/grouping/S11.1.6_A1": {
+		"category": "todo"
+	},
+	"language/expressions/in/S11.8.7_A1": {
+		"category": "todo"
+	},
+	"language/expressions/object/11.1.5_3-3-1": {
+		"category": "tbd"
+	},
+	"language/expressions/object/11.1.5_4-4-b-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-b-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-c-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-c-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-d-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-d-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-d-3": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-4-d-4": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_4-5-1": {
+		"category": "tbd"
+	},
+	"language/expressions/object/11.1.5_5-4-1": {
+		"category": "tbd"
+	},
+	"language/expressions/object/11.1.5_6-2-2-s": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_6-3-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_6-3-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_7-3-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5_7-3-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/concise-generator": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/descriptor": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-accessor-get": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-accessor-set": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/getter": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/identifier-reference-property-get-access": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/let-non-strict-access": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/let-non-strict-syntax": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/not-defined": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/prop-def-id-eval-error-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/prop-def-id-eval-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/prop-def-id-get-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/prop-def-id-valid": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/properties-names-eval-arguments": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/setter": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/yield-non-strict-access": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/yield-non-strict-syntax": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-invoke-ctor": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-invoke-fn-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-invoke-fn-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-length": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-name-prop-string": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-name-prop-symbol": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-no-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-params": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-prop-name-eval-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-prop-name-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-prop-name-yield-id": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-property-desc": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-prototype-prop": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-prototype": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-return": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-super-prop-body": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/generator-super-prop-param": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-invoke-ctor": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-invoke-fn-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-invoke-fn-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-length": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-name-prop-string": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-name-prop-symbol": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-param-id-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-param-init-yield": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-params": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-prop-name-eval-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-prop-name-yield-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-prop-name-yield-id": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-property-desc": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-prototype-prop": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-prototype": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-super-prop-body": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/name-super-prop-param": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-expression-with-rhs": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-expression-without-rhs": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A1.1_T1": {
+		"category": "todo"
+	},
+	"language/expressions/object/method-definition/yield-as-function-expression-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-generator-method-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-identifier-in-nested-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-literal-property-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-property-name": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-statement": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-as-yield-operand": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-newline": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-return": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/method-definition/yield-star-before-newline": {
+		"category": "not_es3"
+	},
+	"language/white-space/S7.2_A2.5_T2": {
+		"category": "todo"
+	},
+	"language/types/number/8.5.1": {
+		"category": "tbd"
+	},
+	"language/types/number/S8.5_A13_T2": {
+		"category": "tbd"
+	},
+	"language/types/number/S8.5_A14_T1": {
+		"category": "todo"
+	},
+	"language/types/number/S8.5_A14_T2": {
+		"category": "todo"
+	},
+	"language/types/object/S8.6.2_A8": {
+		"category": "not_es3"
+	},
+	"language/types/reference/8.7.2-6-s": {
+		"category": "tbd"
+	},
+	"language/types/reference/8.7.2-7-s": {
+		"category": "tbd"
+	},
+	"language/types/string/S8.4_A7.2": {
+		"category": "todo"
+	},
+	"language/types/string/S8.4_A7.3": {
+		"category": "todo"
+	},
+	"language/types/string/S8.4_A7.4": {
+		"category": "todo"
+	},
+	"language/white-space/S7.2_A1.5_T1": {
+		"category": "todo"
+	},
+	"language/white-space/S7.2_A1.5_T2": {
+		"category": "todo"
+	},
+	"language/expressions/in/S8.12.6_A2_T2": {
+		"category": "todo"
+	},
+	"language/expressions/instanceof/S11.8.6_A1": {
+		"category": "todo"
+	},
+	"language/expressions/instanceof/prototype-getter-with-object-throws": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/prototype-getter-with-object": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/prototype-getter-with-primitive": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/symbol-hasinstance-get-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/symbol-hasinstance-invocation": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/symbol-hasinstance-not-callable": {
+		"category": "not_es3"
+	},
+	"language/expressions/instanceof/symbol-hasinstance-to-boolean": {
+		"category": "not_es3"
+	},
+	"language/expressions/left-shift/S11.7.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/less-than/S11.8.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/less-than-or-equal/S11.8.3_A1": {
+		"category": "todo"
+	},
+	"language/expressions/logical-and/S11.11.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/logical-and/symbol-logical-and-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/logical-not/S11.4.9_A1": {
+		"category": "todo"
+	},
+	"language/expressions/logical-not/S9.2_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/logical-not/symbol-logical-not-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/logical-or/S11.11.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/logical-or/symbol-logical-or-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/modulus/S11.5.3_A1": {
+		"category": "todo"
+	},
+	"language/expressions/modulus/S11.5.3_A4_T7": {
+		"category": "todo"
+	},
+	"language/expressions/multiplication/S11.5.1_A1": {
+		"category": "todo"
+	},
+	"language/expressions/new/S11.2.2_A1.1": {
+		"category": "todo"
+	},
+	"language/expressions/new/S11.2.2_A1.2": {
+		"category": "todo"
+	},
+	"language/expressions/object/11.1.5-0-1": {
+		"category": "not_es3"
+	},
+	"language/expressions/object/11.1.5-0-2": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A1.1_T2": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A1.2_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A4_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A4_T3": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A4_T4": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A5_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A5_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A5_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A5_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A5_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A1.1_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A1.1_T2": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A1.2_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A4_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A4_T3": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A4_T4": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A5_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A5_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A5_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A5_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A5_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A1": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A5_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A5_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A5_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A5_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A5_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-decrement/S11.4.5_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A1": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A5_T1": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A5_T2": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A5_T3": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A5_T4": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A5_T5": {
+		"category": "not_es3"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A6_T1": {
+		"category": "todo"
+	},
+	"language/expressions/prefix-increment/S11.4.4_A6_T2": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A1.1": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A1.2": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A3_T2": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A3_T3": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A4_T1": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A4_T4": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A4_T5": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A4_T8": {
+		"category": "todo"
+	},
+	"language/expressions/property-accessors/S11.2.1_A4_T9": {
+		"category": "todo"
+	},
+	"language/expressions/right-shift/S11.7.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/strict-does-not-equals/S11.9.5_A1": {
+		"category": "todo"
+	},
+	"language/expressions/strict-equals/S11.9.4_A1": {
+		"category": "todo"
+	},
+	"language/expressions/subtraction/S11.6.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/tagged-template/cache-differing-expressions-eval": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-differing-expressions-new-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-differing-expressions": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-differing-raw-strings": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-differing-string-count": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-identical-source-eval": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-identical-source-new-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/cache-identical-source": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/call-expression-argument-list-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/call-expression-context-no-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/chained-application": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/constructor-invocation": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/member-expression-argument-list-evaluation": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/member-expression-context": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/template-object-frozen-non-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/tagged-template/template-object": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/evaluation-order": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-abrupt": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-member-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-method": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-primitive": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-template": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/literal-expr-tostr-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-abrupt": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-member-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-method": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-primitive": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-template": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-many-expr-tostr-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-abrupt": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-function": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-member-expr": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-method": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-obj": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-primitive": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-template": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/middle-list-one-expr-tostr-error": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/no-sub": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-character-escape-sequence": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-hex-escape-sequence": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-line-continuation": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-line-terminator-sequence": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-no-substitution": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-null-character-escape-sequence": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-template-character": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-template-characters": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-template-head": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-template-middle": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-template-tail": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-utf16-escape-sequence": {
+		"category": "not_es3"
+	},
+	"language/expressions/template-literal/tv-zwnbsp": {
+		"category": "not_es3"
+	},
+	"language/expressions/typeof/built-in-functions": {
+		"category": "todo"
+	},
+	"language/expressions/typeof/native-call": {
+		"category": "todo"
+	},
+	"language/expressions/typeof/native-no-call": {
+		"category": "todo"
+	},
+	"language/expressions/typeof/null": {
+		"category": "tbd"
+	},
+	"language/expressions/typeof/string": {
+		"category": "todo"
+	},
+	"language/expressions/typeof/symbol": {
+		"category": "not_es3"
+	},
+	"language/expressions/typeof/syntax": {
+		"category": "todo"
+	},
+	"language/expressions/unary-minus/S11.4.7_A1": {
+		"category": "todo"
+	},
+	"language/expressions/unary-plus/S11.4.6_A1": {
+		"category": "todo"
+	},
+	"language/expressions/unsigned-right-shift/S11.7.3_A1": {
+		"category": "todo"
+	},
+	"language/expressions/void/S11.4.2_A1": {
+		"category": "todo"
+	},
+	"language/expressions/yield/arguments-object-attributes": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/captured-free-vars": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/expr-value-specified": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/expr-value-unspecified": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/formal-parameters-after-reassignment-non-strict": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/formal-parameters": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/from-catch": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/from-try": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/from-with": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/star-array": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/star-iterable": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/star-string": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/then-return": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/within-for": {
+		"category": "not_es3"
+	},
+	"language/expressions/yield/yield-expr": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-1-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-10-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-100-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-100gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-101-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-101gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-102-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-102gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-103": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-105": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-10gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-12-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-12gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-14-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-14gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-16-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-16gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-2-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-3-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-36-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-36gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-37-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-37gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-38-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-38gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-39-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-39gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-4-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-40-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-40gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-41-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-41gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-42-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-42gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-43-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-43gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-44-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-44gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-45-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-45gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-46-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-46gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-47-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-47gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-48-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-48gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-49-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-49gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-50-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-50gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-51-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-51gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-52-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-52gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-53-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-53gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-54-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-54gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-55-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-55gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-56-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-56gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-57-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-57gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-58-s": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-58gs": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-59-s": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-59gs": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-60-s": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-60gs": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-61-s": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-61gs": {
+		"category": "tbd"
+	},
+	"language/function-code/10.4.3-1-62-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-62gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-63-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-63gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-64-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-64gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-65-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-65gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-66-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-66gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-67-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-67gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-68-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-68gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-71-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-71gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-72-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-72gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-73-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-73gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-76-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-76gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-77-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-77gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-78-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-78gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-79-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-79gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-8-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-80-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-80gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-8gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-95-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-95gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-96-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-96gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-97-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-97gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-98-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-98gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-99-s": {
+		"category": "not_es3"
+	},
+	"language/function-code/10.4.3-1-99gs": {
+		"category": "not_es3"
+	},
+	"language/function-code/eval-param-env-with-computed-key": {
+		"category": "not_es3"
+	},
+	"language/function-code/eval-param-env-with-prop-initializer": {
+		"category": "not_es3"
+	},
+	"language/identifier-resolution/S10.2.2_A1_T5": {
+		"category": "todo"
+	},
+	"language/identifier-resolution/S10.2.2_A1_T6": {
+		"category": "todo"
+	},
+	"language/identifier-resolution/S10.2.2_A1_T7": {
+		"category": "todo"
+	},
+	"language/identifier-resolution/S10.2.2_A1_T8": {
+		"category": "todo"
+	},
+	"language/identifier-resolution/S10.2.2_A1_T9": {
+		"category": "todo"
+	},
+	"language/identifier-resolution/unscopables": {
+		"category": "not_es3"
+	},
+	"language/identifiers/part-digits-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/part-digits-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/start-escape-seq": {
+		"category": "tbd"
+	},
+	"language/identifiers/val-dollar-sign-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/val-dollar-sign-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/val-underscore-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/val-underscore-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-eng-alpha-lower-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-eng-alpha-lower-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-eng-alpha-upper-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-eng-alpha-upper-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-lower-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-lower-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-lower": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-upper-via-escape-hex": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-upper-via-escape-hex4": {
+		"category": "tbd"
+	},
+	"language/identifiers/vals-rus-alpha-upper": {
+		"category": "tbd"
+	},
+	"language/line-terminators/7.3-1": {
+		"category": "todo"
+	},
+	"language/line-terminators/7.3-2": {
+		"category": "todo"
+	},
+	"language/line-terminators/7.3-3": {
+		"category": "todo"
+	},
+	"language/line-terminators/7.3-4": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A1.3": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A1.4": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A2.3": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A2.4": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A3.3_T1": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A3.3_T2": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A3.4_T1": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A3.4_T2": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A4_T3": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A4_T4": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T1": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T2": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T3": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T4": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T5": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T6": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T7": {
+		"category": "todo"
+	},
+	"language/line-terminators/S7.3_A7_T8": {
+		"category": "todo"
+	},
+	"language/literals/null/S7.8.1_A1_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/7.8.5-2gs": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A1.1_T1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A1.1_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A1.4_T1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A1.4_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A2.1_T1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A2.1_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A2.4_T1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A2.4_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T3": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T4": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T5": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T6": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T7": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T8": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A3.1_T9": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A4.1": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/S7.8.5_A4.2": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/u-astral": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/u-case-mapping": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/u-surrogate-pairs": {
+		"category": "tbd"
+	},
+	"language/literals/regexp/u-unicode-esc": {
+		"category": "tbd"
+	},
+	"language/literals/string/S7.8.4_A2.2_T1": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A2.2_T2": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T1": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T2": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T3": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T4": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T5": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T6": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T7": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A4.2_T8": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.1_T4": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.2_T1": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.2_T2": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.2_T3": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.2_T4": {
+		"category": "todo"
+	},
+	"language/literals/string/S7.8.4_A7.2_T5": {
+		"category": "todo"
+	},
+	"language/module-code/strict-mode": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-1-1": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-10": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-11": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-12": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-13": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-14": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-15": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-16": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-2": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-3": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-4": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-5": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-6": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-7": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-8": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-1-9": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-1": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-10": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-11": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-12": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-13": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-14": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-15": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-16": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-2": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-3": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-4": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-5": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-6": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-7": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-8": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-2-9": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-1": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-10": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-11": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-12": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-13": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-14": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-15": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-16": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-2": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-3": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-4": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-5": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-6": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-7": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-8": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-3-9": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-4-1": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-4-10": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-4-11": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-4-12": {
+		"category": "todo"
+	},
+	"language/reserved-words/7.6.1-4-13": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-14": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-15": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-16": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-2": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-3": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-4": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-5": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-6": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-7": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-8": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-4-9": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-1": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-10": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-11": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-12": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-13": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-14": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-15": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-16": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-2": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-3": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-4": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-5": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-6": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-7": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-8": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/7.6.1-8-9": {
+		"category": "not_es3"
+	},
+	"language/reserved-words/await-module": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/array-pattern": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/arrow-function": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/expected-argument-count": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/no-alias-arguments": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/object-pattern": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/rest-index": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/rest-parameters-apply": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/rest-parameters-call": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/rest-parameters-produce-an-array": {
+		"category": "not_es3"
+	},
+	"language/rest-parameters/with-new-target": {
+		"category": "not_es3"
+	},
+	"language/source-text/6.1": {
+		"category": "todo"
+	},
+	"language/statements/break/S12.8_A2": {
+		"category": "todo"
+	},
+	"language/statements/class/name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/restricted-properties": {
+		"category": "not_es3"
+	},
+	"language/statements/class/arguments/access": {
+		"category": "not_es3"
+	},
+	"language/statements/class/arguments/default-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/accessors": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/basics": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/constructable-but-no-prototype": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/constructor-property": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/constructor-strict-by-default": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/fn-name-accessor-get": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/fn-name-accessor-set": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/fn-name-gen-method": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/fn-name-method": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/fn-name-static-precedence": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/getters-2": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/getters": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/implicit-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/invalid-extends": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-no-yield": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-return": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-expression-with-rhs": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-expression-without-rhs": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-generator-method-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-literal-property-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-property-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-as-yield-operand": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-newline": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-gen-yield-star-before-newline": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-named-eval-arguments": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods-restricted-properties": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/methods": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/numeric-property-names": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/prototype-getter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/prototype-property": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/prototype-setter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/prototype-wiring": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/setters-2": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/setters": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/side-effects-in-extends": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/side-effects-in-property-define": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/this-access-restriction-2": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/this-access-restriction": {
+		"category": "not_es3"
+	},
+	"language/statements/class/definition/this-check-ordering": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/basic": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/const": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/expression": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/in-extends-expression-assigned": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/in-extends-expression-grouped": {
+		"category": "not_es3"
+	},
+	"language/statements/class/name-binding/in-extends-expression": {
+		"category": "not_es3"
+	},
+	"language/statements/class/strict-mode/arguments-caller": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/binding": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtins": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/class-definition-evaluation-empty-constructor-heritage-present": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/class-definition-null-proto-contains-return-override": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/class-definition-null-proto-missing-return-override": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/class-definition-null-proto": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/class-definition-superclass-generator": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/default-constructor-2": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/default-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-boolean": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-null": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-number": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-object": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-string": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-symbol": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-this": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/derived-class-return-override-with-undefined": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/superclass-prototype-setter-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/superclass-prototype-setter-method-override": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/superclass-static-method-override": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Array/contructor-calls-super-multiple-arguments": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Array/contructor-calls-super-single-argument": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Array/length": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Array/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Array/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/ArrayBuffer/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/ArrayBuffer/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Boolean/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Boolean/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/DataView/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/DataView/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Date/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Date/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Error/message-property-assignment": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Error/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Error/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Function/instance-length": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Function/instance-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Function/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Function/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/GeneratorFunction/instance-length": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/GeneratorFunction/instance-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/GeneratorFunction/instance-prototype": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/GeneratorFunction/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/GeneratorFunction/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Map/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Map/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/EvalError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/EvalError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/EvalError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/RangeError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/RangeError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/RangeError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/TypeError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/TypeError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/TypeError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/URIError-message": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/URIError-name": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/NativeError/URIError-super": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Number/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Number/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Object/constructor-return-undefined-throws": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Object/constructor-returns-non-object": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Object/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Object/replacing-prototype": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Promise/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Promise/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Proxy/no-prototype-throws": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/RegExp/lastIndex": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/RegExp/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/RegExp/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Set/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Set/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/String/length": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/String/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/String/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Symbol/new-symbol-with-super-throws": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/Symbol/symbol-valid-as-extends-value": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/TypedArray/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/TypedArray/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/WeakMap/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/WeakMap/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/WeakSet/regular-subclassing": {
+		"category": "not_es3"
+	},
+	"language/statements/class/subclass/builtin-objects/WeakSet/super-must-be-called": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-getter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-methods": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-setter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-static-getter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-static-methods": {
+		"category": "not_es3"
+	},
+	"language/statements/class/super/in-static-setter": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-body-has-direct-super-class-heritage": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-body-method-definition-super-property": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-declaration-binding-identifier-class-element-list": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-declaration-computed-method-definition": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-declaration-computed-method-generator-definition": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-declaration-heritage-identifier-reference-class-element-list": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-expression-binding-identifier-opt-class-element-list": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-expression-heritage-identifier-reference": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-expression": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/class-method-propname-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/class/syntax/early-errors/class-body-constructor-empty-missing-class-heritage": {
+		"category": "not_es3"
+	},
+	"language/statements/const/block-local-closure-get-before-initialization": {
+		"category": "not_es3"
+	},
+	"language/statements/const/block-local-use-before-initialization-in-declaration-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/block-local-use-before-initialization-in-prior-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/statements/const/fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/statements/const/fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/statements/const/fn-name-fn": {
+		"category": "not_es3"
+	},
+	"language/statements/const/fn-name-gen": {
+		"category": "not_es3"
+	},
+	"language/statements/const/function-local-closure-get-before-initialization": {
+		"category": "not_es3"
+	},
+	"language/statements/const/function-local-use-before-initialization-in-declaration-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/function-local-use-before-initialization-in-prior-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/global-closure-get-before-initialization": {
+		"category": "not_es3"
+	},
+	"language/statements/const/global-use-before-initialization-in-declaration-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/global-use-before-initialization-in-prior-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/const-invalid-assignment-next-expression-for": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/const-invalid-assignment-statement-body-for-in": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/const-invalid-assignment-statement-body-for-of": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/const-outer-inner-let-bindings": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/const": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/with-initializer-case-expression-statement-list": {
+		"category": "not_es3"
+	},
+	"language/statements/const/syntax/with-initializer-default-statement-list": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/S12.7_A2": {
+		"category": "todo"
+	},
+	"language/statements/continue/labeled-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/nested-let-bound-for-loops-inner-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/nested-let-bound-for-loops-labeled-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/nested-let-bound-for-loops-outer-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/no-label-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/shadowing-loop-variable-in-same-scope-as-continue": {
+		"category": "not_es3"
+	},
+	"language/statements/continue/simple-and-labeled": {
+		"category": "not_es3"
+	},
+	"language/statements/do-while/S12.6.1_A8": {
+		"category": "todo"
+	},
+	"language/statements/do-while/cptn-abrupt-empty": {
+		"category": "tbd"
+	},
+	"language/statements/do-while/cptn-normal": {
+		"category": "tbd"
+	},
+	"language/statements/do-while/labeled-fn-stmt": {
+		"category": "tbd"
+	},
+	"language/statements/for/S12.6.3_A9.1": {
+		"category": "tbd"
+	},
+	"language/statements/for/S12.6.3_A9": {
+		"category": "tbd"
+	},
+	"language/statements/for/cptn-decl-expr-iter": {
+		"category": "tbd"
+	},
+	"language/statements/for/cptn-decl-expr-no-iter": {
+		"category": "tbd"
+	},
+	"language/statements/for/cptn-expr-expr-iter": {
+		"category": "tbd"
+	},
+	"language/statements/for/cptn-expr-expr-no-iter": {
+		"category": "tbd"
+	},
+	"language/statements/for/head-const-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for/head-let-fresh-binding-per-iteration": {
+		"category": "not_es3"
+	},
+	"language/statements/for/labeled-fn-stmt-expr": {
+		"category": "tbd"
+	},
+	"language/statements/for/labeled-fn-stmt-var": {
+		"category": "tbd"
+	},
+	"language/statements/for-in/12.6.4-1": {
+		"category": "todo"
+	},
+	"language/statements/for-in/12.6.4-2": {
+		"category": "tbd"
 	}
 }
