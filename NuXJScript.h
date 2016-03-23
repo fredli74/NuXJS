@@ -1095,18 +1095,12 @@ class Exception : public std::exception {
 */
 
 // FIX : test with very short max sz length
-class Exception : public std::exception, public GCItem {
+class Exception : public std::exception { // FIX : runtime_error instead?
 	public:		Exception(GCHeap& heap, const Value& value) throw() : value(value) { // FIX : not inline
 					strcpy(sz, "Unknown exception (failed conversion to string)");
-					heap.protect(this);
-					try {
-						const String* src = value.toString(heap);
-						const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
-						*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
-					}
-					catch (...) {
-						assert(0);
-					}
+					const String* src = value.toString(heap);
+					const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
+					*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 				}
 				const Value& getValue() const { return value; }
 				virtual const char* what() const throw() { return sz; }													// what() is for compatibility only and has a length limitation. Use getValue() and convert to string to get the full length unicode exception string.

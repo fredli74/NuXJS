@@ -1,3 +1,5 @@
+// FIX: all below
+
 #include "assert.h"
 #include <cmath>
 #include <ctime>
@@ -5,8 +7,10 @@
 #include <exception>
 #include <stdexcept>
 #include <iostream>
+#include <sstream>
 #include <limits>
 #include <map>
+#include <vector>
 #include "NuXJScript.h"
 
 	bool supressStdErr = false; // FIX : drop
@@ -1571,10 +1575,7 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX: what exception to throw here?
-		std::string s1("Unhandled exception: ");
-		std::wstring s2 = exception.toString(engine.getHeap())->toStdString();
-		s1.append(s2.begin(), s2.end());
-		throw std::runtime_error(s1);
+		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
@@ -3620,11 +3621,33 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 #include <fstream>
 #include <memory>
 
+	bool interactive = true;
+
+	std::vector<std::string> ioLines;
+
+	void pushIOLines(char typeChar, const String& s) {
+		const Char* p = s.begin();
+		const Char* e = s.end();
+		while (p != e) {
+			const Char* b = p;
+			while (p != e && *p != '\n') {
+				++p;
+			}
+			ioLines.push_back(typeChar + std::string(" ") + std::string(b, p));
+			if (p != e) {
+				++p;
+			}
+		}
+	}
+
 	class PrintFunction : public Function {
 		public:		typedef Function super;
 					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
+						if (interactive) {
+							pushIOLines('<', *s);
+						}
 						return Value::UNDEFINED;
 					}
 	};
@@ -3682,7 +3705,6 @@ supressStdErr = false;
 	bool doTime = false;
 	long gcRate = 20000000;
 	bool pauseBeforeQuit = false;
-	bool interactive = true;
 	for (int argi = 1; argi < argc; ++argi) {
 		if (strcmp(argv[argi], "-t") == 0) doTime = true;
 		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
@@ -3703,11 +3725,31 @@ supressStdErr = false;
 			std::wstring s;
 			if (interactive) {
 				std::getline(*inStream, s);
-				if (!s.empty()) {
+				if (s == L"#save") {
+					const time_t t = time(0);
+					char fn[257];
+					strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
+					std::ofstream saveStream(fn);
+					for (std::vector<std::string>::const_iterator it = ioLines.begin(); it != ioLines.end(); ++it) {
+						saveStream << *it << std::endl;
+					}
+					saveStream.close();
+					ioLines.clear();
+					std::cout << "saved to " << fn << std::endl;
+				} else if (s == L"#purge") {
+					ioLines.clear();
+					std::cout << "purged" << std::endl;
+				} else if (!s.empty()) {
 					String line(s);
 					if (!source.empty()) source = String(source, LF_STRING);
 					source = String(source, line);
 				} else {
+					if (source.size() > 0 && source[0] == '?') {
+						source = String(String(String("print("), String(source.begin() + 1, source.end())), String(")")); // FIX : operator+
+					}
+					if (interactive) {
+						pushIOLines('>', source);
+					}
 					execute = true;
 				}
 			} else {
@@ -3731,8 +3773,7 @@ supressStdErr = false;
 				try {
 					compiler.compile(source);
 				}
-				catch (Exception& x) {
-					std::cout << "Compilation error: " << x.what() << std::endl;
+				catch (const Exception& x) {
 					int lineNumber = 1;
 					const Char* stopPoint = compiler.getStopPoint();
 					const Char* p = source.begin();
@@ -3743,7 +3784,16 @@ supressStdErr = false;
 						}
 						++p;
 					}
-					std::cout << "Line: " << lineNumber << std::endl;
+					std::wstring ws;
+					{
+						std::wstringstream ss;
+						ss << std::wstring(L"!!!! Line: ") << lineNumber;
+						ws = ss.str();
+					}
+					std::wcout << ws << std::endl;
+					if (interactive) {
+						pushIOLines('!', String(ws));
+					}
 					throw;
 				}
 				globalsFrame.updatedCode();
@@ -3778,18 +3828,33 @@ supressStdErr = false;
 				source = EMPTY_STRING;
 			}
 		}
-		catch (const std::exception& x) {
-			std::cout << "Exception: " << x.what() << std::endl;
+		catch (const Exception& x) {
 			source = EMPTY_STRING;
+			std::wstring ws = x.getValue().toString(heap)->toStdString();
+			ws = L"!!!! " + ws;
+			std::wcout << ws << std::endl;
 			if (!interactive) {
 				return 1;
+			} else {
+				pushIOLines('!', String(ws));
+			}
+		}
+		catch (const std::exception& x) {
+			source = EMPTY_STRING;
+			std::cout << x.what() << std::endl;
+			if (!interactive) {
+				return 1;
+			} else {
+				pushIOLines('!', String(x.what()));
 			}
 		}
 		catch (...) {
-			std::cout << "Unknown exception" << std::endl;
 			source = EMPTY_STRING;
+			std::cout << "Unknown exception" << std::endl;
 			if (!interactive) {
 				return 1;
+			} else {
+				pushIOLines('!', String("Unknown exception"));
 			}
 		}
 	}
