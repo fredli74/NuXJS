@@ -176,7 +176,7 @@ select, button { background: rgba(88, 88, 88, 0.42);color: rgba(255, 255, 255, 0
 		var testName = selectedTest.name;
 		$.get("/source/" + testName).done(function(data) {
 			$("#source h1").html(testName);
-			$("#source pre").html(data).removeClass("prettyprinted");
+			$("#source pre").text(data).removeClass("prettyprinted");
 			prettyPrint();
 			if (callback) callback(data);
 		});
