@@ -1512,6 +1512,8 @@ new String("a") == new String("a") is false.
 
 	// FIX : test errors
 
+	// FIX : test that all function's have names that matches their property names in their "owner objects"
+
 	{
 		print('-');
 		var global = this;

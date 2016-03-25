@@ -1,0 +1,164 @@
+#! /usr/local/bin/PikaCmd
+
+include('debug.pika');
+include('stdlib.pika');
+include('systools.pika');
+
+SUCCESS_COLOR = FAILURE_COLOR = INPUT_COLOR = GOT_COLOR = EXPECTED_COLOR = '';
+if (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {
+	SUCCESS_COLOR = "\x1B[0;32m";
+	FAILURE_COLOR = "\x1B[1;31m";
+	INPUT_COLOR = "\x1B[1;37m";
+	GOT_COLOR = "\x1B[1;31m";
+	EXPECTED_COLOR = "\x1B[1;32m";
+};
+
+help => {
+	print("testio [-e(rrors too)] [-k(eep input files) <in dir>] [-x <exe command>] <test files / dirs>");
+	didHelp = true;
+};
+
+didHelp = false;
+argNumber = 0;
+files.n = 0;
+exe = (if (PLATFORM === 'WINDOWS') 'Debug\\NuXJScript.exe -s' else 'build/Debug/NuXJScript -s');
+errorsToo = false;
+keepInputFiles = false;
+inputFileDir = '';
+for (i = 1; i < $n; ++i) {
+	arg = $[i];
+	if (arg{:1} === '-') {
+		opt = arg{1:1};
+		if (opt === '?' || opt === 'h') {
+			help();
+		} else if (opt === 'e') {
+			errorsToo = true;
+		} else if (opt === 'k') {
+			keepInputFiles = true;
+			inputFileDir = $[++i];
+		} else if (opt === 'x') {
+			exe = $[++i];
+		} else {
+			throw("Unknown command line option. Use -h for help.");
+		}
+	} else {
+		append(@files, arg);
+	}
+};
+
+if (files.n === 0) help();
+
+testFile => {
+	testPath = $0;
+	testFilename = filenameOfPath(testPath);
+	ioSource = load(testPath);
+	ioSource = replace(ioSource, "\r\n", "\n");
+
+	sectionInput = '';
+	sectionOutput = '';
+	sections.n = 0;
+	skip = false;
+
+	addSection => {
+		if (sectionOutput !== '') {
+			if (!skip) map(@sections[sections.n++], 'input', sectionInput, 'output', sectionOutput);
+			skip = false;
+			sectionInput = '';
+			sectionOutput = '';
+		}
+	};
+
+	tokenize(ioSource, >{
+		directive = $0{:1};
+		command = $0{2:};
+		if (directive === '>') {
+			addSection();
+			sectionInput #= command # LF;
+		} else if (directive === '<' || (directive === '!' && errorsToo)) {
+			sectionOutput #= command # LF;
+		} else {
+			skip = true;
+		}
+	});
+	addSection();
+
+	allInput = '';
+	allOutput = '';
+	for (i = 0; i < sections.n; ++i) {
+		allInput #= sections[i].input # LF;
+		allOutput #= sections[i].output;
+	};
+
+	allOutput = trim(allOutput, '', "\n");
+	if (keepInputFiles) {
+		inFile = inputFileDir # DIR_SLASH # 'testio_' # basenameOfPath(testFilename) # '.txt';
+	} else {
+		inFile = tempDir # 'testio';
+	};
+	save(inFile, allInput);
+	result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), false);
+	result = replace(result, "\r\n", "\n");
+	result = trim(result, '', "\n");
+	if (result === allOutput) {
+		print(SUCCESS_COLOR # testFilename);
+		print(repeat('=', length(testFilename)));
+		print("Success!");
+		print('');
+	} else {
+		print(FAILURE_COLOR # testFilename);
+		print(repeat('=', length(testFilename)));
+		print("Failure!");
+		print("");
+		exitCode = 1;
+		outputLines.n = 0;
+		for (i = 0; i < sections.n; ++i) {
+			tokenize(sections[i].output, >{
+				map(@outputLines[outputLines.n++], 'text', $0, 'section', i);
+			});
+			sections[i].result = '';
+		};
+		i = 0;
+		firstMismatch = void;
+		currentSection = 0;
+		tokenize(result, >{
+			if (i < outputLines.n) {
+				currentSection = outputLines[i].section;
+				if ($0 !== outputLines[i].text && firstMismatch === void) firstMismatch = currentSection;
+			};
+			sections[currentSection].result #= $0 # LF;
+			++i;
+		});
+		if (firstMismatch === void) firstMismatch = sections.n - 1;
+		print(INPUT_COLOR # 'INPUT');
+		print(repeat('-', 40));
+		print(sections[firstMismatch].input);
+		print(GOT_COLOR # 'GOT');
+		print(repeat('-', 40));
+		print(sections[firstMismatch].result);
+		print(EXPECTED_COLOR # 'EXPECTED');
+		print(repeat('-', 40));
+		print(sections[firstMismatch].output);
+		print('');
+	}
+};
+
+tempDir = makeTempDir();
+if (!didHelp) {
+	x = try(>{
+		iterate(@files, >{
+			testDir = dirOfPath($2);
+			dir($2, >{
+				fn = $0;
+				if (appendDirSlash(fn) === fn) {
+					dir(testDir # fn, >testFile(testDir # fn # $0));
+				} else {
+					testFile(testDir # fn);
+				}
+			});
+		});
+	});
+	wipeTempDir(tempDir);
+	if (x !== void) {
+		throw(x);
+	}
+} // (!didHelp)

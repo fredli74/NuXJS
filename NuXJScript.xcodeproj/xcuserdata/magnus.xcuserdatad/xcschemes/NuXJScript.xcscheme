@@ -45,7 +45,7 @@
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
       customWorkingDirectory = "/Users/magnus/projects/lab/ScriptLab/NuXJScript"
-      buildConfiguration = "Debug"
+      buildConfiguration = "Release"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
@@ -61,11 +61,11 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-gc 1000000000 -s goodTests.js"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-gc 100000 benchmarks/chess_bm.js"
-            isEnabled = "NO">
+            argument = "-gc 1000000 benchmarks/chess_bm.js"
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "tests/StringObject_1.js"
@@ -113,7 +113,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-s benchmarks/evalbm2.js"
+            argument = "-s benchmarks/lz4_bm_1.js"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -992,7 +992,7 @@ const String* MergingEnumerator::nextPropertyName() {
 
 /* --- CodeDef --- */
 
-CodeDefinition::CodeDefinition() : source(0), selfName(0) { }
+CodeDefinition::CodeDefinition() : name(0), selfName(0), source(0) { }
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
@@ -1200,8 +1200,9 @@ void UserFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject);
 	Attributes attributes;
 	attributes.dontEnum = true;
-	attributes.dontDelete = true;
 	attributes.readOnly = true;
+	completeObject->defineProperty(engine, &NAME_STRING, Value(codeDef->getName()), attributes);
+	attributes.dontDelete = true;
 	completeObject->defineProperty(engine, &LENGTH_STRING, Value(codeDef->getArgumentsCount()), attributes);
 }
 
@@ -1226,17 +1227,20 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 }
 
 void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
-	Object* lengthObject = regularFunction;
+	Object* templateFunction = regularFunction;
 	if (constructorFunction != 0) {
 		createPrototypeObject(engine, completeObject);
-		lengthObject = constructorFunction;
+		templateFunction = constructorFunction;
 	}
+	Value v;
 	Attributes attributes;
 	attributes.dontEnum = true;
 	attributes.readOnly = true;
+	if (templateFunction->getProperty(engine, &NAME_STRING, &v)) { // FIX : getName?
+		completeObject->defineProperty(engine, &NAME_STRING, v, attributes);
+	}
 	attributes.dontDelete = true;
-	Value v;
-	if (lengthObject->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
+	if (templateFunction->getProperty(engine, &LENGTH_STRING, &v)) { // FIX : in the future I think we should have a getLength
 		completeObject->defineProperty(engine, &LENGTH_STRING, v, attributes);
 	}
 }
@@ -1252,8 +1256,9 @@ Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 	Attributes attributes; // FIX : constant for this common attribute?
 	attributes.dontEnum = true;
-	attributes.dontDelete = true;
 	attributes.readOnly = true;
+	completeObject->defineProperty(engine, &NAME_STRING, Value(&EMPTY_STRING), attributes);
+	attributes.dontDelete = true;
 	completeObject->defineProperty(engine, &LENGTH_STRING, Value(0.0), attributes);
 }
 
@@ -2374,16 +2379,25 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 	emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
 	
 	Int32 index = 0;
+	Int32 lastAddedIndex = 0;
 	while (!token("]", true)) {
-		rvalueExpression(COMMA_PREC);
-		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(String::fromInt(heap, index)));
-		if (token("]", true)) {
-			break;
+		Compiler::ExpressionResult xr;
+		if (optionalExpression(xr, COMMA_PREC)) {
+			makeRValue(xr);
+			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(String::fromInt(heap, index)));
+			lastAddedIndex = index;
+			if (token("]", true)) {
+				break;
+			}
 		}
 		if (!token(",", true)) {
 			error(SYNTAX_ERROR, "Expected ',' or ']'");
 		}
 		++index;
+	}
+	if (index != lastAddedIndex) {
+		emitWithConstant(Processor::CONST_OP, Value(index));
+		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(&LENGTH_STRING));
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -2604,11 +2618,12 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 }
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
+	assert(functionName != 0);
 	CodeDefinition* func = heap.manage(new CodeDefinition());
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {
-		p = funcCompiler.compileFunction(p, e, *functionName, selfName);
+		p = funcCompiler.compileFunction(p, e, functionName, selfName);
 	}
 	catch (const Exception& x) { // FIX : a bit Q & D ish
 		p = funcCompiler.getStopPoint();
@@ -3236,8 +3251,9 @@ if (!supressStdErr) {
 	return p;
 }
 
-const Char* Compiler::compileFunction(const Char* b, const Char* e, const String& functionName, const String* selfName) {
+const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
+	assert(functionName != 0);
 	p = b;
 	this->e = e;
 	expectToken("(", true);
@@ -3261,8 +3277,9 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	expectToken("{", true);
 	compile(p, e); // FIX: ugly as it sets p and e again, although it doesn't hurt
 	expectToken("}", false);
-	codeDef->source = heap.manage(new String(String(FUNCTION_SPACE, functionName), String(b, p))); // FIX : operator+ would make things clearer :)
+	codeDef->name = functionName;
 	codeDef->selfName = selfName;
+	codeDef->source = heap.manage(new String(String(FUNCTION_SPACE, *functionName), String(b, p))); // FIX : operator+ would make things clearer :)
 	return p;
 }
 
@@ -3441,7 +3458,7 @@ struct Support {
 			CodeDefinition* codeDef = heap.manage(new CodeDefinition());
 			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
-			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? *argv[1].toString(heap) : ANONYMOUS_STRING);
+			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
 			return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals())));
 		}
 		return Value::UNDEFINED;
@@ -3649,7 +3666,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	void pushIOLines(char typeChar, const String& s) {
 		const Char* p = s.begin();
 		const Char* e = s.end();
-		while (p != e) {
+		do {
 			const Char* b = p;
 			while (p != e && *p != '\n') {
 				++p;
@@ -3658,7 +3675,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 			if (p != e) {
 				++p;
 			}
-		}
+		} while (p != e);
 	}
 
 	class PrintFunction : public Function {
@@ -3746,7 +3763,8 @@ supressStdErr = false;
 			std::wstring s;
 			if (interactive) {
 				std::getline(*inStream, s);
-				if (s == L"#save") {
+				// FIX : add #undo that drops just the last one
+				if (s == L"#save") { // FIX : add optional file name, can also be used to update results from testio.pika
 					const time_t t = time(0);
 					char fn[257];
 					strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));

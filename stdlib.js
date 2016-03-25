@@ -22,13 +22,13 @@
 var global = this;
 var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
-var isNaN = function(v) { return support.isNaN(+v); };
-var isFinite = function(v) { return support.isFinite(+v); };
+var isNaN = function isNaN(v) { return support.isNaN(+v); };
+var isFinite = function isFinite(v) { return support.isFinite(+v); };
 function toInteger(v) {
 	return (isNaN(v = +v) ? 0.0 : (!isFinite(v) ? v : sign(v) * support.floor(abs(v))));
 };
-var abs = function(v) { return ((v = +v) < 0 ? -v : v); }
-var sign = function(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
+var abs = function abs(v) { return ((v = +v) < 0 ? -v : v); }
+var sign = function sign(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)); }
 var alphaDigits = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 function isPrimitive(v) {
@@ -36,7 +36,7 @@ function isPrimitive(v) {
 	return (((t = typeof v) !== "object" || v === null) && t !== "function");
 }
 
-support.toPrimitive = function(o) {
+support.toPrimitive = function toPrimitive(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
@@ -45,7 +45,7 @@ support.toPrimitive = function(o) {
 	return v;
 }
 
-support.toString = function(o) {
+support.toString = function toString(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
@@ -68,7 +68,7 @@ function checkClass(object, expectedClass, forFunction) {
 
 /* --- Object --- */
 
-var Object = function(v) {
+var Object = function Object(v) {
 	switch (typeof v) {
 		case "object":
 		case "function": if (v !== null) return v;
@@ -81,11 +81,11 @@ var Object = function(v) {
 defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: unconstructable(function() { return this; }),
-	toString: unconstructable(function() { return '[object ' + support.getInternalProperty(this, 'class') + ']' }),
-	hasOwnProperty: unconstructable(function(name) { return support.hasOwnProperty(this, '' + name) }),
-	propertyIsEnumerable: unconstructable(function(name) { return support.isPropertyEnumerable(this, '' + name) }),
-	isPrototypeOf: unconstructable(function(v) {
+	valueOf: unconstructable(function valueOf() { return this; }),
+	toString: unconstructable(function toString() { return '[object ' + support.getInternalProperty(this, 'class') + ']' }),
+	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, '' + name) }),
+	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, '' + name) }),
+	isPrototypeOf: unconstructable(function isPrototypeOf(v) {
 		while (v = support.getInternalProperty(v, 'prototype')) {
 			if (v == this) return true;
 		}
@@ -98,7 +98,7 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 
 /* --- Function --- */
 
-var Function = function(body) {
+var Function = function Function(body) {
 	var source = '(', n = arguments.length - 1;
 	for (var i = 0; i < n; ++i) {
 		source += arguments[i];
@@ -111,7 +111,7 @@ var Function = function(body) {
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
-	apply: unconstructable(function(thisArg, argArray) { // FIX : <- 100% native version in the future I think
+	apply: unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
 		var theClass;
 		if (argArray == null) argArray = [ ];
 		else if ((theClass = support.getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
@@ -119,10 +119,10 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 		};
 		return support.callWithArgs(this, thisArg, argArray, 0);
 	}),
-	call: unconstructable(function(thisArg) { // FIX : <- 100% native version in the future I think
+	call: unconstructable(function call(thisArg) { // FIX : <- 100% native version in the future I think
 		return support.callWithArgs(this, thisArg, arguments, 1);
 	}),
-	toString: unconstructable(function() { // FIX : <- generic, make a factory function
+	toString: unconstructable(function toString() { // FIX : <- generic, make a factory function
 		checkClass(this, 'Function', 'toString');
 		return support.getInternalProperty(this, 'value');
 	})
@@ -130,20 +130,20 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 
 /* --- Boolean --- */
 
-var Boolean = support.specialConstructor(function(v) {
+var Boolean = support.specialConstructor(function Boolean(v) {
 		return !!v;
-	}, function(v) {
+	}, function Boolean(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
 	}
 );
 defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
-	valueOf: unconstructable(function() {
+	valueOf: unconstructable(function valueOf() {
 		checkClass(this, 'Boolean', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: unconstructable(function() {
+	toString: unconstructable(function toString() {
 		checkClass(this, 'Boolean', 'toString');
 		return '' + support.getInternalProperty(this, 'value');
 	})
@@ -151,9 +151,9 @@ defineProperties(Boolean.prototype, { dontEnum: true }, {
 
 /* --- Number --- */
 
-var Number = support.specialConstructor(function(v) {
+var Number = support.specialConstructor(function Number(v) {
 		return (arguments.length ? +v : 0);
-	}, function(v) {
+	}, function Number(v) {
 		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
 	}
 );
@@ -167,11 +167,11 @@ defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 });
 defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: unconstructable(function() {
+	valueOf: unconstructable(function valueOf() {
 		checkClass(this, 'Number', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: unconstructable(function(radix) {
+	toString: unconstructable(function toString(radix) {
 		checkClass(this, 'Number', 'toString');
 		var n = support.getInternalProperty(this, 'value');
 		var r;
@@ -193,15 +193,15 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 
 /* --- String --- */
 
-var String = support.specialConstructor(function(v) {
+var String = support.specialConstructor(function String(v) {
 		return (arguments.length ? '' + v : '');
-	}, function(v) {
+	}, function String(v) {
 		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
 	}
 );
 defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
-	fromCharCode: unconstructable(function(v) {
+	fromCharCode: unconstructable(function fromCharCode(v) {
 		var l;
 		if ((l = arguments.length) === 1) return support.fromCharCode(v & 65535);
 		for (var i = 0, s = ''; i < l; ++i) s += support.fromCharCode(arguments[i] & 65535);
@@ -210,11 +210,11 @@ defineProperties(String, { dontEnum: true }, {
 });
 defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
-	valueOf: unconstructable(function() {
+	valueOf: unconstructable(function valueOf() {
 		checkClass(this, 'String', 'valueOf');
 		return support.getInternalProperty(this, 'value');
 	}),
-	toString: unconstructable(function() {
+	toString: unconstructable(function toString() {
 		checkClass(this, 'String', 'toString');
 		return support.getInternalProperty(this, 'value');
 	})
@@ -222,7 +222,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 
 /* --- Array --- */
 
-var Array = function(v) {
+var Array = function Array(v) {
 	var a = [ ], args, l;
 	if ((l = (args = arguments).length) === 1 && typeof v === 'number') {
 		if ((v >>> 0) !== v) throw RangeError("Invalid array length");
@@ -235,12 +235,12 @@ var Array = function(v) {
 defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
 defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
-	push: unconstructable(function(item) {
+	push: unconstructable(function push(item) {
 		var args, offset = this.length, end = (args = arguments).length + offset;
 		for (var i = offset; i < end; ++i) this[i] = args[i - offset];
 		return end;
 	}),
-	pop: unconstructable(function() {
+	pop: unconstructable(function pop() {
 		var v = void 0, l;
 		if ((l = this.length) > 0) {
 			v = this[l - 1];
@@ -248,14 +248,14 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return v;
 	}),
-	join: unconstructable(function(separator) {
+	join: unconstructable(function join(separator) {
 		separator = (separator === void 0 ? ',' : '' + separator);
 		var s = (this[0] == void 0 ? '' : this[0]);
 		var l = this.length;
 		for (var i = 1; i < l; ++i) s += separator + (this[i] == null ? '' : this[i]);
 		return s;
 	}),
-	toString: unconstructable(function() {
+	toString: unconstructable(function toString() {
 		checkClass(this, 'Array', 'toString');
 		return this.join();
 	})
@@ -295,19 +295,19 @@ defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 
 defineProperties(Math, { dontEnum: true }, { // FIX : construction from array instead?
 	abs: unconstructable(abs),
-	acos: unconstructable(function(v) { return support.acos(+v); }),
-	asin: unconstructable(function(v) { return support.asin(+v); }),
-	atan: unconstructable(function(v) { return support.atan(+v); }),
-	ceil: unconstructable(function(v) { return -support.floor(-v); }),
-	cos: unconstructable(function(v) { return support.cos(+v); }),
-	exp: unconstructable(function(v) { return support.exp(+v); }),
-	floor: unconstructable(function(v) { return support.floor(+v); }),
-	log: unconstructable(function(v) { return support.log(+v); }),
-	round: unconstructable(function(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
-	sin: unconstructable(function(v) { return support.sin(+v); }),
+	acos: unconstructable(function acos(v) { return support.acos(+v); }),
+	asin: unconstructable(function asin(v) { return support.asin(+v); }),
+	atan: unconstructable(function atan(v) { return support.atan(+v); }),
+	ceil: unconstructable(function ceil(v) { return -support.floor(-v); }),
+	cos: unconstructable(function cos(v) { return support.cos(+v); }),
+	exp: unconstructable(function exp(v) { return support.exp(+v); }),
+	floor: unconstructable(function floor(v) { return support.floor(+v); }),
+	log: unconstructable(function log(v) { return support.log(+v); }),
+	round: unconstructable(function round(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
+	sin: unconstructable(function sin(v) { return support.sin(+v); }),
 	sign: unconstructable(sign), // FIX : not ES3 standard??
-	sqrt: unconstructable(function(v) { return support.sqrt(+v); }),
-	tan: unconstructable(function(v) { return support.tan(+v); })
+	sqrt: unconstructable(function sqrt(v) { return support.sqrt(+v); }),
+	tan: unconstructable(function tan(v) { return support.tan(+v); })
 
 	// trunc etc from ES6?
 });
@@ -330,12 +330,9 @@ function createErrorConstructor(name, prototype) {
 		var name, constructor, prototype;
 		support.defineProperty(global, name = ERROR_NAMES[i]
 				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
-		support.defineProperty(constructor, 'prototype', prototype, true, true, true);
-		defineProperties(constructor, { readOnly: true, dontEnum: true, dontDelete: true }, {
-			prototype: prototype,
-			name: name // that is right we add a name here too, mainly for more Ecma-262 tests to pass (it is part of ES6 and actually applies to all function definitions)
-			// FIX : thinking of actually adding this to our engine in the future
-		});
+		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
+		defineProperties(constructor, { readOnly: true, dontEnum: true }, { prototype: prototype, name: name });
+		defineProperties(constructor, { readOnly: true, dontEnum: true, dontDelete: true }, { prototype: prototype });
 		defineProperties(prototype, { dontEnum: true }, {
 			constructor: constructor,
 			name: name
@@ -344,6 +341,6 @@ function createErrorConstructor(name, prototype) {
 
 	defineProperties(Error.prototype, { dontEnum: true }, {
 		message: "",
-		toString: unconstructable(function() { return this.name + (this.message ? (': ' + this.message) : ''); })
+		toString: unconstructable(function toString() { return this.name + (this.message ? (': ' + this.message) : ''); })
 	});
 })();

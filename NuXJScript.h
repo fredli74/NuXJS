@@ -11,6 +11,7 @@
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
 //			ok, one thought: normally an array only contains a cotninuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal UserObject (accessed as through a proxy now)
+//			more thoughts: use different compressed variations (templates) when type is homogenous over all the array, e.g. number array, object array, string array. One could even consider an int array.
 //		basic library (math, string, array ops)
 //		for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
 //			done, but not for strings and arguments objects
@@ -175,6 +176,7 @@
 //
 //		take a shot at generational gc
 //			couldn't it work if we just make sure that a reference from old -> new gen protects the item in new gen until we sweep the old gen?
+//			actually, I don't think we should think new and old gen... we should think standard heap and "sleepy" heap..
 //		no need for recursive marking, just add to one end of the list and continue looping to the end of list
 //		fast allocation pools
 //		automatic gc pace
@@ -419,7 +421,7 @@ class Value {
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
 				// FIX : Value from (heap and) const char* ?
 	
-				bool exists() const { return type != NONEXISTENT_TYPE; } // FIX : I think NONEXISTENT_TYPE *can* and *should* disappear very soon, only used in "legacy code" now
+				bool exists() const { return type != NONEXISTENT_TYPE; } // FIX : I think NONEXISTENT_TYPE *can* and *should* disappear very soon, only used in "legacy code" now (WELL actually, arrays *might* need them in the future if we don't have full flags instead like in tables)
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
 				bool isNumber() const { return type == NUMBER_TYPE; }
 				bool isString() const { return type == STRING_TYPE; }
@@ -808,6 +810,7 @@ class CodeDefinition : public Object {
 				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : constants.begin()); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
 				UInt32 getCodeSize() const { return code.size(); }
+				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 
 	protected:	QuickVector<CodeWord> code;
@@ -816,16 +819,18 @@ class CodeDefinition : public Object {
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
 				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
-				const String* source;
+				const String* name;
 				const String* selfName;
+				const String* source;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(constants.begin(), constants.end());
 					nameIndexes.gcMark(heap);
 					heap.markViaPointers(varNames.begin(), varNames.end());
 					heap.markViaPointers(argumentNames.begin(), argumentNames.end());
-					heap.mark(source);
+					heap.mark(name);
 					heap.mark(selfName);
+					heap.mark(source);
 					super::gcMark(heap);
 				}
 };
@@ -1250,7 +1255,7 @@ class Compiler : public GCItem {
 				
 				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
-				const Char* compileFunction(const Char* b, const Char* e, const String& functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
+				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
 				const Char* getStopPoint() const { return p; }
 
