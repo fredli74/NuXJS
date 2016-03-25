@@ -434,10 +434,10 @@ bool Value::isStrictlyEqualTo(const Value& r) const { return (type == r.type ? c
 				undefined	null	boolean				number			string				object
 	undefined	TRUE		TRUE	FALSE				FALSE			FALSE				FALSE
 	null		TRUE		TRUE	FALSE				FALSE			FALSE				FALSE
-	boolean		FALSE		FALSE	l === r				num(l) === r	num(l) === num(r)	FALSE
+	boolean		FALSE		FALSE	l === r				num(l) === r	num(l) === num(r)	num(l) === num(r)
 	number		FALSE		FALSE	l === num(r)		l === r			l === num(r)		l == prim(r)
 	string		FALSE		FALSE	num(l) === num(r)	num(l) === r	l === r				l == prim(r)
-	object		FALSE		FALSE	FALSE				prim(l) == r	prim(l) == r		l === r
+	object		FALSE		FALSE	num(l) === num(r)	prim(l) == r	prim(l) == r		l === r
 */
 bool Value::isEqualTo(const Value& r) const {
 	if (type == r.type) {
@@ -1650,11 +1650,12 @@ bool Processor::privateRun() {
 				break;
 				
 			case PRE_EQ_OP:
+				// FIX : doesn't feel totally efficient this...
 				if (vsp[-1].isObject() != vsp[0].isObject()) {
 					if (vsp[-1].isObject()) {
 						std::swap(vsp[-1], vsp[0]);
 					}
-					if (vsp[-1].isString() || vsp[-1].isNumber()) {
+					if (vsp[-1].isString() || vsp[-1].isNumber() || vsp[-1].isBoolean()) {
 						engine.toPrimitiveFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
 				}
@@ -2128,13 +2129,14 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
+static const Char LINE_TERMINATORS[] = { '\n', 0x2028, 0x2029, '\r' }; // FIX : '\r' must be last for line count to work, but I think we should change line counting algo in the future, a single '\r' without '\n' should count too really
+
 void Compiler::white() {
 	while (!eof()) {
 		switch (*p) {
-			case ' ': case '\v': case '\f': case '\t':	case '\r': case '\n': case 0x2028: case 0x2029: ++p; break;
+			case ' ': case '\v': case '\f': case '\t':	case '\r': case '\n': case 0xA0: case 0x2028: case 0x2029: ++p; break;
 			case '/':	if (p + 1 != e && p[1] == '/') {
-							static const Char END_CHARS[] = { '\r', '\n', 0x2028, 0x2029 };
-							p = std::find_first_of(p += 2, e, END_CHARS, END_CHARS + 4);
+							p = std::find_first_of(p += 2, e, LINE_TERMINATORS, LINE_TERMINATORS + 4);
 							break;
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
@@ -2191,7 +2193,7 @@ static UInt32 unescapedMaxLength(const Char* p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	Char endChar = *p;
 	UInt32 l = 0;
-	while (++p < e && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+	while (++p < e && *p != endChar && std::find(LINE_TERMINATORS, LINE_TERMINATORS + 4, *p) == LINE_TERMINATORS + 4) {
 		if (*p == '\\' && p + 1 < e) ++p;
 		++l;
 	}
@@ -2206,7 +2208,7 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	Char endChar = *p;
 	const Char* b = ++p;
 	Char* d = buffer;
-	while (!eof() && *p != endChar && *p != '\r' && *p != '\n') { // FIX : use std::find_any
+	while (!eof() && *p != endChar && std::find(LINE_TERMINATORS, LINE_TERMINATORS + 4, *p) == LINE_TERMINATORS + 4) {
 		if (*p == '\\' && p + 1 < e) {
 			d = std::copy(b, p, d);
 			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
@@ -2331,7 +2333,7 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 Value Compiler::stringOrNumberConstant() {
 	switch (*p) {
 		case '0': {
-			if (p + 1 != e && p[1] == 'x') {
+			if (p + 1 != e && (p[1] == 'x' || p[1] == 'X')) {
 				UInt32 u;
 				const Char* b = p += 2;
 				p = parseHex(b, e, u);
@@ -2839,7 +2841,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 void Compiler::semicolon() {
 	const Char* b = p;
 	white();
-	if (!eof() && *p != '}' && !token(";", false) && std::find(b, p, '\n') == p) {
+	if (!eof() && *p != '}' && !token(";", false) && std::find_first_of(b, p, LINE_TERMINATORS, LINE_TERMINATORS + 4) == p) {
 		p = b;
 		error(SYNTAX_ERROR, "Syntax error");
 	}
@@ -3808,7 +3810,7 @@ supressStdErr = false;
 					const Char* p = source.begin();
 					while (p < stopPoint) {
 						assert(p != source.end());
-						if (*p == '\n') {
+						if (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 3, *p) != LINE_TERMINATORS + 3) {
 							++lineNumber;
 						}
 						++p;

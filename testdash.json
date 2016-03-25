@@ -12,7 +12,7 @@
 		"category": "todo"
 	},
 	"language/comments/S7.4_A5": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/comments/S7.4_A6": {
 		"category": "todo"
@@ -66,7 +66,7 @@
 		"category": "tbd"
 	},
 	"language/expressions/addition/S11.6.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.10_T2": {
 		"category": "tbd"
@@ -75,7 +75,7 @@
 		"category": "tbd"
 	},
 	"language/expressions/conditional/S11.12_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/numeric/S7.8.3_A2.2_T1": {
 		"category": "todo"
@@ -102,16 +102,16 @@
 		"category": "todo"
 	},
 	"language/literals/numeric/S7.8.3_A5.1_T2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/numeric/S7.8.3_A5.1_T4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/numeric/S7.8.3_A5.1_T6": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/numeric/S7.8.3_A5.1_T8": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/numeric/binary": {
 		"category": "not_es3"
@@ -615,7 +615,7 @@
 		"category": "tbd"
 	},
 	"language/expressions/assignment/S11.13.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/assignment/S11.13.1_A5_T1": {
 		"category": "todo"
@@ -648,10 +648,10 @@
 		"category": "todo"
 	},
 	"language/expressions/assignment/destructuring/array-elem-elision": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/assignment/destructuring/array-elem-init-assignment": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/assignment/destructuring/array-elem-init-evaluation": {
 		"category": "not_es3"
@@ -1383,7 +1383,7 @@
 		"category": "todo"
 	},
 	"language/expressions/assignment/fn-name-gen": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/assignment/fn-name-lhs-cover": {
 		"category": "not_es3"
@@ -1395,16 +1395,16 @@
 		"category": "not_es3"
 	},
 	"language/expressions/bitwise-and/S11.10.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/bitwise-not/S11.4.8_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/bitwise-or/S11.10.3_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/bitwise-xor/S11.10.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/call/11.2.3-3_3": {
 		"category": "tbd"
@@ -1419,7 +1419,7 @@
 		"category": "not_es3"
 	},
 	"language/expressions/call/S11.2.3_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/class/name": {
 		"category": "not_es3"
@@ -1428,40 +1428,40 @@
 		"category": "not_es3"
 	},
 	"language/expressions/comma/S11.14_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T10": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T11": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T5": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T6": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T7": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T8": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A1_T9": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/compound-assignment/S11.13.2_A5.10_T1": {
 		"category": "not_es3"
@@ -1662,67 +1662,67 @@
 		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.10_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.11_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.11_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.1_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.1_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.2_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.2_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.3_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.3_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.4_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.4_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.5_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.5_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.6_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.6_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.7_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.7_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.8_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.8_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.9_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/compound-assignment/S11.13.2_A7.9_T2": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/expressions/conditional/symbol-conditional-evaluation": {
 		"category": "not_es3"
@@ -1755,13 +1755,13 @@
 		"category": "tbd"
 	},
 	"language/expressions/delete/S11.4.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/division/S11.5.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A3.2": {
 		"category": "todo"
@@ -1782,7 +1782,7 @@
 		"category": "todo"
 	},
 	"language/expressions/equals/S11.9.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A7.2": {
 		"category": "todo"
@@ -1980,16 +1980,16 @@
 		"category": "not_es3"
 	},
 	"language/expressions/greater-than/S11.8.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/greater-than-or-equal/S11.8.4_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/grouping/S11.1.6_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/in/S11.8.7_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/object/11.1.5_3-3-1": {
 		"category": "tbd"
@@ -2280,16 +2280,16 @@
 		"category": "tbd"
 	},
 	"language/types/string/S8.4_A7.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/types/string/S8.4_A7.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/types/string/S8.4_A7.4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/white-space/S7.2_A1.5_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/white-space/S7.2_A1.5_T2": {
 		"category": "todo"
@@ -2298,7 +2298,7 @@
 		"category": ""
 	},
 	"language/expressions/instanceof/S11.8.6_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/instanceof/prototype-getter-with-object-throws": {
 		"category": "not_es3"
@@ -2322,22 +2322,22 @@
 		"category": "not_es3"
 	},
 	"language/expressions/left-shift/S11.7.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/less-than/S11.8.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/less-than-or-equal/S11.8.3_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/logical-and/S11.11.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/logical-and/symbol-logical-and-evaluation": {
 		"category": "not_es3"
 	},
 	"language/expressions/logical-not/S11.4.9_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/logical-not/S9.2_A6_T2": {
 		"category": "todo"
@@ -2346,25 +2346,25 @@
 		"category": "not_es3"
 	},
 	"language/expressions/logical-or/S11.11.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/logical-or/symbol-logical-or-evaluation": {
 		"category": "not_es3"
 	},
 	"language/expressions/modulus/S11.5.3_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/modulus/S11.5.3_A4_T7": {
 		"category": "todo"
 	},
 	"language/expressions/multiplication/S11.5.1_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/new/S11.2.2_A1.1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/new/S11.2.2_A1.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/object/11.1.5-0-1": {
 		"category": "not_es3"
@@ -2376,7 +2376,7 @@
 		"category": "todo"
 	},
 	"language/expressions/postfix-decrement/S11.3.2_A1.2_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/postfix-decrement/S11.3.2_A4_T1": {
 		"category": "todo"
@@ -2415,7 +2415,7 @@
 		"category": "todo"
 	},
 	"language/expressions/postfix-increment/S11.3.1_A1.2_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/postfix-increment/S11.3.1_A4_T1": {
 		"category": "todo"
@@ -2448,7 +2448,7 @@
 		"category": "todo"
 	},
 	"language/expressions/prefix-decrement/S11.4.5_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/prefix-decrement/S11.4.5_A5_T1": {
 		"category": "not_es3"
@@ -2472,7 +2472,7 @@
 		"category": "todo"
 	},
 	"language/expressions/prefix-increment/S11.4.4_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/prefix-increment/S11.4.4_A5_T1": {
 		"category": "not_es3"
@@ -2496,10 +2496,10 @@
 		"category": "todo"
 	},
 	"language/expressions/property-accessors/S11.2.1_A1.1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/property-accessors/S11.2.1_A1.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/property-accessors/S11.2.1_A3_T2": {
 		"category": "todo"
@@ -2523,16 +2523,16 @@
 		"category": "todo"
 	},
 	"language/expressions/right-shift/S11.7.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/strict-does-not-equals/S11.9.5_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/strict-equals/S11.9.4_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/subtraction/S11.6.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/tagged-template/cache-differing-expressions-eval": {
 		"category": "not_es3"
@@ -2718,19 +2718,19 @@
 		"category": "not_es3"
 	},
 	"language/expressions/typeof/syntax": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/unary-minus/S11.4.7_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/unary-plus/S11.4.6_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/unsigned-right-shift/S11.7.3_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/void/S11.4.2_A1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/yield/arguments-object-attributes": {
 		"category": "not_es3"
@@ -3195,70 +3195,70 @@
 		"category": "tbd"
 	},
 	"language/line-terminators/7.3-1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/7.3-2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/7.3-3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/7.3-4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A1.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A1.4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A2.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A2.4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A3.3_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/line-terminators/S7.3_A3.3_T2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A3.4_T1": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/line-terminators/S7.3_A3.4_T2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A4_T3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A4_T4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T5": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T6": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T7": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/line-terminators/S7.3_A7_T8": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/literals/null/S7.8.1_A1_T2": {
 		"category": "tbd"
@@ -4942,5 +4942,80 @@
 	},
 	"language/statements/return/S12.9_A2": {
 		"category": "todo"
+	},
+	"language/statements/generators/declaration": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/has-instance": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/invoke-as-constructor": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/length-property-descriptor": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/name": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/no-yield": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-own-properties": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-property-descriptor": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-relation-to-function": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-typeof": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-uniqueness": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/prototype-value": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/restricted-properties": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/return": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-expression-with-rhs": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-expression-without-rhs": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-function-expression-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-generator-declaration-binding-identifier": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-identifier-in-nested-function": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-literal-property-name": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-property-name": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-statement": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-as-yield-operand": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-newline": {
+		"category": "not_es3"
+	},
+	"language/statements/generators/yield-star-before-newline": {
+		"category": "not_es3"
 	}
 }

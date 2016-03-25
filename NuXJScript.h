@@ -55,11 +55,6 @@
 //		should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
 //			actually, any \ that isn't escape is valid, \ is just swallowed see http://www.ecma-international.org/ecma-262/6.0/index.html#sec-literals-string-literals
 //			also \<cr>|<crlf>|<lf>|<ls>|<ps> is valid and should continue string on next line
-//		proper error exceptions (TypeError etc)
-//		(new) Object(v) should convert v to number, string object etc
-//		toPrimitive also for native function arguments like sqrt etc, how?
-//			stubs
-//		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 //		perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
 //		exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
@@ -71,7 +66,6 @@
 //			global is really a function frame too, with vars that you can't delete etc...
 //		exceptions (and catching both virtual and native)
 //			only thing left is integration with C++ exceptions
-//		instanceof operator
 //		support -0.0 (use std::signbit? or whatever...) add to operation matrix test
 //		with statement, it's actually not too bad... check http://stackoverflow.com/questions/61552/are-there-legitimate-uses-for-javascripts-with-statement
 //		FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
@@ -230,6 +224,12 @@
 //			yes
 //		I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
 //		vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
+//		proper error exceptions (TypeError etc)
+//		instanceof operator
+//		should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
+//		(new) Object(v) should convert v to number, string object etc
+//		toPrimitive also for native function arguments like sqrt etc, how?
+//			stubs
 
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
@@ -422,9 +422,12 @@ class Value {
 				// FIX : Value from (heap and) const char* ?
 	
 				bool exists() const { return type != NONEXISTENT_TYPE; } // FIX : I think NONEXISTENT_TYPE *can* and *should* disappear very soon, only used in "legacy code" now (WELL actually, arrays *might* need them in the future if we don't have full flags instead like in tables)
-				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
+				bool isUndefined() const { return type == UNDEFINED_TYPE; }
+				bool isNull() const { return type == NULL_TYPE; }
+				bool isBoolean() const { return type == BOOLEAN_TYPE; }
 				bool isNumber() const { return type == NUMBER_TYPE; }
 				bool isString() const { return type == STRING_TYPE; }
+				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
 				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
