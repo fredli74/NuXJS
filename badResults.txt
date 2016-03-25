@@ -124,21 +124,15 @@
 !!!! Line: 1
 !!!! SyntaxError: Expected property name
 !!!! Line: 1
-!!!! SyntaxError: Expected expression
-!!!! Line: 1
-!!!! SyntaxError: Expected expression
-!!!! Line: 1
-!!!! SyntaxError: Expected expression
-!!!! Line: 1
-!!!! SyntaxError: Expected expression
+!!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
 !!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
-!!!! SyntaxError: Expected expression
+!!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
 !!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
-!!!! SyntaxError: Expected expression
+!!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
 !!!! ReferenceError: Illegal l-value
 !!!! TypeError

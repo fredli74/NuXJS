@@ -2131,18 +2131,10 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 void Compiler::white() {
 	while (!eof()) {
 		switch (*p) {
-			case ' ':
-			case '\v':
-			case '\f':
-			case '\t':	++p; break;
-			case '\r':	if (p + 1 != e && p[1] == '\n') ++p;
-			case '\n':	++p;
-						while (!eof() && (*p == ' ' || *p == '\t')) ++p; // Eat leading .. on a new line
-						if (e - p >= 2 && p[0] == '.' && p[1] == '.') p += 2;
-						break;
+			case ' ': case '\v': case '\f': case '\t':	case '\r': case '\n': case 0x2028: case 0x2029: ++p; break;
 			case '/':	if (p + 1 != e && p[1] == '/') {
-							static const Char END_CHARS[] = { '\r', '\n' };
-							p = std::find_first_of(p += 2, e, END_CHARS, END_CHARS + 2);
+							static const Char END_CHARS[] = { '\r', '\n', 0x2028, 0x2029 };
+							p = std::find_first_of(p += 2, e, END_CHARS, END_CHARS + 4);
 							break;
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
