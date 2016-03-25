@@ -578,16 +578,16 @@ bool String::getProperty(Engine& engine, const String* name, Value* v) const {
 	return false;
 }
 
-// FIX : speed up by skipping when string is *really* long?
+// FIX : speed up by skipping when string is really long
+// FNV Hash
 UInt32 String::calcHash() const {
 	if (hash == 0) {
 		UInt32 x = 2166136261U;
 		for (const Char* p = begin(), *e = end(); p < e; ++p) {
-			x += *p;
-			x ^= (x << 3);
-			x += (x >> 11);
+			x *= 16777619;
+			x += *p; // FIX : FNV uses xor, not add, why did I do this? Also FNV is really made for byte processing. Also, http://www.isthe.com/chongo/tech/comp/fnv/ recommends xor'ing before multiplying. Better?
 		}
-		hash = x; // I know, in extreme rare circumstances (1 out of 2^32 strings) this turns to 0, but emperical speed tests show enough increased performance if we skip a 0 check here to justify it.
+		hash = (x == 0 ? x + 1 : x);
 	}
 	return hash;
 }
