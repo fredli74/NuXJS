@@ -36,7 +36,8 @@ function isPrimitive(v) {
 	return (((t = typeof v) !== "object" || v === null) && t !== "function");
 }
 
-support.toPrimitive = function toPrimitive(o) {
+// FIX : join these two maybe?
+support.toPrimitiveNumber = function toPrimitive(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
@@ -45,13 +46,13 @@ support.toPrimitive = function toPrimitive(o) {
 	return v;
 }
 
-support.toString = function toString(o) {
+support.toPrimitiveString = function toString(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return '' + v;
+	return v;
 }
 
 function defineProperties(object, attribs, props) {

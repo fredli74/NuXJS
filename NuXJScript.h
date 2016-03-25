@@ -504,17 +504,17 @@ class Object : public GCItem {
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
 				// FIX: try to join defineProperty and setProperty, they really are the same thing, just try out performance
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const; // default: hasProperty()
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const; // default: hasProperty()
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
-				bool getPropertyDeep(Engine& engine, const String* name, Value* v) const; // searches prototype chain
-				bool hasProperty(Engine& engine, const String* name) const; // checks via getProperty()
-				bool hasPropertyDeep(Engine& engine, const String* name) const;
+				bool getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
+				bool hasProperty(Engine& engine, const Value& key) const; // checks via getProperty()
+				bool hasPropertyDeep(Engine& engine, const Value& key) const;
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };
 
@@ -531,12 +531,12 @@ class Object : public GCItem {
 template<class SUPER> class LazyObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyObject();
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
 				UserObject* getCompleteObject(Engine& engine) const;
@@ -638,7 +638,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Value getInternalValue(GCHeap& heap) const { return Value(this); }
 				UInt32 calcHash() const;
@@ -697,13 +697,13 @@ class UserObject : public virtual Object {
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0); // FIX : not = 0 ?
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 				
 	protected:	Table properties;
 				Object* prototype;
@@ -715,6 +715,7 @@ class UserObject : public virtual Object {
 				}
 };
 
+// fix : good candidate for a lazy object
 class WrapperObject : public UserObject {
 	public:		typedef UserObject super;
 				WrapperObject(const String* className, const Value& value, Object* prototype);
@@ -738,12 +739,12 @@ class StringWrapper : public UserObject {
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual bool isPropertyEnumerable(Engine& engine, const String* name) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 
 	protected:	const String* const wrapped;
 				virtual void gcMark(GCHeap& heap) const {
@@ -758,9 +759,9 @@ class Array : public UserObject {
 				Array(Object* prototype = 0); // FIX : not = 0 ?
 				virtual const String* getClassName() const;
 				// FIX : toString too?
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 
 	protected:	UInt32 lengthProperty;
 };
@@ -901,9 +902,9 @@ class Error : public LazyObject<Object> {
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const; // error type name
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				void updateReflection(Engine& engine);
@@ -944,8 +945,8 @@ class Engine {
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
-				UserFunction* toPrimitiveFunction; // Created with script code for simplicity
-				UserFunction* toStringFunction; // Created with script code for simplicity			FIX : in the futrue I believe this might be merged into toPrimitiveFunction with hint: string (like in Ecmascript spec) cause I think TO_STRING_OP will be changed as non-string property keys should be allowed (for arrays)
+				UserFunction* toNumberFunction;
+				UserFunction* toStringFunction;
 };
 
 class Frame : public Object {
@@ -968,18 +969,21 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 	public:		typedef Object super;
 				friend class FunctionFrame;
 				EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v) {
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v) {
+					const String* name = key.toString(engine.getHeap()); // FIX : asString?
 					if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
-					return parent->setProperty(engine, name, v);
+					return parent->setProperty(engine, key, v);
 				}
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const {
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const {
+					const String* name = key.toString(engine.getHeap());
 					const Table::Bucket* bucket = vars.lookup(name);
 					if (bucket != 0) { *v = bucket->getValue(); return true; }
-					return parent->getProperty(engine, name, v);
+					return parent->getProperty(engine, key, v);
 				}
-				virtual bool deleteProperty(Engine& engine, const String* name) {
+				virtual bool deleteProperty(Engine& engine, const Value& key) {
+					const String* name = key.toString(engine.getHeap());
 					if (vars.lookup(name) != 0) { vars.erase(name); return true; } 		// FIX : we need a better way to lookup & update in one
-					return parent->deleteProperty(engine, name);
+					return parent->deleteProperty(engine, key);
 				}
 
 	protected:	Object* parent;
@@ -998,10 +1002,10 @@ class FunctionFrame : public Frame {
 
 				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
 				void updatedCode();
-				virtual bool defineProperty(Engine& engine, const String* name, const Value& v, const Attributes& attributes);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	UserFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
@@ -1035,9 +1039,9 @@ class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
 				EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
@@ -1059,9 +1063,9 @@ class CatchFrame : public Frame {
 	public:		typedef Frame super;
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
@@ -1081,12 +1085,12 @@ class Arguments : public UserObject {
 
 				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
-				virtual bool getProperty(Engine& engine, const String* name, Value* v) const;
-				virtual bool setProperty(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const String* name);
+				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
-	protected:	Value* findProperty(const String* name) const;
+	protected:	Value* findProperty(const Value& key) const;
 				FunctionFrame* const frame;
 				UInt32 const argumentsCount;
 				Value lengthProperty;
@@ -1158,8 +1162,8 @@ class Processor : public GCItem {
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
-					, TO_PRIMITIVE_OP								// stack: value -> primitive_value
-					, TO_STRING_OP									// stack: value -> string_value
+					, TO_NUMBER_OP									// stack: value -> primitive_value (number preferred)
+					, TO_STRING_OP									// stack: value -> primitive_value (string preferred)
 					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
