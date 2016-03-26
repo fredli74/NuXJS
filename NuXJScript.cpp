@@ -567,7 +567,7 @@ bool String::getProperty(Engine& engine, const Value& key, Value* v) const {
 		*v = Value(static_cast<Int32>(size()));
 		return true;
 	}
-	const double d = key.toDouble();
+	const double d = key.toDouble(); // FIX : this is not right, it shouldn't accept "  123  " as a number...
 	const Int32 i = static_cast<Int32>(d);
 	if (i == d && i >= 0 && i < size()) {
 		const Char* p = begin() + i;
@@ -1036,59 +1036,74 @@ class ObjectConstructor : public Function {
 
 static ObjectConstructor OBJECT_OBJECT; // for object literals
 
-Array::Array(Object* prototype) : super(prototype), lengthProperty(0) { }
-
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
+Object* Array::getPrototype(Engine& engine) const { return &engine.arrayPrototype; }
+
+Int32 Array::keyToIndex(const Value& key) {
+	const double d = key.toDouble(); // FIX : util method in value // FIX : shouldn't accept "  123  "
+	const Int32 i = static_cast<Int32>(d);
+	return (i == d && 0 <= i ? i : -1);
+}
 
 bool Array::getProperty(Engine& engine, const Value& key, Value* v) const {
+	const Int32 i = keyToIndex(key);
+	if (i >= 0 && i < elements.size() && elements[i].exists()) {
+		*v = elements[i];
+		return true;
+	}
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
-		*v = Value(lengthProperty);
+		*v = Value(elements.size());
 		return true;
 	}
 	return super::getProperty(engine, key, v);
 }
 
 bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
+	const Int32 i = keyToIndex(key);
+	if (i >= 0) {
+		if (i >= elements.size()) {
+			const Int32 oldSize = elements.size();
+			elements.resize(i + 1);
+			std::fill(elements.begin() + oldSize, elements.end(), Value::NONEXISTENT); // FIX : I feel like this should be part of vector actually. resize(x, fillValue) or make that SafeValue that initialises to NONEXISTENT?
+		}
+		elements[i] = v;
+		return true;
+	}
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
 		// FIX : error if not UInt32! but how if we are to go to exception-lessness?
-		UInt32 newLength = v.toInt(); // fix : to unsigned int
-		if (newLength < lengthProperty) { // FIX : optimize: if onyl removing a few items, loop through them and remove instead of looping through all
-			for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-				UInt32 i;
-				const String* key = b->getKey();
-				const Char* const e = key->end();
-				const Char* p = parseUnsignedInt(key->begin(), e, i);
-				if (p == e && i >= newLength) {
-					properties.erase(key);
-				}
+		const Int32 i = keyToIndex(v);
+		if (i < 0) {
+			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR)))); // FIX : how could we do this without exceptions?
+		}
+		const Int32 oldSize = elements.size();
+		if (i != oldSize) {
+			elements.resize(i);
+			if (oldSize < i) {
+				std::fill(elements.begin() + oldSize, elements.end(), Value::NONEXISTENT);
 			}
 		}
-		lengthProperty = newLength;
 		return true;
-	} else {
-		const double d = key.toDouble(); // FIX : util method in value
-		const Int32 i = static_cast<Int32>(d);
-		if (i == d && i >= lengthProperty) {
-			lengthProperty = i + 1;
-		}
-		return super::setProperty(engine, key, v);
 	}
+	return super::setProperty(engine, key, v);
 }
 
 bool Array::deleteProperty(Engine& engine, const Value& key) {
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) { // FIX : util method in value
-		return false;
-	} else {
-		return super::deleteProperty(engine, key);
+	const Int32 i = keyToIndex(key);
+	if (i >= 0 && i < elements.size()) {
+		elements[i] = Value::NONEXISTENT;
+		return true;
 	}
+	return super::deleteProperty(engine, key);
 }
+
+void Array::constructCompleteObject(Engine& engine) const { }
 
 // FIX : we should have GEN_ARRAY, GEN_OBJECT I think...
 
 class ArrayConstructor : public Function {
 // FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
 	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-					Array* array = engine.getHeap().manage(new Array(&engine.arrayPrototype));
+					Array* array = engine.getHeap().manage(new Array());
 					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING)
 							&& argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
 						array->setProperty(engine, Value(&LENGTH_STRING), argv[0]);

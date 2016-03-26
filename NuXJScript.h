@@ -753,17 +753,23 @@ class StringWrapper : public UserObject {
 				}
 };
 
-class Array : public UserObject {
-	public:		typedef UserObject super;
+class Array : public LazyObject<UserObject> {
+	public:		typedef LazyObject super;
 	
-				Array(Object* prototype = 0); // FIX : not = 0 ?
 				virtual const String* getClassName() const;
+				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 
-	protected:	UInt32 lengthProperty;
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				static Int32 keyToIndex(const Value& key);
+				QuickVector<Value> elements;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.markViaReferences(elements.begin(), elements.end());
+					super::gcMark(heap);
+				}
 };
 
 /*
@@ -942,7 +948,7 @@ class Engine {
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject stringPrototype;
 				Error* errorPrototypes[ERROR_TYPE_COUNT];
-				Array arrayPrototype;
+				UserObject arrayPrototype; // FIX : should be array
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				UserFunction* toNumberFunction;
