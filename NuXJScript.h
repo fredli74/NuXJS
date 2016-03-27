@@ -363,6 +363,7 @@ class GCItem {
 	public:		GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
+				bool gcIsOnHeap() const { return _gcList != 0; };
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 
@@ -815,6 +816,14 @@ class EvalFunction : public Function {
 
 class Frame;
 
+class Constants : public GCItem, public QuickVector<Value> {
+	public:		typedef GCItem super;
+	protected:	virtual void gcMark(GCHeap& heap) const {
+					heap.markViaReferences(begin(), end());
+					super::gcMark(heap);
+				}
+};
+
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
 	friend class FunctionFrame;
@@ -822,19 +831,19 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition();
+				CodeDefinition(Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				Int32 getVarsCount() const { return varNames.size(); }
 				Int32 getArgumentsCount() const { return argumentNames.size(); }
 				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
-				const Value* getConstantsPointer() const { return (constants.empty() ? 0 : constants.begin()); }
+				const Value* getConstantsPointer() const { return constants->begin(); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
 				UInt32 getCodeSize() const { return code.size(); }
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 
 	protected:	QuickVector<CodeWord> code;
-				QuickVector<Value> constants;
+				Constants* const constants;
 				Table nameIndexes; // < 0 : local variables, >= 0 : arguments
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
@@ -844,7 +853,7 @@ class CodeDefinition : public Object {
 				const String* source;
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.markViaReferences(constants.begin(), constants.end());
+					heap.mark(constants);
 					nameIndexes.gcMark(heap);
 					heap.markViaPointers(varNames.begin(), varNames.end());
 					heap.markViaPointers(argumentNames.begin(), argumentNames.end());

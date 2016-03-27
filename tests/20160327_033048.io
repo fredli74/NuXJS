@@ -1,32 +1,20 @@
 > a=[1,2,3,4]
 -
-> for( i in a) print(i)
-< 0
-< 1
-< 2
-< 3
+> z=0;for( i in a) z+=(1<<i); print(z)
+< 15
 -
 > delete a[2]
 -
-> for( i in a) print(i)
-< 3
-< 0
-< 1
+> z=0;for( i in a) z+=(1<<i); print(z)
+< 11
 -
 > a[2]=5
 -
-> for( i in a) print(i)
-< 0
-< 1
-< 2
-< 3
+> z=0;for( i in a) z+=(1<<i); print(z)
+< 15
 -
-> a.x='y'
+> a[' 1 ']='y'
 -
-> for( i in a) print(i)
-< x
-< 0
-< 1
-< 2
-< 3
+> z=0;for( i in a) z+=(1<<i); print(z)
+< 17
 -

@@ -712,24 +712,30 @@ bool Object::hasInstance(Engine& engine, Processor& processor, Object* object) c
 	processor.error(TYPE_ERROR);
 	return false;
 }
+
 Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	processor.error(TYPE_ERROR);
 	return Value();
 }
+
 Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	return call(engine, processor, argc, argv, thisObject);
 }
+
 bool Object::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
 	return setProperty(engine, key, v);
 }
+
 bool Object::hasProperty(Engine& engine, const Value& key) const {
 	Value dummy;
 	return getProperty(engine, key, &dummy);
 }
+
 bool Object::hasPropertyDeep(Engine& engine, const Value& key) const {
 	Value dummy;
 	return getPropertyDeep(engine, key, &dummy);
 }
+
 bool Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const {
 	const Object* o = this;
 	do {
@@ -740,6 +746,7 @@ bool Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const {
 	} while (o != 0);
 	return false;
 }
+
 Value Object::getPropertyDeep(Engine& engine, const char* name) const { // FIX : keep?
 	Value v;
 	String s(name);
@@ -1011,7 +1018,7 @@ const String* MergingEnumerator::nextPropertyName() {
 
 /* --- CodeDef --- */
 
-CodeDefinition::CodeDefinition() : name(0), selfName(0), source(0) { }
+CodeDefinition::CodeDefinition(Constants* constants) : constants(constants), name(0), selfName(0), source(0) { assert(constants != 0); }
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
@@ -2133,6 +2140,9 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) {
+	for (int i = 0; i < codeDef->constants->size(); ++i){
+		definedConstants[(*codeDef->constants)[i]] = i;
+	}
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
@@ -2173,8 +2183,8 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 int Compiler::addConstant(const Value& constant) {
 	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
 	if (it == definedConstants.end()) {
-		Int32 index = codeDef->constants.size();
-		codeDef->constants.append(constant);
+		Int32 index = codeDef->constants->size();
+		codeDef->constants->append(constant);
 		definedConstants[constant] = index;
 		return index;
 	} else {
@@ -2666,7 +2676,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.manage(new CodeDefinition());
+	CodeDefinition* func = heap.manage(new CodeDefinition(codeDef->constants));
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {
@@ -3268,9 +3278,7 @@ void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
-	// FIX : only accept one compile? or opposite? create many different functions?
-	codeDef->code.resize(0);
-	codeDef->constants.resize(0);
+	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	outputCode = &codeDef->code;
 	p = b;
 	this->e = e;
@@ -3289,14 +3297,14 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	// FIX : shrink code vector (copy to quickarray instead?)
 	assert(outputCode == &codeDef->code);
 	codeDef->code.shrink();
-	codeDef->constants.shrink();
+	codeDef->constants->shrink();
 if (!supressStdErr) {
 	disassemble(heap, *codeDef);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
-	std::cerr << "\tConstants: " << codeDef->constants.size() << std::endl;
-	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
+	std::cerr << "\tConstants: " << codeDef->constants->size() << std::endl;
+/* FIX :	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
 		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
-	}
+	}*/
 	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
 }
@@ -3381,7 +3389,8 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
-	const String* sourceCode = argv[0].toString(engine.getHeap());
+	GCHeap& heap = engine.getHeap();
+	const String* sourceCode = argv[0].toString(heap);
 	CodeDefinition* codeDef;
 	
 	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
@@ -3389,9 +3398,9 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 	if (bucket != 0) {
 		codeDef = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
 	} else {
-		codeDef = engine.getHeap().manage(new CodeDefinition());
-		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);
-		engine.getHeap().protect(&compiler);
+		codeDef = heap.manage(new CodeDefinition(heap.manage(new Constants()))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		Compiler compiler(heap, codeDef, Compiler::FOR_EVAL);
+		heap.protect(&compiler);
 		compiler.compile(*sourceCode);
 		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDef));
 	}
@@ -3508,7 +3517,7 @@ struct Support {
 		if (argc >= 1) {
 			GCHeap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
-			CodeDefinition* codeDef = heap.manage(new CodeDefinition());
+			CodeDefinition* codeDef = heap.manage(new CodeDefinition(heap.manage(new Constants()))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
@@ -3662,7 +3671,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	// FIX : all this boilerplating... build a function object or something instead?
 
-	CodeDefinition* code = gcHeap.manage(new CodeDefinition());
+	CodeDefinition* code = gcHeap.manage(new CodeDefinition(gcHeap.manage(new Constants())));
 	gcHeap.protect(code); // FIX : necessary? can we unprotect?
 	{
 		Compiler compiler(gcHeap, code, Compiler::FOR_EVAL);
@@ -3752,7 +3761,9 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	GCHeap heap;
 	UserObject globals;
 	heap.protect(&globals);
-	CodeDefinition globalCode;
+	Constants globalConstants;
+	heap.protect(&globalConstants);
+	CodeDefinition globalCode(&globalConstants);
 	heap.protect(&globalCode);
 	UserFunction globalClosure(&globalCode, &globals); // FIX : yuck!
 	heap.protect(&globalClosure);
@@ -3849,8 +3860,10 @@ supressStdErr = false;
 				heap.protect(&processor);
 				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 				processor.chain(RETURN_TO_HOST_STUB);
-
-				CodeDefinition codeDef;
+				
+				Constants constants;
+				heap.protect(&constants);
+				CodeDefinition codeDef(&constants);
 				heap.protect(&codeDef);
 				Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
 				heap.protect(&compiler);

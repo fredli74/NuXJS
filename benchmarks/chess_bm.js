@@ -166,7 +166,7 @@ var boardHash = 0;
 	~0 to emphasize the "wrapping" of additions and subtractions.
 
 	The advantage of this solution compared to a standard transposition table with exact search results are simplicity
-	(no structs needed), reliablitiy (collisions are harmless) and memory footprvar.
+	(no structs needed), reliablitiy (collisions are harmless) and memory footprint.
 */
 var HASH_TABLE_SIZE = 64 * 1024;
 var HASH_MASK = ~0;
