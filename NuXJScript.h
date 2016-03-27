@@ -141,6 +141,7 @@
 //		.length is very common, special opcode?
 //		arguments and <self name>, couldn't they be indexed variables too instead of accessed through slow READ_NAMED? Either created only when present in code or allocated on demand?
 //		"get parent index" opcode, it is very common to access variables one level up (two levels up not so much), and parent frame never changes in a closure so...
+//		internal int type
 //
 //	Compiler
 //
@@ -576,7 +577,7 @@ class Table {
 					public:		Bucket() : flags(0) { };
 								Value getValue() const { return Value(static_cast<Value::Type>(type), var); }
 								const String* getKey() const { return key; }
-								bool enumerate() const { return ((flags & DONT_ENUM) == 0); }
+								bool doEnumerate() const { return ((flags & DONT_ENUM) == 0); }
 								bool hasStandardFlags() const { return flags == (KEY_EXISTS | VALUE_EXISTS); }
 								
 					protected:	Byte flags;
@@ -593,7 +594,7 @@ class Table {
 				Bucket* getFirst() const;
 				Bucket* getNext(Bucket* bucket) const;
 				Bucket* lookup(const String* key) const;
-				Bucket* insert(const String* key);
+				Bucket* insert(const String* key); // FIX : ok, this was slightly stupid, *whenever* do you want to insert without updating at once?
 				bool update(Bucket* bucket, const Value& value, Byte flags = 0);
 				bool erase(Bucket* bucket);
 				void gcMark(GCHeap& heap) const;
@@ -700,12 +701,12 @@ class UserObject : public virtual Object {
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0); // FIX : not = 0 ?
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 				
 	protected:	Table properties;
@@ -763,15 +764,19 @@ class Array : public LazyObject<Object> {
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				static bool keyToIndex(const Value& key, UInt32& index);
+				void sliceDenseVector(Engine& engine, const Value& key);
 				UInt32 length;
 				QuickVector<Value> denseVector;
 				virtual void gcMark(GCHeap& heap) const {
+					const_cast<Array*>(this)->denseVector.shrink(); // FIX : split into two different gc-things? it really *is* different to just mark stuff and actively shrink / compress stuff
 					heap.markViaReferences(denseVector.begin(), denseVector.end());
 					super::gcMark(heap);
 				}
@@ -1192,8 +1197,8 @@ class Processor : public GCItem {
 					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
 					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
-					, NEW_ARRAY_OP									// stack: -> array_object
 					, NEW_OBJECT_OP									// stack: -> object
+					, NEW_ARRAY_OP									// stack: -> array_object
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value

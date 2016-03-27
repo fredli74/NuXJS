@@ -900,7 +900,7 @@ bool UserObject::deleteProperty(Engine& engine, const Value& key) {
 Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (Table::Bucket* bucket = properties.getFirst(); bucket != 0; bucket = properties.getNext(bucket)) {
-		if (bucket->enumerate()) {
+		if (bucket->doEnumerate()) {
 			list->add(bucket->getKey());
 		}
 	}
@@ -909,7 +909,7 @@ Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
 
 bool UserObject::isPropertyEnumerable(Engine& engine, const Value& key) const {
 	const Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
-	return (bucket != 0 && bucket->enumerate());
+	return (bucket != 0 && bucket->doEnumerate());
 }
 
 bool UserObject::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
@@ -1079,74 +1079,72 @@ bool Array::getProperty(Engine& engine, const Value& key, Value* v) const {
 	return super::getProperty(engine, key, v);
 }
 
+void Array::sliceDenseVector(Engine& engine, const Value& key) {
+	UInt32 index;
+	if (key.toArrayIndex(index) && index < denseVector.size()) {
+		GCHeap& heap = engine.getHeap();
+		Table& props = getCompleteObject(engine)->properties;
+		for (UInt32 moveIndex = index + 1; moveIndex < denseVector.size(); ++moveIndex) {
+			props.update(props.insert(String::fromInt(heap, moveIndex)), denseVector[moveIndex]);
+		}
+		denseVector.resize(index);
+		std::cerr << "sliced " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
+	}
+}
+
+bool Array::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
+	if (attributes.readOnly || attributes.dontEnum || attributes.dontDelete) {
+		sliceDenseVector(engine, key);
+	}
+	return super::defineProperty(engine, key, v, attributes);
+}
+
 bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 	UInt32 index;
-	if (key.toArrayIndex(index)) {
+	if (key.toArrayIndex(index) && index != 0xFFFFFFFFU) {
+		if (index >= length) {
+			length = index + 1;
+		}
 		if (index < denseVector.size()) {
 			denseVector[index] = v;
 			return true;
 		}
-		if (index >= length && index != 0xFFFFFFFFU) {
-			length = index + 1;
-		}
-	}
-/*	if (i == denseVector.size()) {
-		if (completeObject != 0) {
-			GCHeap& heap = engine.getHeap();
-			const Table& props = completeObject->properties;
-			UInt32 moveIndex = i;
-			do {
-				const Table::Bucket* bucket = props.lookup(String::fromInt(heap, moveIndex));
-				if (bucket == 0 || !bucket->hasStandardFlags()) {
-					break;
+		if (index == denseVector.size()) {
+			if (completeObject == 0) {
+				denseVector.append(v);
+			} else {
+				GCHeap& heap = engine.getHeap();
+				Table& props = completeObject->properties;
+				Table::Bucket* bucket = props.lookup(String::fromInt(heap, index));
+				if (bucket == 0 || bucket->hasStandardFlags()) {
+					UInt32 moveIndex = index + 1;
+					denseVector.append(v);
+					while ((bucket = props.lookup(String::fromInt(heap, moveIndex))) != 0 && bucket->hasStandardFlags()) {
+						denseVector.append(bucket->getValue());
+						props.erase(bucket);
+						++moveIndex;
+					}
+					std::cerr << "extended " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
 				}
-				props.erase(
-		const Table::Bucket* bucket = props.getFirst();
-		while (bucket != 0) {
-			if (
-			bucket = props.getNext(bucket);
-		}
-
-	if (i == denseOffset - 1 && denseOffset > 0) {
-		
-		if (i >= elements.size()) {
-			const Int32 oldSize = elements.size();
-			elements.resize(i + 1);
-			std::fill(elements.begin() + oldSize, elements.end(), Value::NONEXISTENT); // FIX : I feel like this should be part of vector actually. resize(x, fillValue) or make that SafeValue that initialises to NONEXISTENT?
-		}
-
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
-		const UInt32 i = keyToIndex(v);
-		if (i < 0) {
-			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR, engine.getHeap().manage(new String("Invalid array length")))))); // FIX : how could we do this without exceptions?
-		}
-		const Int32 oldSize = elements.size();
-		if (i != oldSize) {
-			elements.resize(i);
-			if (oldSize < i) {
-				std::fill(elements.begin() + oldSize, elements.end(), Value::NONEXISTENT);
 			}
+			return true;
 		}
-		return true;
 	}
-	*/
 	
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR, engine.getHeap().manage(new String("Invalid array length")))))); // FIX : how could we do this without exceptions?
 		}
+		if (newLength < denseVector.size()) {
+			denseVector.resize(newLength);
+		}
 		if (completeObject != 0) {
 			Table& props = completeObject->properties;
 			for (Table::Bucket* bucket = props.getFirst(); bucket != 0; bucket = props.getNext(bucket)) {
 				UInt32 i;
-				const String* key = bucket->getKey();
-				const Char* const e = key->end();
-				const Char* p = parseUnsignedInt(key->begin(), e, i);
-				if (p == e && i >= newLength) {
-					if (!props.erase(bucket)) {
-						return false;
-					}
+				if (Value(bucket->getKey()).toArrayIndex(i) && i >= newLength && !props.erase(bucket)) {
+					return false;
 				}
 			}
 		}
@@ -1161,15 +1159,22 @@ bool Array::deleteProperty(Engine& engine, const Value& key) {
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
 		return false;
 	}
-	/*const Int32 i = keyToIndex(key);
-	if (i >= 0 && i < elements.size()) {
-		elements[i] = Value::NONEXISTENT;
-		return true;
-	}*/
+	sliceDenseVector(engine, key);
 	return super::deleteProperty(engine, key);
 }
 
 void Array::constructCompleteObject(Engine& engine) const { }
+
+Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
+	Enumerator* rangeEnumerator = engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, denseVector.size()));
+	return (completeObject == 0 ? rangeEnumerator
+			: engine.getHeap().manage(new MergingEnumerator(engine, rangeEnumerator, completeObject)));
+}
+
+bool Array::isPropertyEnumerable(Engine& engine, const Value& key) const {
+	UInt32 index;
+	return ((key.toArrayIndex(index) && index < denseVector.size()) || super::isPropertyEnumerable(engine, key));
+}
 
 /* --- LazyObject --- */
 
@@ -1821,16 +1826,16 @@ bool Processor::privateRun() {
 			
 			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
 			
-			case NEW_ARRAY_OP: {
-				push(Value(heap.manage(new Array())));
-				break;
-			}
-
 			case NEW_OBJECT_OP: {
 				push(Value(heap.manage(new UserObject(&engine.objectPrototype))));
 				break;
 			}
 			
+			case NEW_ARRAY_OP: {
+				push(Value(heap.manage(new Array())));
+				break;
+			}
+
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
@@ -1959,7 +1964,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_PRIMITIVE", "TO_STRING", "PRE_EQ"
+		, "TO_NUMBER", "TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "USHR"
@@ -1967,7 +1972,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
-		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT"
+		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJECT", "NEW_ARRAY"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
