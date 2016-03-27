@@ -433,6 +433,7 @@ class Value {
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
+				bool toArrayIndex(UInt32& index) const;
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
@@ -576,6 +577,7 @@ class Table {
 								Value getValue() const { return Value(static_cast<Value::Type>(type), var); }
 								const String* getKey() const { return key; }
 								bool enumerate() const { return ((flags & DONT_ENUM) == 0); }
+								bool hasStandardFlags() const { return flags == (KEY_EXISTS | VALUE_EXISTS); }
 								
 					protected:	Byte flags;
 								Byte type;
@@ -588,13 +590,12 @@ class Table {
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);
 				UInt32 getLoadCount() const;
-				const Bucket* getFirst() const;
-				const Bucket* getNext(const Bucket* bucket) const;
-				// FIX : we need a better way to lookup & update in one, right now it needs separate lookup and assign (see EvalVarsObject)
-				// suggestion: lookup returns non-const Bucket (but it's immutable by client anyhow), rename assign to update and it takes Bucket*, insert(?) works like lookup but creates key if it doesn't exist (never returns 0)
-				const Bucket* lookup(const String* key) const; // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
-				bool assign(const String* key, const Value& value, Byte flags = 0); // Important: Table will store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
-				bool erase(const String* key); // Important: In a future implementation, Table *might* store a reference to 'key', so 'key' has to live as long as Table does (e.g. have it managed by the GCHeap).
+				Bucket* getFirst() const;
+				Bucket* getNext(Bucket* bucket) const;
+				Bucket* lookup(const String* key) const;
+				Bucket* insert(const String* key);
+				bool update(Bucket* bucket, const Value& value, Byte flags = 0);
+				bool erase(Bucket* bucket);
 				void gcMark(GCHeap& heap) const;
 				
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
@@ -694,6 +695,8 @@ class MergingEnumerator : public Enumerator {
 
 // Name ExtensibleObject ? ScriptObject ?
 class UserObject : public virtual Object {
+	friend class Array;
+	
 	public:		typedef Object super;
 				
 				UserObject(Object* prototype = 0); // FIX : not = 0 ?
@@ -753,9 +756,10 @@ class StringWrapper : public UserObject {
 				}
 };
 
-class Array : public LazyObject<UserObject> {
-	public:		typedef LazyObject super;
+class Array : public LazyObject<Object> {
+	public:		typedef LazyObject<Object> super;
 	
+				Array();
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
@@ -764,10 +768,11 @@ class Array : public LazyObject<UserObject> {
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				static Int32 keyToIndex(const Value& key);
-				QuickVector<Value> elements;
+				static bool keyToIndex(const Value& key, UInt32& index);
+				UInt32 length;
+				QuickVector<Value> denseVector;
 				virtual void gcMark(GCHeap& heap) const {
-					heap.markViaReferences(elements.begin(), elements.end());
+					heap.markViaReferences(denseVector.begin(), denseVector.end());
 					super::gcMark(heap);
 				}
 };
@@ -948,7 +953,7 @@ class Engine {
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject stringPrototype;
 				Error* errorPrototypes[ERROR_TYPE_COUNT];
-				UserObject arrayPrototype; // FIX : should be array
+				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				UserFunction* toNumberFunction;
@@ -977,7 +982,8 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 				EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v) {
 					const String* name = key.toString(engine.getHeap()); // FIX : asString?
-					if (vars.lookup(name) != 0) { vars.assign(name, v); return true; } // FIX : we need a better way to lookup & update in one
+					Table::Bucket* bucket = vars.lookup(name);
+					if (bucket != 0) { vars.update(bucket, v); return true; }
 					return parent->setProperty(engine, key, v);
 				}
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const {
@@ -988,7 +994,8 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 				}
 				virtual bool deleteProperty(Engine& engine, const Value& key) {
 					const String* name = key.toString(engine.getHeap());
-					if (vars.lookup(name) != 0) { vars.erase(name); return true; } 		// FIX : we need a better way to lookup & update in one
+					Table::Bucket* bucket = vars.lookup(name);
+					if (bucket != 0) { vars.erase(bucket); return true; } 		// FIX : we need a better way to lookup & update in one
 					return parent->deleteProperty(engine, key);
 				}
 
@@ -1185,6 +1192,8 @@ class Processor : public GCItem {
 					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
 					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
+					, NEW_ARRAY_OP									// stack: -> array_object
+					, NEW_OBJECT_OP									// stack: -> object
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value

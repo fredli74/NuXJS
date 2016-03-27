@@ -60,27 +60,27 @@ testFile => {
 	skip = false;
 
 	addSection => {
-		if (sectionOutput !== '') {
-			if (!skip) map(@sections[sections.n++], 'input', sectionInput, 'output', sectionOutput);
-			skip = false;
-			sectionInput = '';
-			sectionOutput = '';
-		}
+		if (!skip) map(@sections[sections.n++], 'input', sectionInput, 'output', sectionOutput);
+		skip = false;
+		sectionInput = '';
+		sectionOutput = '';
 	};
 
 	tokenize(ioSource, >{
 		directive = $0{:1};
 		command = $0{2:};
 		if (directive === '>') {
-			addSection();
+			if (sectionOutput !== '') addSection();
 			sectionInput #= command # LF;
 		} else if (directive === '<' || (directive === '!' && errorsToo)) {
 			sectionOutput #= command # LF;
+		} else if (directive === '-') {
+			addSection();
 		} else {
 			skip = true;
 		}
 	});
-	addSection();
+	if (sectionOutput !== '') addSection();
 
 	allInput = '';
 	allOutput = '';

@@ -350,7 +350,7 @@ double Value::toDouble() const {
 	}
 }
 
-Int32 Value::toInt() const {
+Int32 Value::toInt() const { // FIX : could be faster without toDouble I thinkus
 	double v = toDouble();
 	int i = static_cast<Int32>(v);
 	if (i == v) { // FIX : <2^32 but with decimals will now go via slow fmod, right? unneccessary
@@ -359,6 +359,21 @@ Int32 Value::toInt() const {
 		return 0;
 	} else {
 		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
+	}
+}
+
+bool Value::toArrayIndex(UInt32& index) const {
+	switch (type) {
+		case NUMBER_TYPE: {
+			index = static_cast<UInt32>(var.number);
+			return index == var.number;
+		}
+		case STRING_TYPE: {
+			const Char* const e = var.string->end();
+			const Char* p = parseUnsignedInt(var.string->begin(), e, index);
+			return p == e;
+		}
+		default: return false;
 	}
 }
 
@@ -739,22 +754,21 @@ UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCou
 Table::Table(UInt32 n) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N), loadCount(0) { }
 
 UInt32 Table::getLoadCount() const { return loadCount; }
-const Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
+Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
 
-const Table::Bucket* Table::getNext(const Bucket* bucket) const {
+Table::Bucket* Table::getNext(Bucket* bucket) const {
 	assert(bucket != 0);
-	const Bucket* e = buckets.end();
+	Bucket* e = buckets.end();
 	while (++bucket != e && !bucket->valueExists()) { }
 	return (bucket == e ? 0 : bucket);
 }
 
-const Table::Bucket* Table::lookup(const String* key) const {
-	const Bucket* bucket = find(key, key->calcHash());
+Table::Bucket* Table::lookup(const String* key) const {
+	Bucket* bucket = find(key, key->calcHash());
 	return (bucket->valueExists() ? bucket : 0);
 }
 
-bool Table::assign(const String* key, const Value& value, Byte flags) {
-	assert(value.exists());
+Table::Bucket* Table::insert(const String* key) {
 	UInt32 hash = key->calcHash();
 	Bucket* bucket = find(key, hash);
 	if (!bucket->keyExists()) {
@@ -765,23 +779,28 @@ bool Table::assign(const String* key, const Value& value, Byte flags) {
 			assert(!bucket->keyExists());
 		}
 		++loadCount;
-		bucket->flags = KEY_EXISTS | VALUE_EXISTS | flags;
+		bucket->flags = KEY_EXISTS;
 		bucket->hash16 = static_cast<UInt16>(hash);
 		bucket->key = key;
-		bucket->type = static_cast<Byte>(value.type);
-		bucket->var = value.var;
-	} else if ((bucket->flags & READ_ONLY) != 0) {
+	}
+	return bucket;
+}
+
+bool Table::update(Bucket* bucket, const Value& value, Byte flags) {
+	assert(value.exists());
+	assert(bucket->keyExists());
+	if ((bucket->flags & READ_ONLY) != 0) {
 		return false;
 	} else {
-		bucket->flags |= KEY_EXISTS | VALUE_EXISTS | flags;
+		bucket->flags |= VALUE_EXISTS | flags;
 		bucket->type = static_cast<Byte>(value.type);
 		bucket->var = value.var;
 	}
 	return true;
 }
 
-bool Table::erase(const String* key) {
-	Bucket* bucket = find(key, key->calcHash());
+bool Table::erase(Bucket* bucket) {
+	assert(bucket->keyExists());
 	if (bucket->valueExists()) {
 		if ((bucket->flags & DONT_DELETE) != 0) {
 			return false;
@@ -860,7 +879,7 @@ UserObject::UserObject(Object* prototype) : prototype(prototype) { }
 Object* UserObject::getPrototype(Engine& engine) const { return prototype; }
 
 bool UserObject::setProperty(Engine& engine, const Value& key, const Value& v) {
-	properties.assign(key.toString(engine.getHeap()), v);
+	properties.update(properties.insert(key.toString(engine.getHeap())), v);
 	return true;
 }
 
@@ -874,12 +893,13 @@ bool UserObject::getProperty(Engine& engine, const Value& key, Value* v) const {
 }
 
 bool UserObject::deleteProperty(Engine& engine, const Value& key) {
-	return properties.erase(key.toString(engine.getHeap()));
+	Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
+	return (bucket == 0 || properties.erase(bucket));
 }
 
 Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
-	for (const Table::Bucket* bucket = properties.getFirst(); bucket != 0; bucket = properties.getNext(bucket)) {
+	for (Table::Bucket* bucket = properties.getFirst(); bucket != 0; bucket = properties.getNext(bucket)) {
 		if (bucket->enumerate()) {
 			list->add(bucket->getKey());
 		}
@@ -893,7 +913,8 @@ bool UserObject::isPropertyEnumerable(Engine& engine, const Value& key) const {
 }
 
 bool UserObject::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
-	return properties.assign(key.toString(engine.getHeap()), v, (attributes.readOnly ? Table::READ_ONLY : 0)
+	return properties.update(properties.insert(key.toString(engine.getHeap())), v
+			, (attributes.readOnly ? Table::READ_ONLY : 0)
 			| (attributes.dontEnum ? Table::DONT_ENUM : 0)
 			| (attributes.dontDelete ? Table::DONT_DELETE : 0));
 }
@@ -1036,44 +1057,68 @@ class ObjectConstructor : public Function {
 
 static ObjectConstructor OBJECT_OBJECT; // for object literals
 
-const String* Array::getClassName() const { return &A_RRAY_STRING; }
-Object* Array::getPrototype(Engine& engine) const { return &engine.arrayPrototype; }
+Array::Array() : length(0) { }
 
-Int32 Array::keyToIndex(const Value& key) {
-	const double d = key.toDouble(); // FIX : util method in value // FIX : shouldn't accept "  123  "
-	const Int32 i = static_cast<Int32>(d);
-	return (i == d && 0 <= i ? i : -1);
+const String* Array::getClassName() const { return &A_RRAY_STRING; }
+
+Object* Array::getPrototype(Engine& engine) const { // FIX : have a sep. ArrayPrototype object like we have for Function?
+	return (this == &engine.arrayPrototype ? static_cast<Object*>(&engine.objectPrototype)
+			: static_cast<Object*>(&engine.arrayPrototype));
 }
 
 bool Array::getProperty(Engine& engine, const Value& key, Value* v) const {
-	const Int32 i = keyToIndex(key);
-	if (i >= 0 && i < elements.size() && elements[i].exists()) {
-		*v = elements[i];
+	UInt32 index;
+	if (key.toArrayIndex(index) && index < denseVector.size()) {
+		*v = denseVector[index];
 		return true;
 	}
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
-		*v = Value(elements.size());
+		*v = Value(length);
 		return true;
 	}
 	return super::getProperty(engine, key, v);
 }
 
 bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
-	const Int32 i = keyToIndex(key);
-	if (i >= 0) {
+	UInt32 index;
+	if (key.toArrayIndex(index)) {
+		if (index < denseVector.size()) {
+			denseVector[index] = v;
+			return true;
+		}
+		if (index >= length && index != 0xFFFFFFFFU) {
+			length = index + 1;
+		}
+	}
+/*	if (i == denseVector.size()) {
+		if (completeObject != 0) {
+			GCHeap& heap = engine.getHeap();
+			const Table& props = completeObject->properties;
+			UInt32 moveIndex = i;
+			do {
+				const Table::Bucket* bucket = props.lookup(String::fromInt(heap, moveIndex));
+				if (bucket == 0 || !bucket->hasStandardFlags()) {
+					break;
+				}
+				props.erase(
+		const Table::Bucket* bucket = props.getFirst();
+		while (bucket != 0) {
+			if (
+			bucket = props.getNext(bucket);
+		}
+
+	if (i == denseOffset - 1 && denseOffset > 0) {
+		
 		if (i >= elements.size()) {
 			const Int32 oldSize = elements.size();
 			elements.resize(i + 1);
 			std::fill(elements.begin() + oldSize, elements.end(), Value::NONEXISTENT); // FIX : I feel like this should be part of vector actually. resize(x, fillValue) or make that SafeValue that initialises to NONEXISTENT?
 		}
-		elements[i] = v;
-		return true;
-	}
+
 	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
-		// FIX : error if not UInt32! but how if we are to go to exception-lessness?
-		const Int32 i = keyToIndex(v);
+		const UInt32 i = keyToIndex(v);
 		if (i < 0) {
-			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR)))); // FIX : how could we do this without exceptions?
+			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR, engine.getHeap().manage(new String("Invalid array length")))))); // FIX : how could we do this without exceptions?
 		}
 		const Int32 oldSize = elements.size();
 		if (i != oldSize) {
@@ -1084,64 +1129,47 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 		}
 		return true;
 	}
+	*/
+	
+	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+		UInt32 newLength;
+		if (!v.toArrayIndex(newLength)) {
+			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR, engine.getHeap().manage(new String("Invalid array length")))))); // FIX : how could we do this without exceptions?
+		}
+		if (completeObject != 0) {
+			Table& props = completeObject->properties;
+			for (Table::Bucket* bucket = props.getFirst(); bucket != 0; bucket = props.getNext(bucket)) {
+				UInt32 i;
+				const String* key = bucket->getKey();
+				const Char* const e = key->end();
+				const Char* p = parseUnsignedInt(key->begin(), e, i);
+				if (p == e && i >= newLength) {
+					if (!props.erase(bucket)) {
+						return false;
+					}
+				}
+			}
+		}
+		length = newLength;
+		return true;
+	}
+
 	return super::setProperty(engine, key, v);
 }
 
 bool Array::deleteProperty(Engine& engine, const Value& key) {
-	const Int32 i = keyToIndex(key);
+	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+		return false;
+	}
+	/*const Int32 i = keyToIndex(key);
 	if (i >= 0 && i < elements.size()) {
 		elements[i] = Value::NONEXISTENT;
 		return true;
-	}
+	}*/
 	return super::deleteProperty(engine, key);
 }
 
 void Array::constructCompleteObject(Engine& engine) const { }
-
-// FIX : we should have GEN_ARRAY, GEN_OBJECT I think...
-
-class ArrayConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-					Array* array = engine.getHeap().manage(new Array());
-					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING)
-							&& argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
-						array->setProperty(engine, Value(&LENGTH_STRING), argv[0]);
-					} else {
-						for (Int32 i = 0; i < argc; ++i) {
-							array->setProperty(engine, Value(i), argv[i]);
-						}
-					}
-					return Value(array);
-				}
-	public:		virtual bool getProperty(Engine& engine, const Value& key, Value* v) const {
-					if (key.isString() && key.getString()->isEqualTo(PROTOTYPE_STRING)) {
-						*v = Value(&engine.arrayPrototype);
-						return true;
-					}
-					return false;
-				}
-};
-
-static ArrayConstructor ARRAY_OBJECT; // for array literals
-
-#if 0
-class FunctionConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-					Array* array = engine.getHeap().manage(new Function(&engine.functionPrototype));
-					if (argc == 1 && argv[0].typeOfString()->isEqualTo(NUMBER_STRING) && argv[0].toDouble() == static_cast<UInt32>(argv[0].toInt())) { // FIX : more efficient way?
-						array->setProperty(engine, &LENGTH_STRING, argv[0]);
-					} else {
-						GCHeap& heap = engine.getHeap();
-						for (Int32 i = 0; i < argc; ++i) {
-							array->setProperty(engine, String::fromInt(heap, i), argv[i]);
-						}
-					}
-					return Value(array);
-				}
-};
-#endif
 
 /* --- LazyObject --- */
 
@@ -1368,7 +1396,7 @@ bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
-	for (const Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
+	for (Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
 		list->add(b->getKey());
 	}
 	for (UInt32 i = 0; i < argumentsCount; ++i)
@@ -1467,8 +1495,9 @@ void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
 		environment = evalVars;
 	}
 	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it) {
-		if (*it != 0 && evalVars->vars.lookup(*it) == 0) {
-			evalVars->vars.assign(*it, Value::UNDEFINED); 		// FIX : we need a better way to lookup & update in one
+		Table::Bucket* bucket;
+		if (*it != 0 && (bucket = evalVars->vars.lookup(*it)) == 0) {
+			evalVars->vars.update(evalVars->vars.insert(*it), Value::UNDEFINED);
 		}
 	}
 }
@@ -1771,6 +1800,7 @@ bool Processor::privateRun() {
 				vsp -= n;
 				break;
 			}
+			
 			case NEW_OP: {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
@@ -1788,7 +1818,19 @@ bool Processor::privateRun() {
 				vsp -= n - 1;
 				break;
 			}
+			
 			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
+			
+			case NEW_ARRAY_OP: {
+				push(Value(heap.manage(new Array())));
+				break;
+			}
+
+			case NEW_OBJECT_OP: {
+				push(Value(heap.manage(new UserObject(&engine.objectPrototype))));
+				break;
+			}
+			
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
@@ -1965,7 +2007,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
 			case Processor::ADD_PROPERTY_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].getString()->toStdString(); break;
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -2379,10 +2421,7 @@ Value Compiler::stringOrNumberConstant() {
 }
 
 Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
-	// FIX : we could add an operator for these three, I guess they will be common
-	emitWithConstant(Processor::CONST_OP, Value(&ARRAY_OBJECT));
-	emitWithInt32(Processor::NEW_OP, 0);
-	emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
+	emit(Processor::NEW_ARRAY_OP);
 	
 	Int32 index = 0;
 	Int32 lastAddedIndex = 0;
@@ -2390,7 +2429,7 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 		Compiler::ExpressionResult xr;
 		if (optionalExpression(xr, COMMA_PREC)) {
 			makeRValue(xr);
-			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(String::fromInt(heap, index)));
+			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(index));
 			lastAddedIndex = index;
 			if (token("]", true)) {
 				break;
@@ -2409,26 +2448,23 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 }
 
 Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff with functionCall and arrayInitialiser
-	// FIX : we could add an operator for these three, I guess they will be common
-	emitWithConstant(Processor::CONST_OP, Value(&OBJECT_OBJECT));
-	emitWithInt32(Processor::NEW_OP, 0);
-	emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
+	emit(Processor::NEW_OBJECT_OP);
 	
 	white();
 	while (!token("}", false)) {
 		const Char* b = p;
-		Value name = stringOrNumberConstant();
+		Value key = stringOrNumberConstant();
 		if (p == b) {
 			b = identifier(false, true);
 			if (p == b) {
 				error(SYNTAX_ERROR, "Expected property name");
 			} else {
-				name = Value(String::newHashedString(heap, b, p));
+				key = Value(String::newHashedString(heap, b, p));
 			}
 		}
 		expectToken(":", true);
 		rvalueExpression(COMMA_PREC);
-		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(name.toString(heap)));
+		emitWithConstant(Processor::ADD_PROPERTY_OP, key);
 		if (token("}", true)) {
 			break;
 		}
@@ -2748,13 +2784,14 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Value index;
-		const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
+		Table& nameIndexes = codeDef->nameIndexes;
+		Table::Bucket* bucket = nameIndexes.lookup(name);
 		if (bucket != 0) {
 			index = bucket->getValue();
 		} else {
 			codeDef->varNames.append(name);
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
-			codeDef->nameIndexes.assign(name, index);
+			nameIndexes.update(nameIndexes.insert(name), index);
 		}
 		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
 		if (compilingFor != FOR_EVAL) lxr = ExpressionResult(ExpressionResult::INDEXED, index);
@@ -3088,11 +3125,12 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					white();
 					const Char* b = identifier(true, false);
 					const String* exceptionVarName = String::newHashedString(heap, b, p);
-					Value localIndex = Value::NONEXISTENT;
-					const Table::Bucket* bucket = codeDef->nameIndexes.lookup(exceptionVarName);
+					Value localIndex;
+					Table& nameIndexes = codeDef->nameIndexes;
+					Table::Bucket* bucket = nameIndexes.lookup(exceptionVarName);
 					if (bucket != 0) {
 						localIndex = bucket->getValue();
-						codeDef->nameIndexes.erase(exceptionVarName);
+						nameIndexes.erase(bucket);
 					}
 					completeForwardBranch(catchPoint);
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
@@ -3106,9 +3144,12 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
 					catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
-					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) // FIX : sub
+					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
 						completeForwardBranch(*it);
-					if (localIndex.exists()) codeDef->nameIndexes.assign(exceptionVarName, localIndex);
+					}
+					if (bucket != 0) {
+						nameIndexes.update(nameIndexes.insert(exceptionVarName), localIndex);
+					}
 				}
 				
 				// Finally
@@ -3264,11 +3305,13 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	this->e = e;
 	expectToken("(", true);
 	white();
+	Table& nameIndexes = codeDef->nameIndexes;
+	QuickVector<const String*>& argumentNames = codeDef->argumentNames;
 	while (!token(")", false)) {
 		if (eof()) {
-			error(SYNTAX_ERROR, codeDef->argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
+			error(SYNTAX_ERROR, argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
 		}
-		if (codeDef->argumentNames.size() != 0) {
+		if (argumentNames.size() != 0) {
 			if (!token(",", false)) {
 				error(SYNTAX_ERROR, "Expected ',' or ')'");
 			}
@@ -3276,8 +3319,8 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 		}
 		const Char* b = identifier(true, false);
 		const String* name = String::newHashedString(heap, b, p);
-		codeDef->nameIndexes.assign(name, Value(static_cast<Int32>(codeDef->argumentNames.size())));
-		codeDef->argumentNames.append(name);
+		nameIndexes.update(nameIndexes.insert(name), Value(static_cast<Int32>(argumentNames.size())));
+		argumentNames.append(name);
 		white();
 	}
 	expectToken("{", true);
@@ -3345,7 +3388,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 		Compiler compiler(engine.getHeap(), codeDef, Compiler::FOR_EVAL);
 		engine.getHeap().protect(&compiler);
 		compiler.compile(*sourceCode);
-		functionDefCache.assign(sourceCode, Value(codeDef));
+		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDef));
 	}
 	processor.enterEval(codeDef, direct);
 	return Value();
@@ -3558,8 +3601,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 		, evalDirectFunction(true), toNumberFunction(0), toStringFunction(0)
 		, booleanPrototype(&B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
-		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
-		, arrayPrototype(&objectPrototype) {
+		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
 	assert(heap.belongs(globals));
 
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
@@ -3576,13 +3618,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 	}
 	
 	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
-	ArrayConstructor* arrayObject = gcHeap.manage(new ArrayConstructor());
-//	FunctionConstructor* functionObject = gcHeap.manage(new FunctionConstructor());
 	objectObject->setProperty(*this, Value(&PROTOTYPE_STRING), Value(&objectPrototype));
-	arrayObject->setProperty(*this, Value(&PROTOTYPE_STRING), Value(&arrayPrototype));
-//	functionObject->setProperty(*this, &PROTOTYPE_STRING, Value(&functionPrototype));
-	globals->setProperty(*this, Value(&A_RRAY_STRING), Value(arrayObject));
-//	globals->setProperty(*this, &F_UNCTION_STRING, Value(functionObject));
 	globals->setProperty(*this, Value(&EVAL_STRING), Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
 }
@@ -3678,6 +3714,10 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		} while (p != e);
 	}
 
+	void pushIOStop() {
+		ioLines.push_back("-");
+	}
+
 	class PrintFunction : public Function {
 		public:		typedef Function super;
 					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
@@ -3758,8 +3798,8 @@ supressStdErr = false;
 		}
 	}
 	while (inStream->good()) {
+		bool execute = false;
 		try {
-			bool execute = false;
 			std::wstring s;
 			if (interactive) {
 				std::getline(*inStream, s);
@@ -3895,6 +3935,9 @@ supressStdErr = false;
 			} else {
 				pushIOLines('!', String("Unknown exception"));
 			}
+		}
+		if (execute && interactive) {
+			pushIOStop();
 		}
 	}
 	if (pauseBeforeQuit) std::wcin.get();
