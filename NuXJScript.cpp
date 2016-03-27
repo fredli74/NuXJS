@@ -528,36 +528,20 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
 struct QuickConstants {
 	QuickConstants() {
-		try {
-			std::fill_n(integers, QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1, (String*)(0));
-			for (int i = 0; i < 127; ++i) {
-				Char buf[1] = { static_cast<Char>(i) };
-				ascii[i] = Value(new String(buf, buf + 1));
-			}
-			for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
-				Char buffer[32];
-				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = new String(intToString(buffer, i), buffer + 32); // FIX : newHashedString
-				integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]->calcHash();
-			}
-		}
-		catch (...) {
-			cleanup();
-			throw;
-		}
-	}
-	void cleanup() {
 		for (int i = 0; i < 127; ++i) {
-			delete ascii[i].getString();
-			ascii[i] = Value::NONEXISTENT;
+			Char buf[1] = { static_cast<Char>(i) };
+			asciiChars[i] = String(buf, buf + 1);
+			ascii[i] = Value(&asciiChars[i]);
 		}
 		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
-			delete integers[i + QUICK_CONSTANTS_INTEGERS_RANGE];
-			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = 0;
+			Char buffer[32];
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = String(intToString(buffer, i), buffer + 32); // FIX : newHashedString
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE].calcHash();
 		}
 	}
-	~QuickConstants() { cleanup(); }
 	Value ascii[127];
-	String* integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
+	String asciiChars[127];
+	String integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
 };
 
 QuickConstants QUICK_CONSTANTS;
@@ -633,16 +617,24 @@ Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size()));
 }
 
+static Table _strings;
+
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	String* o = heap.manage(new String(b, e));
 	o->calcHash();
-	return o;
+	Table::Bucket* bucket = _strings.insert(o);
+	if (bucket->valueExists()) {
+		return bucket->getValue().getString();
+	} else {
+		_strings.update(bucket, Value(o));
+		return o;
+	}
 }
 
 const String* String::fromInt(GCHeap& heap, Int32 i) {
 	Char buffer[32];
 	return (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
-		 ? QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
+		 ? &QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
 		 : heap.manage(new String(intToString(buffer, i), buffer + 32));
 }
 
@@ -2140,7 +2132,7 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) {
-	for (int i = 0; i < codeDef->constants->size(); ++i){
+	for (int i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
 }
@@ -2809,7 +2801,9 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
 		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-		if (compilingFor != FOR_EVAL) lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+		if (compilingFor != FOR_EVAL) {
+			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+		}
 	}
 	return lxr;
 }
@@ -3526,14 +3520,6 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	/* FIX : drop
-	Value callFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-		Object* newThis = (argc > 0 ? argv[0].toObject(engine, false) : 0);
-		return thisObject->call(engine, processor, std::max(argc - 1, 0), argv + std::min(1, argc)
-				, (newThis == 0 ? engine.getGlobals() : newThis));
-	}
-	*/
-
 	static Value callWithArgs(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		Object* callObject = (argc > 0 ? argv[0].toObject(engine, false) : 0);
 		if (callObject == 0) {
@@ -3570,16 +3556,6 @@ struct Support {
 		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
 		return (object != 0 ? Value(object->isPropertyEnumerable(engine, argv[1])) : Value(false));
 	}
-
-	/*
-	Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-		Char c;
-		if (argc == 1 && (c = argv[0].toInt()) < 127) return QUICK_CONSTANTS.ascii[c];
-		String* s = engine.getHeap().manage(new String(argc));
-		for (Int32 i = 0; i < argc; ++i) (*s)[i] = static_cast<Char>(argv[i].toInt());
-		return Value(s);
-	}*/
-	// UnaryNativeFunction< std::function<double (double)> > NATIVE_SQRT_FUNCTION([](double d) { return sqrt(d); });
 
 	static Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
@@ -3861,10 +3837,6 @@ supressStdErr = false;
 				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 				processor.chain(RETURN_TO_HOST_STUB);
 				
-				Constants constants;
-				heap.protect(&constants);
-				CodeDefinition codeDef(&constants);
-				heap.protect(&codeDef);
 				Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
 				heap.protect(&compiler);
 				try {
@@ -3894,7 +3866,12 @@ supressStdErr = false;
 					throw;
 				}
 				globalsFrame.updatedCode();
-				processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
+if (!supressStdErr) {
+	for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
+		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
+	}
+}
+					processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
 				
 				bool done = false;
 				clock_t start = ::clock();	

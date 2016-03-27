@@ -580,6 +580,7 @@ class Table {
 								const String* getKey() const { return key; }
 								bool doEnumerate() const { return ((flags & DONT_ENUM) == 0); }
 								bool hasStandardFlags() const { return flags == (KEY_EXISTS | VALUE_EXISTS); }
+								bool valueExists() const { return ((flags & VALUE_EXISTS) != 0); }
 								
 					protected:	Byte flags;
 								Byte type;
@@ -587,7 +588,6 @@ class Table {
 								const String* key;
 								Value::Variable var;
 								bool keyExists() const { return flags != 0; }
-								bool valueExists() const { return ((flags & VALUE_EXISTS) != 0); }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);

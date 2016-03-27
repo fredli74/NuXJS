@@ -45,7 +45,7 @@
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
       customWorkingDirectory = "/Users/magnus/projects/lab/ScriptLab/NuXJScript"
-      buildConfiguration = "Release"
+      buildConfiguration = "Debug"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
@@ -65,7 +65,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-gc 1000000 benchmarks/chess_bm.js"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "tests/StringObject_1.js"
