@@ -1088,7 +1088,7 @@ void Array::sliceDenseVector(Engine& engine, const Value& key) {
 			props.update(props.insert(String::fromInt(heap, moveIndex)), denseVector[moveIndex]);
 		}
 		denseVector.resize(index);
-		std::cerr << "sliced " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
+// FIX :		std::cerr << "sliced " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
 	}
 }
 
@@ -1124,7 +1124,7 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 						props.erase(bucket);
 						++moveIndex;
 					}
-					std::cerr << "extended " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
+// FIX :					std::cerr << "extended " << this << " at " << index << " (dense size: " << denseVector.size() << ", table load: " << props.getLoadCount() << ")" << std::endl;
 				}
 			}
 			return true;
