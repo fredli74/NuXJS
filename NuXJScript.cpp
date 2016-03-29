@@ -1502,6 +1502,7 @@ bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v) 
 		indexedPointer[index] = v;
 		return true;
 	}
+	// FIX : make sub that lookup's the bucket, also use in getProperty
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
