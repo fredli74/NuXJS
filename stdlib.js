@@ -37,7 +37,7 @@ function isPrimitive(v) {
 }
 
 // FIX : join these two maybe?
-support.toPrimitiveNumber = function toPrimitive(o) {
+support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
@@ -46,7 +46,7 @@ support.toPrimitiveNumber = function toPrimitive(o) {
 	return v;
 }
 
-support.toPrimitiveString = function toString(o) {
+support.toPrimitiveString = function toPrimitiveString(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
