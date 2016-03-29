@@ -496,13 +496,12 @@ class Function;
 class Processor;
 class ScriptObject;
 
-enum {
-	READ_ONLY_FLAG = 16
-	, DONT_ENUM_FLAG = 32
-	, DONT_DELETE_FLAG = 64
-	, STANDARD_FLAGS = 0
-};
-
+const Flags EXISTS_FLAG = 1;
+const Flags READ_ONLY_FLAG = 2;
+const Flags DONT_ENUM_FLAG = 4;
+const Flags DONT_DELETE_FLAG = 8;
+const Flags STANDARD_FLAGS = 0;		// use with setProperty()
+const Flags NONEXISTENT = 0;		// use with getProperty() to check for existence, e.g. getProperty(o, k, v) != NONEXISTENT
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
@@ -522,7 +521,7 @@ class Object : public GCItem {
 
 				bool getPropertyNoFlags(Engine& engine, const Value& key, Value* v) const { Flags dummy; return getPropertyAndFlags(engine, key, v, dummy); }
 				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;  // don't touch v if you return false
+				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;  // don't touch v if you return 0
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
@@ -571,11 +570,6 @@ class Enumerator : public Object {
 };
 
 class Table {
-	protected:	enum {
-					KEY_EXISTS_FLAG = 1
-					, VALUE_EXISTS_FLAG = 2
-				};
-				
 				/*
 					The only reason why Bucket doesn't contain the Value class, but rather holds it's own Byte type and
 					Variable union, is memory. This solution makes it possible to squeeze in key flags and a truncated
@@ -584,20 +578,20 @@ class Table {
 	public:		class Bucket {
 					friend class Table;
 					
-					public:		Bucket() : flags(0) { };
+					public:		Bucket() : key(0) { };
 								Value getValue() const { assert(valueExists()); return Value(static_cast<Value::Type>(type), var); }
 								Flags getFlags() const { return flags; }
 								const String* getKey() const { assert(keyExists()); return key; }
 								bool doEnumerate() const { return ((flags & DONT_ENUM_FLAG) == 0); }
-								bool hasStandardFlags() const { return flags == (KEY_EXISTS_FLAG | VALUE_EXISTS_FLAG); }
-								bool valueExists() const { return ((flags & VALUE_EXISTS_FLAG) != 0); }
+								bool hasStandardFlags() const { return flags == EXISTS_FLAG; }
+								bool valueExists() const { return (key != 0 && ((flags & EXISTS_FLAG) != 0)); }
 								
-					protected:	Byte flags;
+					protected:	const String* key;
+								Byte flags;
 								Byte type;
 								UInt16 hash16;
-								const String* key;
 								Value::Variable var;
-								bool keyExists() const { return flags != 0; }
+								bool keyExists() const { return key != 0; }
 				};
 				
 				Table(UInt32 n = TABLE_BUILT_IN_N);

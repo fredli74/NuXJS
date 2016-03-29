@@ -787,7 +787,7 @@ Table::Bucket* Table::insert(const String* key) {
 			assert(!bucket->keyExists());
 		}
 		++loadCount;
-		bucket->flags = KEY_EXISTS_FLAG;
+		bucket->flags = 0;
 		bucket->hash16 = static_cast<UInt16>(hash);
 		bucket->key = key;
 	}
@@ -800,7 +800,7 @@ bool Table::update(Bucket* bucket, const Value& value, Byte flags) {
 	if ((bucket->flags & READ_ONLY_FLAG) != 0) {
 		return false;
 	} else {
-		bucket->flags |= VALUE_EXISTS_FLAG | flags;
+		bucket->flags |= EXISTS_FLAG | flags;
 		bucket->type = static_cast<Byte>(value.type);
 		bucket->var = value.var;
 	}
@@ -813,7 +813,7 @@ bool Table::erase(Bucket* bucket) {
 		if ((bucket->flags & DONT_DELETE_FLAG) != 0) {
 			return false;
 		}
-		bucket->flags = KEY_EXISTS_FLAG;
+		bucket->flags = 0;
 	}
 	return true;
 }
