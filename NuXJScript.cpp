@@ -1419,17 +1419,22 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 	Attributes attributes;
 	attributes.dontEnum = true;
 	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(argumentsCount), attributes);
-	completeObject->defineProperty(engine, Value(&CALLEE_STRING), Value(frame->selfFunction), attributes);
+	completeObject->defineProperty(engine, Value(&CALLEE_STRING), Value(frame->function), attributes);
 }
 
 /* --- ScriptFrame --- */
 
+static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
+	const CodeDefinition* codeDef = function->getDefinition();
+	return codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc);
+}
+
 ScriptFrame::ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv)
-		: codeDef(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
-		, indexed(codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc))
-		, environment(function->getEnvironment()) {
+		: function(function), passedArgumentsCount(argc), environment(function->getEnvironment())
+		, indexed(calcIndexedVariablesSize(function, argc)) {
+	const CodeDefinition* codeDef = function->getDefinition();
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
-	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED); // FIX : optimize
+	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
 	if (codeDef->getArgumentsCount() > argc) {
 		std::fill(e, indexed.end(), Value::UNDEFINED);
@@ -1438,10 +1443,11 @@ ScriptFrame::ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv
 
 // FIX : this one must GO! Q&D crap
 void ScriptFrame::updatedCode() {
-	const Int32 oldVarsCount = indexedPointer - indexed.begin();
-	const Int32 oldArgsCount = indexed.end() - indexedPointer;
-	const Int32 newVarsCount = codeDef->getVarsCount();
-	const Int32 newArgsCount = std::max(codeDef->getArgumentsCount(), passedArgumentsCount);
+	const CodeDefinition* codeDef = function->getDefinition();
+	const UInt32 oldVarsCount = indexedPointer - indexed.begin();
+	const UInt32 oldArgsCount = indexed.end() - indexedPointer;
+	const UInt32 newVarsCount = codeDef->getVarsCount();
+	const UInt32 newArgsCount = std::max(codeDef->getArgumentsCount(), passedArgumentsCount);
 	assert(newVarsCount >= oldVarsCount);
 	assert(newArgsCount >= oldArgsCount);
 	QuickArray<Value> newIndexed(newVarsCount + newArgsCount);
@@ -1454,6 +1460,7 @@ void ScriptFrame::updatedCode() {
 
 // FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
 bool ScriptFrame::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
+	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
@@ -1462,6 +1469,7 @@ bool ScriptFrame::defineProperty(Engine& engine, const Value& key, const Value& 
 
 // FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
 bool ScriptFrame::isPropertyEnumerable(Engine& engine, const Value& key) const {
+	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
@@ -1469,50 +1477,57 @@ bool ScriptFrame::isPropertyEnumerable(Engine& engine, const Value& key) const {
 }
 
 bool ScriptFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
+	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		*v = indexedPointer[index];
 		return true;
-	} else if (super::getProperty(engine, key, v)) {
-		return true;
-	} else {
-		return environment->getProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 	}
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
+		if (super::getProperty(engine, key, v)) {
+			return true;
+		}
+	}
+	return environment->getProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
 bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v) {
+	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		indexedPointer[index] = v;
 		return true;
-	} else {
+	}
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			props.update(bucket, v);
 			return true;
 		}
-		return environment->setProperty(engine, key, v); // FIX : recursion
 	}
+	return environment->setProperty(engine, key, v); // FIX : recursion
 }
 
 bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
+	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		return false;
-	} else {
+	}
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			return props.erase(bucket);
 		}
-		return environment->deleteProperty(engine, key); // FIX : recursion
 	}
+	return environment->deleteProperty(engine, key); // FIX : recursion
 }
 
 void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
@@ -1525,11 +1540,13 @@ void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
 	}
 }
 
+// FIX: this turned out to be *really* slow of course, all global var accesses now creates a lot of nearly empty ScriptObjects :(
 void ScriptFrame::constructCompleteObject(Engine& engine) const {
+	const CodeDefinition* codeDef = function->getDefinition();
 	if (codeDef->selfName != 0) {
 		Attributes attributes;
 		attributes.dontDelete = true;
-		completeObject->defineProperty(engine, Value(codeDef->selfName), Value(selfFunction), attributes);
+		completeObject->defineProperty(engine, Value(codeDef->selfName), Value(function), attributes);
 	}
 	completeObject->setProperty(engine, Value(&ARGUMENTS_STRING)
 			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))));

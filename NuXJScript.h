@@ -514,13 +514,14 @@ class Object : public GCItem {
 				// FIX: try to join defineProperty and setProperty, they really are the same thing, just try out performance
 				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;  // FIX: const String& name instead? so that it takes temporaries // don't touch v if you return false
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v); // setProperty can store a reference to the name pointer, therefore the name string must live as long as this object lives, naturally, the string can be managed by the gc-heap
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const; // default: hasProperty()
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				bool getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
+				bool setPropertyDeep(Engine& engine, const Value& key, Value* v) const; // checks prototype chain for read-only
 				bool hasProperty(Engine& engine, const Value& key) const; // checks via getProperty()
 				bool hasPropertyDeep(Engine& engine, const Value& key) const;
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
@@ -836,8 +837,8 @@ class CodeDefinition : public Object {
 				
 				CodeDefinition(Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
-				Int32 getVarsCount() const { return varNames.size(); }
-				Int32 getArgumentsCount() const { return argumentNames.size(); }
+				UInt32 getVarsCount() const { return varNames.size(); }
+				UInt32 getArgumentsCount() const { return argumentNames.size(); }
 				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
 				const Value* getConstantsPointer() const { return constants->begin(); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
@@ -992,7 +993,7 @@ class ScriptFrame : public LazyObject<Frame> {
 	public:		typedef LazyObject<Frame> super;
 
 				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
-				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
+				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
@@ -1003,15 +1004,13 @@ class ScriptFrame : public LazyObject<Frame> {
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const; // FIX : should go in the future
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				const CodeDefinition* const codeDef;
-				ScriptFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
-				const Int32 passedArgumentsCount;
+				ScriptFunction* const function;
+				const UInt32 passedArgumentsCount;
+				Object* const environment;
 				QuickArray<Value> indexed; // Includes variables and arguments.
-				Object* environment;
 				
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(codeDef);
-					heap.mark(selfFunction);
+					heap.mark(function);
 					heap.markViaReferences(indexed.begin(), indexed.end());
 					heap.mark(environment);
 					super::gcMark(heap);
