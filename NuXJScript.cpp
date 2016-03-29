@@ -1467,7 +1467,16 @@ bool FunctionFrame::defineProperty(Engine& engine, const Value& key, const Value
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
 	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
-	else return environment->defineProperty(engine, key, v, attributes);
+	else return (environment == evalVars ? evalVars->parent : environment)->defineProperty(engine, key, v, attributes);
+}
+
+// FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
+bool FunctionFrame::isPropertyEnumerable(Engine& engine, const Value& key) const {
+	Int32 index;
+	const String* name = key.getString();
+	if (codeDef->lookupNameIndex(name, index)) return false;
+	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
+	else return (environment == evalVars ? evalVars->parent : environment)->isPropertyEnumerable(engine, key);
 }
 
 bool FunctionFrame::getProperty(Engine& engine, const Value& key, Value* v) const {

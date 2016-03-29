@@ -1612,6 +1612,7 @@ pok
 pok
 qthreguajf
 viusdh
+{  }
 { asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
 typeof ChainA.prototype.constructor: function
 ChainA.prototype.constructor: 12345
@@ -1709,7 +1710,7 @@ Boolean : dontEnum, (deleted:true)
 Boolean.prototype: false
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 Boolean.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 Boolean.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1718,7 +1719,7 @@ Number : dontEnum, (deleted:true)
 Number.prototype: 0
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 Number.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 Number.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1727,7 +1728,7 @@ String : dontEnum, (deleted:true)
 String.prototype: 
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 String.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 String.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1736,7 +1737,7 @@ Function : dontEnum, (deleted:true)
 Function.prototype: function() { [native code] }
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 Function.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 Function.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1745,7 +1746,7 @@ Error : dontEnum, (deleted:true)
 Error.prototype: Error
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 Error.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 Error.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1754,7 +1755,7 @@ RangeError : dontEnum, (deleted:true)
 RangeError.prototype: RangeError
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 RangeError.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 RangeError.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1763,7 +1764,7 @@ ReferenceError : dontEnum, (deleted:true)
 ReferenceError.prototype: ReferenceError
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 ReferenceError.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 ReferenceError.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1772,7 +1773,7 @@ SyntaxError : dontEnum, (deleted:true)
 SyntaxError.prototype: SyntaxError
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 SyntaxError.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 SyntaxError.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1781,7 +1782,7 @@ TypeError : dontEnum, (deleted:true)
 TypeError.prototype: TypeError
 prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 TypeError.prototype.constructor: function
-constructor : dontDelete, (deleted:true)
+constructor : dontEnum, (deleted:true)
 true
 TypeError.length: 1
 length : dontEnum,readOnly,dontDelete, (deleted:false)
@@ -1823,6 +1824,7 @@ x instanceof String: false
 x instanceof realString: true
 -
 [object Object] (global)
+count: 5
 1
 2
 3
@@ -1830,13 +1832,63 @@ x instanceof realString: true
 5
 -
 me
+count: 3
 6
 7
 8
 -
 [object Object] (global)
+count: 4
 9
 10
 11
 12
-!!!! TypeError
+-
+me
+count: 4
+9
+10
+11
+12
+-
+[object Object] (global)
+count: 4
+13
+14
+15
+16
+-
+me
+count: 4
+13
+14
+15
+16
+-
+me
+count: 0
+-
+me
+count: 0
+-
+[object Object] (global)
+count: 0
+-
+[object Object] (global)
+count: 0
+-
+snuttelisnutt
+count: 0
+-
+snuttelisnutt
+count: 0
+-
+me
+count: 4
+17
+18
+19
+20
+-
+TypeError: Argument list has wrong type
+TypeError: Argument list has wrong type

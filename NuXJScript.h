@@ -1036,11 +1036,13 @@ class FunctionFrame : public Frame {
 
 				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
 				void updatedCode();
-				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
+
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes); // FIX : should go in the future
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const; // FIX : should go in the future
 
 	protected:	UserFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
