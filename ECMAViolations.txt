@@ -17,3 +17,5 @@
 *) implicit valueOf and toString conversions are done earlier than in ECMA standard and not necessarily in the same order or number of times. E.g. v[o]++ in Ecmascript means two calls to toString() but one in NuXJScript.
 
 *) does not support octal (0o) or binary (0b) in string->value conversion
+
+*) arguments object mapping follow ES3 rules only, changing element attributes (read-only etc) doesn't follow ES5 rules 100%

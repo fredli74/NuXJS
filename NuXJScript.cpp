@@ -303,6 +303,7 @@ const String ZERO_STRING("0");
 const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
+const String CALLEE_STRING("callee");
 const String PROTOTYPE_STRING("prototype");
 const String CLASS_STRING("class");
 const String VALUE_STRING("value");
@@ -470,6 +471,10 @@ bool Value::isEqualTo(const Value& r) const {
 	}
 }
 
+bool Value::isEqualTo(const String& s) const {
+	return (type == STRING_TYPE && s.isEqualTo(*var.string));
+}
+
 bool Value::isLessThan(const Value& y) const {
 	if (type == STRING_TYPE && y.type == STRING_TYPE) return var.string->isLessThan(*y.var.string);
 	double thisNumber = toDouble();
@@ -562,7 +567,7 @@ const String* String::toString(GCHeap& heap) const { return this; }
 Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
 
 bool String::getProperty(Engine& engine, const Value& key, Value* v) const {
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+	if (key.isEqualTo(LENGTH_STRING)) {
 		*v = Value(static_cast<Int32>(size()));
 		return true;
 	}
@@ -617,6 +622,7 @@ Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, size()));
 }
 
+// FIX : just a test, solve thread-safe or drop!
 static Table _strings;
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
@@ -839,7 +845,7 @@ Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	Bucket* bucket;
 	while ((bucket = &buckets[i])->keyExists()) {
 		if (bucket->hash16 == hash16 && bucket->key->isEqualTo(*key)) {
-			if (i != (hash & mask)) {
+			if (i != (hash & mask)) { // move found bucket one step closer to search entry, to speed up future lookups
 				std::swap(buckets[i], buckets[(i - 1) & mask]);
 				i = (i - 1) & mask;
 			}
@@ -968,7 +974,7 @@ bool StringWrapper::deleteProperty(Engine& engine, const Value& key) {
 }
 
 Enumerator* StringWrapper::getPropertyEnumerator(Engine& engine) const {
-	return engine.getHeap().manage(new MergingEnumerator(engine, super::getPropertyEnumerator(engine), wrapped));
+	return engine.getHeap().manage(new JoinedEnumerator(engine, super::getPropertyEnumerator(engine), wrapped));
 }
 
 bool StringWrapper::isPropertyEnumerable(Engine& engine, const Value& key) const {
@@ -986,16 +992,16 @@ StringListEnumerator::StringListEnumerator(UInt32 initialCapacity) : list(initia
 void StringListEnumerator::add(const String* s) { list.append(s); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
 
-/* --- MergingEnumerator --- */
+/* --- JoinedEnumerator --- */
 
-MergingEnumerator::MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject)
+JoinedEnumerator::JoinedEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject)
 		: engine(engine)
 		, leftEnumerator(leftEnumerator)
 		, rightObject(rightObject)
 		, rightEnumerator(rightObject->getPropertyEnumerator(engine)) {
 }
 
-const String* MergingEnumerator::nextPropertyName() {
+const String* JoinedEnumerator::nextPropertyName() {
 	const String* name = rightEnumerator->nextPropertyName();
 	if (name == 0) {
 		do {
@@ -1071,7 +1077,7 @@ bool Array::getProperty(Engine& engine, const Value& key, Value* v) const {
 		*v = denseVector[index];
 		return true;
 	}
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+	if (key.isEqualTo(LENGTH_STRING)) {
 		*v = Value(length);
 		return true;
 	}
@@ -1130,7 +1136,7 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 		}
 	}
 	
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+	if (key.isEqualTo(LENGTH_STRING)) {
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(RANGE_ERROR, engine.getHeap().manage(new String("Invalid array length")))))); // FIX : how could we do this without exceptions?
@@ -1155,7 +1161,7 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 }
 
 bool Array::deleteProperty(Engine& engine, const Value& key) {
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
+	if (key.isEqualTo(LENGTH_STRING)) {
 		return false;
 	}
 	sliceDenseVector(engine, key);
@@ -1167,7 +1173,7 @@ void Array::constructCompleteObject(Engine& engine) const { }
 Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
 	Enumerator* rangeEnumerator = engine.getHeap().manage(new RangeEnumerator(engine.getHeap(), 0, denseVector.size()));
 	return (completeObject == 0 ? rangeEnumerator
-			: engine.getHeap().manage(new MergingEnumerator(engine, rangeEnumerator, completeObject)));
+			: engine.getHeap().manage(new JoinedEnumerator(engine, rangeEnumerator, completeObject)));
 }
 
 bool Array::isPropertyEnumerable(Engine& engine, const Value& key) const {
@@ -1365,20 +1371,25 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount)
 		: frame(frame)
 		, argumentsCount(argumentsCount)
-		, lengthProperty(argumentsCount)
-		, deletedArguments(argumentsCount + 1) {
+		, deletedArguments(argumentsCount) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
 const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
 
+Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
+
 Value* Arguments::findProperty(const Value& key) const {
-	if (key.isString() && key.getString()->isEqualTo(LENGTH_STRING)) {
-		return (deletedArguments[0] ? 0 : const_cast<Value*>(&lengthProperty));
+	UInt32 i;
+	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? frame->getIndexedPointer() + i : 0);
+}
+
+bool Arguments::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
+	const Value* p = findProperty(key);
+	if (p != 0) {
+		deletedArguments[p - frame->getIndexedPointer()] = true;
 	}
-	const double d = key.toDouble();
-	const int i = static_cast<Int32>(d);
-	return (i >= 0 && i < argumentsCount && !deletedArguments[i + 1] ? frame->getIndexedPointer() + i : 0);
+	return super::defineProperty(engine, key, v, attributes);
 }
 
 bool Arguments::getProperty(Engine& engine, const Value& key, Value* v) const {
@@ -1394,18 +1405,30 @@ bool Arguments::setProperty(Engine& engine, const Value& key, const Value& v) {
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 	const Value* p = findProperty(key);
 	if (p == 0) return super::deleteProperty(engine, key);
-	else if (p == &lengthProperty) return (deletedArguments[0] = true);
-	else return (deletedArguments[p - frame->getIndexedPointer() + 1] = true);
+	else return (deletedArguments[p - frame->getIndexedPointer()] = true);
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
-	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount() + argumentsCount + 1));
-	for (Table::Bucket* b = properties.getFirst(); b != 0; b = properties.getNext(b)) {
-		list->add(b->getKey());
+	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(argumentsCount));
+	for (UInt32 i = 0; i < argumentsCount; ++i) {
+		if (!deletedArguments[i]) {
+			list->add(String::fromInt(engine.getHeap(), i));
+		}
 	}
-	for (UInt32 i = 0; i < argumentsCount; ++i)
-		if (!deletedArguments[i + 1]) list->add(String::fromInt(engine.getHeap(), i));
-	return list;
+	return (completeObject == 0 ? static_cast<Enumerator*>(list)
+			: engine.getHeap().manage(new JoinedEnumerator(engine, list, completeObject)));
+}
+
+bool Arguments::isPropertyEnumerable(Engine& engine, const Value& key) const {
+	const Value* p = findProperty(key);
+	return (p != 0 || super::isPropertyEnumerable(engine, key));
+}
+
+void Arguments::constructCompleteObject(Engine& engine) const {
+	Attributes attributes;
+	attributes.dontEnum = true;
+	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(argumentsCount), attributes);
+	completeObject->defineProperty(engine, Value(&CALLEE_STRING), Value(frame->selfFunction), attributes);
 }
 
 /* --- FunctionFrame --- */
@@ -1438,9 +1461,10 @@ void FunctionFrame::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
+// FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
 bool FunctionFrame::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
 	Int32 index;
-	const String* name = key.toString(engine.getHeap());
+	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
 	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
 	else return environment->defineProperty(engine, key, v, attributes);
@@ -1448,7 +1472,7 @@ bool FunctionFrame::defineProperty(Engine& engine, const Value& key, const Value
 
 bool FunctionFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	Int32 index;
-	const String* name = key.toString(engine.getHeap());
+	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		*v = indexedPointer[index];
@@ -1470,7 +1494,7 @@ bool FunctionFrame::getProperty(Engine& engine, const Value& key, Value* v) cons
 
 bool FunctionFrame::setProperty(Engine& engine, const Value& key, const Value& v) {
 	Int32 index;
-	const String* name = key.toString(engine.getHeap());
+	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		indexedPointer[index] = v;
@@ -1487,7 +1511,7 @@ bool FunctionFrame::setProperty(Engine& engine, const Value& key, const Value& v
 
 bool FunctionFrame::deleteProperty(Engine& engine, const Value& key) {
 	Int32 index;
-	const String* name = key.toString(engine.getHeap());
+	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
 	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
 	else return environment->deleteProperty(engine, key);
@@ -1527,17 +1551,17 @@ CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Va
 
 bool CatchFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	// FIX : always isString here right?
-	if (key.isString() && key.getString()->isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
+	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
 	else return parentFrame->getProperty(engine, key, v);
 }
 
 bool CatchFrame::setProperty(Engine& engine, const Value& key, const Value& v) {
-	if (key.isString() && key.getString()->isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
+	if (key.isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
 	else return parentFrame->setProperty(engine, key, v);
 }
 
 bool CatchFrame::deleteProperty(Engine& engine, const Value& key) {
-	if (key.isString() && key.getString()->isEqualTo(*exceptionName)) return false;
+	if (key.isEqualTo(*exceptionName)) return false;
 	else return parentFrame->deleteProperty(engine, key);
 }
 
@@ -1916,7 +1940,7 @@ bool Processor::privateRun() {
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
 				Enumerator* enumerator = &EMPTY_ENUMERATOR;
 				while (o != 0) {
-					enumerator = heap.manage(new MergingEnumerator(engine, enumerator, o));
+					enumerator = heap.manage(new JoinedEnumerator(engine, enumerator, o));
 					o = o->getPrototype(engine);
 				}
 				vsp[0] = Value(enumerator);
@@ -2577,7 +2601,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case FUNCTION_CALL: {
 			Processor::Opcode op = Processor::CALL_OP;
-			if (xr.t == ExpressionResult::NAMED && xr.v.getString()->isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
+			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
 			if (xr.t == ExpressionResult::PROPERTY) op = Processor::CALL_METHOD_OP;
 			else xr = makeRValue(xr);
 			xr = functionCall(op);
@@ -3178,7 +3202,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				}
 				emit(Processor::RETURN_OP);
 				
-				// Re-thrower (could actually be eliminated if we only have catch and no finally)
+				// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
 				
 				completeForwardBranch(catchPoint);
 				ExpressionResult thrownXR(ExpressionResult::PUSHED);
@@ -3532,8 +3556,8 @@ struct Support {
 			if (arrayObject != 0) {
 				Value v;
 				if (arrayObject->getProperty(engine, Value(&LENGTH_STRING), &v)) { // FIX : in the future I think we should have a getLength
-					Int32 length = v.toInt();
 					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
+					Int32 length = std::max(v.toInt() - offset, 0);
 					args.resize(length);
 					for (Int32 i = 0; i < length; ++i) {
 						args[i] = Value::UNDEFINED;
@@ -3796,10 +3820,18 @@ supressStdErr = false;
 			if (interactive) {
 				std::getline(*inStream, s);
 				// FIX : add #undo that drops just the last one
-				if (s == L"#save") { // FIX : add optional file name, can also be used to update results from testio.pika
+				if (s == L"#save" || s.substr(0, 6) == L"#save ") {
 					const time_t t = time(0);
 					char fn[257];
-					strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
+					if (s.size() >= 6) {
+						std::wstring ws = L"tests/";
+						ws += s.substr(6);
+						ws += L".io";
+						strncpy(fn, std::string(ws.begin(), ws.end()).c_str(), 256);
+						fn[256] = 0;
+					} else {
+						strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
+					}
 					std::ofstream saveStream(fn);
 					for (std::vector<std::string>::const_iterator it = ioLines.begin(); it != ioLines.end(); ++it) {
 						saveStream << *it << std::endl;

@@ -116,7 +116,7 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 		var theClass;
 		if (argArray == null) argArray = [ ];
 		else if ((theClass = support.getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
-			throw TypeError("argument list for apply() has wrong type");
+			throw TypeError("Argument list has wrong type");
 		};
 		return support.callWithArgs(this, thisArg, argArray, 0);
 	}),
@@ -345,3 +345,16 @@ function createErrorConstructor(name, prototype) {
 		toString: unconstructable(function toString() { return this.name + (this.message ? (': ' + this.message) : ''); })
 	});
 })();
+
+/* --- ES >3 polyfills --- */
+
+// These are not guaranteed to be 100% compatible
+
+defineProperties(Object, { dontEnum: true }, {
+	defineProperty: unconstructable(function defineProperty(o, p, d) {
+		support.defineProperty(o, '' + p, d.value, !d.writable, !d.enumerable, !d.configurable);
+	}),
+	getPrototypeOf: unconstructable(function getPrototypeOf(o) {
+		return support.getInternalProperty(o, 'prototype');
+	})
+});

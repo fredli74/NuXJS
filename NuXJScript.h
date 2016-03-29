@@ -142,6 +142,9 @@
 //		arguments and <self name>, couldn't they be indexed variables too instead of accessed through slow READ_NAMED? Either created only when present in code or allocated on demand?
 //		"get parent index" opcode, it is very common to access variables one level up (two levels up not so much), and parent frame never changes in a closure so...
 //		internal int type
+//		so, it's definitely worth it to "consolidate" / "internalize" all strings so that all identifiers get the same pointer (proven by the chess benchmark). The question is: how do we do this thread agnostic?
+//			there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
+//				the only problem is that it won't help stuff that is pushed on the stack only, e.g. a[x] = y <- both x and y are pushed data on stack and changing those pointers really won't help anyone :)
 //
 //	Compiler
 //
@@ -410,6 +413,7 @@ class Function;
 class Engine;
 class Value {
 	friend class Table;
+	
 	public:		Value()
 				#if !defined(NDEBUG)
 						: type(BAD_TYPE)
@@ -443,6 +447,7 @@ class Value {
 				bool operator<(const Value& r) const;
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
+				bool isEqualTo(const String& s) const;
 				bool isLessThan(const Value& r) const;
 				bool isLessThanOrEqualTo(const Value& r) const;
 				Value add(GCHeap& heap, const Value& r) const;
@@ -677,9 +682,9 @@ class StringListEnumerator : public Enumerator {
 				}
 };
 
-class MergingEnumerator : public Enumerator {
+class JoinedEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				MergingEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
+				JoinedEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
 				virtual const String* nextPropertyName();
 
 	protected:	Engine& engine;
@@ -991,8 +996,9 @@ class Frame : public Object {
 };
 
 class EvalVarsObject : public Object { // FIX : can we reuse something here? UserObject (with prototype)? FunctionFrame?
+	friend class FunctionFrame;
+	
 	public:		typedef Object super;
-				friend class FunctionFrame;
 				EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v) {
 					const String* name = key.toString(engine.getHeap()); // FIX : asString?
@@ -1023,8 +1029,9 @@ class EvalVarsObject : public Object { // FIX : can we reuse something here? Use
 				}
 };
 
-class Arguments;
 class FunctionFrame : public Frame {
+	friend class Arguments;
+	
 	public:		typedef Frame super;
 
 				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
@@ -1107,25 +1114,27 @@ class CatchFrame : public Frame {
 				}
 };
 
-class Arguments : public UserObject {
-	public:		typedef UserObject super;
+class Arguments : public LazyObject<UserObject> {
+	public:		typedef LazyObject<UserObject> super;
 
 				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
+				virtual Object* getPrototype(Engine& engine) const;
+				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 
-	protected:	Value* findProperty(const Value& key) const;
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				Value* findProperty(const Value& key) const;
 				FunctionFrame* const frame;
 				UInt32 const argumentsCount;
-				Value lengthProperty;
-				QuickArray<Byte, 8> deletedArguments;
+				QuickArray<Byte> deletedArguments;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(frame);
-					lengthProperty.gcMark(heap);
 					super::gcMark(heap);
 				}
 };

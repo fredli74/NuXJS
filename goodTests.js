@@ -1147,11 +1147,11 @@ mandelbrot();
 		sort(keys);
 		var s = "{ ";
 		for (var i = 0; i < keys.length; ++i) {
-			s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : " }"); 
+			s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : ""); 
 		}
-		return s;
+		return s + " }";
 	}
-
+	print(contents({}));
 	print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
 
 	function ChainA(a, b, c, d) { this.shadowProperty = "ChainA value"; this.toString = function() { return this.shadowProperty; }; };
@@ -1363,26 +1363,41 @@ new String("a") == new String("a") is false.
 		return v;
 	};
 */
-	function analyzeFlags(object, property) {
-		var dontEnum = true;
-		for (var p in object) {
-			if (p === property) {
-				dontEnum = false;
-				break;
+	function analyzeFlags(object, property, testValue) {
+		var origObject = Object; // In case it is Object we are testing
+		property = '' + property;
+		testValue = (testValue != null ? testValue : { });
+		if (!object.hasOwnProperty(property)) {
+			print(property + " : doesn't exist");
+		} else {
+			var dontEnum = true;
+			for (var p in object) {
+				if (p === property) {
+					dontEnum = false;
+					break;
+				}
+			}
+			var doEnum = object.propertyIsEnumerable(property);
+			if (doEnum === dontEnum) {
+				print("Warning! object.propertyIsEnumerable() returned " + doEnum + " for property '" + property
+						+ "' although it " + (dontEnum ? "was not" : "was") + " listed by for-in");
+			}
+			var valueWas = object[property];
+			object[property] = testValue;
+			var valueIs = object[property];
+			var readOnly = (valueIs !== testValue);
+			var deleted = delete object[property];
+			var dontDelete = object.hasOwnProperty(property);
+			print(property + " : " + (dontEnum ? "dontEnum," : "") + (readOnly ? "readOnly," : "")
+					+ (dontDelete ? "dontDelete," : "") + " (deleted:" + deleted + ')');
+			if (origObject.defineProperty) {
+				origObject.defineProperty(object, property, { value: valueWas, enumerable: !dontEnum, configurable: !dontDelete, writable: !readOnly });
+			} else {
+				object[property] = valueWas;
 			}
 		}
-		var valueWas = object[property];
-		var testObject = { };
-		object[property] = testObject;
-		var valueIs = object[property];
-		var readOnly = (valueIs !== testObject);
-		var deleted = delete object[property];
-		var dontDelete = (property in object);
-		print(property + " : " + (dontEnum ? "dontEnum," : "") + (readOnly ? "readOnly," : "")
-				+ (dontDelete ? "dontDelete," : "") + " (deleted:" + deleted + ')');
-		object[property] = valueWas;
-	};
-	
+	}
+
 	var readOnlyConstants = [
 		[ this, "NaN" ], [ this, "Infinity" ], [ this, "undefined" ]
 		, [ Number, "MAX_VALUE" ], [ Number, "MIN_VALUE" ], [ Number, "NaN" ], [ Number, "NEGATIVE_INFINITY" ], [ Number, "POSITIVE_INFINITY" ]
@@ -1517,7 +1532,7 @@ new String("a") == new String("a") is false.
 	{
 		print('-');
 		var global = this;
-		function test() { print(this.toString() + (this === global ? ' (global)' : '')); for (i = 0; i < arguments.length; ++i) print(arguments[i].toString()); print('-') }
+		function test() { print(this.toString() + (this === global ? ' (global)' : '')); print('count: ' + arguments.length); for (i = 0; i < arguments.length; ++i) print(arguments[i].toString()); print('-') }
 		test(1,2,3,4,5);
 		var o = { toString: function() { return "me" }, test: test };
 		o.test(6,7,8);
@@ -1532,7 +1547,7 @@ new String("a") == new String("a") is false.
 		test.call("snuttelisnutt");
 		test.apply("snuttelisnutt");
 		(function() { test.apply(o, arguments); })(17,18,19,20);
-		test.apply(o, "snuttelisnutt");
+		try { test.apply(o, "snuttelisnutt"); } catch (e) { print(e); }
 		try { test.apply(o, { 'wrong': 'type of object' }); } catch (e) { print(e); }
 	}
 })();

@@ -26,11 +26,13 @@
 > 	sort(keys);
 > 	var s = "{ ";
 > 	for (var i = 0; i < keys.length; ++i) {
-> 		s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : " }"); 
+> 		s += keys[i] + ": " + o[keys[i]] + (i < keys.length - 1 ? ", " : ""); 
 > 	}
-> 	return s;
+> 	return s + " }";
 > }
+> print(contents({}));
 > print(contents({ "kzxcjvn": "oaierjf", "goiegjf": "odisjv", "kjscnv": "oeriuf", "asdf": "poqker" }));
+< {  }
 < { asdf: poqker, goiegjf: odisjv, kjscnv: oeriuf, kzxcjvn: oaierjf }
 -
 > a=[]
@@ -58,13 +60,8 @@
 > print(contents(a));
 < { 1: 2, 2: 5, 3: x }
 -
-> if (!Object.defineProperty) {
->  support.defineProperty(a, '1', 'x', true, true, true)
->  support.defineProperty(a, '4', 'y', true, false, false)
-> } else {
->  Object.defineProperty(a, '1', { value: 'x', writable: false, enumerable: false, configurable: false });
->  Object.defineProperty(a, '4', { value: 'y', writable: false, enumerable: true, configurable: true });
-> }
+> Object.defineProperty(a, '1', { value: 'x', writable: false, enumerable: false, configurable: false });
+> Object.defineProperty(a, '4', { value: 'y', writable: false, enumerable: true, configurable: true });
 -
 > print(contents(a));
 < { 2: 5, 3: x, 4: y }
@@ -99,6 +96,7 @@
 < { 0: 234, 2: 5, 3: x, 5: 123 }
 -
 > function analyzeFlags(object, property, testValue) {
+>   property = '' + property;
 > 	testValue = (testValue != null ? testValue : { });
 >	if (!object.hasOwnProperty(property)) {
 >		print(property + " : doesn't exist");
@@ -110,6 +108,11 @@
 > 				break;
 > 			}
 > 		}
+>		var doEnum = object.propertyIsEnumerable(property);
+>		if (doEnum === dontEnum) {
+>			print("object.propertyIsEnumerable() returned " + doEnum + " for property '" + property
+>					+ "' although it " + (dontEnum ? "was not" : "was") + " listed by for-in");
+>		}
 > 		var valueWas = object[property];
 > 		object[property] = testValue;
 > 		var valueIs = object[property];
@@ -118,20 +121,20 @@
 > 		var dontDelete = object.hasOwnProperty(property);
 > 		print(property + " : " + (dontEnum ? "dontEnum," : "") + (readOnly ? "readOnly," : "")
 > 				+ (dontDelete ? "dontDelete," : "") + " (deleted:" + deleted + ')');
-> 		object[property] = valueWas;
+> 		Object.defineProperty(object, property, { value: valueWas, enumerable: !dontEnum, configurable: !dontDelete, writable: !readOnly });
 >	}
 > }
 > analyzeFlags(a, 0);
-< 0 : dontEnum, (deleted:true)
+< 0 :  (deleted:true)
 -
 > analyzeFlags(a, 1);
 < 1 : dontEnum,readOnly,dontDelete, (deleted:false)
 -
 > analyzeFlags(a, 2);
-< 2 : dontEnum, (deleted:true)
+< 2 :  (deleted:true)
 -
 > analyzeFlags(a, 3);
-< 3 : dontEnum, (deleted:true)
+< 3 :  (deleted:true)
 -
 > analyzeFlags(a, 4);
 < 4 : doesn't exist
@@ -147,5 +150,5 @@
 < { 0: 234, 2: 5, 3: x, 5: 3993 }
 -
 > analyzeFlags(a, 5);
-< 5 : dontEnum, (deleted:true)
+< 5 :  (deleted:true)
 -

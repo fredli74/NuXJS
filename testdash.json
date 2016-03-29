@@ -129,16 +129,16 @@
 		"category": "not_es3"
 	},
 	"language/arguments-object/10.6-13-a-1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/arguments-object/10.6-13-a-2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/10.6-13-a-3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/10.6-13-c-2-s": {
-		"category": "todo"
+		"category": "tbd"
 	},
 	"language/arguments-object/mapped/Symbol.iterator": {
 		"category": "not_es3"
@@ -1122,10 +1122,10 @@
 		"category": "not_es3"
 	},
 	"language/arguments-object/10.6-14-c-1-s": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/10.6-5-1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/10.6-6-1": {
 		"category": "tbd"
@@ -1134,19 +1134,19 @@
 		"category": "tbd"
 	},
 	"language/arguments-object/10.6-7-1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/arguments-object/S10.6_A2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/S10.6_A3_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/S10.6_A4": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/S10.6_A5_T1": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/arguments-object/mapped/mapped-arguments-nonconfigurable-1": {
 		"category": "tbd"
@@ -1212,7 +1212,7 @@
 		"category": "tbd"
 	},
 	"language/arguments-object/unmapped/Symbol.iterator": {
-		"category": "tbd"
+		"category": "not_es3"
 	},
 	"language/asi/S7.9.2_A1_T4": {
 		"category": "todo"
@@ -1764,37 +1764,37 @@
 		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A3.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A3.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A7.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A7.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A7.8": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/does-not-equals/S11.9.2_A7.9": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A1": {
 		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A7.2": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A7.3": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A7.8": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/S11.9.1_A7.9": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/equals/coerce-symbol-to-prim-err": {
 		"category": "not_es3"
