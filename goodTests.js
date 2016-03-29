@@ -118,7 +118,7 @@ print(-2147483648.0|0); // Should be -2147483648
 print(4294967295>>>0); // Should be 4294967295
 print((-4294967295)>>>0); // Should be 1
 
-var i = 0 ;   while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
+var i = 0 ;  j = 1234.5; while (   i   <   100.0e+1   )  {  j = j + i ; ++ i  }
  do { j = j - i * 0.5 } while ( i ++ < 2000 )
  print (  i + ", " + j )  ;
 
@@ -215,7 +215,6 @@ print(objectFromLiteral.patch);
 print(objectFromCall.patch);
 print(objectFromConstructor.patch);
 print(objectFromCustomConstructor.patch);
-
 print(delete Object.prototype.patch);
 */
 
@@ -225,7 +224,6 @@ print(delete Object.prototype.patch);
 	o.a += 5;
 	print(o.a++);
 	print(++o.a);
-
 	var a = {b:0};
 	a.b=1;
 	a.b+=1
@@ -580,9 +578,9 @@ s = ''; for ( a in "abcdefgh" ) s += a + ','; print(s);
 s = ''; for ( var a in "abcdefgh" ) s += a + ','; print(s);
 s = ''; for ( var a = 100 in "abcdefgh" ) s += a + ','; print(s);
 s = ''; for ( var a = 100 in "" ) ; print(a);
-a = new MyObject; for (a.x in "abcd") print(a.x)
-a = new MyObject; x = 0; for (a[x++] in "abcd") { }; print(x); for (var i = 0; i < x; ++i) print(a[i]);
-a = new MyObject; f = function() { print("tick "); return 0 }; for (a[f()] in "abcd") { print (a[0]) }
+a = { }; for (a.x in "abcd") print(a.x)
+a = { }; x = 0; for (a[x++] in "abcd") { }; print(x); for (var i = 0; i < x; ++i) print(a[i]);
+a = { }; f = function() { print("tick "); return 0 }; for (a[f()] in "abcd") { print (a[0]) }
 
 print("*** closures ***")
 

@@ -207,8 +207,8 @@ undefined
 9
 3
 f.length=3
-delete f.length=false
-f.length=3
+delete f.length=true
+f.length=0
 0
 hej
 function
@@ -664,7 +664,7 @@ tick
 25
 26
 *** arguments ***
-false
+true
 object
 true
 object
@@ -1704,7 +1704,7 @@ Object.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 Object.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 Boolean: function
 Boolean : dontEnum, (deleted:true)
 Boolean.prototype: false
@@ -1713,7 +1713,7 @@ Boolean.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 Boolean.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 Number: function
 Number : dontEnum, (deleted:true)
 Number.prototype: 0
@@ -1722,7 +1722,7 @@ Number.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 Number.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 String: function
 String : dontEnum, (deleted:true)
 String.prototype: 
@@ -1731,7 +1731,7 @@ String.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 String.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 Function: function
 Function : dontEnum, (deleted:true)
 Function.prototype: function() { [native code] }
@@ -1740,7 +1740,7 @@ Function.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 Function.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 Error: function
 Error : dontEnum, (deleted:true)
 Error.prototype: Error
@@ -1749,7 +1749,7 @@ Error.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 Error.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 RangeError: function
 RangeError : dontEnum, (deleted:true)
 RangeError.prototype: RangeError
@@ -1758,7 +1758,7 @@ RangeError.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 RangeError.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 ReferenceError: function
 ReferenceError : dontEnum, (deleted:true)
 ReferenceError.prototype: ReferenceError
@@ -1767,7 +1767,7 @@ ReferenceError.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 ReferenceError.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 SyntaxError: function
 SyntaxError : dontEnum, (deleted:true)
 SyntaxError.prototype: SyntaxError
@@ -1776,7 +1776,7 @@ SyntaxError.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 SyntaxError.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 TypeError: function
 TypeError : dontEnum, (deleted:true)
 TypeError.prototype: TypeError
@@ -1785,7 +1785,7 @@ TypeError.prototype.constructor: function
 constructor : dontEnum, (deleted:true)
 true
 TypeError.length: 1
-length : dontEnum,readOnly,dontDelete, (deleted:false)
+length : dontEnum,readOnly, (deleted:true)
 x: true
 x instanceof Boolean: true
 custom Boolean call

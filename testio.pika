@@ -4,8 +4,9 @@ include('debug.pika');
 include('stdlib.pika');
 include('systools.pika');
 
-SUCCESS_COLOR = FAILURE_COLOR = INPUT_COLOR = GOT_COLOR = EXPECTED_COLOR = '';
+STANDARD_COLOR = SUCCESS_COLOR = FAILURE_COLOR = INPUT_COLOR = GOT_COLOR = EXPECTED_COLOR = '';
 if (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {
+	STANDARD_COLOR = "\x1B[1;37m";
 	SUCCESS_COLOR = "\x1B[0;32m";
 	FAILURE_COLOR = "\x1B[1;31m";
 	INPUT_COLOR = "\x1B[1;37m";
@@ -51,6 +52,10 @@ if (files.n === 0) help();
 testFile => {
 	testPath = $0;
 	testFilename = filenameOfPath(testPath);
+
+	print(STANDARD_COLOR # testFilename);
+	print(repeat('=', length(testFilename)));
+
 	ioSource = load(testPath);
 	ioSource = replace(ioSource, "\r\n", "\n");
 
@@ -91,7 +96,7 @@ testFile => {
 
 	allOutput = trim(allOutput, '', "\n");
 	if (keepInputFiles) {
-		inFile = inputFileDir # DIR_SLASH # 'testio_' # basenameOfPath(testFilename) # '.txt';
+		inFile = inputFileDir # DIR_SLASH # basenameOfPath(testFilename) # '.js';
 	} else {
 		inFile = tempDir # 'testio';
 	};
@@ -100,14 +105,10 @@ testFile => {
 	result = replace(result, "\r\n", "\n");
 	result = trim(result, '', "\n");
 	if (result === allOutput) {
-		print(SUCCESS_COLOR # testFilename);
-		print(repeat('=', length(testFilename)));
-		print("Success!");
+		print(SUCCESS_COLOR # "Success!");
 		print('');
 	} else {
-		print(FAILURE_COLOR # testFilename);
-		print(repeat('=', length(testFilename)));
-		print("Failure!");
+		print(FAILURE_COLOR # "Failure!");
 		print("");
 		exitCode = 1;
 		outputLines.n = 0;

@@ -10,7 +10,7 @@
 //			take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
 //			only downside to that would be read and write named, which assumes the constant is a string pointer
 //			also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
-//			ok, one thought: normally an array only contains a cotninuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal UserObject (accessed as through a proxy now)
+//			ok, one thought: normally an array only contains a cotninuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal ScriptObject (accessed as through a proxy now)
 //			more thoughts: use different compressed variations (templates) when type is homogenous over all the array, e.g. number array, object array, string array. One could even consider an int array.
 //		basic library (math, string, array ops)
 //		for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
@@ -493,7 +493,7 @@ class Engine;
 class Enumerator;
 class Function;
 class Processor;
-class UserObject;
+class ScriptObject;
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
@@ -530,11 +530,11 @@ class Object : public GCItem {
 	LazyObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
 	
 	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
-	2) Memory: until the user accesses or adds properties, LazyObjects are usually super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
+	2) Memory: until the user accesses or adds properties, LazyObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
 	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
 		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
 
-	This class is a template so you can re-use and apply this architecture on different super classes.
+	This class is a template so this concept can be used with different super classes.
 */
 template<class SUPER> class LazyObject : public SUPER {
 	public:		typedef SUPER super;
@@ -547,8 +547,8 @@ template<class SUPER> class LazyObject : public SUPER {
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
-				UserObject* getCompleteObject(Engine& engine) const;
-				mutable UserObject* completeObject;
+				ScriptObject* getCompleteObject(Engine& engine) const;
+				mutable ScriptObject* completeObject;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(completeObject);
@@ -600,7 +600,7 @@ class Table {
 				Bucket* getFirst() const;
 				Bucket* getNext(Bucket* bucket) const;
 				Bucket* lookup(const String* key) const;
-				Bucket* insert(const String* key); // FIX : ok, this was slightly stupid, *whenever* do you want to insert without updating at once?
+				Bucket* insert(const String* key);
 				bool update(Bucket* bucket, const Value& value, Byte flags = 0);
 				bool erase(Bucket* bucket);
 				void gcMark(GCHeap& heap) const;
@@ -700,13 +700,10 @@ class JoinedEnumerator : public Enumerator {
 				}
 };
 
-// Name ExtensibleObject ? ScriptObject ?
-class UserObject : public virtual Object {
-	friend class Array;
-	
+class ScriptObject : public virtual Object {
 	public:		typedef Object super;
 				
-				UserObject(Object* prototype = 0); // FIX : not = 0 ?
+				ScriptObject(Object* prototype = 0); // FIX : not = 0 ?
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
@@ -714,6 +711,7 @@ class UserObject : public virtual Object {
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const;
+				Table& accessProperties();
 				
 	protected:	Table properties;
 				Object* prototype;
@@ -726,8 +724,8 @@ class UserObject : public virtual Object {
 };
 
 // fix : good candidate for a lazy object
-class WrapperObject : public UserObject {
-	public:		typedef UserObject super;
+class WrapperObject : public ScriptObject {
+	public:		typedef ScriptObject super;
 				WrapperObject(const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -742,8 +740,8 @@ class WrapperObject : public UserObject {
 };
 
 // FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
-class StringWrapper : public UserObject {
-	public:		typedef UserObject super;
+class StringWrapper : public ScriptObject {
+	public:		typedef ScriptObject super;
 				StringWrapper(const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -831,7 +829,7 @@ class Constants : public GCItem, public QuickVector<Value> {
 
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
-	friend class FunctionFrame;
+	friend class ScriptFrame;
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
@@ -881,10 +879,10 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
 
-class UserFunction : public ExtensibleFunction {
+class ScriptFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				
-				UserFunction(CodeDefinition* codeDef, Object* environment);
+				ScriptFunction(CodeDefinition* codeDef, Object* environment);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
@@ -956,8 +954,8 @@ class ErrorPrototype : public Error {
 };
 
 class Engine {
-	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard UserObject, there is some performance benefit to having them indexed just like a regular function.
-				// FIX : the only problem with a standard FunctionFrame for globals is that it's got arguments. It shouldn't have arguments.
+	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard ScriptObject, there is some performance benefit to having them indexed just like a regular function.
+				// FIX : the only problem with a standard ScriptFrame for globals is that it's got arguments. It shouldn't have arguments.
 				GCHeap& getHeap() const { return gcHeap; }
 				Frame* getGlobals() const { return globals; }
 				void setupStandardLibrary(const String& librarySourceCode);
@@ -966,7 +964,7 @@ class Engine {
 				Frame* const globals;
 				
 	// FIX : public? v
-	public:		UserObject objectPrototype; // FIX : make private? put where really?
+	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
 				FunctionPrototypeFunction functionPrototype;
 				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
@@ -975,89 +973,47 @@ class Engine {
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
-				UserFunction* toNumberFunction;
-				UserFunction* toStringFunction;
+				ScriptFunction* toNumberFunction;
+				ScriptFunction* toStringFunction;
 };
 
 class Frame : public Object {
 	public:		typedef Object super;
-				Frame(const CodeDefinition* codeDef) : codeDef(codeDef) { }
-				const CodeDefinition* getFunctionDef() const { return codeDef; }
+				virtual const CodeDefinition* getFunctionDef() const = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
-				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* def) = 0;
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* def) = 0;
 				
-	protected:	const CodeDefinition* const codeDef;
-				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(codeDef);
-					super::gcMark(heap);
-				}
+	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 };
 
-class EvalVarsObject : public Object { // FIX : can we reuse something here? UserObject (with prototype)? FunctionFrame?
-	friend class FunctionFrame;
-	
-	public:		typedef Object super;
-				EvalVarsObject(Object* parent) : parent(parent) { assert(parent != 0); }
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v) {
-					const String* name = key.toString(engine.getHeap()); // FIX : asString?
-					Table::Bucket* bucket = vars.lookup(name);
-					if (bucket != 0) { vars.update(bucket, v); return true; }
-					return parent->setProperty(engine, key, v);
-				}
-				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const {
-					const String* name = key.toString(engine.getHeap());
-					const Table::Bucket* bucket = vars.lookup(name);
-					if (bucket != 0) { *v = bucket->getValue(); return true; }
-					return parent->getProperty(engine, key, v);
-				}
-				virtual bool deleteProperty(Engine& engine, const Value& key) {
-					const String* name = key.toString(engine.getHeap());
-					Table::Bucket* bucket = vars.lookup(name);
-					if (bucket != 0) { vars.erase(bucket); return true; } 		// FIX : we need a better way to lookup & update in one
-					return parent->deleteProperty(engine, key);
-				}
-
-	protected:	Object* parent;
-				Table vars;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parent);
-					vars.gcMark(heap);
-					super::gcMark(heap);
-				}
-};
-
-class FunctionFrame : public Frame {
+class ScriptFrame : public LazyObject<Frame> {
 	friend class Arguments;
 	
-	public:		typedef Frame super;
+	public:		typedef LazyObject<Frame> super;
 
-				FunctionFrame(UserFunction* function, Int32 argc, const Value* argv);
+				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
+				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
 				void updatedCode();
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
 				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes); // FIX : should go in the future
 				virtual bool isPropertyEnumerable(Engine& engine, const Value& key) const; // FIX : should go in the future
 
-	protected:	UserFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				const CodeDefinition* const codeDef;
+				ScriptFunction* const selfFunction; // FIX : we have codeDef too in Frame, not *really* necessary, we should also contemplate adding codeDef pointer to CStackEntry directly (see below)
 				const Int32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
-				mutable Value argumentsValue; // FIX : I don't appreciate this solution 100%, would be nicer if "arguments" could be part of evalVars (see below), or maybe even a true local?
 				Object* environment;
-				// FIX : rename below to "DynamicVars" or something and use it also for Arguments and selfName, although selfName is not writable... 
-				EvalVarsObject* evalVars; // Created at first eval() call under this frame. Will be chained as an environment *above* this frame and contain variable slots for each var declared by the eval string.				
 				
 				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(codeDef);
 					heap.mark(selfFunction);
 					heap.markViaReferences(indexed.begin(), indexed.end());
-					argumentsValue.gcMark(heap);
 					heap.mark(environment);
-					heap.mark(evalVars);
 					super::gcMark(heap);
 				}
 
@@ -1065,25 +1021,28 @@ class FunctionFrame : public Frame {
 
 // FIX : if CStackEntry included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
-	This is the direct frame of an eval(), it only bridges all virtuals to the parent FunctionFrame, but has a different
+	This is the direct frame of an eval(), it only bridges all virtuals to the parent ScriptFrame, but has a different
 	codeDef pointer (for constants etc).
 	
-	FIX : I think we can use a FunctionFrame now for simplicity, if we just empty codeDef->nameIndexes first.
+	FIX : I think we can use a ScriptFrame now for simplicity, if we just empty codeDef->nameIndexes first.
 	Well, it shouldn't have arguments either. Like the global frame.
 */
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
-				EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame);
+				EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame);
+				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
-	protected:	Frame* parentFrame;
-				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
+	protected:	const CodeDefinition* const evalCodeDef;
+				Frame* const parentFrame;
+				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a ScriptFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
 
 				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(evalCodeDef);
 					heap.mark(parentFrame);
 					heap.markViaReferences(indexed.begin(), indexed.end());
 					super::gcMark(heap);
@@ -1099,10 +1058,11 @@ class CatchFrame : public Frame {
 	public:		typedef Frame super;
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
+				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
 				virtual bool getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef);
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -1116,10 +1076,10 @@ class CatchFrame : public Frame {
 				}
 };
 
-class Arguments : public LazyObject<UserObject> {
-	public:		typedef LazyObject<UserObject> super;
+class Arguments : public LazyObject<Object> {
+	public:		typedef LazyObject<Object> super;
 
-				Arguments(FunctionFrame* frame, UInt32 argumentsCount);
+				Arguments(ScriptFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
@@ -1131,7 +1091,7 @@ class Arguments : public LazyObject<UserObject> {
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Value* findProperty(const Value& key) const;
-				FunctionFrame* const frame;
+				ScriptFrame* const frame;
 				UInt32 const argumentsCount;
 				QuickArray<Byte> deletedArguments;
 
@@ -1241,10 +1201,10 @@ class Processor : public GCItem {
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(Function* completion);
-				void chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject);
+				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Frame* frame, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
-	// FIX :			void call(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject);
+	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }

@@ -626,14 +626,14 @@ Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 static Table _strings;
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
-	String* o = heap.manage(new String(b, e));
-	o->calcHash();
-	Table::Bucket* bucket = _strings.insert(o);
+	String* s = heap.manage(new String(b, e));
+	s->calcHash();
+	Table::Bucket* bucket = _strings.insert(s);
 	if (bucket->valueExists()) {
 		return bucket->getValue().getString();
 	} else {
-		_strings.update(bucket, Value(o));
-		return o;
+		_strings.update(bucket, Value(heap.protect(s)));
+		return s;
 	}
 }
 
@@ -679,7 +679,9 @@ void GCList::relinquish(GCItem* item) throw() {
 }
 
 void GCList::claim(GCItem* item) throw() {
-	if (item->_gcList != 0) item->_gcList->relinquish(item);
+	if (item->_gcList != 0) {
+		item->_gcList->relinquish(item);
+	}
 	item->_gcPrev = this;
 	item->_gcNext = _gcNext;
 	_gcNext->_gcPrev = item;
@@ -877,18 +879,19 @@ UInt32 Table::rebuild(UInt32 newN) {
 	return newLoadCount;
 }
 
-/* --- UserObject --- */
+/* --- ScriptObject --- */
 
-UserObject::UserObject(Object* prototype) : prototype(prototype) { }
+ScriptObject::ScriptObject(Object* prototype) : prototype(prototype) { }
 
-Object* UserObject::getPrototype(Engine& engine) const { return prototype; }
+Object* ScriptObject::getPrototype(Engine& engine) const { return prototype; }
+Table& ScriptObject::accessProperties() { return properties; }
 
-bool UserObject::setProperty(Engine& engine, const Value& key, const Value& v) {
+bool ScriptObject::setProperty(Engine& engine, const Value& key, const Value& v) {
 	properties.update(properties.insert(key.toString(engine.getHeap())), v);
 	return true;
 }
 
-bool UserObject::getProperty(Engine& engine, const Value& key, Value* v) const {
+bool ScriptObject::getProperty(Engine& engine, const Value& key, Value* v) const {
 	const Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
 	if (bucket != 0) {
 		*v = bucket->getValue();
@@ -897,12 +900,12 @@ bool UserObject::getProperty(Engine& engine, const Value& key, Value* v) const {
 	return false;
 }
 
-bool UserObject::deleteProperty(Engine& engine, const Value& key) {
+bool ScriptObject::deleteProperty(Engine& engine, const Value& key) {
 	Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
 	return (bucket == 0 || properties.erase(bucket));
 }
 
-Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
+Enumerator* ScriptObject::getPropertyEnumerator(Engine& engine) const {
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(properties.getLoadCount()));
 	for (Table::Bucket* bucket = properties.getFirst(); bucket != 0; bucket = properties.getNext(bucket)) {
 		if (bucket->doEnumerate()) {
@@ -912,12 +915,12 @@ Enumerator* UserObject::getPropertyEnumerator(Engine& engine) const {
 	return list;
 }
 
-bool UserObject::isPropertyEnumerable(Engine& engine, const Value& key) const {
+bool ScriptObject::isPropertyEnumerable(Engine& engine, const Value& key) const {
 	const Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
 	return (bucket != 0 && bucket->doEnumerate());
 }
 
-bool UserObject::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
+bool ScriptObject::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
 	return properties.update(properties.insert(key.toString(engine.getHeap())), v
 			, (attributes.readOnly ? Table::READ_ONLY : 0)
 			| (attributes.dontEnum ? Table::DONT_ENUM : 0)
@@ -1051,16 +1054,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	return false;
 }
 
-/* --- Object support --- */
-
-class ObjectConstructor : public Function {
-// FIX : if we allow a object prototype to change after construction we could override construct here as well and just change the prototype of thisObject, this would save an extra new UserObject when running "new Object()"
-	public:		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-					return Value(engine.getHeap().manage(new UserObject(&engine.objectPrototype)));
-				}
-};
-
-static ObjectConstructor OBJECT_OBJECT; // for object literals
+/* --- Array --- */
 
 Array::Array() : length(0) { }
 
@@ -1088,7 +1082,7 @@ void Array::sliceDenseVector(Engine& engine, const Value& key) {
 	UInt32 index;
 	if (key.toArrayIndex(index) && index < denseVector.size()) {
 		GCHeap& heap = engine.getHeap();
-		Table& props = getCompleteObject(engine)->properties;
+		Table& props = getCompleteObject(engine)->accessProperties();
 		for (UInt32 moveIndex = index + 1; moveIndex < denseVector.size(); ++moveIndex) {
 			props.update(props.insert(String::fromInt(heap, moveIndex)), denseVector[moveIndex]);
 		}
@@ -1119,7 +1113,7 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 				denseVector.append(v);
 			} else {
 				GCHeap& heap = engine.getHeap();
-				Table& props = completeObject->properties;
+				Table& props = completeObject->accessProperties();
 				Table::Bucket* bucket = props.lookup(String::fromInt(heap, index));
 				if (bucket == 0 || bucket->hasStandardFlags()) {
 					UInt32 moveIndex = index + 1;
@@ -1145,7 +1139,7 @@ bool Array::setProperty(Engine& engine, const Value& key, const Value& v) {
 			denseVector.resize(newLength);
 		}
 		if (completeObject != 0) {
-			Table& props = completeObject->properties;
+			Table& props = completeObject->accessProperties();
 			for (Table::Bucket* bucket = props.getFirst(); bucket != 0; bucket = props.getNext(bucket)) {
 				UInt32 i;
 				if (Value(bucket->getKey()).toArrayIndex(i) && i >= newLength && !props.erase(bucket)) {
@@ -1209,9 +1203,9 @@ template<class SUPER> bool LazyObject<SUPER>::isPropertyEnumerable(Engine& engin
 	return getCompleteObject(engine)->isPropertyEnumerable(engine, key);
 }
 
-template<class SUPER> UserObject* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
+template<class SUPER> ScriptObject* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
 	if (completeObject == 0) {
-		completeObject = engine.getHeap().manage(new UserObject(SUPER::getPrototype(engine)));
+		completeObject = engine.getHeap().manage(new ScriptObject(SUPER::getPrototype(engine)));
 		constructCompleteObject(engine);
 	}
 	return completeObject;
@@ -1220,7 +1214,7 @@ template<class SUPER> UserObject* LazyObject<SUPER>::getCompleteObject(Engine& e
 /* --- ExtensibleFunction --- */
 
 void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
-	UserObject* prototype = engine.getHeap().manage(new UserObject(&engine.objectPrototype));
+	ScriptObject* prototype = engine.getHeap().manage(new ScriptObject(&engine.objectPrototype));
 	Attributes attributes;
 	attributes.dontEnum = true;
 	prototype->defineProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), attributes);
@@ -1228,30 +1222,29 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 	forObject->defineProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), attributes);
 }
 
-/* --- UserFunction --- */
+/* --- ScriptFunction --- */
 
-UserFunction::UserFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
-Value UserFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
-CodeDefinition* UserFunction::getDefinition() const { return codeDef; }
-Object* UserFunction::getEnvironment() const { return environment; }
+ScriptFunction::ScriptFunction(CodeDefinition* codeDef, Object* environment) : codeDef(codeDef), environment(environment) { }
+Value ScriptFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
+CodeDefinition* ScriptFunction::getDefinition() const { return codeDef; }
+Object* ScriptFunction::getEnvironment() const { return environment; }
 
-const String* UserFunction::toString(GCHeap& heap) const {
+const String* ScriptFunction::toString(GCHeap& heap) const {
 	const String* s = codeDef->getSource();
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value UserFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	processor.chain(this, argc, argv, thisObject);
 	return Value();
 }
 
-void UserFunction::constructCompleteObject(Engine& engine) const {
+void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject);
 	Attributes attributes;
 	attributes.dontEnum = true;
 	attributes.readOnly = true;
 	completeObject->defineProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), attributes);
-	attributes.dontDelete = true;
 	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), attributes);
 }
 
@@ -1288,7 +1281,6 @@ void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 	if (templateFunction->getProperty(engine, Value(&NAME_STRING), &v)) { // FIX : getName?
 		completeObject->defineProperty(engine, Value(&NAME_STRING), v, attributes);
 	}
-	attributes.dontDelete = true;
 	if (templateFunction->getProperty(engine, Value(&LENGTH_STRING), &v)) { // FIX : in the future I think we should have a getLength
 		completeObject->defineProperty(engine, Value(&LENGTH_STRING), v, attributes);
 	}
@@ -1307,7 +1299,6 @@ void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 	attributes.dontEnum = true;
 	attributes.readOnly = true;
 	completeObject->defineProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), attributes);
-	attributes.dontDelete = true;
 	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(0.0), attributes);
 }
 
@@ -1368,7 +1359,7 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 
 /* --- Arguments --- */
 
-Arguments::Arguments(FunctionFrame* frame, UInt32 argumentsCount)
+Arguments::Arguments(ScriptFrame* frame, UInt32 argumentsCount)
 		: frame(frame)
 		, argumentsCount(argumentsCount)
 		, deletedArguments(argumentsCount) {
@@ -1431,12 +1422,12 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 	completeObject->defineProperty(engine, Value(&CALLEE_STRING), Value(frame->selfFunction), attributes);
 }
 
-/* --- FunctionFrame --- */
+/* --- ScriptFrame --- */
 
-FunctionFrame::FunctionFrame(UserFunction* function, Int32 argc, const Value* argv)
-		: super(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
+ScriptFrame::ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv)
+		: codeDef(function->getDefinition()), selfFunction(function), passedArgumentsCount(argc)
 		, indexed(codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc))
-		, argumentsValue(Value::NONEXISTENT), environment(function->getEnvironment()), evalVars(0) {
+		, environment(function->getEnvironment()) {
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED); // FIX : optimize
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
@@ -1446,7 +1437,7 @@ FunctionFrame::FunctionFrame(UserFunction* function, Int32 argc, const Value* ar
 }
 
 // FIX : this one must GO! Q&D crap
-void FunctionFrame::updatedCode() {
+void ScriptFrame::updatedCode() {
 	const Int32 oldVarsCount = indexedPointer - indexed.begin();
 	const Int32 oldArgsCount = indexed.end() - indexedPointer;
 	const Int32 newVarsCount = codeDef->getVarsCount();
@@ -1462,99 +1453,103 @@ void FunctionFrame::updatedCode() {
 }
 
 // FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
-bool FunctionFrame::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
+bool ScriptFrame::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
-	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
-	else return (environment == evalVars ? evalVars->parent : environment)->defineProperty(engine, key, v, attributes);
+	else return environment->defineProperty(engine, key, v, attributes);
 }
 
 // FIX : v - only declared because globals are a function frame too, which kind of sucks I suppose
-bool FunctionFrame::isPropertyEnumerable(Engine& engine, const Value& key) const {
+bool ScriptFrame::isPropertyEnumerable(Engine& engine, const Value& key) const {
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) return false;
-	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
-	else return (environment == evalVars ? evalVars->parent : environment)->isPropertyEnumerable(engine, key);
+	else return environment->isPropertyEnumerable(engine, key);
 }
 
-bool FunctionFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
+bool ScriptFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		*v = indexedPointer[index];
 		return true;
-	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
-		if (!argumentsValue.exists()) {
-			Object* o = engine.getHeap().manage(new Arguments(const_cast<FunctionFrame*>(this), passedArgumentsCount));
-			argumentsValue = Value(o);
-		}
-		*v = argumentsValue;
-		return true;
-	} else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
-		*v = Value(selfFunction);
+	} else if (super::getProperty(engine, key, v)) {
 		return true;
 	} else {
 		return environment->getProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 	}
 }
 
-bool FunctionFrame::setProperty(Engine& engine, const Value& key, const Value& v) {
+bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v) {
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		indexedPointer[index] = v;
 		return true;
-	} else if (name->isEqualTo(ARGUMENTS_STRING)) {
-		argumentsValue = v;
-		return true;
-	} else if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
-		return false;
 	} else {
-		return environment->setProperty(engine, key, v);
+		Table& props = getCompleteObject(engine)->accessProperties();
+		Table::Bucket* bucket = props.lookup(name);
+		if (bucket != 0) {
+			props.update(bucket, v);
+			return true;
+		}
+		return environment->setProperty(engine, key, v); // FIX : recursion
 	}
 }
 
-bool FunctionFrame::deleteProperty(Engine& engine, const Value& key) {
+bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	Int32 index;
 	const String* name = key.getString();
-	if (codeDef->lookupNameIndex(name, index)) return false;
-	else if ((codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) || name->isEqualTo(ARGUMENTS_STRING)) return false;
-	else return environment->deleteProperty(engine, key);
+	if (codeDef->lookupNameIndex(name, index)) {
+		return false;
+	} else {
+		Table& props = getCompleteObject(engine)->accessProperties();
+		Table::Bucket* bucket = props.lookup(name);
+		if (bucket != 0) {
+			return props.erase(bucket);
+		}
+		return environment->deleteProperty(engine, key); // FIX : recursion
+	}
 }
 
-void FunctionFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* def) {
-	if (evalVars == 0) {
-		evalVars = heap.manage(new EvalVarsObject(environment));
-		environment = evalVars;
-	}
+void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
+	Table& props = getCompleteObject(engine)->accessProperties();
 	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it) {
 		Table::Bucket* bucket;
-		if (*it != 0 && (bucket = evalVars->vars.lookup(*it)) == 0) {
-			evalVars->vars.update(evalVars->vars.insert(*it), Value::UNDEFINED);
+		if (*it != 0 && (bucket = props.lookup(*it)) == 0) { // FIX : lookup and insert only if 0 at once, how?!
+			props.update(props.insert(*it), Value::UNDEFINED);
 		}
 	}
 }
 
+void ScriptFrame::constructCompleteObject(Engine& engine) const {
+	if (codeDef->selfName != 0) {
+		Attributes attributes;
+		attributes.dontDelete = true;
+		completeObject->defineProperty(engine, Value(codeDef->selfName), Value(selfFunction), attributes);
+	}
+	completeObject->setProperty(engine, Value(&ARGUMENTS_STRING)
+			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))));
+}
+
 /* --- EvalFrame --- */
 
-EvalFrame::EvalFrame(const CodeDefinition* evalFunctionDef, Frame* parentFrame) : super(evalFunctionDef)
-		, parentFrame(parentFrame), indexed(evalFunctionDef->getVarsCount()) {
+EvalFrame::EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame)
+		: evalCodeDef(evalCodeDef), parentFrame(parentFrame), indexed(evalCodeDef->getVarsCount()) {
 	indexedPointer = indexed.end();
 }
 bool EvalFrame::getProperty(Engine& engine, const Value& key, Value* v) const { return parentFrame->getProperty(engine, key, v); }
 bool EvalFrame::setProperty(Engine& engine, const Value& key, const Value& v) { return parentFrame->setProperty(engine, key, v); }
 bool EvalFrame::deleteProperty(Engine& engine, const Value& key) { return parentFrame->deleteProperty(engine, key); }
-void EvalFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(heap, evalFunctionDef); }
+void EvalFrame::mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); }
 
 /* --- CatchFrame --- */
 
 CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
-		: super(parentFrame->getFunctionDef()), parentFrame(parentFrame), exceptionName(exceptionName)
-		, exceptionValue(exceptionValue) {
+		: parentFrame(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) {
 	indexedPointer = parentFrame->getIndexedPointer();
 }
 
@@ -1574,8 +1569,8 @@ bool CatchFrame::deleteProperty(Engine& engine, const Value& key) {
 	else return parentFrame->deleteProperty(engine, key);
 }
 
-void CatchFrame::mergeEvalVars(GCHeap& heap, CodeDefinition* evalFunctionDef) {
-	parentFrame->mergeEvalVars(heap, evalFunctionDef);
+void CatchFrame::mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) {
+	parentFrame->mergeEvalVars(engine, evalFunctionDef);
 }
 
 /* --- Processor --- */
@@ -1623,8 +1618,8 @@ void Processor::chain(Function* completion) {
 	chain(chainCallStub);
 }
 
-void Processor::chain(UserFunction* func, Int32 argc, const Value* argv, Object* thisObject) {
-	frame = engine.getHeap().manage(new FunctionFrame(func, argc, argv));
+void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject) {
+	frame = engine.getHeap().manage(new ScriptFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
@@ -1649,7 +1644,7 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 --vsp;
 	Frame* f = (directCall ? frame : engine.getGlobals());
-	f->mergeEvalVars(engine.getHeap(), codeDef);
+	f->mergeEvalVars(engine, codeDef);
 	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
@@ -1848,7 +1843,7 @@ bool Processor::privateRun() {
 				Value v(Value::NONEXISTENT);
 				f->getProperty(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
-				Object* newObject = heap.manage(new UserObject(prototype != 0 ? prototype : &engine.objectPrototype));
+				Object* newObject = heap.manage(new ScriptObject(prototype != 0 ? prototype : &engine.objectPrototype));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
@@ -1859,7 +1854,7 @@ bool Processor::privateRun() {
 			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
 			
 			case NEW_OBJECT_OP: {
-				push(Value(heap.manage(new UserObject(&engine.objectPrototype))));
+				push(Value(heap.manage(new ScriptObject(&engine.objectPrototype))));
 				break;
 			}
 			
@@ -1873,7 +1868,7 @@ bool Processor::privateRun() {
 			case GEN_FUNC_OP: {
 				o = constants[operand()].asObject(); // FIX : .getObject?
 				assert(o != 0);
-				push(Value(heap.manage(new UserFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case ADD_PROPERTY_OP: {
@@ -3548,7 +3543,7 @@ struct Support {
 			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.manage(new UserFunction(codeDef, engine.getGlobals())));
+			return Value(heap.manage(new ScriptFunction(codeDef, engine.getGlobals())));
 		}
 		return Value::UNDEFINED;
 	}
@@ -3640,17 +3635,15 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), e
 		errorPrototypes[i] = gcHeap.protect(new ErrorPrototype(static_cast<ErrorType>(i)));
 	}
 	
-	ObjectConstructor* objectObject = gcHeap.manage(new ObjectConstructor());
-	objectObject->setProperty(*this, Value(&PROTOTYPE_STRING), Value(&objectPrototype));
 	globals->setProperty(*this, Value(&EVAL_STRING), Value(gcHeap.protect(&evalFunction)));
 	gcHeap.protect(&evalDirectFunction);
 }
 
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
-	UserObject* supportObject = gcHeap.manage(new UserObject(&objectPrototype));
+	ScriptObject* supportObject = gcHeap.manage(new ScriptObject(&objectPrototype));
 	// FIX : no new String?
 	globals->setProperty(*this, Value(gcHeap.manage(new String("support"))), Value(supportObject));
-	UserObject* prototypesObject = gcHeap.manage(new UserObject(&objectPrototype));
+	ScriptObject* prototypesObject = gcHeap.manage(new ScriptObject(&objectPrototype));
 	supportObject->setProperty(*this, Value(gcHeap.manage(new String("prototypes"))), Value(prototypesObject));
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
 		supportObject->setProperty(*this, Value(&SUPPORT_FUNCTIONS[i].name), Value(&SUPPORT_FUNCTIONS[i].func));
@@ -3694,22 +3687,22 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		gcHeap.protect(&processor);
 		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 		processor.chain(RETURN_TO_HOST_STUB);
-		UserFunction* localFunction = gcHeap.manage(new UserFunction(code, globals));
-		FunctionFrame* localFrame = gcHeap.manage(new FunctionFrame(localFunction, 0, 0));
+		ScriptFunction* localFunction = gcHeap.manage(new ScriptFunction(code, globals));
+		ScriptFrame* localFrame = gcHeap.manage(new ScriptFrame(localFunction, 0, 0));
 		processor.chain(code->getCodePointer(), localFrame, globals);
 		bool needsMoreTime = processor.run();
 		assert(!needsMoreTime);
 	}
 	gcHeap.gc();
 
-	// FIX: UserFunction cast sucks! call() instead of chain() in Processor so that we can have arbitrary object
-	toNumberFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asObject());
+	// FIX: ScriptFunction cast sucks! call() instead of chain() in Processor so that we can have arbitrary object
+	toNumberFunction = reinterpret_cast<ScriptFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asObject());
 	if (toNumberFunction == 0) {
 	// FIX : all these gcHeap.manage(new String()) ... could be a utility function!
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveNumber"))))));
 	}
 		
-	toStringFunction = reinterpret_cast<UserFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveString").asObject());
+	toStringFunction = reinterpret_cast<ScriptFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveString").asObject());
 	if (toStringFunction == 0) {
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveString"))))));
 	}
@@ -3768,15 +3761,15 @@ supressStdErr = true;
 std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
 std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	GCHeap heap;
-	UserObject globals;
+	ScriptObject globals;
 	heap.protect(&globals);
 	Constants globalConstants;
 	heap.protect(&globalConstants);
 	CodeDefinition globalCode(&globalConstants);
 	heap.protect(&globalCode);
-	UserFunction globalClosure(&globalCode, &globals); // FIX : yuck!
+	ScriptFunction globalClosure(&globalCode, &globals); // FIX : yuck!
 	heap.protect(&globalClosure);
-	FunctionFrame globalsFrame(&globalClosure, 0, 0);
+	ScriptFrame globalsFrame(&globalClosure, 0, 0);
 	heap.protect(&globalsFrame);
 	
 	Engine engine(heap, &globalsFrame);
