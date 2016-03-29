@@ -520,8 +520,6 @@ class Object : public GCItem {
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
-				// FIX: try to join defineProperty and setProperty, they really are the same thing, just try out performance
-				bool defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes);
 				bool getPropertyNoFlags(Engine& engine, const Value& key, Value* v) const { Flags dummy; return getPropertyAndFlags(engine, key, v, dummy); }
 				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;  // don't touch v if you return false

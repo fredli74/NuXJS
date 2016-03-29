@@ -727,14 +727,6 @@ Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const 
 	return call(engine, processor, argc, argv, thisObject);
 }
 
-// FIX : drop
-bool Object::defineProperty(Engine& engine, const Value& key, const Value& v, const Attributes& attributes) {
-	return setProperty(engine, key, v
-			, (attributes.readOnly ? READ_ONLY_FLAG : 0)
-			| (attributes.dontEnum ? DONT_ENUM_FLAG : 0)
-			| (attributes.dontDelete ? DONT_DELETE_FLAG : 0));
-}
-
 bool Object::hasProperty(Engine& engine, const Value& key) const {
 	Value dummy;
 	return getPropertyNoFlags(engine, key, &dummy);
@@ -1185,11 +1177,8 @@ template<class SUPER> ScriptObject* LazyObject<SUPER>::getCompleteObject(Engine&
 
 void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
 	ScriptObject* prototype = engine.getHeap().manage(new ScriptObject(&engine.objectPrototype));
-	Attributes attributes;
-	attributes.dontEnum = true;
-	prototype->defineProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), attributes);
-	attributes.dontDelete = true;
-	forObject->defineProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), attributes);
+	prototype->setProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), DONT_ENUM_FLAG);
+	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 }
 
 /* --- ScriptFunction --- */
@@ -1211,11 +1200,8 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, con
 
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject);
-	Attributes attributes;
-	attributes.dontEnum = true;
-	attributes.readOnly = true;
-	completeObject->defineProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), attributes);
-	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), attributes);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
 }
 
 /* --- SpecialConstructorFunction --- */
@@ -1263,11 +1249,8 @@ Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int3
 Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
-	Attributes attributes; // FIX : constant for this common attribute?
-	attributes.dontEnum = true;
-	attributes.readOnly = true;
-	completeObject->defineProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), attributes);
-	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(0.0), attributes);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG);
 }
 
 /* --- Error --- */
@@ -1304,9 +1287,7 @@ bool Error::deleteProperty(Engine& engine, const Value& key) {
 
 void Error::constructCompleteObject(Engine& engine) const {
 	if (message != 0) {
-		Attributes attributes;
-		attributes.dontEnum = true;
-		completeObject->defineProperty(engine, Value(&MESSAGE_STRING), Value(message), attributes);
+		completeObject->setProperty(engine, Value(&MESSAGE_STRING), Value(message), DONT_ENUM_FLAG);
 	}
 }
 
@@ -1369,10 +1350,8 @@ Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
 }
 
 void Arguments::constructCompleteObject(Engine& engine) const {
-	Attributes attributes;
-	attributes.dontEnum = true;
-	completeObject->defineProperty(engine, Value(&LENGTH_STRING), Value(argumentsCount), attributes);
-	completeObject->defineProperty(engine, Value(&CALLEE_STRING), Value(frame->function), attributes);
+	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(argumentsCount), DONT_ENUM_FLAG);
+	completeObject->setProperty(engine, Value(&CALLEE_STRING), Value(frame->function), DONT_ENUM_FLAG);
 }
 
 /* --- ScriptFrame --- */
@@ -1481,9 +1460,7 @@ void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
 void ScriptFrame::constructCompleteObject(Engine& engine) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	if (codeDef->selfName != 0) {
-		Attributes attributes;
-		attributes.dontDelete = true;
-		completeObject->defineProperty(engine, Value(codeDef->selfName), Value(function), attributes);
+		completeObject->setProperty(engine, Value(codeDef->selfName), Value(function), DONT_DELETE_FLAG);
 	}
 	completeObject->setProperty(engine, Value(&ARGUMENTS_STRING)
 			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))), STANDARD_FLAGS);
@@ -3479,11 +3456,10 @@ struct Support {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
-				Attributes attributes;
-				attributes.readOnly = (argc >= 4 && argv[3].toBool());
-				attributes.dontEnum = (argc >= 5 && argv[4].toBool());
-				attributes.dontDelete = (argc >= 6 && argv[5].toBool());
-				success = o->defineProperty(engine, argv[1], (argc >= 3 ? argv[2] : Value::UNDEFINED), attributes);
+				success = o->setProperty(engine, argv[1], (argc >= 3 ? argv[2] : Value::UNDEFINED)
+						, (argc >= 4 && argv[3].toBool() ? READ_ONLY_FLAG : 0)
+						| (argc >= 5 && argv[4].toBool() ? DONT_ENUM_FLAG : 0)
+						| (argc >= 6 && argv[5].toBool() ? DONT_DELETE_FLAG : 0));
 			}
 		}
 		return Value(success);
