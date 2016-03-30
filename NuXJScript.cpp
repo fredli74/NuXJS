@@ -566,11 +566,10 @@ const String* String::getClassName() const { return &S_TRING_STRING; }
 const String* String::toString(GCHeap& heap) const { return this; }
 Object* String::getPrototype(Engine& engine) const { return &engine.stringPrototype; }
 
-bool String::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags String::getProperty(Engine& engine, const Value& key, Value* v) const {
 	if (key.isEqualTo(LENGTH_STRING)) {
 		*v = Value(static_cast<Int32>(size()));
-		flags = (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
-		return true;
+		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
 	const double d = key.toDouble(); // FIX : this is not right, it shouldn't accept "  123  " as a number...
 	const Int32 i = static_cast<Int32>(d);
@@ -578,9 +577,9 @@ bool String::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Fla
 		const Char* p = begin() + i;
 		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
 		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
-		return true;
+		return (STANDARD_FLAGS | EXISTS_FLAG);
 	}
-	return false;
+	return NONEXISTENT;
 }
 
 // FIX : speed up by skipping when string is really long
@@ -699,14 +698,13 @@ const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 Value Object::getInternalValue(GCHeap& heap) const { return Value::UNDEFINED; }
-bool Object::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const { return false; }
+Flags Object::getProperty(Engine& engine, const Value& key, Value* v) const { return NONEXISTENT; }
 bool Object::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return false; }
 bool Object::deleteProperty(Engine& engine, const Value& key) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 bool Object::isPropertyEnumerable(Engine& engine, const Value& key) const {
 	Value dummy;
-	Flags flags;
-	return getPropertyAndFlags(engine, key, &dummy, flags) && (flags & DONT_ENUM_FLAG) == 0;
+	return (getProperty(engine, key, &dummy) & (DONT_ENUM_FLAG | EXISTS_FLAG)) == EXISTS_FLAG;
 }
 
 const String* Object::toString(GCHeap& heap) const {
@@ -729,27 +727,23 @@ Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const 
 
 bool Object::hasProperty(Engine& engine, const Value& key) const {
 	Value dummy;
-	return getPropertyNoFlags(engine, key, &dummy);
+	return (getProperty(engine, key, &dummy) != NONEXISTENT);
 }
 
-bool Object::hasPropertyDeep(Engine& engine, const Value& key) const {
-	Value dummy;
-	return getPropertyDeep(engine, key, &dummy);
-}
-
-bool Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const {
+Flags Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const {
 	const Object* o = this;
 	do {
-		if (o->getPropertyNoFlags(engine, key, v)) {
-			return true;
+		Flags flags = o->getProperty(engine, key, v);
+		if (flags != NONEXISTENT) {
+			return flags;
 		}
 		o = o->getPrototype(engine);
 	} while (o != 0);
-	return false;
+	return NONEXISTENT;
 }
 
 Value Object::getPropertyDeep(Engine& engine, const char* name) const { // FIX : keep?
-	Value v;
+	Value v = Value::UNDEFINED;
 	String s(name);
 	getPropertyDeep(engine, Value(&s), &v);
 	return v;
@@ -891,12 +885,11 @@ bool ScriptObject::setProperty(Engine& engine, const Value& key, const Value& v,
 	return properties.update(properties.insert(key.toString(engine.getHeap())), v, flags);
 }
 
-bool ScriptObject::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags ScriptObject::getProperty(Engine& engine, const Value& key, Value* v) const {
 	const Table::Bucket* bucket = properties.lookup(key.toString(engine.getHeap()));
 	if (bucket != 0) {
 		*v = bucket->getValue();
-		flags = bucket->getFlags();
-		return true;
+		return bucket->getFlags();
 	}
 	return false;
 }
@@ -936,11 +929,9 @@ const String* StringWrapper::getClassName() const { return &S_TRING_STRING; }
 const String* StringWrapper::toString(GCHeap& heap) const { return wrapped; }
 Value StringWrapper::getInternalValue(GCHeap& heap) const { return Value(wrapped); }
 
-bool StringWrapper::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
-	if (wrapped->getPropertyAndFlags(engine, key, v, flags)) {
-		return true;
-	}
-	return super::getPropertyAndFlags(engine, key, v, flags);
+Flags StringWrapper::getProperty(Engine& engine, const Value& key, Value* v) const {
+	Flags flags = wrapped->getProperty(engine, key, v);;
+	return (flags != NONEXISTENT ? flags : super::getProperty(engine, key, v));
 }
 
 bool StringWrapper::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1018,9 +1009,10 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	if (object == 0) {
 		return false;
 	}
-	Value v;
-	Object* prototypeObject;
-	if (!getPropertyNoFlags(engine, Value(&PROTOTYPE_STRING), &v) || (prototypeObject = v.asObject()) == 0) {
+	Value v(Value::NONEXISTENT);
+	getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
+	Object* prototypeObject = v.asObject();
+	if (prototypeObject == 0) {
 		processor.error(TYPE_ERROR);
 		return false;
 	}
@@ -1043,19 +1035,17 @@ Object* Array::getPrototype(Engine& engine) const { // FIX : have a sep. ArrayPr
 			: static_cast<Object*>(&engine.arrayPrototype));
 }
 
-bool Array::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags Array::getProperty(Engine& engine, const Value& key, Value* v) const {
 	UInt32 index;
 	if (key.toArrayIndex(index) && index < denseVector.size()) {
 		*v = denseVector[index];
-		flags = STANDARD_FLAGS;
-		return true;
+		return STANDARD_FLAGS | EXISTS_FLAG;
 	}
 	if (key.isEqualTo(LENGTH_STRING)) {
 		*v = Value(length);
-		flags = (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
-		return true;
+		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
-	return super::getPropertyAndFlags(engine, key, v, flags);
+	return super::getProperty(engine, key, v);
 }
 
 void Array::sliceDenseVector(Engine& engine, const Value& key) {
@@ -1149,8 +1139,8 @@ Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
 
 template<class SUPER> LazyObject<SUPER>::LazyObject() : completeObject(0) { }
 
-template<class SUPER> bool LazyObject<SUPER>::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
-	return getCompleteObject(engine)->getPropertyAndFlags(engine, key, v, flags);
+template<class SUPER> Flags LazyObject<SUPER>::getProperty(Engine& engine, const Value& key, Value* v) const {
+	return getCompleteObject(engine)->getProperty(engine, key, v);
 }
 
 template<class SUPER> bool LazyObject<SUPER>::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1231,11 +1221,12 @@ void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 		templateFunction = constructorFunction;
 	}
 	Value v;
-	Flags flags;
-	if (templateFunction->getPropertyAndFlags(engine, Value(&NAME_STRING), &v, flags)) { // FIX : getName?
+	Flags flags = templateFunction->getPropertyDeep(engine, Value(&NAME_STRING), &v);
+	if (flags != NONEXISTENT) { // FIX : getName?
 		completeObject->setProperty(engine, Value(&NAME_STRING), v, flags);
 	}
-	if (templateFunction->getPropertyAndFlags(engine, Value(&LENGTH_STRING), &v, flags)) { // FIX : in the future I think we should have a getLength
+	flags = templateFunction->getPropertyDeep(engine, Value(&LENGTH_STRING), &v);
+	if (flags != NONEXISTENT) { // FIX : in the future I think we should have a getLength
 		completeObject->setProperty(engine, Value(&LENGTH_STRING), v, flags);
 	}
 }
@@ -1269,8 +1260,8 @@ const String* Error::toString(GCHeap& heap) const {
 
 void Error::updateReflection(Engine& engine) {
 	Value v;
-	name = (getPropertyNoFlags(engine, Value(&NAME_STRING), &v) ? v.toString(engine.getHeap()) : &ERROR_NAMES[errorType]);
-	message = (getPropertyNoFlags(engine, Value(&MESSAGE_STRING), &v) ? v.toString(engine.getHeap()) : 0);
+	name = (getPropertyDeep(engine, Value(&NAME_STRING), &v) != NONEXISTENT ? v.toString(engine.getHeap()) : &ERROR_NAMES[errorType]);
+	message = (getPropertyDeep(engine, Value(&MESSAGE_STRING), &v) != NONEXISTENT ? v.toString(engine.getHeap()) : 0);
 }
 
 bool Error::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1318,9 +1309,9 @@ Value* Arguments::findProperty(const Value& key) const {
 	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? frame->getIndexedPointer() + i : 0);
 }
 
-bool Arguments::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags Arguments::getProperty(Engine& engine, const Value& key, Value* v) const {
 	const Value* p = findProperty(key);
-	return (p == 0 ? super::getPropertyAndFlags(engine, key, v, flags) : (*v = *p, flags = STANDARD_FLAGS, true));
+	return (p == 0 ? super::getProperty(engine, key, v) : (*v = *p, (STANDARD_FLAGS | EXISTS_FLAG)));
 }
 
 bool Arguments::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1390,22 +1381,22 @@ void ScriptFrame::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
-bool ScriptFrame::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags ScriptFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		*v = indexedPointer[index];
-		flags = DONT_DELETE_FLAG;
-		return true;
+		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
-		if (super::getPropertyAndFlags(engine, key, v, flags)) {
-			return true;
+		Flags flags = super::getProperty(engine, key, v);
+		if (flags != NONEXISTENT) {
+			return flags;
 		}
 	}
-	return environment->getPropertyAndFlags(engine, key, v, flags); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
+	return environment->getProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
 bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1472,7 +1463,7 @@ EvalFrame::EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame)
 		: evalCodeDef(evalCodeDef), parentFrame(parentFrame), indexed(evalCodeDef->getVarsCount()) {
 	indexedPointer = indexed.end();
 }
-bool EvalFrame::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const { return parentFrame->getPropertyAndFlags(engine, key, v, flags); }
+Flags EvalFrame::getProperty(Engine& engine, const Value& key, Value* v) const { return parentFrame->getProperty(engine, key, v); }
 bool EvalFrame::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentFrame->setProperty(engine, key, v, flags); }
 bool EvalFrame::deleteProperty(Engine& engine, const Value& key) { return parentFrame->deleteProperty(engine, key); }
 void EvalFrame::mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); }
@@ -1484,10 +1475,10 @@ CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Va
 	indexedPointer = parentFrame->getIndexedPointer();
 }
 
-bool CatchFrame::getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const {
+Flags CatchFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	// FIX : always isString here right?
 	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
-	else return parentFrame->getPropertyAndFlags(engine, key, v, flags);
+	else return parentFrame->getProperty(engine, key, v);
 }
 
 bool CatchFrame::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1616,7 +1607,7 @@ bool Processor::privateRun() {
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
-			case READ_NAMED_OP:		if (!frame->getPropertyNoFlags(engine, constants[operand()], ++vsp)) { // FIX : assert always string?
+			case READ_NAMED_OP:		if (frame->getProperty(engine, constants[operand()], ++vsp) == NONEXISTENT) { // FIX : for 'with' support this should be getPropertyDeep
 										error(REFERENCE_ERROR);
 									}
 									break;
@@ -1628,7 +1619,7 @@ bool Processor::privateRun() {
 										error(TYPE_ERROR);
 										break;
 									}
-									if (!o->getPropertyDeep(engine, vsp[0], vsp - 1)) {
+									if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
 										vsp[-1] = Value::UNDEFINED;
 									}
 									pop(1);
@@ -1726,11 +1717,10 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR);
 					break;
 				}
-				Value v(Value::NONEXISTENT);
-				thisObject->getPropertyDeep(engine, vsp[-n], &v);
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Object* f = v.asObject();
-				if (f == 0) {
+				Value v(Value::NONEXISTENT);
+				Object* f;
+				if (thisObject->getPropertyDeep(engine, vsp[-n], &v) == NONEXISTENT || (f = v.asObject()) == 0) {
 					error(TYPE_ERROR);
 					break;
 				}
@@ -1772,7 +1762,7 @@ bool Processor::privateRun() {
 					break;
 				}
 				Value v(Value::NONEXISTENT);
-				f->getPropertyNoFlags(engine, Value(&PROTOTYPE_STRING), &v);
+				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.manage(new ScriptObject(prototype != 0 ? prototype : &engine.objectPrototype));
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
@@ -1848,7 +1838,8 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR);
 					break;
 				}
-				vsp[-1] = Value(o->hasPropertyDeep(engine, vsp[-1]));
+				Value dummy;
+				vsp[-1] = Value(o->getPropertyDeep(engine, vsp[-1], &dummy) != NONEXISTENT);
 				pop(1);
 				break;
 			}
@@ -1865,7 +1856,7 @@ bool Processor::privateRun() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				frame->getPropertyNoFlags(engine, constants[operand()], &v);
+				frame->getProperty(engine, constants[operand()], &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
@@ -3489,13 +3480,13 @@ struct Support {
 			Object* arrayObject = (argc > 2 ? argv[2].toObject(engine, false) : 0);
 			if (arrayObject != 0) {
 				Value v;
-				if (arrayObject->getPropertyNoFlags(engine, Value(&LENGTH_STRING), &v)) { // FIX : in the future I think we should have a getLength
+				if (arrayObject->getPropertyDeep(engine, Value(&LENGTH_STRING), &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
 					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
 					Int32 length = std::max(v.toInt() - offset, 0);
 					args.resize(length);
 					for (Int32 i = 0; i < length; ++i) {
 						args[i] = Value::UNDEFINED;
-						arrayObject->getPropertyNoFlags(engine, Value(i + offset), &args[i]);
+						arrayObject->getPropertyDeep(engine, Value(i + offset), &args[i]);
 					}
 				}
 			}

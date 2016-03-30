@@ -519,18 +519,16 @@ class Object : public GCItem {
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
-				bool getPropertyNoFlags(Engine& engine, const Value& key, Value* v) const { Flags dummy; return getPropertyAndFlags(engine, key, v, dummy); }
 				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;  // don't touch v if you return 0
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
-				bool getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
+				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
 				bool setPropertyDeep(Engine& engine, const Value& key, Value* v) const; // checks prototype chain for read-only
 				bool hasProperty(Engine& engine, const Value& key) const; // checks via getProperty()
-				bool hasPropertyDeep(Engine& engine, const Value& key) const;
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };
 
@@ -547,7 +545,7 @@ class Object : public GCItem {
 template<class SUPER> class LazyObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyObject();
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
@@ -645,7 +643,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Value getInternalValue(GCHeap& heap) const { return Value(this); }
 				UInt32 calcHash() const;
@@ -704,7 +702,7 @@ class ScriptObject : public virtual Object {
 				
 				ScriptObject(Object* prototype = 0); // FIX : not = 0 ?
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
@@ -744,7 +742,7 @@ class StringWrapper : public ScriptObject {
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
@@ -763,7 +761,7 @@ class Array : public LazyObject<Object> {
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
@@ -986,7 +984,7 @@ class ScriptFrame : public LazyObject<Frame> {
 				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
@@ -1019,7 +1017,7 @@ class EvalFrame : public Frame {
 
 				EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
@@ -1046,7 +1044,7 @@ class CatchFrame : public Frame {
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
 				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
@@ -1069,7 +1067,7 @@ class Arguments : public LazyObject<Object> {
 				Arguments(ScriptFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool getPropertyAndFlags(Engine& engine, const Value& key, Value* v, Flags& flags) const;
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
