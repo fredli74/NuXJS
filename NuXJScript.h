@@ -519,15 +519,15 @@ class Object : public GCItem {
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
-				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
+				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
 				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
-				bool setPropertyDeep(Engine& engine, const Value& key, Value* v) const; // checks prototype chain for read-only
+				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // checks prototype chain for read-only
 				bool hasProperty(Engine& engine, const Value& key) const; // checks via getProperty()
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };

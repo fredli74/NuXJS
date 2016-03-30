@@ -742,6 +742,19 @@ Flags Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const 
 	return NONEXISTENT;
 }
 
+bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
+	Value dummy;
+	if (getProperty(engine, key, &dummy) == NONEXISTENT) {
+		const Object* o = this;
+		while ((o = o->getPrototype(engine)) != 0) {
+			if ((o->getProperty(engine, key, &dummy) & READ_ONLY_FLAG) != 0) {
+				return false;
+			}
+		}
+	}
+	return setProperty(engine, key, v, STANDARD_FLAGS);
+}
+
 Value Object::getPropertyDeep(Engine& engine, const char* name) const { // FIX : keep?
 	Value v = Value::UNDEFINED;
 	String s(name);
@@ -1629,7 +1642,7 @@ bool Processor::privateRun() {
 										error(TYPE_ERROR);
 										break;
 									}
-									o->setProperty(engine, vsp[-1], vsp[0], STANDARD_FLAGS);
+									o->setPropertyDeep(engine, vsp[-1], vsp[0]);
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
