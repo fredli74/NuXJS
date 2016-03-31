@@ -1,5 +1,5 @@
 > (function() { print(delete arguments); print(typeof arguments); })();
-< true
+< false
 < object
 -
 > f=function() { var a = arguments; var arguments; var b = arguments; var arguments = 3; var c = arguments; print(a==b); print(typeof a); print(c) }; f();

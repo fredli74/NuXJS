@@ -4,7 +4,7 @@
 < SyntaxError
 > delete SyntaxError.name
 > print(SyntaxError.name)
-< 
+< Error
 > print(Error.prototype.name)
 < Error
 > print(Error.isPrototypeOf(SyntaxError))

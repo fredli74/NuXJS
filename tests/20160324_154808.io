@@ -10,7 +10,7 @@
 > print(SyntaxError.name)
 > function test() { }
 > print(test.name)
-< 
+< Error
 < test
 > test.name=1345
 > print(test.name)
