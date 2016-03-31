@@ -61,19 +61,21 @@ static int strncmp(const Char* a, const char* b, UInt32 n) {
 	return (i == n ? 0 : a[i] - b[i]);
 }
 /* Built with QuickHashMaker.pika */
-static int findStatementToken(int n /* string length */, const Char* s) {
-	static const char* STRINGS[12] = {
+static int findStatementToken(int n /* string length */, const Char* s /* string (zero termination not required) */) {
+	static const char* STRINGS[13] = {
 		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
-		"throw", "switch", "function"
+		"throw", "switch", "function", "with"
 	};
-	static const int QUICK_HASH_TABLE[32] = {
-		-1, -1, 11, 7, -1, 6, -1, -1, -1, -1, -1, -1, -1, 0, 2, 8, 
-		-1, 9, -1, 10, 5, -1, -1, -1, -1, 1, -1, -1, -1, 4, 3, -1
+	static const int HASH_TABLE[64] = {
+		-1, -1, -1, -1, 10, -1, -1, -1, -1, 4, -1, 3, 6, -1, -1, 11, 
+		7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, -1, 
+		-1, 2, 12, 5, 9, -1, -1, -1, -1, -1, -1, -1, -1, 1, 8, -1
 	};
 	if (n < 2 || n > 8) return -1;
-	int stringIndex = QUICK_HASH_TABLE[(n - s[0]) & 31];
+	int stringIndex = HASH_TABLE[(s[1] - s[0]) & 63];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
+}
 /* Built with QuickHashMaker.pika */
 static int findReservedKeyword(int n /* string length */, const Char* s) {
 	static const char* STRINGS[36] = {
@@ -702,7 +704,7 @@ Flags Object::getProperty(Engine& engine, const Value& key, Value* v) const { re
 bool Object::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return false; }
 bool Object::deleteProperty(Engine& engine, const Value& key) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
-bool Object::isPropertyEnumerable(Engine& engine, const Value& key) const {
+bool Object::isOwnPropertyEnumerable(Engine& engine, const Value& key) const {
 	Value dummy;
 	return (getProperty(engine, key, &dummy) & (DONT_ENUM_FLAG | EXISTS_FLAG)) == EXISTS_FLAG;
 }
@@ -725,7 +727,7 @@ Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const 
 	return call(engine, processor, argc, argv, thisObject);
 }
 
-bool Object::hasProperty(Engine& engine, const Value& key) const {
+bool Object::hasOwnProperty(Engine& engine, const Value& key) const {
 	Value dummy;
 	return (getProperty(engine, key, &dummy) != NONEXISTENT);
 }
@@ -948,14 +950,14 @@ Flags StringWrapper::getProperty(Engine& engine, const Value& key, Value* v) con
 }
 
 bool StringWrapper::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
-	if (wrapped->hasProperty(engine, key)) {
+	if (wrapped->hasOwnProperty(engine, key)) {
 		return false;
 	}
 	return super::setProperty(engine, key, v, flags);
 }
 
 bool StringWrapper::deleteProperty(Engine& engine, const Value& key) {
-	if (wrapped->hasProperty(engine, key)) {
+	if (wrapped->hasOwnProperty(engine, key)) {
 		return false;
 	} else {
 		return super::deleteProperty(engine, key);
@@ -991,7 +993,7 @@ const String* JoinedEnumerator::nextPropertyName() {
 	if (name == 0) {
 		do {
 			name = leftEnumerator->nextPropertyName();
-			if (name != 0 && !rightObject->isPropertyEnumerable(engine, Value(name))) {
+			if (name != 0 && !rightObject->isOwnPropertyEnumerable(engine, Value(name))) {
 				return name;
 			}
 		} while (name != 0);
@@ -1460,14 +1462,13 @@ void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
 	}
 }
 
-// FIX: this turned out to be *really* slow of course, all global var accesses now creates a lot of nearly empty ScriptObjects :(
 void ScriptFrame::constructCompleteObject(Engine& engine) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	if (codeDef->selfName != 0) {
-		completeObject->setProperty(engine, Value(codeDef->selfName), Value(function), DONT_DELETE_FLAG);
+		completeObject->setProperty(engine, Value(codeDef->selfName), Value(function), DONT_DELETE_FLAG | READ_ONLY_FLAG);
 	}
 	completeObject->setProperty(engine, Value(&ARGUMENTS_STRING)
-			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))), STANDARD_FLAGS);
+			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))), DONT_DELETE_FLAG);
 }
 
 /* --- EvalFrame --- */
@@ -1504,8 +1505,30 @@ bool CatchFrame::deleteProperty(Engine& engine, const Value& key) {
 	else return parentFrame->deleteProperty(engine, key);
 }
 
-void CatchFrame::mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) {
-	parentFrame->mergeEvalVars(engine, evalFunctionDef);
+/* --- WithFrame --- */
+
+WithFrame::WithFrame(Frame* parentFrame, Object* withObject) : parentFrame(parentFrame), withObject(withObject) {
+	indexedPointer = parentFrame->getIndexedPointer();
+}
+
+Flags WithFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
+	Flags flags = withObject->getPropertyDeep(engine, key, v);
+	return (flags != NONEXISTENT ? flags : parentFrame->getProperty(engine, key, v));
+}
+
+bool WithFrame::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+	Value dummy;
+	// FIX : ok, this is seriously disturbed, climbing up the prototype tree first to check existence, then again to check non-read-only (in setPropertyDeep)
+	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
+	return (findFlags != NONEXISTENT ? withObject->setPropertyDeep(engine, key, v)
+			: parentFrame->setProperty(engine, key, v, flags));
+}
+
+bool WithFrame::deleteProperty(Engine& engine, const Value& key) {
+	Value dummy;
+	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
+	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, key)
+			: parentFrame->deleteProperty(engine, key));
 }
 
 /* --- Processor --- */
@@ -1823,6 +1846,15 @@ bool Processor::privateRun() {
 				poppush(Value(o->deleteProperty(engine, vsp[0])));
 				break;
 			}
+			case PUSH_FRAME_OP: { // FIX : why don't we use the value stack for pushing / popping frames only (when it isn't a full call)
+				++csp;
+				assert(csp < cstackEnd);
+				csp->returnIP = 0;
+				frame = csp->frame = heap.manage(new WithFrame(frame, vsp[0].toObject(engine, false)));
+				csp->thisObject = csp[-1].thisObject;
+				pop(1);
+				break;
+			}
 			case POP_FRAME_OP: {
 				--csp;
 				assert(csp >= cstackStart);
@@ -1840,8 +1872,8 @@ bool Processor::privateRun() {
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
 				frame = csp->frame = heap.manage(new CatchFrame(frame, constants[operand()].getString(), vsp[0]));
-				pop(1);
 				csp->thisObject = csp[-1].thisObject;
+				pop(1);
 				break;
 			}
 			case THROW_OP: throwVirtualException(vsp[0]); break;
@@ -1938,7 +1970,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC"
-		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "POP_FRAME"
+		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "PUSH_FRAME", "POP_FRAME"
 		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
@@ -2066,15 +2098,19 @@ const OperatorInfo POST_OPS[] = {
 enum Statement {
 	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
 	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT, THROW_STATEMENT, SWITCH_STATEMENT, FUNCTION_STATEMENT
+	, WITH_STATEMENT
 };
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 struct Compiler::Scope {
-	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE };
+	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
 	Scope(Type type, Scope* next) : type(type), next(next) { }
 	Scope(const String& label, Scope* next) : type(LABEL_TYPE), label(label), next(next) { }
 	void makeIteratorScopes(Scope* untilScope) {
 		for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
+	}
+	bool needToPopFrame() const {
+		return (type == CATCH_TYPE || type == FINALLY_TYPE || type == WITH_TYPE);
 	}
 	Type type;
 	String label; // empty for automatic while, for, case labels
@@ -2094,7 +2130,7 @@ struct Compiler::ExpressionResult {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true) {
+		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true), withScopeDepth(0) {
 	for (int i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2705,7 +2741,8 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						discard(xr);
 						const String* name = String::newHashedString(heap, b, p);
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
-						if (compilingFor != FOR_EVAL) { // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
+						 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
+						if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
 								xr = ExpressionResult(ExpressionResult::INDEXED, bucket->getValue());
@@ -2741,7 +2778,7 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 
 /*
 	Normally statements discard expression results, but when compiling for eval, statements should return results.
-	flushXR is required to before any conditional branching and before branch targets to produce the result on the
+	flushXR is required before any conditional branching and before branch targets to produce the result on the
 	vstack in case it has not already been pushed (in other words if it is not an rvalue, e.g. a constant).
 */
 void Compiler::flushXR(ExpressionResult& evalXR) {
@@ -2883,11 +2920,28 @@ void Compiler::functionStatement() {
 	outputCode = &codeDef->code;
 }
 
-void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
+void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
+	expectToken("(", false);
+	rvalueExpression();
+	expectToken(")", true);
+	emit(Processor::PUSH_FRAME_OP);
+	++withScopeDepth;
+	Scope withScope(Scope::WITH_TYPE, currentScope);
+	statement(&withScope, &withScope, evalXR);
+	--withScopeDepth;
+	emit(Processor::POP_FRAME_OP);
+}
+
+/*
+	'scopeLabelsEnd' points to the end of a range of scopes that are all labelled scopes. This is required
+	because it is legal to give while loops etc mulitple alternative labels to be used with 'continue'.
+	(These should all be converted to 'ITERATOR_LABEL_TYPE' upon entry.)
+*/
+void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	white();
 	
 	if (token("{", false)) {
-		statementList(firstScope, evalXR);
+		statementList(currentScope, evalXR);
 		expectToken("}", false);
 		return;
 	}
@@ -2901,12 +2955,12 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 		const Char* q = p;
 		if (p != b && token(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String label(b, q);
-			for (Scope* s = firstScope; s != 0; s = s->next) {
+			for (Scope* s = currentScope; s != 0; s = s->next) {
 				if (!s->label.empty() && s->label.isEqualTo(label)) {
 					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
-			Scope newLabelScope(label, firstScope);
+			Scope newLabelScope(label, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd, evalXR);
 			completeBreaks(&newLabelScope);
 		} else {
@@ -2924,7 +2978,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			case CONTINUE_STATEMENT: {
 				flushXR(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
-				Scope* s = firstScope;
+				Scope* s = currentScope;
 				const Char* b = identifier(false, false);
 				// FIX : too complicated!! bone out...
 				String label(b, p);
@@ -2933,7 +2987,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						&& s->label.isEqualTo(label))) {
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
+					if (s->needToPopFrame()) {
+						emit(Processor::POP_FRAME_OP);
+					}
 					s = s->next;
 				}
 				if (s == 0) {
@@ -2959,11 +3015,11 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				rvalueExpression();
 				expectToken(")", true);
 				Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-				statement(firstScope, firstScope, evalXR);
+				statement(currentScope, currentScope, evalXR);
 				if (token("else", true)) {
 					Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 					completeForwardBranch(falsePoint);
-					statement(firstScope, firstScope, evalXR);
+					statement(currentScope, currentScope, evalXR);
 					completeForwardBranch(endPoint);
 				} else {
 					flushXR(evalXR);
@@ -2975,9 +3031,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			case WHILE_STATEMENT: {
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
-				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				Scope emptyLabelScope(EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-				expectToken("(", false);
+				expectToken("(", false); // FIX : sub of this
 				rvalueExpression();
 				expectToken(")", true);
 				Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
@@ -2993,7 +3049,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			case DO_WHILE_STATEMENT: {
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
-				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				Scope emptyLabelScope(EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
 				flushXR(evalXR);
@@ -3010,7 +3066,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			
 			case FOR_STATEMENT: {
 				flushXR(evalXR);
-				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				Scope emptyLabelScope(EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
 				QuickVector<CodeWord> initCode;
@@ -3054,7 +3110,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				}
 				ExpressionResult returnXR;
 				optionalExpression(returnXR, LOWEST_PREC);
-				Scope* s = firstScope;
+				Scope* s = currentScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
 					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
@@ -3064,7 +3120,9 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 						}
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
+					if (s->needToPopFrame()) {
+						emit(Processor::POP_FRAME_OP);
+					}
 					s = s->next;
 				}
 				makeRValue(returnXR);
@@ -3078,7 +3136,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			
 			case TRY_STATEMENT: {
 				flushXR(evalXR);
-				Scope tryScope(Scope::TRY_TYPE, firstScope);
+				Scope tryScope(Scope::TRY_TYPE, currentScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
 				statementList(&tryScope, evalXR);
@@ -3108,7 +3166,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
 					emitWithConstant(Processor::CATCH_FRAME_OP, Value(exceptionVarName));
 					expectToken(")", true);
-					Scope catchScope(Scope::CATCH_TYPE, firstScope);
+					Scope catchScope(Scope::CATCH_TYPE, currentScope);
 					expectToken("{", true); // FIX : sub
 					statementList(&catchScope, evalXR);
 					expectToken("}", false);
@@ -3131,7 +3189,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				emit(Processor::TRIED_OP);
 				Int32 rethrowPoint = markBackwardBranch();
 				if (token("finally", true)) {
-					Scope finallyScope(Scope::FINALLY_TYPE, firstScope);
+					Scope finallyScope(Scope::FINALLY_TYPE, currentScope);
 					expectToken("{", true); // FIX : sub
 					statementList(&finallyScope, evalXR);
 					expectToken("}", false);
@@ -3173,7 +3231,7 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 				QuickVector<Int32> jumpOffsets;
 				Int32 startOffset = outputCode->size();
 				Int32 defaultPoint = INVALID_CODE_POINT;
-				Scope emptyLabelScope(EMPTY_STRING, firstScope);
+				Scope emptyLabelScope(EMPTY_STRING, currentScope);
 				bool firstStatement = true;
 				white();
 				while (!token("}", false)) {
@@ -3221,16 +3279,18 @@ void Compiler::statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionRes
 			
 			case FUNCTION_STATEMENT: functionStatement(); break;
 			
+			case WITH_STATEMENT: withStatement(currentScope, evalXR); break;
+			
 			default: assert(0);
 		}
 	}
 }
 
-void Compiler::statementList(Scope* firstScope, ExpressionResult& evalXR) {
+void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 	const Char* b;
 	do {
 		b = p;
-		statement(firstScope, firstScope, evalXR);
+		statement(currentScope, currentScope, evalXR);
 	} while (!eof() && b != p);
 }
 
@@ -3511,12 +3571,12 @@ struct Support {
 	
 	static Value hasOwnProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
-		return (object != 0 ? Value(object->hasProperty(engine, argv[1])) : Value(false));
+		return (object != 0 ? Value(object->hasOwnProperty(engine, argv[1])) : Value(false));
 	}
 
 	static Value isPropertyEnumerable(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
-		return (object != 0 ? Value(object->isPropertyEnumerable(engine, argv[1])) : Value(false));
+		return (object != 0 ? Value(object->isOwnPropertyEnumerable(engine, argv[1])) : Value(false));
 	}
 
 	static Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
@@ -3549,7 +3609,7 @@ static struct {
 static UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 static UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), evalFunction(false)
+Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), objectPrototype(0), evalFunction(false)
 		, evalDirectFunction(true), toNumberFunction(0), toStringFunction(0)
 		, booleanPrototype(&B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
@@ -3695,7 +3755,7 @@ supressStdErr = true;
 std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
 std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	GCHeap heap;
-	ScriptObject globals;
+	ScriptObject globals(0);
 	heap.protect(&globals);
 	Constants globalConstants;
 	heap.protect(&globalConstants);

@@ -525,10 +525,11 @@ class Object : public GCItem {
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
-				bool isPropertyEnumerable(Engine& engine, const Value& key) const;
+				// FIX : or maybe drop them, we now check with getProperty
+				bool hasOwnProperty(Engine& engine, const Value& key) const; // checks via getProperty()
+				bool isOwnPropertyEnumerable(Engine& engine, const Value& key) const;
 				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
 				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // checks prototype chain for read-only
-				bool hasProperty(Engine& engine, const Value& key) const; // checks via getProperty()
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
 };
 
@@ -700,7 +701,7 @@ class JoinedEnumerator : public Enumerator {
 class ScriptObject : public virtual Object {
 	public:		typedef Object super;
 				
-				ScriptObject(Object* prototype = 0); // FIX : not = 0 ?
+				ScriptObject(Object* prototype);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -970,8 +971,8 @@ class Engine {
 class Frame : public Object {
 	public:		typedef Object super;
 				virtual const CodeDefinition* getFunctionDef() const = 0;
-				Value* getIndexedPointer() const { return indexedPointer; }
 				virtual void mergeEvalVars(Engine& engine, CodeDefinition* def) = 0;
+				Value* getIndexedPointer() const { return indexedPointer; }
 				
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 };
@@ -983,11 +984,11 @@ class ScriptFrame : public LazyObject<Frame> {
 
 				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 				void updatedCode();
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -1017,10 +1018,10 @@ class EvalFrame : public Frame {
 
 				EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
 	protected:	const CodeDefinition* const evalCodeDef;
 				Frame* const parentFrame;
@@ -1044,10 +1045,10 @@ class CatchFrame : public Frame {
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
 				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); }
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -1057,6 +1058,23 @@ class CatchFrame : public Frame {
 					heap.mark(parentFrame);
 					heap.mark(exceptionName);
 					exceptionValue.gcMark(heap);
+					super::gcMark(heap);
+				}
+};
+
+class WithFrame : public Frame {
+	public:		typedef Frame super;
+				WithFrame(Frame* parentFrame, Object* withObject);
+				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
+				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); } // FIX : share with CatchFrame
+				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
+	protected:	Frame* parentFrame;
+				Object* withObject;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(parentFrame);
+					heap.mark(withObject);
 					super::gcMark(heap);
 				}
 };
@@ -1171,6 +1189,7 @@ class Processor : public GCItem {
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
 					, CATCH_FRAME_OP								// operand: const_index for exception variable name
+					, PUSH_FRAME_OP									// stack: object ->
 					, POP_FRAME_OP
 					, IN_OP											// stack: string, object -> boolean
 					, INSTANCE_OF_OP								// stack: object, function -> boolean
@@ -1289,6 +1308,7 @@ class Compiler : public GCItem {
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
 				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void functionStatement();
+				void withStatement(Scope* currentScope, ExpressionResult& evalXR);
 				void statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void statementList(Scope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
@@ -1308,8 +1328,9 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord> funcInitCode; // function declarations, inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
-				QuickVector<CodeWord>* outputCode; // FIX : these two are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
+				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
 				bool acceptInOperator;
+				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);

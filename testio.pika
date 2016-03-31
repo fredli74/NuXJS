@@ -143,21 +143,18 @@ testFile => {
 	}
 };
 
+testDir = function {
+	thisDir = dirOfPath($0);
+	print(STANDARD_COLOR # $0 # LF # repeat('#', length($0)) # LF);
+	dir($0, >{
+		fn = $0;
+		(if (appendDirSlash(fn) === fn) testDir else testFile)(thisDir # fn);
+	});
+};
+
 tempDir = makeTempDir();
 if (!didHelp) {
-	x = try(>{
-		iterate(@files, >{
-			testDir = dirOfPath($2);
-			dir($2, >{
-				fn = $0;
-				if (appendDirSlash(fn) === fn) {
-					dir(testDir # fn, >testFile(testDir # fn # $0));
-				} else {
-					testFile(testDir # fn);
-				}
-			});
-		});
-	});
+	x = try(>iterate(@files, >testDir($2)));
 	wipeTempDir(tempDir);
 	if (x !== void) {
 		throw(x);
