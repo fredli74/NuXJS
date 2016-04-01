@@ -333,7 +333,8 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				void append(const T& t) { insert(end(), &t, &t + 1); }
 				void shrink() { qArray.resize(count); }
-			#if !defined(NDEBUG) // FIX : test performance in release
+			// FIX : ambigious according to c++ standard or something, didnt' work -v
+			#if 0 && !defined(NDEBUG) // FIX : test performance in release
 				T& operator[](UInt32 index) const { assert(index < count); return qArray[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
 				T& operator[](UInt32 index) { assert(index < count); return qArray[index]; }
 			#endif

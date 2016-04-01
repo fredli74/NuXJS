@@ -1210,7 +1210,7 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, con
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject);
 #if (STRICTLY_ES3)
-	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), STANDARD_FLAGS);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
@@ -1265,7 +1265,7 @@ Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &
 
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 #if (STRICTLY_ES3)
-	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), STANDARD_FLAGS);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG);

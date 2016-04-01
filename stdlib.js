@@ -331,13 +331,13 @@ function createErrorConstructor(name, prototype) {
 		var name, constructor, prototype;
 		support.defineProperty(global, name = ERROR_NAMES[i]
 				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
+    /* FIX : not necessary for strict es3, where .name isn't included at all in the official specs but is my own extension using standard flags
 		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
-		defineProperties(constructor, { readOnly: true, dontEnum: true }, { prototype: prototype, name: name });
-		defineProperties(constructor, { readOnly: true, dontEnum: true, dontDelete: true }, { prototype: prototype });
-		defineProperties(prototype, { dontEnum: true }, {
-			constructor: constructor,
-			name: name
-		});
+    */
+		constructor.name = name;
+		defineProperties(constructor, { dontDelete: true }, { prototype: prototype });
+		defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
+		prototype.name = name;
 	}
 
 	defineProperties(Error.prototype, { dontEnum: true }, {
