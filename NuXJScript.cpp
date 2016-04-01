@@ -1183,7 +1183,11 @@ template<class SUPER> ScriptObject* LazyObject<SUPER>::getCompleteObject(Engine&
 void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
 	ScriptObject* prototype = engine.getHeap().manage(new ScriptObject(&engine.objectPrototype));
 	prototype->setProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), DONT_ENUM_FLAG);
+#if (STRICTLY_ES3)
+	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_DELETE_FLAG);
+#else
 	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+#endif
 }
 
 /* --- ScriptFunction --- */
@@ -1205,8 +1209,13 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, con
 
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject);
+#if (STRICTLY_ES3)
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+#else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+#endif
 }
 
 /* --- SpecialConstructorFunction --- */
@@ -1255,8 +1264,13 @@ Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int3
 Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
+#if (STRICTLY_ES3)
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+#else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+#endif
 }
 
 /* --- Error --- */
@@ -1326,7 +1340,12 @@ Value* Arguments::findProperty(const Value& key) const {
 
 Flags Arguments::getProperty(Engine& engine, const Value& key, Value* v) const {
 	const Value* p = findProperty(key);
-	return (p == 0 ? super::getProperty(engine, key, v) : (*v = *p, (STANDARD_FLAGS | EXISTS_FLAG)));
+	return (p == 0 ? super::getProperty(engine, key, v) : (*v = *p
+#if (STRICTLY_ES3)
+			, (STANDARD_FLAGS | DONT_ENUM_FLAG | EXISTS_FLAG)));
+#else
+			, (STANDARD_FLAGS | EXISTS_FLAG)));
+#endif
 }
 
 bool Arguments::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1345,6 +1364,9 @@ bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
+#if (STRICTLY_ES3)
+	return (completeObject == 0 ? super::getPropertyEnumerator(engine) : completeObject->getPropertyEnumerator(engine));
+#else
 	StringListEnumerator* list = engine.getHeap().manage(new StringListEnumerator(argumentsCount));
 	for (UInt32 i = 0; i < argumentsCount; ++i) {
 		if (!deletedArguments[i]) {
@@ -1353,6 +1375,7 @@ Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
 	}
 	return (completeObject == 0 ? static_cast<Enumerator*>(list)
 			: engine.getHeap().manage(new JoinedEnumerator(engine, list, completeObject)));
+#endif
 }
 
 void Arguments::constructCompleteObject(Engine& engine) const {
@@ -2801,7 +2824,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
 		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-		if (compilingFor != FOR_EVAL) {
+		if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
 			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
 		}
 	}
@@ -3113,11 +3136,13 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				Scope* s = currentScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE || s->type == Scope::WITH_TYPE) {
 						if (!safeKept) {
 							returnXR = safeKeep(returnXR);
 							safeKept = true;
 						}
+					}
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					if (s->needToPopFrame()) {

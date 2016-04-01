@@ -5017,5 +5017,35 @@
 	},
 	"language/statements/generators/yield-star-before-newline": {
 		"category": "not_es3"
+	},
+	"language/statements/with/12.10-0-12": {
+		"category": "todo"
+	},
+	"language/statements/with/12.10-2-4": {
+		"category": "todo"
+	},
+	"language/statements/with/12.10-2-5": {
+		"category": "todo"
+	},
+	"language/statements/with/12.10.1-1-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-12-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-2-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-3-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-4-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-8-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/12.10.1-9-s": {
+		"category": "not_es3"
 	}
 }

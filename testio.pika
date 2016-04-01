@@ -81,7 +81,7 @@ testFile => {
 			sectionOutput #= command # LF;
 		} else if (directive === '-') {
 			addSection();
-		} else {
+		} else if (directive !== '/') {
 			skip = true;
 		}
 	});
