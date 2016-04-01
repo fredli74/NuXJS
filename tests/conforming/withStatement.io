@@ -21,6 +21,9 @@
 < 5
 < up 123
 -
+> print((function() { with ({ x: 3 }) { return x; }})());
+< 3
+-
 > o={x:3};with(o) { var x; x=5; print(x) }; print(x);
 < 5
 < undefined

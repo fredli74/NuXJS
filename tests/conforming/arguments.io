@@ -29,42 +29,59 @@
 > print('');
 > f=function() { for (var i in arguments) print(i) }; f('1', '2', '3', '4');
 > print('');
-< 
-< 0
-< 1
-< 2
-< 3
+<
+// ES >3 
+/ 0
+/ 1
+/ 2
+/ 3
 < 
 -
 > f=function(a,b,c,d,e) {
-> print(arguments[0]);
-> a = 111;
-> print(arguments[0]);
-> arguments[0] = 222;
-> print(a);
-> delete arguments[0];
-> print(arguments[0]);
-> arguments[0] = 333;
-> print(arguments[0]);
-> print(a);
-> print (arguments.length);
-> arguments.length = 100;
-> print(arguments.length);
-> arguments.length = 0;
-> print(arguments.length);
-> print(arguments[1]);
+>  print(arguments[0]);
+>  a = 111;
+>  print(arguments[0]);
+>  arguments[0] = 222;
+>  print(a);
+>  print(delete arguments[0]);
+>  print(arguments[0]);
+>  print(a);
+>  print(0 in arguments)
+>  arguments[0] = 333;
+>  print(arguments[0]);
+>  print(a);
+>  print(0 in arguments)
+>  a = undefined;
+>  print(0 in arguments)
+>  print(delete a)
+>  print(0 in arguments)
+>  print (arguments.length);
+>  arguments.length = 100;
+>  print(arguments.length);
+>  arguments.length = 0;
+>  print(arguments.length);
+>  print(arguments[1]);
+>  print('---');
 > };
 > f(1,'b',true);
 < 1
 < 111
 < 222
+< true
 < undefined
+< 222
+< false
 < 333
 < 222
+< true
+< true
+< false
+< true
 < 3
 < 100
 < 0
 < b
+< ---
 -
 > print('');
 > f = function() { for (arguments in "abcd") print(arguments); }; f();

@@ -2,13 +2,13 @@
 > print(f.name)
 < f
 > print(delete f.name)
-< true
+< false
 > print(f.name)
 > print('name' in f)
-< 
+< f
 < true
 > print(f.hasOwnProperty('name'))
-< false
+< true
 > print('name' in Function.prototype)
 < true
 > print(Function.prototype.name)

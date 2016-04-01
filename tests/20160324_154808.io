@@ -6,7 +6,7 @@
 > print(SyntaxError.name)
 < SyntaxError
 > print(delete SyntaxError.name)
-< true
+< false
 > print(SyntaxError.name)
 > function test() { }
 > print(test.name)

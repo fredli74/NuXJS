@@ -1,45 +1,58 @@
 > a: try { print("a0"); b: { try { print("b0"); break b; print("b1") } finally { print("bf") } }; print("a1"); } finally { print("af") }
-> a: try { print("a0"); b: { try { print("b0"); break a; print("b1") } finally { print("bf") } }; print("a1"); } finally { print("af") }
-> var s = ''; for (var i = 0; i < 10; ++i) { try { if (i == 8) break; if (i > 5) continue; s += i } finally { s += "." } s += ','; }; print(s);
-> a: try { print("a"); } finally { break a; print("b") }
-> a: try { print("a"); } finally { try { break a; } finally { print("c") }; print("b") }
-> a: try { print("a"); } finally { try { } finally { break a; print("c") }; print("b") }
-> print((function() { try { return "du"; } finally { print("hej") } })());
-> print((function() { try { print("a"); } finally { try { return "r"; } finally { print("c") }; print("b") } })());
-> print((function() { try { print("a"); } finally { try { } finally { return "r"; print("c") }; print("b") } })());
-> print((function() { a: try { return 1 } finally { break a; print(2) } })());
-> print((function() { try { return 1 } finally { return 3; print(2) } })());
-> print(function() { var x = 0; try { return ++x; } finally { x++; print(x) } }())
-> print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
-> print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
-> try { (function() { try { throw "x" } finally { try { throw "y" } catch ( x ) { print(x) } } })() } catch (x) { print(x) }
 < a0
 < b0
 < bf
 < a1
 < af
+-
+> a: try { print("a0"); b: { try { print("b0"); break a; print("b1") } finally { print("bf") } }; print("a1"); } finally { print("af") }
 < a0
 < b0
 < bf
 < af
+-
+> var s = ''; for (var i = 0; i < 10; ++i) { try { if (i == 8) break; if (i > 5) continue; s += i } finally { s += "." } s += ','; }; print(s);
 < 0.,1.,2.,3.,4.,5.,...
+-
+> a: try { print("a"); } finally { break a; print("b") }
 < a
+-
+> a: try { print("a"); } finally { try { break a; } finally { print("c") }; print("b") }
 < a
 < c
+-
+> a: try { print("a"); } finally { try { } finally { break a; print("c") }; print("b") }
 < a
+-
+> print((function() { try { return "du"; } finally { print("hej") } })());
 < hej
 < du
+-
+> print((function() { try { print("a"); } finally { try { return "r"; } finally { print("c") }; print("b") } })());
 < a
 < c
 < r
+-
+> print((function() { try { print("a"); } finally { try { } finally { return "r"; print("c") }; print("b") } })());
 < a
 < r
+-
+> print((function() { a: try { return 1 } finally { break a; print(2) } })());
 < undefined
+-
+> print((function() { try { return 1 } finally { return 3; print(2) } })());
 < 3
+-
+> print(function() { var x = 0; try { return ++x; } finally { x++; print(x) } }())
 < 2
 < 1
+-
+> print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
 < 2
 < 2
+-
+> print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
+> try { (function() { try { throw "x" } finally { try { throw "y" } catch ( x ) { print(x) } } })() } catch (x) { print(x) }
 < y
 < x
 -
