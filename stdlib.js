@@ -200,7 +200,10 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 var String = support.specialConstructor(function String(v) {
 		return (arguments.length ? '' + v : '');
 	}, function String(v) {
-		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
+		var s;
+		return defineProperties(
+				support.createWrapper('String', (s = arguments.length ? '' + v : ''), support.prototypes.String)
+				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 	}
 );
 defineProperties(String, { dontDelete: true }, { prototype: support.prototypes.String });

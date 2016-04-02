@@ -736,6 +736,7 @@ class WrapperObject : public ScriptObject {
 				}
 };
 
+#if (!STRICTLY_ES3)
 // FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
@@ -755,6 +756,7 @@ class StringWrapper : public ScriptObject {
 					super::gcMark(heap);
 				}
 };
+#endif
 
 class Array : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;

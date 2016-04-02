@@ -926,6 +926,7 @@ const String* WrapperObject::getClassName() const { return className; }
 const String* WrapperObject::toString(GCHeap& heap) const { return (wrapped.isUndefined() ? super::toString(heap) : wrapped.toString(heap)); }
 Value WrapperObject::getInternalValue(GCHeap& heap) const { return wrapped; }
 
+#if (!STRICTLY_ES3)
 /* --- StringWrapper --- */
 
 StringWrapper::StringWrapper(const String* string, Object* prototype)
@@ -959,6 +960,7 @@ bool StringWrapper::deleteProperty(Engine& engine, const Value& key) {
 Enumerator* StringWrapper::getPropertyEnumerator(Engine& engine) const {
 	return engine.getHeap().manage(new JoinedEnumerator(engine, super::getPropertyEnumerator(engine), wrapped));
 }
+#endif
 
 /* --- RangeEnumerator --- */
 
@@ -3533,9 +3535,12 @@ struct Support {
 				prototype = &engine.objectPrototype;
 			}
 			Object* o = 0;
+		#if (!STRICTLY_ES3)
 			if (className->isEqualTo(S_TRING_STRING)) {
 				o = new StringWrapper(internalValue.toString(engine.getHeap()), prototype);
-			} else if (className->isEqualTo(E_RROR_STRING)) {
+			} else
+		#endif
+			if (className->isEqualTo(E_RROR_STRING)) {
 				for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 					if (prototype == engine.errorPrototypes[i]) {
 						o = new Error(static_cast<ErrorType>(i));
