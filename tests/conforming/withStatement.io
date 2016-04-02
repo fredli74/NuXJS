@@ -52,7 +52,6 @@
 > print(TestObject.prototype.z)
 > print(o.x)
 > print(o.z)
--
 < 9
 < 123
 < 5
@@ -97,7 +96,7 @@
 < object
 < function
 -
-> with({O:null,o:null}){O=function(){};Object.defineProperty(O.prototype,'x',{value:'y',writable:false});o=new O;print(o.x);print(o.hasOwnProperty('x'));o.x=7;print(o.x);(function(){with(o){x=9;print(x)}})();(function(){var x=12;with(o){x=9;print(x)};print(x)})()};
+> if (Object.defineProperty) with({O:null,o:null}){O=function(){};Object.defineProperty(O.prototype,'x',{value:'y',writable:false});o=new O;print(o.x);print(o.hasOwnProperty('x'));o.x=7;print(o.x);(function(){with(o){x=9;print(x)}})();(function(){var x=12;with(o){x=9;print(x)};print(x)})()};
 < y
 < false
 < y

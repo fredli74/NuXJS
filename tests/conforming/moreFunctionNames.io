@@ -6,13 +6,17 @@
 < 3
 -
 > print(SyntaxError.name)
+// ES6:
+// < SyntaxError
 < 3
 -
 > print(delete SyntaxError.name)
 < true
 -
 > print(SyntaxError.name)
-< Error
+// ES6, maybe:
+// < Error
+< 
 -
 > function test() { }
 > print(test.name)
@@ -20,7 +24,9 @@
 -
 > test.name=1345
 > print(test.name)
-< test
+// ES6, maybe:
+// < test
+< 1345
 -
 > print(delete test.name)
 < true
@@ -29,5 +35,7 @@
 > test.name=3
 > print(test.name)
 < 
+// ES6, maybe:
+// < 
 < 3
 -

@@ -6,7 +6,7 @@
 > print(function() { var z=3; var g=function() {  return delete z; } ; return g; }()())
 > print(delete "constant is always ok");
 < true
-! !!!! ReferenceError
+! !!!! ReferenceError: f is not defined
 -
 > (function() { var x=new(function(){}); x.a="a"; var b=function(){}; b.prototype=x; var c=new b; c.a="b"; print(c.a); delete c.a; print(c.a) })();
 < b

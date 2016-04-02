@@ -92,7 +92,9 @@
 < -
 -
 > f('abcd');
-< { 0: abcd }
+// ES5.1: 10.6: In Edition 5 the array indexed properties of argument objects that correspond to actual formal parameters are enumerable. In Edition 3, such properties were not enumerable.
+// < { 0: abcd }
+< {  }
 < 1
 < 1
 < length : dontEnum, (deleted:true)
@@ -101,11 +103,15 @@
 < function
 < true
 < callee : dontEnum, (deleted:true)
-< 0 :  (deleted:true)
+// ES5.1:
+// < 0 :  (deleted:true)
+< 0 : dontEnum, (deleted:true)
 < -
 -
 > f('a', 'b', 'c', 'd');
-< { 0: a, 1: b, 2: c, 3: d }
+// ES5.1:
+// < { 0: a, 1: b, 2: c, 3: d }
+< {  }
 < 4
 < 4
 < length : dontEnum, (deleted:true)
@@ -114,9 +120,14 @@
 < function
 < true
 < callee : dontEnum, (deleted:true)
-< 0 :  (deleted:true)
-< 1 :  (deleted:true)
-< 2 :  (deleted:true)
-< 3 :  (deleted:true)
+// ES5.1:
+// < 0 :  (deleted:true)
+// < 1 :  (deleted:true)
+// < 2 :  (deleted:true)
+// < 3 :  (deleted:true)
+< 0 : dontEnum, (deleted:true)
+< 1 : dontEnum, (deleted:true)
+< 2 : dontEnum, (deleted:true)
+< 3 : dontEnum, (deleted:true)
 < -
 -
