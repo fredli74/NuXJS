@@ -415,6 +415,7 @@ class String;
 class Object;
 class Function;
 class Engine;
+class Function;
 class Value {
 	friend class Table;
 	
@@ -439,6 +440,7 @@ class Value {
 				bool isString() const { return type == STRING_TYPE; }
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
 				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
+				Function* asFunction() const;
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
@@ -511,16 +513,12 @@ const Flags NONEXISTENT = 0;		// use with getProperty() to check for existence, 
 class Object : public GCItem {
 	public:		typedef GCItem super;
 				
+				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				// FIX : all argc -> UInt32 maybe?
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -788,11 +786,16 @@ class Array : public LazyObject<Object> {
 class Function : public Object {
 	public:		typedef Object super;
 				
+				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
+				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
+				// FIX : all argc -> UInt32 maybe?
+				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 };
 
@@ -899,13 +902,13 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
-				SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction);
+				SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				Object* const regularFunction;
-				Object* const constructorFunction;
+				Function* const regularFunction;
+				Function* const constructorFunction;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(regularFunction);
@@ -1087,6 +1090,7 @@ class Arguments : public LazyObject<Object> {
 
 				Arguments(ScriptFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
+				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -1213,7 +1217,7 @@ class Processor : public GCItem {
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
-				void error(ErrorType errorType);
+				void error(ErrorType errorType, const String* message = 0);
 				
 	protected:	void push(const Value& v);
 				void pop(Int32 count = 1);

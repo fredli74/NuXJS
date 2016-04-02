@@ -317,6 +317,9 @@ const String MESSAGE_STRING("message");
 const String NAME_STRING("name");
 const String FUNCTION_SPACE("function ");
 const String COLON_SPACE(": ");
+const String CANNOT_CONVERT_TO_OBJECT_STRING("Cannot convert undefined or null to object");
+const String IS_NOT_A_FUNCTION_STRING(" is not a function");
+const String IS_NOT_DEFINED_STRING(" is not defined");
 const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
 };
@@ -324,6 +327,8 @@ const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 /* --- Value --- */
 
 const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
+
+Function* Value::asFunction() const { return (type == OBJECT_TYPE ? var.object->asFunction() : 0); }
 
 const String* Value::typeOfString() const {
 	return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]);
@@ -696,6 +701,7 @@ void GCList::claim(GCItem* item) throw() {
 
 static struct EmptyEnumerator : public Enumerator { const String* nextPropertyName() { return 0; } } EMPTY_ENUMERATOR;
 
+Function* Object::asFunction() { return 0; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
@@ -711,20 +717,6 @@ bool Object::isOwnPropertyEnumerable(Engine& engine, const Value& key) const {
 
 const String* Object::toString(GCHeap& heap) const {
 	return heap.manage(new String(String(BRACKET_OBJECT_STRING, *getClassName()), END_BRACKET_STRING));
-}
-
-bool Object::hasInstance(Engine& engine, Processor& processor, Object* object) const {
-	processor.error(TYPE_ERROR);
-	return false;
-}
-
-Value Object::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-	processor.error(TYPE_ERROR);
-	return Value();
-}
-
-Value Object::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-	return call(engine, processor, argc, argv, thisObject);
 }
 
 bool Object::hasOwnProperty(Engine& engine, const Value& key) const {
@@ -1014,11 +1006,16 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 /* --- Function --- */
 
+Function* Function::asFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 const String* Function::toString(GCHeap& heap) const { return &NATIVE_FUNCTION_STRING; }
 Value Function::getInternalValue(GCHeap& heap) const { return Value(&NATIVE_FUNCTION_STRING); }
 Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; };
+
+Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	return call(engine, processor, argc, argv, thisObject);
+}
 
 bool Function::hasInstance(Engine& engine, Processor& processor, Object* object) const {
 	if (object == 0) {
@@ -1028,7 +1025,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
-		processor.error(TYPE_ERROR);
+		processor.error(TYPE_ERROR, engine.getHeap().manage(new String("Non-object prototype in instanceof check")));
 		return false;
 	}
 	while ((object = object->getPrototype(engine)) != 0) {
@@ -1220,7 +1217,7 @@ void ScriptFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- SpecialConstructorFunction --- */
 
-SpecialConstructorFunction::SpecialConstructorFunction(Object* regularFunction, Object* constructorFunction)
+SpecialConstructorFunction::SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction)
 		: regularFunction(regularFunction), constructorFunction(constructorFunction) {
 	assert(regularFunction != 0);
 }
@@ -1231,7 +1228,9 @@ Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int
 
 Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 	if (constructorFunction == 0) {
-		processor.error(TYPE_ERROR);
+		Value v;
+		regularFunction->getPropertyDeep(engine, Value(&NAME_STRING), &v);
+		processor.error(TYPE_ERROR, engine.getHeap().manage(new String(*v.toString(engine.getHeap()), String(" is not a constructor"))));
 		return Value();
 	} else {
 		return constructorFunction->call(engine, processor, argc, argv, thisObject);
@@ -1330,6 +1329,12 @@ Arguments::Arguments(ScriptFrame* frame, UInt32 argumentsCount)
 }
 
 const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
+
+#if (STRICTLY_ES3)
+const String* Arguments::toString(GCHeap& heap) const {
+	return heap.manage(new String(String(BRACKET_OBJECT_STRING, O_BJECT_STRING), END_BRACKET_STRING));
+}
+#endif
 
 Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
@@ -1566,10 +1571,11 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -
 Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
-void Processor::error(ErrorType errorType) {
+void Processor::error(ErrorType errorType, const String* message) {
 // FIX : which? both works!
 //	throwVirtualException(Value(errorObject)
-	throw Exception(engine.getHeap(), Value(engine.getHeap().manage(new Error(errorType))));
+	GCHeap& heap = engine.getHeap();
+	throw Exception(heap, Value(heap.manage(new Error(errorType, message))));
 }
 
 void Processor::updateInternals() {
@@ -1666,8 +1672,12 @@ bool Processor::privateRun() {
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
-			case READ_NAMED_OP:		if (frame->getProperty(engine, constants[operand()], ++vsp) == NONEXISTENT) { // FIX : for 'with' support this should be getPropertyDeep
-										error(REFERENCE_ERROR);
+			case READ_NAMED_OP:		{
+										const Value& name = constants[operand()];
+										if (frame->getProperty(engine, name, ++vsp) == NONEXISTENT) {
+											error(REFERENCE_ERROR, heap.manage(new String(*name.toString(heap)
+													, IS_NOT_DEFINED_STRING)));
+										}
 									}
 									break;
 									
@@ -1675,7 +1685,7 @@ bool Processor::privateRun() {
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
-										error(TYPE_ERROR);
+										error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 										break;
 									}
 									if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
@@ -1685,7 +1695,7 @@ bool Processor::privateRun() {
 									break;
 			
 			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) {
-										error(TYPE_ERROR);
+										error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 										break;
 									}
 									o->setPropertyDeep(engine, vsp[-1], vsp[0]);
@@ -1773,14 +1783,15 @@ bool Processor::privateRun() {
 				Int32 n = operand();
 				Object* thisObject = vsp[-n - 1].toObject(engine, true);
 				if (thisObject == 0) {
-					error(TYPE_ERROR);
+					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 					break;
 				}
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Value v(Value::NONEXISTENT);
-				Object* f;
-				if (thisObject->getPropertyDeep(engine, vsp[-n], &v) == NONEXISTENT || (f = v.asObject()) == 0) {
-					error(TYPE_ERROR);
+				Function* f;
+				const Value& name = vsp[-n];
+				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+					error(TYPE_ERROR, heap.manage(new String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
@@ -1790,9 +1801,9 @@ bool Processor::privateRun() {
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Object* f = vsp[-n].asObject();
+				Function* f = returnPointer->asFunction();
 				if (f == 0) {
-					error(TYPE_ERROR);
+					error(TYPE_ERROR, heap.manage(new String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
 				if (f == &engine.evalFunction) f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
@@ -1803,9 +1814,9 @@ bool Processor::privateRun() {
 			case CALL_OP: {
 				Int32 n = operand();
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Object* f = vsp[-n].asObject();
+				Function* f = returnPointer->asFunction();
 				if (f == 0) {
-					error(TYPE_ERROR);
+					error(TYPE_ERROR, heap.manage(new String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
@@ -1815,16 +1826,16 @@ bool Processor::privateRun() {
 			
 			case NEW_OP: {
 				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
-				Object* f = vsp[-n].asObject(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
-				if (f == 0) {
-					error(TYPE_ERROR);
+				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				Function* f = returnPointer->asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
+				if (f == 0) { // FIX : sub
+					error(TYPE_ERROR, heap.manage(new String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
 				Value v(Value::NONEXISTENT);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.manage(new ScriptObject(prototype != 0 ? prototype : &engine.objectPrototype));
-				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
 				vsp -= n - 1;
@@ -1863,7 +1874,7 @@ bool Processor::privateRun() {
 			case DELETE_OP: {
 				o = vsp[-1].toObject(engine, true);
 				if (o == 0) {
-					error(TYPE_ERROR);
+					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 					break;
 				}
 				poppush(Value(o->deleteProperty(engine, vsp[0])));
@@ -1873,7 +1884,12 @@ bool Processor::privateRun() {
 				++csp;
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
-				frame = csp->frame = heap.manage(new WithFrame(frame, vsp[0].toObject(engine, false)));
+				Object* o = vsp[0].toObject(engine, false);
+				if (o == 0) { // FIX : so common!
+					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+					break;
+				}
+				frame = csp->frame = heap.manage(new WithFrame(frame, o));
 				csp->thisObject = csp[-1].thisObject;
 				pop(1);
 				break;
@@ -1903,7 +1919,7 @@ bool Processor::privateRun() {
 			case IN_OP: {
 				o = vsp[0].asObject();
 				if (o == 0) {
-					error(TYPE_ERROR);
+					error(TYPE_ERROR, heap.manage(new String(String("Cannot use 'in' operator on "), *vsp[0].toString(heap))));
 					break;
 				}
 				Value dummy;
@@ -1912,12 +1928,12 @@ bool Processor::privateRun() {
 				break;
 			}
 			case INSTANCE_OF_OP: {
-				o = vsp[0].asObject();
-				if (o == 0) {
-					error(TYPE_ERROR);
+				Function* f = vsp[0].asFunction();
+				if (f == 0) {
+					error(TYPE_ERROR, heap.manage(new String(*vsp[0].toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
-				vsp[-1] = Value(o->hasInstance(engine, *this, vsp[-1].asObject()));
+				vsp[-1] = Value(f->hasInstance(engine, *this, vsp[-1].asObject()));
 				pop(1);
 				break;
 			}
@@ -1930,6 +1946,12 @@ bool Processor::privateRun() {
 			}
 			case GET_ENUMERATOR_OP: {
 				o = vsp[0].toObject(engine, false);
+			#if (STRICTLY_ES3)
+				if (o == 0) { // FIX : so common!
+					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+					break;
+				}
+			#endif
 				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
 				Enumerator* enumerator = &EMPTY_ENUMERATOR;
@@ -3531,9 +3553,9 @@ struct Support {
 
 	static Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
-			Object* regularFunction = argv[0].toObject(engine, false);
+			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
-				Object* constructorFunction = (argc >= 2 ? argv[1].toObject(engine, false) : 0);
+				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
 				return Value(engine.getHeap().manage(new SpecialConstructorFunction(regularFunction, constructorFunction)));
 			}
 		}
@@ -3568,9 +3590,9 @@ struct Support {
 	}
 
 	static Value callWithArgs(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
-		Object* callObject = (argc > 0 ? argv[0].toObject(engine, false) : 0);
-		if (callObject == 0) {
-			processor.error(TYPE_ERROR); // FIX : ?
+		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
+		if (callFunction == 0) {
+			processor.error(TYPE_ERROR, engine.getHeap().manage(new String("apply / call used on non-function")));
 			return Value();
 		} else {
 			Object* newThis = (argc > 1 ? argv[1].toObject(engine, false) : 0);
@@ -3590,7 +3612,7 @@ struct Support {
 			}
 			// FIX : we copy all arguments once to args, and then chain will copy them again to a frame object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
-			return callObject->call(engine, processor, args.size(), args.begin(), (newThis == 0 ? engine.getGlobals() : newThis));
+			return callFunction->call(engine, processor, args.size(), args.begin(), (newThis == 0 ? engine.getGlobals() : newThis));
 		}
 	}
 	

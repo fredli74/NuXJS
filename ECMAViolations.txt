@@ -19,3 +19,5 @@
 *) does not support octal (0o) or binary (0b) in string->value conversion
 
 *) arguments object mapping follow ES3 rules only, changing element attributes (read-only etc) doesn't follow ES5 rules 100%
+
+*) function 'name' property is set for all created function which seems to be a commonly found feature although not standardized until ES6. In ES6 the name property is not writable, not enumerable, but configurable. In NuXJScript it has standard attributes (equivalent to writable, enumerable, configurable).

@@ -79,11 +79,14 @@ var Object = function Object(v) {
 		case "string": return new String(v);
 	}
 };
-defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
+defineProperties(Object, { dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
 	valueOf: unconstructable(function valueOf() { return this; }),
-	toString: unconstructable(function toString() { return '[object ' + support.getInternalProperty(this, 'class') + ']' }),
+	toString: unconstructable(function toString() {
+		var s;
+		return '[object ' + (((s = support.getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
+	}),
 	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, '' + name) }),
 	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, '' + name) }),
 	isPrototypeOf: unconstructable(function isPrototypeOf(v) {
@@ -109,7 +112,7 @@ var Function = function Function(body) {
 	if (n >= 0) source += arguments[n];
 	return support.compileFunction(source + ' }', 'anonymous');
 };
-defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
+defineProperties(Function, { dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
 	apply: unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
@@ -137,7 +140,7 @@ var Boolean = support.specialConstructor(function Boolean(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
 	}
 );
-defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
+defineProperties(Boolean, { dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: unconstructable(function valueOf() {
@@ -158,8 +161,8 @@ var Number = support.specialConstructor(function Number(v) {
 		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
 	}
 );
+defineProperties(Number, { dontDelete: true }, { prototype: support.prototypes.Number });
 defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
-	prototype: support.prototypes.Number,
 	MAX_VALUE: support.maxNumber,
 	MIN_VALUE: support.minNumber,
 	NaN: support.NaN,
@@ -200,7 +203,7 @@ var String = support.specialConstructor(function String(v) {
 		return support.createWrapper('String', arguments.length ? '' + v : '', support.prototypes.String);
 	}
 );
-defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
+defineProperties(String, { dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function fromCharCode(v) {
 		var l;
@@ -233,7 +236,7 @@ var Array = function Array(v) {
 	}
 	return a;
 }
-defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
+defineProperties(Array, { dontDelete: true }, { prototype: support.prototypes.Array });
 defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
 	push: unconstructable(function push(item) {
@@ -250,10 +253,13 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return v;
 	}),
 	join: unconstructable(function join(separator) {
+		var s, s2, l = this.length;
 		separator = (separator === void 0 ? ',' : '' + separator);
-		var s = (this[0] == void 0 ? '' : this[0]);
-		var l = this.length;
-		for (var i = 1; i < l; ++i) s += separator + (this[i] == null ? '' : this[i]);
+		if ((s = this[0]) == void 0) s = '';
+		for (var i = 1; i < l; ++i) {
+			s += separator;
+			if ((s2 = this[i]) != null) s += s2;
+		}
 		return s;
 	}),
 	toString: unconstructable(function toString() {
@@ -276,7 +282,7 @@ defineProperties(global, { dontEnum: true }, {
 	Math: support.createWrapper('Math', void 0)
 });
 
-defineProperties(global, { readOnly: true, dontEnum: true, dontDelete: true }, {
+defineProperties(global, { dontEnum: true, dontDelete: true }, {
 	NaN: support.NaN, Infinity: support.Infinity, undefined: support.undefined
 });
 

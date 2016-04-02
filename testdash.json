@@ -5047,5 +5047,8 @@
 	},
 	"language/statements/with/12.10.1-9-s": {
 		"category": "not_es3"
+	},
+	"language/statements/function/13.2-15-1": {
+		"category": "tbd"
 	}
 }

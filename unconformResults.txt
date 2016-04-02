@@ -33,27 +33,13 @@ asdf
 zxcv 4
 
 extra
-0
-1
-2
-3
 
 
-0
-2
-3
 
 1
-0
-2
-3
 
 
 length
-0
-1
-2
-3
 
 *** regression tests ***
 yeah

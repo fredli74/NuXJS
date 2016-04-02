@@ -90,8 +90,9 @@ testFile => {
 	allInput = '';
 	allOutput = '';
 	for (i = 0; i < sections.n; ++i) {
-		allInput #= sections[i].input # LF;
-		allOutput #= sections[i].output;
+		sections[i].header = sectionHeader = '----<<<< ' # i # ' >>>>----';
+		allInput #= 'print("' # sectionHeader # '");' # LF # sections[i].input # LF;
+		allOutput #= sectionHeader # LF # sections[i].output;
 	};
 
 	allOutput = trim(allOutput, '', "\n");
@@ -101,7 +102,7 @@ testFile => {
 		inFile = tempDir # 'testio';
 	};
 	save(inFile, allInput);
-	result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), false);
+	result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), !errorsToo);
 	result = replace(result, "\r\n", "\n");
 	result = trim(result, '', "\n");
 	if (result === allOutput) {
@@ -111,35 +112,33 @@ testFile => {
 		print(FAILURE_COLOR # "Failure!");
 		print("");
 		exitCode = 1;
-		outputLines.n = 0;
-		for (i = 0; i < sections.n; ++i) {
-			tokenize(sections[i].output, >{
-				map(@outputLines[outputLines.n++], 'text', $0, 'section', i);
-			});
-			sections[i].result = '';
+		sectionIndex = 0;
+		section = '';
+		check => {
+			if (sectionIndex >= 0 && section !== sections[sectionIndex].output) {
+				print(INPUT_COLOR # 'INPUT');
+				print(repeat('-', 40));
+				print(sections[sectionIndex].input);
+				print(GOT_COLOR # 'GOT');
+				print(repeat('-', 40));
+				print(section);
+				print(EXPECTED_COLOR # 'EXPECTED');
+				print(repeat('-', 40));
+				print(sections[sectionIndex].output);
+				print('');
+			}
 		};
-		i = 0;
-		firstMismatch = void;
-		currentSection = 0;
+		sectionIndex = -1;
 		tokenize(result, >{
-			if (i < outputLines.n) {
-				currentSection = outputLines[i].section;
-				if ($0 !== outputLines[i].text && firstMismatch === void) firstMismatch = currentSection;
-			};
-			sections[currentSection].result #= $0 # LF;
-			++i;
+			if (sectionIndex + 1 < sections.n && $0 === sections[sectionIndex + 1].header) {
+				check();
+				section = '';
+				++sectionIndex;
+			} else {
+				section #= $0 # LF;
+			}
 		});
-		if (firstMismatch === void) firstMismatch = sections.n - 1;
-		print(INPUT_COLOR # 'INPUT');
-		print(repeat('-', 40));
-		print(sections[firstMismatch].input);
-		print(GOT_COLOR # 'GOT');
-		print(repeat('-', 40));
-		print(sections[firstMismatch].result);
-		print(EXPECTED_COLOR # 'EXPECTED');
-		print(repeat('-', 40));
-		print(sections[firstMismatch].output);
-		print('');
+		check();
 	}
 };
 
