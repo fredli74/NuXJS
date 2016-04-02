@@ -3600,7 +3600,7 @@ struct Support {
 			processor.error(TYPE_ERROR, engine.getHeap().manage(new String("apply / call used on non-function")));
 			return Value();
 		} else {
-			Object* newThis = (argc > 1 ? argv[1].toObject(engine, false) : 0);
+			Object* newThis = (argc > 1 ? argv[1].toObject(engine, true) : 0);
 			QuickArray<Value> args;
 			Object* arrayObject = (argc > 2 ? argv[2].toObject(engine, false) : 0);
 			if (arrayObject != 0) {

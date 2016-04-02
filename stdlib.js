@@ -351,7 +351,9 @@ function createErrorConstructor(name, prototype) {
 
 	defineProperties(Error.prototype, { dontEnum: true }, {
 		message: "",
-		toString: unconstructable(function toString() { return this.name + (this.message ? (': ' + this.message) : ''); })
+		toString: unconstructable(function toString() {
+			return (this.name === void 0 ? 'Error' : this.name) + (this.message ? (': ' + this.message) : '');
+		})
 	});
 })();
 

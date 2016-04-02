@@ -21,3 +21,15 @@
 *) arguments object mapping follow ES3 rules only, changing element attributes (read-only etc) doesn't follow ES5 rules 100%
 
 *) function 'name' property is set for all created function which seems to be a commonly found feature although not standardized until ES6. In ES6 the name property is not writable, not enumerable, but configurable. In NuXJScript it has standard attributes (equivalent to writable, enumerable, configurable).
+
+*) The following point:
+
+		11.2.3: Edition 5 reverses the order of steps 2 and 3 of the algorithm. The original order as specified in Editions 1 through 3 was incorrectly specified such that side-effects of evaluating Arguments could affect the result of evaluating MemberExpression.
+
+	is not respected (but it *is* a 5.1 point after all)... evaluation order is object and arguments first, then finally getting the member
+
+*) The following point:
+		
+		12.4: In Edition 3, an object is created, as if by new Object()to serve as the scope for resolving the name of the exception parameter passed to a catch clause of a try statement. If the actual exception object is a function and it is called from within the catch clause, the scope object will be passed as the this value of the call. The body of the function can then define new properties on its this value and those property names become visible identifiers bindings within the scope of the catch clause after the function returns. In Edition 5, when an exception parameter is called as a function, undefined is passed as the this value. 
+
+	*is* respected (sort of), although it is a 5.1 change... this will be the global object as a regular function call (which is the same in effect as undefined because it is converted to the global object).
