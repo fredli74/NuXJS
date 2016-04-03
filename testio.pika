@@ -49,6 +49,8 @@ for (i = 1; i < $n; ++i) {
 
 if (files.n === 0) help();
 
+fails.n = 0;
+
 testFile => {
 	testPath = $0;
 	testFilename = filenameOfPath(testPath);
@@ -139,6 +141,7 @@ testFile => {
 			}
 		});
 		check();
+		append(@::fails, testFilename);
 	}
 };
 
@@ -157,5 +160,11 @@ if (!didHelp) {
 	wipeTempDir(tempDir);
 	if (x !== void) {
 		throw(x);
+	};
+	if (fails.n > 0) {
+		s = FAILURE_COLOR # 'Fails: ';
+		iterate(@fails, >s #= $2 # ', ');
+		s = chop(s, 2);
+		print(s);
 	}
 } // (!didHelp)

@@ -88,6 +88,7 @@
 //		Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
 //		function.name is actually not a bad idea, although standardized first in ES6 (in a very complex manner where x = function() also get a name)...
 //			good to have the name accessible for tracing/debugging (future stack-trace support?)
+//		perhaps it would have been better to split Frame into different pointers (more similar to ES-spec): one for running code (not changed by catch and with), one for variable object (not changed by catch, with or eval) and "current scope object" (changed by them all). This way we wouldn't have to declare so many dummy virtuals that just passes stuff upwards the Frame chain.
 //
 // Compiler
 //
@@ -848,6 +849,7 @@ class CodeDefinition : public Object {
 	protected:	QuickVector<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes; // < 0 : local variables, >= 0 : arguments
+				// FIX : bloated with all built-in quickvector counts here? vvv
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
 				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
@@ -979,10 +981,11 @@ class Engine {
 class Frame : public Object {
 	public:		typedef Object super;
 				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* def) = 0;
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
 				
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Frame* parentFrame;
 };
 
 class ScriptFrame : public LazyObject<Frame> {
@@ -992,11 +995,11 @@ class ScriptFrame : public LazyObject<Frame> {
 
 				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 				void updatedCode();
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -1026,10 +1029,10 @@ class EvalFrame : public Frame {
 
 				EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef);
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
 				Frame* const parentFrame;
@@ -1053,10 +1056,10 @@ class CatchFrame : public Frame {
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
 				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); }
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -1073,11 +1076,12 @@ class CatchFrame : public Frame {
 class WithFrame : public Frame {
 	public:		typedef Frame super;
 				WithFrame(Frame* parentFrame, Object* withObject);
-				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
-				virtual void mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); } // FIX : share with CatchFrame
+				virtual const CodeDefinition* getFunctionDef() const;
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+
 	protected:	Frame* parentFrame;
 				Object* withObject;
 				virtual void gcMark(GCHeap& heap) const {
@@ -1194,6 +1198,7 @@ class Processor : public GCItem {
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
+					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and through WRITE_INDEXED_OP)
 					, THROW_OP										// stack: value ->
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP

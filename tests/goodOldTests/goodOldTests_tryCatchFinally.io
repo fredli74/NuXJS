@@ -49,10 +49,10 @@
 -
 > print(function() { var x = 0; try { return ++x; } finally { x++; return(x) } }())
 < 2
-< 2
 -
 > print(function() { var x = 0; try { return ++x; } finally { return ++x } }())
 > try { (function() { try { throw "x" } finally { try { throw "y" } catch ( x ) { print(x) } } })() } catch (x) { print(x) }
+< 2
 < y
 < x
 -

@@ -98,15 +98,15 @@
 !!!! SyntaxError: Expected ';'
 !!!! Line: 1
 !!!! ReferenceError: Illegal l-value
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
+!!!! TypeError: not a function is not a function
+!!!! TypeError: s is not a function
+!!!! TypeError: [object Object] is not a function
+!!!! TypeError: b is not a function
+!!!! TypeError: not a function is not a function
+!!!! TypeError: [object Object] is not a function
 !!!! Line: 1
 !!!! SyntaxError: Illegal return
-!!!! TypeError
+!!!! TypeError: Cannot use 'in' operator on abcd
 !!!! Line: 1
 !!!! SyntaxError: Expected property name
 !!!! Line: 1
@@ -135,7 +135,7 @@
 !!!! SyntaxError: Expected ',' or ']'
 !!!! Line: 1
 !!!! ReferenceError: Illegal l-value
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
-!!!! TypeError
+!!!! TypeError: Cannot convert undefined or null to object
+!!!! TypeError: Cannot convert undefined or null to object
+!!!! TypeError: Cannot convert undefined or null to object
+!!!! TypeError: Cannot convert undefined or null to object

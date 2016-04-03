@@ -1482,12 +1482,17 @@ bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	return environment->deleteProperty(engine, key); // FIX : recursion
 }
 
-void ScriptFrame::mergeEvalVars(Engine& engine, CodeDefinition* def) {
-	Table& props = getCompleteObject(engine)->accessProperties();
-	for (const String** it = def->varNames.begin(); it != def->varNames.end(); ++it) {
-		Table::Bucket* bucket;
-		if (*it != 0 && (bucket = props.lookup(*it)) == 0) { // FIX : lookup and insert only if 0 at once, how?!
-			props.update(props.insert(*it), Value::UNDEFINED);
+void ScriptFrame::declareVar(Engine& engine, const String* name, const Value& initValue) {
+	Int32 index;
+	if (function->getDefinition()->lookupNameIndex(name, index)) { // FIX : only checking flags because globals are a function frame too, which kind of sucks I suppose
+		if (!initValue.isUndefined()) {
+			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+			indexedPointer[index] = initValue;
+		}
+	} else {
+		Table& props = getCompleteObject(engine)->accessProperties();
+		if (!initValue.isUndefined() || props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
+			props.update(props.insert(name), initValue);
 		}
 	}
 }
@@ -1510,7 +1515,6 @@ EvalFrame::EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame)
 Flags EvalFrame::getProperty(Engine& engine, const Value& key, Value* v) const { return parentFrame->getProperty(engine, key, v); }
 bool EvalFrame::setProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentFrame->setProperty(engine, key, v, flags); }
 bool EvalFrame::deleteProperty(Engine& engine, const Value& key) { return parentFrame->deleteProperty(engine, key); }
-void EvalFrame::mergeEvalVars(Engine& engine, CodeDefinition* evalFunctionDef) { parentFrame->mergeEvalVars(engine, evalFunctionDef); }
 
 /* --- CatchFrame --- */
 
@@ -1540,6 +1544,8 @@ bool CatchFrame::deleteProperty(Engine& engine, const Value& key) {
 WithFrame::WithFrame(Frame* parentFrame, Object* withObject) : parentFrame(parentFrame), withObject(withObject) {
 	indexedPointer = parentFrame->getIndexedPointer();
 }
+
+const CodeDefinition* WithFrame::getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
 
 Flags WithFrame::getProperty(Engine& engine, const Value& key, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, key, v);
@@ -1631,9 +1637,7 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
 }
 
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
---vsp;
 	Frame* f = (directCall ? frame : engine.getGlobals());
-	f->mergeEvalVars(engine, codeDef);
 	frame = engine.getHeap().manage(new EvalFrame(codeDef, f));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
@@ -1642,6 +1646,7 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	csp->thisObject = csp[-1].thisObject;
 	ip = codeDef->getCodePointer();
 	updateInternals();
+	--vsp;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -1864,6 +1869,11 @@ bool Processor::privateRun() {
 				push(Value(heap.manage(new ScriptFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
+			case DECLARE_OP: {
+				frame->declareVar(engine, constants[operand()].getString(), vsp[0]);
+				pop(1);
+				break;
+			}
 			case ADD_PROPERTY_OP: {
 				o = vsp[-1].asObject();
 				assert(o != 0);
@@ -2016,7 +2026,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJECT", "NEW_ARRAY"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
-		, "GEN_FUNC"
+		, "GEN_FUNC", "DECLARE"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "PUSH_FRAME", "POP_FRAME"
 		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
@@ -2050,6 +2060,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
 			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
+			case Processor::DECLARE_OP:
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
 			case Processor::ADD_PROPERTY_OP:
