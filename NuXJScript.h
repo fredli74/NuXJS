@@ -981,7 +981,7 @@ class Engine {
 class Frame : public Object {
 	public:		typedef Object super;
 				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
+				virtual void declareVar(Engine& engine, const String* name) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
 				
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
@@ -999,7 +999,7 @@ class ScriptFrame : public LazyObject<Frame> {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
+				virtual void declareVar(Engine& engine, const String* name);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -1032,7 +1032,7 @@ class EvalFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
 				Frame* const parentFrame;
@@ -1059,7 +1059,7 @@ class CatchFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -1080,7 +1080,7 @@ class WithFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
 
 	protected:	Frame* parentFrame;
 				Object* withObject;
@@ -1198,7 +1198,7 @@ class Processor : public GCItem {
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
-					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and through WRITE_INDEXED_OP)
+					, DECLARE_OP									// operand: const_index (name)		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and through WRITE_INDEXED_OP)
 					, THROW_OP										// stack: value ->
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
@@ -1339,7 +1339,7 @@ class Compiler : public GCItem {
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
 				std::map<Value, Int32> definedConstants; // FIX : drop map dependency, increases code size
-				QuickVector<CodeWord> funcInitCode; // function declarations, inserted at top of function when finalizing
+				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change

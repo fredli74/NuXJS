@@ -1448,7 +1448,7 @@ bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v, 
 	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
 	const String* name = key.getString();
-	if (codeDef->lookupNameIndex(name, index) && ((flags & READ_ONLY_FLAG) == 0)) { // FIX : only checking flags because globals are a function frame too, which kind of sucks I suppose
+	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		indexedPointer[index] = v;
 		return true;
@@ -1482,17 +1482,12 @@ bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	return environment->deleteProperty(engine, key); // FIX : recursion
 }
 
-void ScriptFrame::declareVar(Engine& engine, const String* name, const Value& initValue) {
+void ScriptFrame::declareVar(Engine& engine, const String* name) {
 	Int32 index;
-	if (function->getDefinition()->lookupNameIndex(name, index)) { // FIX : only checking flags because globals are a function frame too, which kind of sucks I suppose
-		if (!initValue.isUndefined()) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-			indexedPointer[index] = initValue;
-		}
-	} else {
+	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
-		if (!initValue.isUndefined() || props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
-			props.update(props.insert(name), initValue);
+		if (props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
+			props.update(props.insert(name), Value::UNDEFINED);
 		}
 	}
 }
@@ -1870,8 +1865,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case DECLARE_OP: {
-				frame->declareVar(engine, constants[operand()].getString(), vsp[0]);
-				pop(1);
+				frame->declareVar(engine, constants[operand()].getString());
 				break;
 			}
 			case ADD_PROPERTY_OP: {
@@ -2848,19 +2842,24 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (!name->isEqualTo(ARGUMENTS_STRING)) {
-		Value index;
-		Table& nameIndexes = codeDef->nameIndexes;
-		Table::Bucket* bucket = nameIndexes.lookup(name);
-		if (bucket != 0) {
-			index = bucket->getValue();
+		if (compilingFor == FOR_EVAL) {
+			outputCode = &setupCode;
+			emitWithConstant(Processor::DECLARE_OP, Value(name));
+			outputCode = &codeDef->code;
 		} else {
-			codeDef->varNames.append(name);
-			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
-			nameIndexes.update(nameIndexes.insert(name), index);
-		}
-		 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-		if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
-			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+			Value index;
+			Table& nameIndexes = codeDef->nameIndexes;
+			Table::Bucket* bucket = nameIndexes.lookup(name);
+			if (bucket != 0) {
+				index = bucket->getValue();
+			} else {
+				codeDef->varNames.append(name);
+				index = Value(-static_cast<Int32>(codeDef->varNames.size()));
+				nameIndexes.update(nameIndexes.insert(name), index);
+			}
+			if (withScopeDepth == 0) {
+				lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+			}
 		}
 	}
 	return lxr;
@@ -2968,10 +2967,10 @@ void Compiler::semicolon() {
 // FIX : make member functions of all the different statements
 
 void Compiler::functionStatement() {
-	outputCode = &funcInitCode;
 	const Char* b = identifier(true, false);
 	const String* name = String::newHashedString(heap, b, p);
 	ExpressionResult lxr(declareIdentifier(name));
+	outputCode = &setupCode;
 	functionDefinition(name);
 	makeAssignment(lxr);
 	emit(Processor::POP_OP);
@@ -3368,8 +3367,8 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	}
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
-	if (!funcInitCode.empty()) {
-		outputCode->insert(outputCode->begin(), funcInitCode.begin(), funcInitCode.end());
+	if (!setupCode.empty()) {
+		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
 	}
 	// FIX : shrink code vector (copy to quickarray instead?)
 	assert(outputCode == &codeDef->code);
