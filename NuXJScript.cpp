@@ -19,8 +19,8 @@
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
 #include <float.h>
-static bool isNaN(double d) { return _isnan(d); }
-static bool isFinite(double d) { return _finite(d); }
+static bool isNaN(double d) { return (_isnan(d) != 0); }
+static bool isFinite(double d) { return (_finite(d) != 0); }
 
 /*
 	Ecma rules
@@ -366,7 +366,8 @@ Int32 Value::toInt() const { // FIX : could be faster without toDouble I thinkus
 	} else if (!isFinite(v)) {
 		return 0;
 	} else {
-		return (v >= 0) ? static_cast<UInt32>(fmod(v, 4294967296.0)) : -static_cast<UInt32>(fmod(-v, 4294967296.0));
+		return (v >= 0) ? static_cast<Int32>(static_cast<UInt32>(fmod(v, 4294967296.0)))
+				: -static_cast<Int32>(static_cast<UInt32>(fmod(-v, 4294967296.0)));
 	}
 }
 
@@ -579,8 +580,8 @@ Flags String::getProperty(Engine& engine, const Value& key, Value* v) const {
 		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
 	const double d = key.toDouble(); // FIX : this is not right, it shouldn't accept "  123  " as a number...
-	const Int32 i = static_cast<Int32>(d);
-	if (i == d && i >= 0 && i < size()) {
+	const UInt32 i = static_cast<UInt32>(d);
+	if (i == d && i < size()) {
 		const Char* p = begin() + i;
 		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
 		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
@@ -1018,7 +1019,7 @@ const String* Function::toString(GCHeap& heap) const { return &NATIVE_FUNCTION_S
 Value Function::getInternalValue(GCHeap& heap) const { return Value(&NATIVE_FUNCTION_STRING); }
 Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; };
 
-Value Function::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value Function::construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return call(engine, processor, argc, argv, thisObject);
 }
 
@@ -1204,7 +1205,7 @@ const String* ScriptFunction::toString(GCHeap& heap) const {
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value ScriptFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.chain(this, argc, argv, thisObject);
 	return Value();
 }
@@ -1227,11 +1228,11 @@ SpecialConstructorFunction::SpecialConstructorFunction(Function* regularFunction
 	assert(regularFunction != 0);
 }
 
-Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value SpecialConstructorFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return regularFunction->call(engine, processor, argc, argv, thisObject);
 }
 
-Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (constructorFunction == 0) {
 		Value v;
 		regularFunction->getPropertyDeep(engine, Value(&NAME_STRING), &v);
@@ -1261,7 +1262,7 @@ void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- FunctionPrototypeFunction --- */
 
-Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return Value::UNDEFINED;
 }
 
@@ -1400,7 +1401,7 @@ static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 ar
 	return codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc);
 }
 
-ScriptFrame::ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv)
+ScriptFrame::ScriptFrame(ScriptFunction* function, UInt32 argc, const Value* argv)
 		: function(function), passedArgumentsCount(argc), environment(function->getEnvironment())
 		, indexed(calcIndexedVariablesSize(function, argc)) {
 	const CodeDefinition* codeDef = function->getDefinition();
@@ -1620,7 +1621,7 @@ void Processor::chain(Function* completion) {
 	chain(chainCallStub);
 }
 
-void Processor::chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject) {
+void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	frame = engine.getHeap().manage(new ScriptFrame(func, argc, argv));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
@@ -2196,7 +2197,7 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), outputCode(&codeDef->code), acceptInOperator(true), withScopeDepth(0) {
-	for (int i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
+	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
 }
@@ -2738,7 +2739,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
 	}
-	catch (const Exception& x) { // FIX : a bit Q & D ish
+	catch (const Exception&) { // FIX : a bit Q & D ish
 		p = funcCompiler.getStopPoint();
 		throw;
 	}
@@ -3497,7 +3498,7 @@ void GCHeap::mark(const GCItem* item) {
 	}
 }
 
-Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
@@ -3526,7 +3527,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, Int32 argc, const
 
 typedef std::function<Value (Engine&, Processor&, Int32, const Value*, Object*)> NativeFunction;
 
-		mathObject->setProperty(*this, &SQRT_STRING, newNativeFunction(gcHeap, [](Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		mathObject->setProperty(*this, &SQRT_STRING, newNativeFunction(gcHeap, [](Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 			return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 		}));
 		
@@ -3536,7 +3537,7 @@ typedef Value (*NativeFunction)(Engine&, Processor&, Int32, const Value*, Object
 
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
-	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(engine, processor, argc, argv, thisObject);
 	}
 	F f;
@@ -3544,7 +3545,7 @@ template<class F> struct FunctorAdapter : public Function {
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
-	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F f;
@@ -3553,7 +3554,7 @@ template<class F> struct UnaryMathFunction : public Function {
 // template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
 
 struct Support {
-	static Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value getInternalProperty(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
@@ -3571,7 +3572,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value createWrapper(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value createWrapper(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
 			const String* const className = argv[0].toString(engine.getHeap());
 			const Value internalValue = argv[1];
@@ -3601,7 +3602,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value specialConstructor(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value specialConstructor(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
@@ -3612,7 +3613,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value defineProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value defineProperty(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		bool success = false;
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
@@ -3626,7 +3627,7 @@ struct Support {
 		return Value(success);
 	}
 
-	static Value compileFunction(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value compileFunction(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
 			GCHeap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
@@ -3639,7 +3640,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value callWithArgs(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value callWithArgs(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
 			processor.error(TYPE_ERROR, engine.getHeap().manage(new String("apply / call used on non-function")));
@@ -3666,26 +3667,26 @@ struct Support {
 		}
 	}
 	
-	static Value hasOwnProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value hasOwnProperty(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
 		return (object != 0 ? Value(object->hasOwnProperty(engine, argv[1])) : Value(false));
 	}
 
-	static Value isPropertyEnumerable(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value isPropertyEnumerable(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Object* object = (argc >= 2 ? argv[0].toObject(engine, false) : 0);
 		return (object != 0 ? Value(object->isOwnPropertyEnumerable(engine, argv[1])) : Value(false));
 	}
 
-	static Value fromCharCode(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value fromCharCode(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
 		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(engine.getHeap().manage(new String(&c, &c + 1))));
 	}
 
-	static Value atan2(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value atan2(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 2 ? Value(std::atan2(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 
-	static Value pow(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+	static Value pow(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 };
@@ -3702,7 +3703,7 @@ static struct {
 
 static struct {
 	String name;
-	FunctorAdapter<Value (*)(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) > func;
+	FunctorAdapter<Value (*)(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
 } SUPPORT_FUNCTIONS[] = {
 	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
@@ -3836,7 +3837,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 
 	class PrintFunction : public Function {
 		public:		typedef Function super;
-					virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+					virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						if (interactive) {
@@ -3847,7 +3848,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	};
 	
 	struct GCFunction : public Function {
-		virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 			UInt32 sweptCount = engine.getHeap().gc();
 			return Value(static_cast<Int32>(sweptCount));
 		}
@@ -3976,7 +3977,7 @@ supressStdErr = false;
 				try {
 					compiler.compile(source);
 				}
-				catch (const Exception& x) {
+				catch (const Exception&) {
 					int lineNumber = 1;
 					const Char* stopPoint = compiler.getStopPoint();
 					const Char* p = source.begin();

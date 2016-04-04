@@ -797,15 +797,15 @@ class Function : public Object {
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
 				// FIX : all argc -> UInt32 maybe?
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) = 0;
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
 };
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(bool direct) : direct(direct) { }
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
 				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
@@ -876,7 +876,7 @@ class ExtensibleFunction : public LazyObject<Function> {
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
@@ -887,7 +887,7 @@ class ScriptFunction : public ExtensibleFunction {
 				ScriptFunction(CodeDefinition* codeDef, Object* environment);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
 				
@@ -907,8 +907,8 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
 				SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction);
-				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Function* const regularFunction;
@@ -992,7 +992,7 @@ class ScriptFrame : public LazyObject<Frame> {
 	
 	public:		typedef LazyObject<Frame> super;
 
-				ScriptFrame(ScriptFunction* function, Int32 argc, const Value* argv);
+				ScriptFrame(ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
@@ -1216,10 +1216,10 @@ class Processor : public GCItem {
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(Function* completion);
-				void chain(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject);
+				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Frame* frame, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
-	// FIX :			void call(ScriptFunction* func, Int32 argc, const Value* argv, Object* thisObject);
+	// FIX :			void call(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
