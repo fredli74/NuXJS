@@ -1182,11 +1182,11 @@ template<class SUPER> ScriptObject* LazyObject<SUPER>::getCompleteObject(Engine&
 
 /* --- ExtensibleFunction --- */
 
-void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject) const {
+void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const {
 	ScriptObject* prototype = engine.getHeap().manage(new ScriptObject(&engine.objectPrototype));
 	prototype->setProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), DONT_ENUM_FLAG);
 #if (STRICTLY_ES3)
-	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_DELETE_FLAG);
+	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), (dontEnumPrototype ? (DONT_ENUM_FLAG | DONT_DELETE_FLAG) : DONT_DELETE_FLAG));
 #else
 	forObject->setProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #endif
@@ -1210,9 +1210,9 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, Int32 argc, con
 }
 
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
-	createPrototypeObject(engine, completeObject);
+	createPrototypeObject(engine, completeObject, false);
 #if (STRICTLY_ES3)
-	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), STANDARD_FLAGS);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), DONT_ENUM_FLAG);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
@@ -1245,7 +1245,7 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 	Object* templateFunction = regularFunction;
 	if (constructorFunction != 0) {
-		createPrototypeObject(engine, completeObject);
+		createPrototypeObject(engine, completeObject, true);
 		templateFunction = constructorFunction;
 	}
 	Value v;
@@ -1269,7 +1269,7 @@ Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &
 
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 #if (STRICTLY_ES3)
-	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), STANDARD_FLAGS);
+	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), DONT_ENUM_FLAG);
 	completeObject->setProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #else
 	completeObject->setProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG);

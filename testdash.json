@@ -1821,7 +1821,7 @@
 		"category": "not_es3"
 	},
 	"language/expressions/exponentiation/applying-the-exp-operator_A10": {
-		"category": "todo"
+		"category": ""
 	},
 	"language/expressions/exponentiation/applying-the-exp-operator_A11": {
 		"category": "not_es3"
@@ -5050,5 +5050,14 @@
 	},
 	"language/statements/function/13.2-15-1": {
 		"category": "tbd"
+	},
+	"language/statements/with/binding-blocked-by-unscopables": {
+		"category": "not_es3"
+	},
+	"language/statements/with/binding-not-blocked-by-unscopables-falsey-prop": {
+		"category": "not_es3"
+	},
+	"language/statements/with/binding-not-blocked-by-unscopables-non-obj": {
+		"category": "not_es3"
 	}
 }

@@ -871,7 +871,7 @@ class CodeDefinition : public Object {
 
 class ExtensibleFunction : public LazyObject<Function> {
 	public:		typedef LazyObject<Function> super;
-	protected:	void createPrototypeObject(Engine& engine, Object* forObject) const;				
+	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {

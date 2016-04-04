@@ -79,7 +79,7 @@ var Object = function Object(v) {
 		case "string": return new String(v);
 	}
 };
-defineProperties(Object, { dontDelete: true }, { prototype: support.prototypes.Object });
+defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
 defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
 	valueOf: unconstructable(function valueOf() { return this; }),
@@ -112,7 +112,7 @@ var Function = function Function(body) {
 	if (n >= 0) source += args[n];
 	return support.compileFunction(source + ' }', 'anonymous');
 };
-defineProperties(Function, { dontDelete: true }, { prototype: support.prototypes.Function });
+defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
 	apply: unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
@@ -140,7 +140,7 @@ var Boolean = support.specialConstructor(function Boolean(v) {
 		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
 	}
 );
-defineProperties(Boolean, { dontDelete: true }, { prototype: support.prototypes.Boolean });
+defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: unconstructable(function valueOf() {
@@ -161,7 +161,7 @@ var Number = support.specialConstructor(function Number(v) {
 		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
 	}
 );
-defineProperties(Number, { dontDelete: true }, { prototype: support.prototypes.Number });
+defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Number });
 defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 	MAX_VALUE: support.maxNumber,
 	MIN_VALUE: support.minNumber,
@@ -206,7 +206,7 @@ var String = support.specialConstructor(function String(v) {
 				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 	}
 );
-defineProperties(String, { dontDelete: true }, { prototype: support.prototypes.String });
+defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function fromCharCode(v) {
 		var l, args;
@@ -239,7 +239,7 @@ var Array = function Array(v) {
 	}
 	return a;
 }
-defineProperties(Array, { dontDelete: true }, { prototype: support.prototypes.Array });
+defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
 defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
 	push: unconstructable(function push(item) {
@@ -347,7 +347,7 @@ function createErrorConstructor(name, prototype) {
 		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
     */
 		constructor.name = name;
-		defineProperties(constructor, { dontDelete: true }, { prototype: prototype });
+		defineProperties(constructor, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: prototype });
 		defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
 		prototype.name = name;
 	}
