@@ -105,9 +105,17 @@
 < function
 < 4
 -
-> (function() { print(typeof arguments); eval("function arguments(a,b,c,d) { }"); print(arguments.length) })();
+> (function() { print(typeof arguments); eval("print (typeof arguments); function arguments(a,b,c,d) { }"); print(typeof arguments); print(arguments.length) })();
 < object
+< function
+< function
 < 4
+-
+> (function() { print(typeof arguments); var o = { arguments: 1234 }; with(o) {eval("print (typeof arguments); function arguments(a,b,c,d) { }");}; print(typeof o.arguments); print(typeof arguments); })();
+< object
+< number
+< number
+< function
 -
 > (function() { print(arguments); })()
 // ES5.1: 10.6: In Edition 5 the value of the [[Class]] internal property of an arguments object is "Arguments". In Edition 3, it was "Object". This is observable if toString is called as a method of an arguments object.

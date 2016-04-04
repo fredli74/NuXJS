@@ -8,8 +8,8 @@
 < undefined
 -
 > (function x() { eval("var x = 3"); eval("var x = 5"); print(typeof x); print(delete x); print(typeof x); })();
-< function
-< false
+< number
+< true
 < function
 -
 > (function f() { eval("var x = 3"); eval("var x = 5"); print(delete x); print(typeof x); })();

@@ -5,3 +5,15 @@
 < undefined
 < undefined
 -
+> (function() { function arguments() { }; print(typeof arguments); })()
+< function
+-
+> (function() { var arguments = 3; print(typeof arguments); })()
+< number
+-
+> (function() { eval("function arguments() { };"); print(typeof arguments); })()
+< function
+-
+> (function() { eval("var arguments = 3;"); print(typeof arguments); })()
+< number
+-
