@@ -78,7 +78,7 @@
 < Object: function
 < Object : dontEnum, (deleted:true)
 < Object.prototype: [object Object]
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < Object.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -89,7 +89,7 @@
 < Boolean: function
 < Boolean : dontEnum, (deleted:true)
 < Boolean.prototype: false
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < Boolean.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -100,7 +100,7 @@
 < Number: function
 < Number : dontEnum, (deleted:true)
 < Number.prototype: 0
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < Number.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -111,7 +111,7 @@
 < String: function
 < String : dontEnum, (deleted:true)
 < String.prototype: 
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < String.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -122,7 +122,7 @@
 < Function: function
 < Function : dontEnum, (deleted:true)
 < Function.prototype: function() { [native code] }
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < Function.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -133,7 +133,7 @@
 < Error: function
 < Error : dontEnum, (deleted:true)
 < Error.prototype: Error
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < Error.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -144,7 +144,7 @@
 < RangeError: function
 < RangeError : dontEnum, (deleted:true)
 < RangeError.prototype: RangeError
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < RangeError.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -155,7 +155,7 @@
 < ReferenceError: function
 < ReferenceError : dontEnum, (deleted:true)
 < ReferenceError.prototype: ReferenceError
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < ReferenceError.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -166,7 +166,7 @@
 < SyntaxError: function
 < SyntaxError : dontEnum, (deleted:true)
 < SyntaxError.prototype: SyntaxError
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < SyntaxError.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
@@ -177,7 +177,7 @@
 < TypeError: function
 < TypeError : dontEnum, (deleted:true)
 < TypeError.prototype: TypeError
-< prototype : dontDelete, (deleted:false)
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
 < TypeError.prototype.constructor: function
 < constructor : dontEnum, (deleted:true)
 < true
