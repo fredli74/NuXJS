@@ -1341,7 +1341,7 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
-				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change
+				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
 				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 

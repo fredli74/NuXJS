@@ -103,13 +103,13 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 /* --- Function --- */
 
 var Function = function Function(body) {
-	var args, source = '(', n = (args = arguments).length - 1;
+	var argv, source = '(', n = (argv = arguments).length - 1;
 	for (var i = 0; i < n; ++i) {
-		source += args[i];
+		source += argv[i];
 		if (i < n - 1) s += ',';
 	}
 	source += ') { ';
-	if (n >= 0) source += args[n];
+	if (n >= 0) source += argv[n];
 	return support.compileFunction(source + ' }', 'anonymous');
 };
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
@@ -209,9 +209,9 @@ var String = support.specialConstructor(function String(v) {
 defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function fromCharCode(v) {
-		var l, args;
-		if ((l = (args = arguments).length) === 1) return support.fromCharCode(v & 65535);
-		for (var i = 0, s = ''; i < l; ++i) s += support.fromCharCode(args[i] & 65535);
+		var argc, argv;
+		if ((argc = (argv = arguments).length) === 1) return support.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < argc; ++i) s += support.fromCharCode(argv[i] & 65535);
 		return s;
 	})
 });
@@ -230,30 +230,29 @@ defineProperties(String.prototype, { dontEnum: true }, {
 /* --- Array --- */
 
 var Array = function Array(v) {
-	var a = [ ], args, l;
-	if ((l = (args = arguments).length) === 1 && typeof v === 'number') {
+	var a = [ ], argv, argc;
+	if ((argc = (argv = arguments).length) === 1 && typeof v === 'number') {
 		if ((v >>> 0) !== v) throw RangeError("Invalid array length");
 		a.length = v;
 	} else {
-		for (var i = 0; i < l; ++i) a[i] = args[i];
+		for (var i = 0; i < argc; ++i) a[i] = argv[i];
 	}
 	return a;
 }
 defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
 defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
-	push: unconstructable(function push(item) {
-		var args, offset = this.length, end = (args = arguments).length + offset;
-		for (var i = offset; i < end; ++i) this[i] = args[i - offset];
-		return end;
-	}),
-	pop: unconstructable(function pop() {
-		var v = void 0, l;
-		if ((l = this.length) > 0) {
-			v = this[l - 1];
-			--this.length;
+	concat: unconstructable(function concat(item1) {
+		var a = [ ], argv, argc = (argv = arguments).length, n = 0, v = this;
+		for (var i = -1; i < argc; v = argv[++i]) {
+			if (support.getInternalProperty(v, 'class') !== 'Array') {
+				a[n++] = v;
+			} else {
+				for (var j = 0, e = v.length; j < e; ++j) if (j in v) a[n + j] = v[j];
+				a.length = (n += j);
+			}
 		}
-		return v;
+		return a;
 	}),
 	join: unconstructable(function join(separator) {
 		var s, s2, l = this.length;
@@ -264,6 +263,27 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 			if ((s2 = this[i]) != null) s += s2;
 		}
 		return s;
+	}),
+	pop: unconstructable(function pop() {
+		var v = void 0, l;
+		if ((l = this.length) > 0) {
+			v = this[l - 1];
+			--this.length;
+		}
+		return v;
+	}),
+	push: unconstructable(function push(item) {
+		var argv, offset = this.length, end = (argv = arguments).length + offset;
+		for (var i = offset; i < end; ++i) this[i] = argv[i - offset];
+		return end;
+	}),
+	reverse: unconstructable(function reverse() {
+		var l, n = support.floor((l = this.length) / 2);
+		--l;
+		for (var i = 0; i < n; ++i) {
+			var left = this[i];
+			var right = this[l - i];
+		}
 	}),
 	toString: unconstructable(function toString() {
 		checkClass(this, 'Array', 'toString');
@@ -314,8 +334,8 @@ defineProperties(Math, { dontEnum: true }, { // FIX : construction from array in
 	exp: unconstructable(function exp(v) { return support.exp(+v); }),
 	floor: unconstructable(function floor(v) { return support.floor(+v); }),
 	log: unconstructable(function log(v) { return support.log(+v); }),
-	max: unconstructable(function max(x, y) { var m = -support.Infinity, v; for (var i = (args = arguments).length - 1; i >= 0; --i) if ((v = +args[i]) > m || isNaN(v)) m = v; return m; }),
-	min: unconstructable(function min(x, y) { var m = support.Infinity, v; for (var i = (args = arguments).length - 1; i >= 0; --i) if ((v = +args[i]) < m || isNaN(v)) m = v; return m; }),
+	max: unconstructable(function max(x, y) { var m = -support.Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || isNaN(v)) m = v; return m; }),
+	min: unconstructable(function min(x, y) { var m = support.Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || isNaN(v)) m = v; return m; }),
 	pow: unconstructable(function pow(x, y) { return support.pow(+x, +y); }),
 	round: unconstructable(function round(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
 	sin: unconstructable(function sin(v) { return support.sin(+v); }),
@@ -363,6 +383,15 @@ function createErrorConstructor(name, prototype) {
 /* --- ES >3 polyfills --- */
 
 // These are not guaranteed to be 100% compatible
+
+defineProperties(Array, { dontEnum: true }, {
+	isArray: unconstructable(function isArray(o) {
+		return support.getInternalProperty(o, 'class') === 'Array';
+	}),
+	getPrototypeOf: unconstructable(function getPrototypeOf(o) {
+		return support.getInternalProperty(o, 'prototype');
+	})
+});
 
 defineProperties(Object, { dontEnum: true }, {
 	defineProperty: unconstructable(function defineProperty(o, p, d) {

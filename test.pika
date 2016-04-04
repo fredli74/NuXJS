@@ -15,7 +15,7 @@ if (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {
 };
 
 help => {
-	print("testio [-e(rrors too)] [-k(eep input files) <in dir>] [-x <exe command>] <test files / dirs>");
+	print("test [-e(rrors too)] [-k(eep input files) <in dir>] [-x <exe command>] <test files / dirs>");
 	didHelp = true;
 };
 
@@ -101,10 +101,11 @@ testFile => {
 	if (keepInputFiles) {
 		inFile = inputFileDir # DIR_SLASH # basenameOfPath(testFilename) # '.js';
 	} else {
-		inFile = tempDir # 'testio';
+		inFile = tempDir # 'test';
 	};
 	save(inFile, allInput);
-	result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), !errorsToo);
+	error = try(> result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), !errorsToo));
+	if (error != void) result = error;
 	result = replace(result, "\r\n", "\n");
 	result = trim(result, '', "\n");
 	if (result === allOutput) {
