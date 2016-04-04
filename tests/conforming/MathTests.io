@@ -145,3 +145,33 @@
 > print(Math.atan2(Math.sin(0.3),Math.cos(0.3)))
 < 0.3
 -
+> print(Math.max());
+< -Infinity
+-
+> print(Math.max(1234));
+< 1234
+-
+> print(Math.max(-505, 1234, 5678, 9090));
+< 9090
+-
+> print(Math.max('12345', '2', 0.5, '-89999', '-9999'));
+< 12345
+-
+> print(Math.max('12345', NaN, 0.5, '-89999', '-9999'));
+< NaN
+-
+> print(Math.min());
+< Infinity
+-
+> print(Math.min(1234));
+< 1234
+-
+> print(Math.min(-505, 1234, 5678, 9090));
+< -505
+-
+> print(Math.min('12345', '2', 0.5, '-89999', '-9999'));
+< -89999
+-
+> print(Math.min('12345', NaN, 0.5, '-89999', '-9999'));
+< NaN
+-

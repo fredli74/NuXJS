@@ -103,13 +103,13 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 /* --- Function --- */
 
 var Function = function Function(body) {
-	var source = '(', n = arguments.length - 1;
+	var args, source = '(', n = (args = arguments).length - 1;
 	for (var i = 0; i < n; ++i) {
-		source += arguments[i];
+		source += args[i];
 		if (i < n - 1) s += ',';
 	}
 	source += ') { ';
-	if (n >= 0) source += arguments[n];
+	if (n >= 0) source += args[n];
 	return support.compileFunction(source + ' }', 'anonymous');
 };
 defineProperties(Function, { dontDelete: true }, { prototype: support.prototypes.Function });
@@ -209,9 +209,9 @@ var String = support.specialConstructor(function String(v) {
 defineProperties(String, { dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function fromCharCode(v) {
-		var l;
-		if ((l = arguments.length) === 1) return support.fromCharCode(v & 65535);
-		for (var i = 0, s = ''; i < l; ++i) s += support.fromCharCode(arguments[i] & 65535);
+		var l, args;
+		if ((l = (args = arguments).length) === 1) return support.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < l; ++i) s += support.fromCharCode(args[i] & 65535);
 		return s;
 	})
 });
@@ -314,6 +314,8 @@ defineProperties(Math, { dontEnum: true }, { // FIX : construction from array in
 	exp: unconstructable(function exp(v) { return support.exp(+v); }),
 	floor: unconstructable(function floor(v) { return support.floor(+v); }),
 	log: unconstructable(function log(v) { return support.log(+v); }),
+	max: unconstructable(function max(x, y) { var m = -support.Infinity, v; for (var i = (args = arguments).length - 1; i >= 0; --i) if ((v = +args[i]) > m || isNaN(v)) m = v; return m; }),
+	min: unconstructable(function min(x, y) { var m = support.Infinity, v; for (var i = (args = arguments).length - 1; i >= 0; --i) if ((v = +args[i]) < m || isNaN(v)) m = v; return m; }),
 	pow: unconstructable(function pow(x, y) { return support.pow(+x, +y); }),
 	round: unconstructable(function round(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
 	sin: unconstructable(function sin(v) { return support.sin(+v); }),
