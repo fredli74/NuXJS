@@ -1435,11 +1435,15 @@ Flags ScriptFrame::getProperty(Engine& engine, const Value& key, Value* v) const
 		*v = indexedPointer[index];
 		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	}
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
 		Flags flags = super::getProperty(engine, key, v);
 		if (flags != NONEXISTENT) {
 			return flags;
 		}
+	}
+	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+		*v = Value(function);
+		return DONT_DELETE_FLAG | READ_ONLY_FLAG;
 	}
 	return environment->getProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
@@ -1454,13 +1458,16 @@ bool ScriptFrame::setProperty(Engine& engine, const Value& key, const Value& v, 
 		return true;
 	}
 	// FIX : make sub that lookup's the bucket, also use in getProperty
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			props.update(bucket, v);
 			return true;
 		}
+	}
+	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+		return false;
 	}
 	return environment->setProperty(engine, key, v, flags); // FIX : recursion
 }
@@ -1472,17 +1479,20 @@ bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	if (codeDef->lookupNameIndex(name, index)) {
 		return false;
 	}
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING) || (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName))) {
+	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			return props.erase(bucket);
 		}
 	}
+	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+		return false;
+	}
 	return environment->deleteProperty(engine, key); // FIX : recursion
 }
 
-void ScriptFrame::declareVar(Engine& engine, const String* name) {
+void ScriptFrame::declareVar(Engine& engine, const String* name, const Value& initValue) {
 	Int32 index;
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
@@ -1490,13 +1500,12 @@ void ScriptFrame::declareVar(Engine& engine, const String* name) {
 			props.update(props.insert(name), Value::UNDEFINED);
 		}
 	}
+	if (!initValue.isUndefined()) {
+		setProperty(engine, Value(name), initValue, DONT_DELETE_FLAG);
+	}
 }
 
 void ScriptFrame::constructCompleteObject(Engine& engine) const {
-	const CodeDefinition* codeDef = function->getDefinition();
-	if (codeDef->selfName != 0) {
-		completeObject->setProperty(engine, Value(codeDef->selfName), Value(function), DONT_DELETE_FLAG | READ_ONLY_FLAG);
-	}
 	completeObject->setProperty(engine, Value(&ARGUMENTS_STRING)
 			, Value(engine.getHeap().manage(new Arguments(const_cast<ScriptFrame*>(this), passedArgumentsCount))), DONT_DELETE_FLAG);
 }
@@ -1865,7 +1874,8 @@ bool Processor::privateRun() {
 				break;
 			}
 			case DECLARE_OP: {
-				frame->declareVar(engine, constants[operand()].getString());
+				frame->declareVar(engine, constants[operand()].getString(), vsp[0]);
+				pop(1);
 				break;
 			}
 			case ADD_PROPERTY_OP: {
@@ -2839,35 +2849,42 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 	}
 }
 
-Compiler::ExpressionResult Compiler::declareIdentifier(const String* name) {
+Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
-	if (!name->isEqualTo(ARGUMENTS_STRING)) {
-		if (compilingFor == FOR_EVAL) {
-			outputCode = &setupCode;
-			emitWithConstant(Processor::DECLARE_OP, Value(name));
-			outputCode = &codeDef->code;
-		} else {
-			Value index;
-			Table& nameIndexes = codeDef->nameIndexes;
-			Table::Bucket* bucket = nameIndexes.lookup(name);
-			if (bucket != 0) {
-				index = bucket->getValue();
-			} else {
-				codeDef->varNames.append(name);
-				index = Value(-static_cast<Int32>(codeDef->varNames.size()));
-				nameIndexes.update(nameIndexes.insert(name), index);
-			}
-			if (withScopeDepth == 0) {
-				lxr = ExpressionResult(ExpressionResult::INDEXED, index);
-			}
+	if (compilingFor == FOR_EVAL) {
+		QuickVector<CodeWord>* const outputCodeWas = outputCode;
+		outputCode = &setupCode;
+		if (!func) {
+			emit(Processor::VOID_OP);
 		}
+		emitWithConstant(Processor::DECLARE_OP, Value(name));
+		outputCode = outputCodeWas;
+		return lxr;
+	} else if (!name->isEqualTo(ARGUMENTS_STRING)) {
+		Value index;
+		Table& nameIndexes = codeDef->nameIndexes;
+		Table::Bucket* bucket = nameIndexes.lookup(name);
+		if (bucket != 0) {
+			index = bucket->getValue();
+		} else {
+			codeDef->varNames.append(name);
+			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
+			nameIndexes.update(nameIndexes.insert(name), index);
+		}
+		if (withScopeDepth == 0) {
+			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+		}
+	}
+	if (func) {
+		makeAssignment(lxr);
+		emit(Processor::POP_OP);
 	}
 	return lxr;
 }
 
 Compiler::ExpressionResult Compiler::varDeclaration() {
 	const Char* b = identifier(true, false);
-	ExpressionResult lxr(declareIdentifier(String::newHashedString(heap, b, p)));
+	ExpressionResult lxr(declareIdentifier(String::newHashedString(heap, b, p), false));
 	if (token("=", true)) {
 		rvalueExpression(COMMA_PREC);
 		makeAssignment(lxr);
@@ -2969,12 +2986,11 @@ void Compiler::semicolon() {
 void Compiler::functionStatement() {
 	const Char* b = identifier(true, false);
 	const String* name = String::newHashedString(heap, b, p);
-	ExpressionResult lxr(declareIdentifier(name));
+	QuickVector<CodeWord>* const outputCodeWas = outputCode;
 	outputCode = &setupCode;
 	functionDefinition(name);
-	makeAssignment(lxr);
-	emit(Processor::POP_OP);
-	outputCode = &codeDef->code;
+	declareIdentifier(name, true);
+	outputCode = outputCodeWas;
 }
 
 void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
@@ -3144,12 +3160,13 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				} else {
+					QuickVector<CodeWord>* const outputCodeWas = outputCode;
 					outputCode = &initCode;
 					acceptInOperator = false;
 					ExpressionResult iterXR;
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
-					outputCode = &codeDef->code;
+					outputCode = outputCodeWas;
 					if (gotExpression && token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
@@ -3299,14 +3316,15 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					}
 					else if (token("case", false)) {
 						flushXR(evalXR);
+						QuickVector<CodeWord>* const outputCodeWas = outputCode;
 						outputCode = &testsCode;
 						makeRValue(controlXR);
 						rvalueExpression();
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
-						emitWithInt32(Processor::JT_OP, codeDef->code.size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
+						emitWithInt32(Processor::JT_OP, outputCodeWas->size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.append(testsCode.size() - OPERAND_SIZE);
-						outputCode = &codeDef->code;
+						outputCode = outputCodeWas;
 					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
@@ -3732,7 +3750,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	CodeDefinition* code = gcHeap.manage(new CodeDefinition(gcHeap.manage(new Constants())));
 	gcHeap.protect(code); // FIX : necessary? can we unprotect?
 	{
-		Compiler compiler(gcHeap, code, Compiler::FOR_EVAL);
+		Compiler compiler(gcHeap, code, Compiler::FOR_GLOBAL);
 		gcHeap.protect(&compiler);
 		compiler.compile(librarySourceCode);
 	}

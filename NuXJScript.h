@@ -890,9 +890,9 @@ class ScriptFunction : public ExtensibleFunction {
 				virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject);
 				CodeDefinition* getDefinition() const;
 				Object* getEnvironment() const;
-	
+				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-	
+				
 				CodeDefinition* const codeDef;
 				Object* const environment; // Usually the global object or the frame of the context that created this function.
 				
@@ -981,11 +981,10 @@ class Engine {
 class Frame : public Object {
 	public:		typedef Object super;
 				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name) = 0;
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
 				
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Frame* parentFrame;
 };
 
 class ScriptFrame : public LazyObject<Frame> {
@@ -999,7 +998,7 @@ class ScriptFrame : public LazyObject<Frame> {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -1032,7 +1031,7 @@ class EvalFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
 				Frame* const parentFrame;
@@ -1059,7 +1058,7 @@ class CatchFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	Frame* parentFrame;
 				const String* exceptionName;
@@ -1080,7 +1079,7 @@ class WithFrame : public Frame {
 				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name) { parentFrame->declareVar(engine, name); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	Frame* parentFrame;
 				Object* withObject;
@@ -1198,7 +1197,7 @@ class Processor : public GCItem {
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
-					, DECLARE_OP									// operand: const_index (name)		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and through WRITE_INDEXED_OP)
+					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
 					, THROW_OP										// stack: value ->
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
@@ -1314,7 +1313,7 @@ class Compiler : public GCItem {
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
 				void functionDefinition(const String* functionName, const String* selfName = 0); // selfName is only for named function expressions
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
-				ExpressionResult declareIdentifier(const String* name);
+				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
 				void flushXR(ExpressionResult& evalXR);
 				void varDeclarations();
