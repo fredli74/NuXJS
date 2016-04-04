@@ -3,3 +3,7 @@
 < 7
 < 5
 -
+> (function() { var x = 7; try { throw "x" } catch (x) { x = 9; eval("for (var x = 0; x < 10; ++x);"); print(x) }; print(x); })()
+< 10
+< 7
+-

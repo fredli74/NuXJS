@@ -627,7 +627,7 @@
 		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A5_T4": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A5_T5": {
 		"category": "tbd"
@@ -5058,6 +5058,18 @@
 		"category": "not_es3"
 	},
 	"language/statements/with/binding-not-blocked-by-unscopables-non-obj": {
+		"category": "not_es3"
+	},
+	"language/statements/variable/S12.2_A9": {
+		"category": "todo"
+	},
+	"language/statements/with/unscopables-get-err": {
+		"category": "not_es3"
+	},
+	"language/statements/with/unscopables-not-referenced-for-undef": {
+		"category": "not_es3"
+	},
+	"language/statements/with/unscopables-prop-get-err": {
 		"category": "not_es3"
 	}
 }
