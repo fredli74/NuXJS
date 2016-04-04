@@ -8,7 +8,7 @@
 >   try {
 >    throw "oops again";
 >   } catch (b) {
->    b = 4;
+>    var b = 4;
 >    print(b);
 >   }
 >   try {
@@ -18,11 +18,19 @@
 >    print(a);
 >    print(b);
 >   }
+>   try {
+>    throw "final throw";
+>   } catch (c) {
+>    c = 6;
+>   }
 >  }
+>  var c = 7;
+>  print(c);
 > }
 > f()
 < 3
 < 4
 < 5
 < 3
+< 7
 -
