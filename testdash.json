@@ -618,13 +618,13 @@
 		"category": ""
 	},
 	"language/expressions/assignment/S11.13.1_A5_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A5_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A5_T3": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A5_T4": {
 		"category": "todo"
@@ -633,13 +633,13 @@
 		"category": "tbd"
 	},
 	"language/expressions/assignment/S11.13.1_A6_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A6_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A6_T3": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A7_T1": {
 		"category": "todo"
