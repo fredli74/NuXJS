@@ -58,6 +58,9 @@
 //		why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 //		perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
 //		exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
+//		Split ScriptFrame -> GlobalFrame & ScriptFrame
+//		make variable lookup non-recusrive loop outside the objects, abuse to use get/setOwnProperty for this
+//		setting array length needs to do a to_number, how to do this asynchronously?
 //
 //	Compiler
 //
@@ -506,8 +509,8 @@ const Flags EXISTS_FLAG = 1;
 const Flags READ_ONLY_FLAG = 2;
 const Flags DONT_ENUM_FLAG = 4;
 const Flags DONT_DELETE_FLAG = 8;
-const Flags STANDARD_FLAGS = 0;		// use with setProperty()
-const Flags NONEXISTENT = 0;		// use with getProperty() to check for existence, e.g. getProperty(o, k, v) != NONEXISTENT
+const Flags STANDARD_FLAGS = 0;		// use with setOwnProperty()
+const Flags NONEXISTENT = 0;		// use with getOwnProperty() to check for existence, e.g. getOwnProperty(o, k, v) != NONEXISTENT
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
@@ -521,14 +524,14 @@ class Object : public GCItem {
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
-				// FIX : or maybe drop them, we now check with getProperty
-				bool hasOwnProperty(Engine& engine, const Value& key) const; // checks via getProperty()
+				// FIX : or maybe drop them, we now check with getOwnProperty
+				bool hasOwnProperty(Engine& engine, const Value& key) const; // checks via getOwnProperty()
 				bool isOwnPropertyEnumerable(Engine& engine, const Value& key) const;
 				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
 				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // checks prototype chain for read-only
@@ -548,8 +551,8 @@ class Object : public GCItem {
 template<class SUPER> class LazyObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyObject();
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
@@ -646,7 +649,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual Value getInternalValue(GCHeap& heap) const { return Value(this); }
 				UInt32 calcHash() const;
@@ -682,9 +685,9 @@ class StringListEnumerator : public Enumerator {
 				}
 };
 
-class JoinedEnumerator : public Enumerator {
+class JoiningEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				JoinedEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
+				JoiningEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
 				virtual const String* nextPropertyName();
 
 	protected:	Engine& engine;
@@ -705,8 +708,8 @@ class ScriptObject : public virtual Object {
 				
 				ScriptObject(Object* prototype);
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				Table& accessProperties();
@@ -746,8 +749,8 @@ class StringWrapper : public ScriptObject {
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
@@ -766,8 +769,8 @@ class Array : public LazyObject<Object> {
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
@@ -848,7 +851,7 @@ class CodeDefinition : public Object {
 
 	protected:	QuickVector<CodeWord> code;
 				Constants* const constants;
-				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == curren catch parameter (don't use fast index binding)
+				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == current catch parameter during compile-time only (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
@@ -881,20 +884,38 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
 
+// FIX : Frame -> Scope? More ES lingo
+class Frame : public Object {
+	public:		typedef Object super;
+				Frame(Frame* parentFrame = 0) : parentFrame(parentFrame) { };
+				virtual const CodeDefinition* getFunctionDef() const = 0;
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
+				Value* getIndexedPointer() const { return indexedPointer; }
+				
+	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Frame* parentFrame;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(parentFrame);
+					super::gcMark(heap);
+				}
+};
+
 class ScriptFunction : public ExtensibleFunction {
+	friend class ScriptFrame;
+	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(CodeDefinition* codeDef, Object* environment);
+				ScriptFunction(CodeDefinition* codeDef, Frame* environment);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				CodeDefinition* getDefinition() const;
-				Object* getEnvironment() const;
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
 				CodeDefinition* const codeDef;
-				Object* const environment; // Usually the global object or the frame of the context that created this function.
+				Frame* const environment;
 				
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
@@ -932,7 +953,7 @@ class Error : public LazyObject<Object> {
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const; // error type name
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
@@ -978,15 +999,6 @@ class Engine {
 				ScriptFunction* toStringFunction;
 };
 
-class Frame : public Object {
-	public:		typedef Object super;
-				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
-				Value* getIndexedPointer() const { return indexedPointer; }
-				
-	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-};
-
 class ScriptFrame : public LazyObject<Frame> {
 	friend class Arguments;
 	
@@ -995,21 +1007,20 @@ class ScriptFrame : public LazyObject<Frame> {
 				ScriptFrame(ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
-				Object* const environment;
 				QuickArray<Value> indexed; // Includes variables and arguments.
 				
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(function);
 					heap.markViaReferences(indexed.begin(), indexed.end());
-					heap.mark(environment);
 					super::gcMark(heap);
 				}
 
@@ -1026,20 +1037,18 @@ class ScriptFrame : public LazyObject<Frame> {
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
-				EvalFrame(const CodeDefinition* evalCodeDef, Frame* parentFrame);
+				EvalFrame(Frame* parentFrame, const CodeDefinition* evalCodeDef);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
-				Frame* const parentFrame;
 				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a ScriptFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(evalCodeDef);
-					heap.mark(parentFrame);
 					heap.markViaReferences(indexed.begin(), indexed.end());
 					super::gcMark(heap);
 				}
@@ -1055,17 +1064,15 @@ class CatchFrame : public Frame {
 
 				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
 				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
-	protected:	Frame* parentFrame;
-				const String* exceptionName;
+	protected:	const String* exceptionName;
 				Value exceptionValue;
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parentFrame);
 					heap.mark(exceptionName);
 					exceptionValue.gcMark(heap);
 					super::gcMark(heap);
@@ -1076,15 +1083,13 @@ class WithFrame : public Frame {
 	public:		typedef Frame super;
 				WithFrame(Frame* parentFrame, Object* withObject);
 				virtual const CodeDefinition* getFunctionDef() const;
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
 
-	protected:	Frame* parentFrame;
-				Object* withObject;
+	protected:	Object* withObject;
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parentFrame);
 					heap.mark(withObject);
 					super::gcMark(heap);
 				}
@@ -1097,8 +1102,8 @@ class Arguments : public LazyObject<Object> {
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 

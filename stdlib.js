@@ -106,11 +106,11 @@ var Function = function Function(body) {
 	var argv, source = '(', n = (argv = arguments).length - 1;
 	for (var i = 0; i < n; ++i) {
 		source += argv[i];
-		if (i < n - 1) s += ',';
+		if (i < n - 1) source += ',';
 	}
-	source += ') { ';
+	source += ") {\n";
 	if (n >= 0) source += argv[n];
-	return support.compileFunction(source + ' }', 'anonymous');
+	return support.compileFunction(source + "\n}", 'anonymous');
 };
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {

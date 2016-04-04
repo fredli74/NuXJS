@@ -1,6 +1,5 @@
 #! /usr/local/bin/PikaCmd
 
-include('debug.pika');
 include('stdlib.pika');
 include('systools.pika');
 
