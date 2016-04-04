@@ -2855,6 +2855,7 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 	}
 }
 
+// FIX : ok, this is serious mess
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (compilingFor == FOR_EVAL) {
@@ -3541,16 +3542,15 @@ template<class F> struct FunctorAdapter : public Function {
 	F f;
 };
 
-// FIX : only toDouble?
-template<class F> struct UnaryNativeFunction : public Function {
-	UnaryNativeFunction(const F& f) : f(f) { }
+template<class F> struct UnaryMathFunction : public Function {
+	UnaryMathFunction(const F& f) : f(f) { }
 	virtual Value call(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F f;
 };
 
-template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
+// template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
 
 struct Support {
 	static Value getInternalProperty(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
@@ -3680,17 +3680,25 @@ struct Support {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
 		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(engine.getHeap().manage(new String(&c, &c + 1))));
 	}
+
+	static Value atan2(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		return (argc >= 2 ? Value(std::atan2(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
+	}
+
+	static Value pow(Engine& engine, Processor& processor, Int32 argc, const Value* argv, Object* thisObject) {
+		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
+	}
 };
 
 static struct {
 	String name;
-	UnaryNativeFunction<double (*)(double)> func;
+	UnaryMathFunction<double (*)(double)> func;
 } NATIVE_MATH_FUNCTIONS[] = {
 	{ String("acos"), acos }, { String("asin"), asin }, { String("atan"), atan }, { String("cos"), cos },
 	{ String("exp"), exp }, { String("floor"), floor }, { String("log"), log }, { String("sin"), sin },
 	{ String("sqrt"), sqrt }, { String("tan"), tan }
 };
-// TODO : atan2, pow, min, max, random
+// TODO : min, max, random
 
 static struct {
 	String name;
@@ -3700,11 +3708,12 @@ static struct {
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
 	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
 	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
-	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }
+	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
+	{ String("pow"), Support::pow }
 };
 
-static UnaryNativeFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
-static UnaryNativeFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
+static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
+static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), objectPrototype(0), evalFunction(false)
 		, evalDirectFunction(true), toNumberFunction(0), toStringFunction(0)

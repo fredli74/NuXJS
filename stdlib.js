@@ -308,17 +308,18 @@ defineProperties(Math, { dontEnum: true }, { // FIX : construction from array in
 	acos: unconstructable(function acos(v) { return support.acos(+v); }),
 	asin: unconstructable(function asin(v) { return support.asin(+v); }),
 	atan: unconstructable(function atan(v) { return support.atan(+v); }),
+	atan2: unconstructable(function atan2(y, x) { return support.atan2(+y, +x); }),
 	ceil: unconstructable(function ceil(v) { return -support.floor(-v); }),
 	cos: unconstructable(function cos(v) { return support.cos(+v); }),
 	exp: unconstructable(function exp(v) { return support.exp(+v); }),
 	floor: unconstructable(function floor(v) { return support.floor(+v); }),
 	log: unconstructable(function log(v) { return support.log(+v); }),
+	pow: unconstructable(function pow(x, y) { return support.pow(+x, +y); }),
 	round: unconstructable(function round(v) { return support.floor(v + 0.5); }), // FIX : -0 rule in ES262
 	sin: unconstructable(function sin(v) { return support.sin(+v); }),
 	sign: unconstructable(sign), // FIX : not ES3 standard??
 	sqrt: unconstructable(function sqrt(v) { return support.sqrt(+v); }),
 	tan: unconstructable(function tan(v) { return support.tan(+v); })
-
 	// trunc etc from ES6?
 });
 
