@@ -848,7 +848,7 @@ class CodeDefinition : public Object {
 
 	protected:	QuickVector<CodeWord> code;
 				Constants* const constants;
-				Table nameIndexes; // < 0 : local variables, >= 0 : arguments
+				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == curren catch parameter (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;

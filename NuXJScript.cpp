@@ -1001,7 +1001,10 @@ CodeDefinition::CodeDefinition(Constants* constants) : constants(constants), nam
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
-	if (bucket == 0) return false;
+	if (bucket == 0) {
+		return false;
+	}
+	assert(!bucket->getValue().isUndefined());
 	index = bucket->getValue().toInt();
 	return true;
 }
@@ -2807,7 +2810,10 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
-								xr = ExpressionResult(ExpressionResult::INDEXED, bucket->getValue());
+								Value index = bucket->getValue();
+								if (!index.isUndefined()) {
+									xr = ExpressionResult(ExpressionResult::INDEXED, index);
+								}
 							}
 						}
 						break;
@@ -2871,7 +2877,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
-		if (withScopeDepth == 0) {
+		if (withScopeDepth == 0 && !index.isUndefined()) {
 			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
 		}
 	}
@@ -3058,8 +3064,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
 						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) // FIX : share with return
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) { // FIX : share with return
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
+					}
 					if (s->needToPopFrame()) {
 						emit(Processor::POP_FRAME_OP);
 					}
@@ -3231,13 +3238,17 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					white();
 					const Char* b = identifier(true, false);
 					const String* exceptionVarName = String::newHashedString(heap, b, p);
-					Value localIndex;
+					Value previousLocalIndex;
 					Table& nameIndexes = codeDef->nameIndexes;
-					Table::Bucket* bucket = nameIndexes.lookup(exceptionVarName);
-					if (bucket != 0) {
-						localIndex = bucket->getValue();
-						nameIndexes.erase(bucket);
+					bool didExist = false; // FIX : can use NON_EXISTENT type if we choose to keep it
+					Table::Bucket* indexBucket = nameIndexes.lookup(exceptionVarName);
+					if (indexBucket != 0) {
+						didExist = true;
+						previousLocalIndex = indexBucket->getValue();
+					} else {
+						indexBucket = nameIndexes.insert(exceptionVarName);
 					}
+					nameIndexes.update(indexBucket, Value::UNDEFINED); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 					completeForwardBranch(catchPoint);
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
 					emitWithConstant(Processor::CATCH_FRAME_OP, Value(exceptionVarName));
@@ -3253,8 +3264,10 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
 						completeForwardBranch(*it);
 					}
-					if (bucket != 0) {
-						nameIndexes.update(nameIndexes.insert(exceptionVarName), localIndex);
+					if (didExist) {
+						nameIndexes.update(nameIndexes.insert(exceptionVarName), previousLocalIndex);
+					} else {
+						nameIndexes.erase(nameIndexes.lookup(exceptionVarName));
 					}
 				}
 				
@@ -3271,7 +3284,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					expectToken("}", false);
 					flushXR(evalXR);
 				} else {
-					if (!gotCatch) error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
+					if (!gotCatch) {
+						error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
+					}
 				}
 				emit(Processor::RETURN_OP);
 				
@@ -3285,7 +3300,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				returnSafeKept(thrownXR, true);
 				emit(Processor::THROW_OP);
 				completeForwardBranch(tryEndPoint);
-				if (catchEndPoint != INVALID_CODE_POINT) completeForwardBranch(catchEndPoint);
+				if (catchEndPoint != INVALID_CODE_POINT) {
+					completeForwardBranch(catchEndPoint);
+				}
 				break;
 			}
 			
