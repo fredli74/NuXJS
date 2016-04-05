@@ -298,12 +298,26 @@
 			return end;
 		}),
 		reverse: $unconstructable(function reverse() {
-			var l, n = $floor((l = this.length) / 2);
-			--l;
-			for (var i = 0; i < n; ++i) {
-				var left = this[i];
-				var right = this[l - i];
+			var len, mid = $floor((len = this.length) / 2);
+			--len;
+			for (var leftIndex = 0; leftIndex < mid; ++leftIndex) {
+				var rightIndex = len - leftIndex;
+				var right = this[rightIndex];
+				if (leftIndex in this) this[rightIndex] = this[leftIndex]; else delete this[rightIndex];
+				if (rightIndex in this) this[leftIndex] = right; else delete this[leftIndex];
 			}
+			return this;
+		}),
+		shift: $unconstructable(function shift() {
+			var len, elementZero;
+			if (len = this.length) {
+				elementZero = this[0];
+				for (var i = 1; i < len; ++i) {
+					if (i in this) this[i - 1] = this[i]; else delete this[i - 1];
+				}
+				--this.length;
+			}
+			return elementZero;
 		}),
 		toString: $unconstructable(function toString() {
 			$checkClass(this, 'Array', 'toString');

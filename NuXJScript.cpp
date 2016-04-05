@@ -1658,6 +1658,7 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
 	csp->frame = this->frame;
 	csp->thisObject = thisObject;
 	this->ip = ip;
+	assert(ip != 0);
 	updateInternals();
 }
 
@@ -1680,6 +1681,7 @@ void Processor::throwVirtualException(const Value& exception) {
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
+	assert(ip != 0);
 	csp = catcher.csp;
 	vsp = catcher.vsp;
 	push(exception);
@@ -1798,6 +1800,7 @@ bool Processor::privateRun() {
 							break;
 
 			case RETURN_OP:	ip = (csp--)->returnIP;
+							assert(ip != 0);
 							assert(csp >= cstackStart);							
 							updateInternals();
 							break;
@@ -3105,11 +3108,11 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
 						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) { // FIX : share with return
-						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
-					}
 					if (s->needToPopFrame()) {
 						emit(Processor::POP_FRAME_OP);
+					}
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) { // FIX : share with return
+						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					s = s->next;
 				}
@@ -3248,11 +3251,11 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 							safeKept = true;
 						}
 					}
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
-						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
-					}
 					if (s->needToPopFrame()) {
 						emit(Processor::POP_FRAME_OP);
+					}
+					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
+						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					s = s->next;
 				}

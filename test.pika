@@ -98,7 +98,7 @@ testFile => {
 	if (sectionOutput !== '') addSection();
 
 	if (warnAboutExpectedErrors) {
-		print("Warning! Expect one or more tests to fail. Run with -e to test these too.")
+		print("Warning! Expects one or more tests to fail. Run with -e to test these too.")
 	};
 
 	allInput = '';
