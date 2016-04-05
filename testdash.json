@@ -1092,7 +1092,7 @@
 		"category": "not_es3"
 	},
 	"language/statements/for-in/S12.6.4_A1": {
-		"category": ""
+		"category": "not_es3"
 	},
 	"language/statements/for-in/S12.6.4_A14_T2": {
 		"category": ""
@@ -2259,10 +2259,10 @@
 		"category": "todo"
 	},
 	"language/types/number/8.5.1": {
-		"category": "tbd"
+		"category": "todo"
 	},
 	"language/types/number/S8.5_A13_T2": {
-		"category": "tbd"
+		"category": "todo"
 	},
 	"language/types/number/S8.5_A14_T1": {
 		"category": "todo"
@@ -5070,6 +5070,60 @@
 		"category": "not_es3"
 	},
 	"language/statements/with/unscopables-prop-get-err": {
+		"category": "not_es3"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A1.1_T3": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-decrement/S11.3.2_A1.1_T4": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A1.1_T3": {
+		"category": "todo"
+	},
+	"language/expressions/postfix-increment/S11.3.1_A1.1_T4": {
+		"category": "todo"
+	},
+	"language/statements/function/13.2-17-1": {
+		"category": "tbd"
+	},
+	"language/statements/function/13.2-17-s": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-dflt-b-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/variable/fn-name-cover": {
+		"category": "not_es3"
+	},
+	"language/statements/while/S12.6.2_A8": {
+		"category": "todo"
+	},
+	"language/statements/while/cptn-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/while/cptn-iter": {
+		"category": "not_es3"
+	},
+	"language/statements/while/cptn-no-iter": {
+		"category": "not_es3"
+	},
+	"language/statements/while/labeled-fn-stmt": {
+		"category": "by_design"
+	},
+	"language/statements/function/13.2-18-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-21-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-22-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-25-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-26-s": {
 		"category": "not_es3"
 	}
 }

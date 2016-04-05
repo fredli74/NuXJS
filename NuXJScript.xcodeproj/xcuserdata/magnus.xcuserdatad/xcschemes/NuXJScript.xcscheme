@@ -68,8 +68,8 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "tests/StringObject_1.js"
-            isEnabled = "NO">
+            argument = "temp/MathTests.js"
+            isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
       <AdditionalOptions>

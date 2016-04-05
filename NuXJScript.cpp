@@ -2279,7 +2279,7 @@ static const Char LINE_TERMINATORS[] = { '\n', 0x2028, 0x2029, '\r' }; // FIX : 
 void Compiler::white() {
 	while (!eof()) {
 		switch (*p) {
-			case ' ': case '\v': case '\f': case '\t':	case '\r': case '\n': case 0xA0: case 0x2028: case 0x2029: ++p; break;
+			case ' ': case '\f': case '\n': case '\r': case '\t': case '\v': case 0xA0: case 0x2028: case 0x2029: ++p; break;
 			case '/':	if (p + 1 != e && p[1] == '/') {
 							p = std::find_first_of(p += 2, e, LINE_TERMINATORS, LINE_TERMINATORS + 4);
 							break;
@@ -3760,7 +3760,6 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), o
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	ScriptObject* supportObject = gcHeap.manage(new ScriptObject(&objectPrototype));
 	// FIX : no new String?
-	globals->setOwnProperty(*this, Value(gcHeap.manage(new String("support"))), Value(supportObject), DONT_ENUM_FLAG);
 	ScriptObject* prototypesObject = gcHeap.manage(new ScriptObject(&objectPrototype));
 	supportObject->setOwnProperty(*this, Value(gcHeap.manage(new String("prototypes"))), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
@@ -3792,9 +3791,8 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	// FIX : all this boilerplating... build a function object or something instead?
 
 	CodeDefinition* code = gcHeap.manage(new CodeDefinition(gcHeap.manage(new Constants())));
-	gcHeap.protect(code); // FIX : necessary? can we unprotect?
 	{
-		Compiler compiler(gcHeap, code, Compiler::FOR_GLOBAL);
+		Compiler compiler(gcHeap, code, Compiler::FOR_EVAL);
 		gcHeap.protect(&compiler);
 		compiler.compile(librarySourceCode);
 	}
@@ -3805,10 +3803,19 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		gcHeap.protect(&processor);
 		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 		processor.chain(RETURN_TO_HOST_STUB);
-		ScriptFunction* localFunction = gcHeap.manage(new ScriptFunction(code, globals));
-		ScriptFrame* localFrame = gcHeap.manage(new ScriptFrame(localFunction, 0, 0));
-		processor.chain(code->getCodePointer(), localFrame, globals);
+++processor.vsp; // FIX!!!
+		processor.enterEval(code, false);
 		bool needsMoreTime = processor.run();
+		assert(!needsMoreTime);
+		Value v = processor.getResult();
+		Function* f = v.asFunction();
+		if (f != 0) {
+			processor.chain(RETURN_TO_HOST_STUB);
+			Value argv[1] = { Value(supportObject) };
+++processor.vsp; // FIX!!!
+			f->call(*this, processor, 1, argv, getGlobals());
+		}
+		needsMoreTime = processor.run();
 		assert(!needsMoreTime);
 	}
 	gcHeap.gc();
