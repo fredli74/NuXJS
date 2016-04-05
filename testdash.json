@@ -456,7 +456,7 @@
 		"category": "not_es3"
 	},
 	"language/eval-code/10.4.2-1-5": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/arrow-function/ArrowFunction_restricted-properties": {
 		"category": "not_es3"
@@ -2403,10 +2403,10 @@
 		"category": "not_es3"
 	},
 	"language/expressions/postfix-decrement/S11.3.2_A6_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/postfix-decrement/S11.3.2_A6_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/postfix-increment/S11.3.1_A1.1_T1": {
 		"category": "todo"
@@ -2442,10 +2442,10 @@
 		"category": "not_es3"
 	},
 	"language/expressions/postfix-increment/S11.3.1_A6_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/postfix-increment/S11.3.1_A6_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/prefix-decrement/S11.4.5_A1": {
 		"category": ""
@@ -2466,10 +2466,10 @@
 		"category": "not_es3"
 	},
 	"language/expressions/prefix-decrement/S11.4.5_A6_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/prefix-decrement/S11.4.5_A6_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/prefix-increment/S11.4.4_A1": {
 		"category": ""
@@ -2490,10 +2490,10 @@
 		"category": "not_es3"
 	},
 	"language/expressions/prefix-increment/S11.4.4_A6_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/prefix-increment/S11.4.4_A6_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/property-accessors/S11.2.1_A1.1": {
 		"category": ""

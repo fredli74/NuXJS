@@ -1735,13 +1735,13 @@ bool Processor::privateRun() {
 									pop(2);
 									break;
 
-			case TO_NUMBER_OP:
+			case OBJ_TO_NUMBER_OP:
 				if ((o = vsp[0].asObject()) != 0) {
 					engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
 
-			case TO_STRING_OP:
+			case OBJ_TO_STRING_OP:
 				if ((o = vsp[0].asObject()) != 0) {
 					engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
@@ -2040,7 +2040,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "TO_NUMBER", "TO_STRING", "PRE_EQ"
+		, "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "USHR"
@@ -2048,7 +2048,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
-		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJECT", "NEW_ARRAY"
+		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC", "DECLARE"
@@ -2390,12 +2390,12 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 
 Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: if (toPrimitive) emit(Processor::TO_NUMBER_OP); return xr;
+		case ExpressionResult::PUSHED: if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(Processor::TO_NUMBER_OP); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(Processor::TO_NUMBER_OP); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(Processor::TO_NUMBER_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
 		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
@@ -2630,7 +2630,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 
 		case IN_OPERATOR: {
 			makeRValue(xr);
-			emit(Processor::TO_STRING_OP);
+			emit(Processor::OBJ_TO_STRING_OP);
 			xr = makeRValue(operand(op));
 			emit(op.vmOp);
 			break;
@@ -2645,6 +2645,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				emit(Processor::REPUSH_2_OP);
 			}
 			makeRValue(xr, true);
+			emit(Processor::PLUS_OP);
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
@@ -2763,7 +2764,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PROPERTY_BRACKETS: {
 			xr = makeRValue(xr);
 			makeRValue(operand(op)); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
-			emit(Processor::TO_STRING_OP);
+			emit(Processor::OBJ_TO_STRING_OP);
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -2867,7 +2868,6 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	const Char* b = p;
     while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
-		white();
 	}
 	p = b;
 	return true;

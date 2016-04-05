@@ -37,3 +37,14 @@
 	*is* respected (sort of), although it is a 5.1 change... this will be the global object as a regular function call (which is the same in effect as undefined because it is converted to the global object).
 
 *) Does not evaluate left-hand side of an assignment to a reference before evaluating right-hand side. E.g. provided `x` is a global, `x = (eval("var x;"), 1)` (from within a function) will assign to the local x that is declared by the eval, not to the global x. On the other hand, most engines do the same (incl V8 at the time of writing).
+
+*) Doesn't respect the exact evaluation order specified here: 11.2.1 Property Accessors. Expression is evaluated and possibly converted to string before base is converted to object as exemplified with this test:
+
+	var invalidBase = null;
+	var objectPropertyName = { toString: function() { print("to string called!"); return 'x' } };
+	try { invalidBase[objectPropertyName] } catch (e) { print(e.name) }
+
+	This will output "to string called!" in NuXJScript, although it really shouldn't
+
+	Motiviation: performance. Object conversion is done directly by the GET_PROPERTY opcode. Conversion to primitive value must happen before this (via OBJ_TO_STRING) as it may require running script code.
+	

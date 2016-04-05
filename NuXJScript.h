@@ -1178,8 +1178,8 @@ class Processor : public GCItem {
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
-					, TO_NUMBER_OP									// stack: value -> primitive_value (number preferred)
-					, TO_STRING_OP									// stack: value -> primitive_value (string preferred)
+					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
+					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
 					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
 					, INC_OP, DEC_OP								// stack: value -> number
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
