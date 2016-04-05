@@ -22,3 +22,13 @@
 > try { eval("a\n--"); } catch (e) { print(e.name) }
 < SyntaxError
 -
+> var a=1,b=2,c=3;
+> a=b
+> ++c
+> print(a);
+> print(b);
+> print(c);
+< 2
+< 2
+< 4
+-
