@@ -237,6 +237,9 @@
 	});
 	$defineProperties(String.prototype, { dontEnum: true }, {
 		constructor: String,
+		charCodeAt: $unconstructable(function charCodeAt(pos) {
+			return $support.charCodeAt('' + this, +pos);
+		}),
 		valueOf: $unconstructable(function valueOf() {
 			$checkClass(this, 'String', 'valueOf');
 			return $support.getInternalProperty(this, 'value');

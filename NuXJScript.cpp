@@ -52,6 +52,8 @@ static bool isNaN(double d) { return d != d; }
 static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); };
 #endif
 
+static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
+
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
 static int strncmp(const Char* a, const char* b, UInt32 n) {
 	UInt32 i = 0;
@@ -340,7 +342,7 @@ bool Value::toBool() const {
 		case UNDEFINED_TYPE:
 		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return var.boolean;
-		case NUMBER_TYPE: return (var.number != 0.0 && !isNaN(var.number));
+		case NUMBER_TYPE: return nanToZero(var.number) != 0.0;
 		case STRING_TYPE: return (!var.string->empty());
 		case OBJECT_TYPE: return true;
 	}
@@ -2279,6 +2281,14 @@ bool Compiler::isLeadingIdentifierChar(Char c) {
 
 static const Char LINE_TERMINATORS[] = { '\n', 0x2028, 0x2029, '\r' }; // FIX : '\r' must be last for line count to work, but I think we should change line counting algo in the future, a single '\r' without '\n' should count too really
 
+static bool isLineTerminator(Char c) {
+	return (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 4, c) != LINE_TERMINATORS + 4);
+}
+
+static bool lineTerminatorInRange(const Char* b, const Char* e) {
+	return (std::find_first_of(b, e, LINE_TERMINATORS, LINE_TERMINATORS + 4) != e);
+}
+
 void Compiler::white() {
 	while (!eof()) {
 		switch (*p) {
@@ -2301,14 +2311,10 @@ void Compiler::white() {
 	}
 }
 
-static bool lfInRange(const Char* b, const Char* e) {
-	return (std::find_first_of(b, e, LINE_TERMINATORS, LINE_TERMINATORS + 4) != e);
-}
-
 bool Compiler::whiteNoLF() {
 	const Char* b = p;
 	white();
-	if (lfInRange(b, p)) {
+	if (lineTerminatorInRange(b, p)) {
 		p = b;
 		return false;
 	}
@@ -2358,8 +2364,10 @@ static UInt32 unescapedMaxLength(const Char* p, const Char* e) {
 	assert(p <= e && (*p == '"' || *p == '\''));
 	Char endChar = *p;
 	UInt32 l = 0;
-	while (++p < e && *p != endChar && std::find(LINE_TERMINATORS, LINE_TERMINATORS + 4, *p) == LINE_TERMINATORS + 4) {
-		if (*p == '\\' && p + 1 < e) ++p;
+	while (++p < e && *p != endChar && !isLineTerminator(*p)) {
+		if (*p == '\\' && p + 1 < e) {
+			++p;
+		}
 		++l;
 	}
 	return l;
@@ -2371,24 +2379,40 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	static const Char ESCAPE_CODES[] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
 	const int ESCAPE_CODE_COUNT = sizeof (ESCAPE_CHARS) / sizeof (*ESCAPE_CHARS);
 	Char endChar = *p;
-	const Char* b = ++p;
+	++p;
+	const Char* b = p;
 	Char* d = buffer;
-	while (!eof() && *p != endChar && std::find(LINE_TERMINATORS, LINE_TERMINATORS + 4, *p) == LINE_TERMINATORS + 4) {
+	while (!eof() && *p != endChar && !isLineTerminator(*p)) {
 		if (*p == '\\' && p + 1 < e) {
-			d = std::copy(b, p, d);
-			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
-			b = p;
 			UInt32 l = 0;
-			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
-			else if (*p == 'x') { b = ++p; p = parseHex(p, (e - p > 2 ? p + 2 : e), l); } // FIX : in ecma, you *need* two (and four) hex chars, nothing else, throw here!
-			else if (*p == 'u') { b = ++p; p = parseHex(p, (e - p > 4 ? p + 4 : e), l); }
-			if (p == b) error(SYNTAX_ERROR, "Illegal escape character");
-			b = p;
+			d = std::copy(b, p, d);
+			++p;
+			const Char* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *p);
+			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) {
+				l = ESCAPE_CODES[f - ESCAPE_CHARS];
+			} else if (*p == 'x' || *p == 'u') {
+				const int n = (*p == 'x' ? 2 : 4);
+				if (e - (p + 1) < n || parseHex(p + 1, p + 1 + n, l) != p + 1 + n) {
+					error(SYNTAX_ERROR, "Illegal escape sequence");
+				}
+				p += n;
+			} else if (isLineTerminator(*p)) {
+				error(SYNTAX_ERROR, "\\ continuation is not supported");
+			} else {
+				l = *p;
+			}
+			b = ++p;
 			*d++ = Char(l);
-		} else ++p;
+		} else {
+			++p;
+		}
 	}
-	if (eof() || *p != endChar) error(SYNTAX_ERROR, "Unterminated string");
-	return std::copy(b, p++, d);
+	if (eof() || *p != endChar) {
+		error(SYNTAX_ERROR, "Unterminated string");
+	}
+	d = std::copy(b, p, d);
+	++p;
+	return d;
 }
 
 Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive) {
@@ -2640,7 +2664,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 
 		case POST_INC_DEC: {
-			if (lfInRange(b, p)) {
+			if (lineTerminatorInRange(b, p)) {
 				p = b;
 				return false;
 			}
@@ -3026,7 +3050,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 void Compiler::semicolon(bool acceptLF) {
 	const Char* b = p;
 	white();
-	if (!eof() && *p != '}' && !token(";", false) && (!acceptLF || !lfInRange(b, p))) {
+	if (!eof() && *p != '}' && !token(";", false) && (!acceptLF || !lineTerminatorInRange(b, p))) {
 		p = b;
 		error(SYNTAX_ERROR, "Syntax error");
 	}
@@ -3765,6 +3789,18 @@ struct Support {
 		}
 		return result;
 	}
+
+	static Value charCodeAt(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Value result = Value::NOT_A_NUMBER;
+		if (argc >= 2) {
+			const String* s = argv[0].toString(engine.getHeap());
+			const double d = nanToZero(argv[1].toDouble());
+			if (-1.0 < d && d < s->size()) {
+				result = Value((*s)[static_cast<UInt32>(d)]);
+			}
+		}
+		return result;
+	}
 };
 
 static struct {
@@ -3786,7 +3822,7 @@ static struct {
 	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
 	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
-	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }
+	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }, { String("charCodeAt"), Support::charCodeAt }
 };
 
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);

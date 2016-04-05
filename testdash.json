@@ -642,10 +642,10 @@
 		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A7_T1": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/S11.13.1_A7_T2": {
-		"category": "todo"
+		"category": "by_design"
 	},
 	"language/expressions/assignment/destructuring/array-elem-elision": {
 		"category": "not_es3"
@@ -3534,13 +3534,13 @@
 		"category": "todo"
 	},
 	"language/reserved-words/7.6.1-4-10": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/reserved-words/7.6.1-4-11": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/reserved-words/7.6.1-4-12": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/reserved-words/7.6.1-4-13": {
 		"category": "not_es3"
@@ -5133,6 +5133,63 @@
 		"category": "not_es3"
 	},
 	"language/statements/function/13.2-9-s": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-else-false-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-else-false-nrml": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-else-true-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-else-true-nrml": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-no-else-false": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-no-else-true-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/if/cptn-no-else-true-nrml": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-a-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-b-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-b-final": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-dflt-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-dflt-b-final": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-dflt-final": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-no-dflt-match-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-no-dflt-match-final": {
+		"category": "not_es3"
+	},
+	"language/statements/switch/cptn-no-dflt-no-match": {
+		"category": "not_es3"
+	},
+	"language/statements/variable/fn-name-arrow": {
+		"category": "not_es3"
+	},
+	"language/statements/variable/fn-name-class": {
 		"category": "not_es3"
 	}
 }

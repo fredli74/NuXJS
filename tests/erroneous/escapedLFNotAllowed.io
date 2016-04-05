@@ -1,3 +1,3 @@
 > eval("\"x\\\ny\"")
-! !!!! SyntaxError: Illegal escape character
+! !!!! SyntaxError: \ continuation is not supported
 -

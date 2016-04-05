@@ -34,13 +34,13 @@
 ! !!!! Line: 1
 ! !!!! SyntaxError: Unterminated string
 -
-> "\x5k" // should be illegal, but isn't right now
--
-> "\u53Ak" // should be illegal, but isn't right now
--
-> " \q illegal escape "
+> "\x5k"
 ! !!!! Line: 1
-! !!!! SyntaxError: Illegal escape character
+! !!!! SyntaxError: Illegal escape sequence
+-
+> "\u53Ak"
+! !!!! Line: 1
+! !!!! SyntaxError: Illegal escape sequence
 -
 > f(
 ! !!!! Line: 1
