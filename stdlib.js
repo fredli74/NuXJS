@@ -337,6 +337,7 @@
 		String: String,
 		isFinite: $unconstructable(function isFinite(v) { return $isFinite(+v) }),
 		isNaN: $unconstructable(function isNaN(v) { return $isNaN(+v) }),
+		parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat('' + string); }),
 		parseInt: $unconstructable(function parseInt(string, radix) {
 			string = '' + string;
 			var pic = $PARSE_INT_CHARS, ch, i = -1;

@@ -248,7 +248,7 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 static const Char* eatStringWhite(const Char* p, const Char* e) {
 	while (p < e) {
 		switch (*p) {
-			case '\t': case '\n': case '\v': case '\f': case '\r': case ' ': break; // FIX : support U+00A0	NO-BREAK SPACE	<NBSP>, U+2028	LINE SEPARATOR	<LS>, U+2029	PARAGRAPH SEPARATOR, U+FEFF	ZERO WIDTH NO-BREAK SPACE	 ?
+			case ' ': case '\f': case '\n': case '\r': case '\t': case '\v': case 0xA0: case 0x2028: case 0x2029: break;
 			default: return p;
 		}
 		++p;
@@ -3751,6 +3751,20 @@ struct Support {
 	static Value pow(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
+
+	static Value parseFloat(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Value result = Value::NOT_A_NUMBER;
+		if (argc >= 1) {
+			const String* s = argv[0].toString(engine.getHeap());
+			const Char* e = s->end();
+			const Char* b = eatStringWhite(s->begin(), e);
+			double d = 0.0;
+			if (parseDouble(b, e, d) != b) {
+				result = Value(d);
+			}
+		}
+		return result;
+	}
 };
 
 static struct {
@@ -3772,7 +3786,7 @@ static struct {
 	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
 	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
-	{ String("pow"), Support::pow }
+	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }
 };
 
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
