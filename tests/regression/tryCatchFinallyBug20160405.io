@@ -2,3 +2,6 @@
 > while (true) try { throw "oj" } catch (x) { break; } finally { try { print(x) } catch (e) { print(e.name); } }
 < ReferenceError
 -
+> (function() { while (true) try { throw "oj" } catch (x) { return; } finally { try { print(x) } catch (e) { print(e.name); } } })()
+< ReferenceError
+-
