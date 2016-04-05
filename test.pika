@@ -72,14 +72,23 @@ testFile => {
 		sectionOutput = '';
 	};
 
+	warnAboutExpectedErrors = false;
+
 	tokenize(ioSource, >{
 		directive = $0{:1};
 		command = $0{2:};
 		if (directive === '>') {
 			if (sectionOutput !== '') addSection();
 			sectionInput #= command # LF;
-		} else if (directive === '<' || (directive === '!' && errorsToo)) {
+		} else if (directive === '<') {
 			sectionOutput #= command # LF;
+		} else if (directive === '!') {
+			if (errorsToo) {
+				sectionOutput #= command # LF;
+			} else {
+				warnAboutExpectedErrors = true;
+				skip = true;
+			}
 		} else if (directive === '-') {
 			addSection();
 		} else if (directive !== '/') {
@@ -88,11 +97,15 @@ testFile => {
 	});
 	if (sectionOutput !== '') addSection();
 
+	if (warnAboutExpectedErrors) {
+		print("Warning! Expect one or more tests to fail. Run with -e to test these too.")
+	};
+
 	allInput = '';
 	allOutput = '';
 	for (i = 0; i < sections.n; ++i) {
 		sections[i].header = sectionHeader = '----<<<< ' # i # ' >>>>----';
-		allInput #= 'print("' # sectionHeader # '");' # LF # sections[i].input # LF;
+		allInput #= 'print("' # sectionHeader # '");' # LF # LF # sections[i].input # LF;
 		allOutput #= sectionHeader # LF # sections[i].output;
 	};
 

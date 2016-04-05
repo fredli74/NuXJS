@@ -2285,14 +2285,31 @@ void Compiler::white() {
 							break;
 						} else if (p + 1 != e && p[1] == '*') {
 							static const Char END_CHARS[] = { '*', '/' };
-							p = std::search(p += 2, e, END_CHARS, END_CHARS + 2);
-							if (eof()) error(SYNTAX_ERROR, "Missing */");
+							p += 2;
+							p = std::search(p, e, END_CHARS, END_CHARS + 2);
+							if (eof()) {
+								error(SYNTAX_ERROR, "Missing */");
+							}
 							p += 2;
 							break;
 						}
 			default:	return;
 		}
 	}
+}
+
+static bool lfInRange(const Char* b, const Char* e) {
+	return (std::find_first_of(b, e, LINE_TERMINATORS, LINE_TERMINATORS + 4) != e);
+}
+
+bool Compiler::whiteNoLF() {
+	const Char* b = p;
+	white();
+	if (lfInRange(b, p)) {
+		p = b;
+		return false;
+	}
+	return true;
 }
 
 bool Compiler::token(const char* t, bool eatLeadingWhite) {
@@ -2568,6 +2585,10 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 // FIX : split into pre and post operators anyhow, all pre discards xr now
 bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
 	const Char* b = p;
+    white();
+	if (eof()) {
+		return false;
+	}
 	// FIX : use a quick hash solution
 	int i = 0;
 	while (i < opCount && !token(opList[i].token, false)) {
@@ -2616,6 +2637,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 
 		case POST_INC_DEC: {
+			if (lfInRange(b, p)) {
+				p = b;
+				return false;
+			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				emit(Processor::REPUSH_2_OP);
 			}
@@ -2764,11 +2789,10 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
-	white();
-	if (eof()) {
-		return false;
-	}
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
+		if (eof()) {
+			return false;
+		}
 		const Char* b = p;
 		token();
 		int i = findLiteralToken(p - b, &*b);
@@ -2841,7 +2865,6 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		}
     }
 	const Char* b = p;
-    white();
     while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
 		b = p;
 		white();
@@ -2997,10 +3020,10 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	completeBreaks(emptyLabelScope);
 }
 
-void Compiler::semicolon() {
+void Compiler::semicolon(bool acceptLF) {
 	const Char* b = p;
 	white();
-	if (!eof() && *p != '}' && !token(";", false) && std::find_first_of(b, p, LINE_TERMINATORS, LINE_TERMINATORS + 4) == p) {
+	if (!eof() && *p != '}' && !token(";", false) && (!acceptLF || !lfInRange(b, p))) {
 		p = b;
 		error(SYNTAX_ERROR, "Syntax error");
 	}
@@ -3070,16 +3093,15 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			semicolon();
 		}
 	} else {
-		white();
 		switch (static_cast<Statement>(statementTokenIndex)) {
 			case BREAK_STATEMENT:
 			case CONTINUE_STATEMENT: {
 				flushXR(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
 				Scope* s = currentScope;
-				const Char* b = identifier(false, false);
+				const Char* b = (whiteNoLF() ? identifier(false, false) : p);
+				String label = String(b, p);
 				// FIX : too complicated!! bone out...
-				String label(b, p);
 				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
 						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
@@ -3103,12 +3125,14 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 						
 			case VAR_STATEMENT: {
+				white();
 				varDeclarations();
 				semicolon();
 				break;
 			}
 			
 			case IF_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				expectToken("(", false);
 				rvalueExpression();
@@ -3128,6 +3152,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 
 			case WHILE_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, currentScope);
@@ -3146,6 +3171,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 
 			case DO_WHILE_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
 				Scope emptyLabelScope(EMPTY_STRING, currentScope);
@@ -3164,6 +3190,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 			
 			case FOR_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				Scope emptyLabelScope(EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
@@ -3209,7 +3236,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					error(SYNTAX_ERROR, "Illegal return");
 				}
 				ExpressionResult returnXR;
-				optionalExpression(returnXR, LOWEST_PREC);
+				if (whiteNoLF()) {
+					optionalExpression(returnXR, LOWEST_PREC);
+				}
 				Scope* s = currentScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
@@ -3237,6 +3266,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 			
 			case TRY_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				Scope tryScope(Scope::TRY_TYPE, currentScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
@@ -3326,6 +3356,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 			
 			case THROW_STATEMENT: {
+				if (!whiteNoLF()) {
+					error(SYNTAX_ERROR, "Illegal newline after throw");
+				}
 				rvalueExpression();
 				emit(Processor::THROW_OP);
 				semicolon();
@@ -3333,6 +3366,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			}
 			
 			case SWITCH_STATEMENT: {
+				white();
 				flushXR(evalXR);
 				expectToken("(", true);
 				ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
@@ -3390,9 +3424,17 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				break;
 			}
 			
-			case FUNCTION_STATEMENT: functionStatement(); break;
+			case FUNCTION_STATEMENT: {
+				white();
+				functionStatement();
+				break;
+			}
 			
-			case WITH_STATEMENT: withStatement(currentScope, evalXR); break;
+			case WITH_STATEMENT: {
+				white();
+				withStatement(currentScope, evalXR);
+				break;
+			}
 			
 			default: assert(0);
 		}

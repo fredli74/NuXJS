@@ -5125,5 +5125,14 @@
 	},
 	"language/statements/function/13.2-26-s": {
 		"category": "not_es3"
+	},
+	"language/statements/function/13.2-5-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-6-s": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-9-s": {
+		"category": "not_es3"
 	}
 }

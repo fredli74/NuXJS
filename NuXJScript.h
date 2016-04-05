@@ -1331,9 +1331,10 @@ class Compiler : public GCItem {
 				void statementList(Scope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				bool eof() const { return p == e; }
-				void semicolon();
+				void semicolon(bool acceptLF = true);
 				void expectToken(const char* t, bool eatLeadingWhite);
 				void white();
+				bool whiteNoLF();
 				void token();
 				Char* unescape(Char* buffer, const Char* e);
 				bool isLeadingIdentifierChar(Char c);
