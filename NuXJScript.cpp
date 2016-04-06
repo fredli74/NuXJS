@@ -3792,15 +3792,30 @@ struct Support {
 	}
 
 	static Value charCodeAt(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Value result = Value::NOT_A_NUMBER;
 		if (argc >= 2) {
 			const String* s = argv[0].toString(engine.getHeap());
 			const double d = nanToZero(argv[1].toDouble());
 			if (-1.0 < d && d < s->size()) {
-				result = Value((*s)[static_cast<UInt32>(d)]);
+				return Value((*s)[static_cast<UInt32>(d)]);
 			}
 		}
-		return result;
+		return Value::NOT_A_NUMBER;;
+	}
+
+	static Value substring(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Value result(&EMPTY_STRING);
+		if (argc >= 3) {
+			const String* s = argv[0].toString(engine.getHeap());
+			const double l = s->size();
+			const double from = std::max(nanToZero(argv[1].toDouble()), 0.0);
+			const double to = std::min(nanToZero(argv[2].toDouble()), l);
+			if (from < to && from < l && to >= 1.0) {
+				const Char* b = s->begin();
+				return Value(from < 1.0 && to >= l ? s
+						: engine.getHeap().manage(new String(b + static_cast<UInt32>(from), b + static_cast<UInt32>(to))));
+			}
+		}
+		return Value(&EMPTY_STRING);
 	}
 };
 
@@ -3823,7 +3838,8 @@ static struct {
 	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
 	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
-	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }, { String("charCodeAt"), Support::charCodeAt }
+	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }, { String("charCodeAt"), Support::charCodeAt },
+	{ String("substring"), Support::substring }
 };
 
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
@@ -3922,7 +3938,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	// FIX : all these gcHeap.manage(new String()) ... could be a utility function!
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveNumber"))))));
 	}
-		
+	
 	toStringFunction = reinterpret_cast<ScriptFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveString").asObject());
 	if (toStringFunction == 0) {
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveString"))))));

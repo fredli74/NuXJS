@@ -249,10 +249,26 @@
 		charCodeAt: $unconstructable(function charCodeAt(pos) {
 			return $support.charCodeAt($toString(this), +pos);
 		}),
-		concat: $unconstructable(function charCodeAt(string1) {
+		concat: $unconstructable(function concat(string1) {
 			var args, n = (args = arguments).length, s = $toString(this);
 			for (var i = 0; i < n; ++i) s += $toString(args[i]);
 			return s;
+		}),
+		substr: $unconstructable(function substring(start, length) {
+			var s = $toString(this);
+			if ((start = +start) <= -1.0) start = s.length + start;
+			return $support.substring(s, start, (length === void 0 ? $Infinity : start + +length));
+		}),
+		substring: $unconstructable(function substring(start, end) {
+			start = +start;
+			if (end === void 0) {
+				end = $Infinity;
+			} else if ((end = +end) < start) {
+				var swap = start;
+				start = end;
+				end = swap;
+			}
+			return $support.substring($toString(this), start, end);
 		}),
 		valueOf: $unconstructable(function valueOf() {
 			$checkClass(this, 'String', 'valueOf');

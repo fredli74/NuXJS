@@ -1101,7 +1101,7 @@
 		"category": ""
 	},
 	"language/statements/for-in/S12.6.4_A2": {
-		"category": ""
+		"category": "not_es3"
 	},
 	"language/statements/for-of/head-lhs-non-asnmt-trgt": {
 		"category": "not_es3"
@@ -5190,6 +5190,9 @@
 		"category": "not_es3"
 	},
 	"language/statements/variable/fn-name-class": {
+		"category": "not_es3"
+	},
+	"language/statements/variable/12.2.1-22-s": {
 		"category": "not_es3"
 	}
 }
