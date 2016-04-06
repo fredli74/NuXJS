@@ -254,6 +254,13 @@
 			for (var i = 0; i < n; ++i) s += $toString(args[i]);
 			return s;
 		}),
+		slice: $unconstructable(function substring(start, end) {
+			var s = $toString(this);
+			if ((start = +start) <= -1.0) start = s.length + start;
+			if (end === void 0) end = $Infinity;
+			else if ((end = +end) <= -1.0) end = s.length + end;
+			return $support.substring(s, start, end);
+		}),
 		substr: $unconstructable(function substring(start, length) {
 			var s = $toString(this);
 			if ((start = +start) <= -1.0) start = s.length + start;
@@ -261,9 +268,8 @@
 		}),
 		substring: $unconstructable(function substring(start, end) {
 			start = +start;
-			if (end === void 0) {
-				end = $Infinity;
-			} else if ((end = +end) < start) {
+			if (end === void 0) end = $Infinity;
+			else if ((end = +end) < start) {
 				var swap = start;
 				start = end;
 				end = swap;
