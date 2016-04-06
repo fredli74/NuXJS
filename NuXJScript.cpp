@@ -2373,11 +2373,12 @@ static UInt32 unescapedMaxLength(const Char* p, const Char* e) {
 	return l;
 }
 
+static const Char ESCAPE_CHARS[] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
+static const Char ESCAPE_CODES[] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
+const int ESCAPE_CODE_COUNT = sizeof (ESCAPE_CHARS) / sizeof (*ESCAPE_CHARS);
+
 Char* Compiler::unescape(Char* buffer, const Char* e) {	
 	assert(p <= e && (*p == '"' || *p == '\''));
-	static const Char ESCAPE_CHARS[] = { '\\', '\"', '\'', 'b',  'f',  'n',  'r',  't',  'v', '0' };
-	static const Char ESCAPE_CODES[] = { '\\', '\"', '\'', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
-	const int ESCAPE_CODE_COUNT = sizeof (ESCAPE_CHARS) / sizeof (*ESCAPE_CHARS);
 	Char endChar = *p;
 	++p;
 	const Char* b = p;

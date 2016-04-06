@@ -237,6 +237,10 @@
 	});
 	$defineProperties(String.prototype, { dontEnum: true }, {
 		constructor: String,
+		charAt: $unconstructable(function charAt(pos) {
+			var s;
+			return (((pos = $toInteger(pos)) < 0 || pos >= (s = '' + this).length) ? '' : s[pos]);
+		}),
 		charCodeAt: $unconstructable(function charCodeAt(pos) {
 			return $support.charCodeAt('' + this, +pos);
 		}),
