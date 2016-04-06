@@ -28,9 +28,6 @@
 	var $floor = $support.floor;
 	var $NaN = $support.NaN;
 	var $Infinity = $support.Infinity;
-	function $toInteger(v) {
-		return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))));
-	};
 	var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz";
 	var $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	var $WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
@@ -47,8 +44,12 @@
 		return pic;
 	})();
 
+	function $toInteger(v) {
+		return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))));
+	}
+
 	function $isPrimitive(v) {
-		var v;
+		var v, t;
 		return (((t = typeof v) !== "object" || v === null) && t !== "function");
 	}
 
@@ -60,7 +61,7 @@
 			throw TypeError("Error converting object to primitive type");
 		}
 		return v;
-	}
+	};
 
 	$support.toPrimitiveString = function toPrimitiveString(o) {
 		var f, v;
@@ -69,6 +70,10 @@
 			throw TypeError("Error converting object to primitive type");
 		}
 		return v;
+	};
+
+	function $toString(o) {
+		return '' + ($isPrimitive(o) ? o : $support.toPrimitiveString(o));
 	}
 
 	function $defineProperties(object, attribs, props) {
@@ -103,8 +108,8 @@
 			var s;
 			return '[object ' + (((s = $support.getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
 		}),
-		hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, '' + name) }),
-		propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, '' + name) }),
+		hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
+		propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
 		isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
 			while (v = $support.getInternalProperty(v, 'prototype')) {
 				if (v == this) return true;
@@ -218,11 +223,11 @@
 	/* --- String --- */
 
 	var String = $support.specialConstructor(function String(v) {
-			return (arguments.length ? '' + v : '');
+			return (arguments.length ? $toString(v) : '');
 		}, function String(v) {
 			var s;
 			return $defineProperties(
-					$support.createWrapper('String', (s = arguments.length ? '' + v : ''), $support.prototypes.String)
+					$support.createWrapper('String', (s = (arguments.length ? $toString(v) : '')), $support.prototypes.String)
 					,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 		}
 	);
@@ -239,10 +244,15 @@
 		constructor: String,
 		charAt: $unconstructable(function charAt(pos) {
 			var s;
-			return (((pos = $toInteger(pos)) < 0 || pos >= (s = '' + this).length) ? '' : s[pos]);
+			return (((pos = $toInteger(pos)) < 0 || pos >= (s = $toString(this)).length) ? '' : s[pos]);
 		}),
 		charCodeAt: $unconstructable(function charCodeAt(pos) {
-			return $support.charCodeAt('' + this, +pos);
+			return $support.charCodeAt($toString(this), +pos);
+		}),
+		concat: $unconstructable(function charCodeAt(string1) {
+			var args, n = (args = arguments).length, s = $toString(this);
+			for (var i = 0; i < n; ++i) s += $toString(args[i]);
+			return s;
 		}),
 		valueOf: $unconstructable(function valueOf() {
 			$checkClass(this, 'String', 'valueOf');
@@ -283,11 +293,11 @@
 		}),
 		join: $unconstructable(function join(separator) {
 			var s, s2, l = this.length;
-			separator = (separator === void 0 ? ',' : '' + separator);
+			separator = (separator === void 0 ? ',' : $toString(separator));
 			if ((s = this[0]) == void 0) s = '';
 			for (var i = 1; i < l; ++i) {
 				s += separator;
-				if ((s2 = this[i]) != null) s += s2;
+				if ((s2 = this[i]) != null) s += $toString(s2);
 			}
 			return s;
 		}),
@@ -344,9 +354,9 @@
 		String: String,
 		isFinite: $unconstructable(function isFinite(v) { return $isFinite(+v) }),
 		isNaN: $unconstructable(function isNaN(v) { return $isNaN(+v) }),
-		parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat('' + string); }),
+		parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat($toString(string)); }),
 		parseInt: $unconstructable(function parseInt(string, radix) {
-			string = '' + string;
+			string = $toString(string);
 			var pic = $PARSE_INT_CHARS, ch, i = -1;
 			while (pic[string[++i]] === null) ;
 			var sign = 1;
@@ -417,7 +427,7 @@
 		return function(message) {
 			var e;
 			$support.defineProperty(e = $support.createWrapper('Error', name, prototype), 'message'
-					, (message !== void 0 ? '' + message : ''), false, true, false);
+					, (message !== void 0 ? $toString(message) : ''), false, true, false);
 			return e
 		}
 	};
@@ -439,7 +449,7 @@
 		}
 
 		$defineProperties(Error.prototype, { dontEnum: true }, {
-			message: "",
+			message: '',
 			toString: $unconstructable(function toString() {
 				return (this.name === void 0 ? 'Error' : this.name) + (this.message ? (': ' + this.message) : '');
 			})
@@ -461,7 +471,7 @@
 
 	$defineProperties(Object, { dontEnum: true }, {
 		defineProperty: $unconstructable(function defineProperty(o, p, d) {
-			$support.defineProperty(o, '' + p, d.value, !d.writable, !d.enumerable, !d.configurable);
+			$support.defineProperty(o, $toString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
 		}),
 		getPrototypeOf: $unconstructable(function getPrototypeOf(o) {
 			return $support.getInternalProperty(o, 'prototype');
