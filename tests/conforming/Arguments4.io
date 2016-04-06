@@ -26,17 +26,6 @@
 < b
 < undefined
 -
-> print('');
-> f=function() { for (var i in arguments) print(i) }; f('1', '2', '3', '4');
-> print('');
-<
-// ES >3 
-// 0
-// 1
-// 2
-// 3
-< 
--
 > f=function(a,b,c,d,e) {
 >  print(arguments[0]);
 >  a = 111;
@@ -116,9 +105,4 @@
 < number
 < number
 < function
--
-> (function() { print(arguments); })()
-// ES5.1: 10.6: In Edition 5 the value of the [[Class]] internal property of an arguments object is "Arguments". In Edition 3, it was "Object". This is observable if toString is called as a method of an arguments object.
-// < [object Arguments]
-< [object Object]
 -
