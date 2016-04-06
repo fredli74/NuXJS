@@ -256,20 +256,20 @@
 		}),
 		slice: $unconstructable(function substring(start, end) {
 			var s = $toString(this);
-			if ((start = +start) <= -1.0) start = s.length + start;
+			if ((start = $toInteger(start)) < 0) start = s.length + start;
 			if (end === void 0) end = $Infinity;
-			else if ((end = +end) <= -1.0) end = s.length + end;
+			else if ((end = $toInteger(end)) < 0) end = s.length + end;
 			return $support.substring(s, start, end);
 		}),
 		substr: $unconstructable(function substring(start, length) {
 			var s = $toString(this);
-			if ((start = +start) <= -1.0) start = s.length + start;
-			return $support.substring(s, start, (length === void 0 ? $Infinity : start + +length));
+			if ((start = $toInteger(start)) < 0) start = s.length + start;
+			return $support.substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
 		}),
 		substring: $unconstructable(function substring(start, end) {
-			start = +start;
+			start = $toInteger(start);
 			if (end === void 0) end = $Infinity;
-			else if ((end = +end) < start) {
+			else if ((end = $toInteger(end)) < start) {
 				var swap = start;
 				start = end;
 				end = swap;

@@ -1,7 +1,7 @@
 > var testFuncs = [ 'substring', 'substr', 'slice' ];
 > var testStrings = [ '', 'abcdefghijklmnopqrstuvwxyz', { toString: function() { return "qwertyuiop" }, valueOf: function() { return 'object' } } ];
 > var testArgs = [ [ ],  [ 0 ],  [ 1 ],  [ 2 ], [ 5 ], [ 100 ], [ 0.3 ], [ Infinity ], [ NaN ], [ -1 ], [ -7 ], [ -0.5 ], [ -Infinity ],
-> 		[ 0, 0 ], [ 0, 1 ], [ 1, 2 ], [ 2, 5 ], [ -1, 3 ], [ -5, 2 ], [ 5.3, 7.6 ], [ 7, 2 ], [ -5, -1 ], [ 3, Infinity ], [ 3, -Infinity ],
+> 		[ 0, 0 ], [ 0, 1 ], [ 1, 2 ], [ 2, 5 ], [ -1, 3 ], [ -5, 2 ], [ 5.3, 7.6 ], [ 7, 2 ], [ -5, -1 ], [ 3, NaN ], [ 3, Infinity ], [ 3, -Infinity ],
 >       [ undefined, 5 ], [ "5", "10" ], [ { toString: function() { return "obj1" }, valueOf: function() { return "1.3" } }, { toString: function() { return "obj2" }, valueOf: function() { return "9.3" } } ] ];
 > for (var funcIndex = 0; funcIndex < testFuncs.length; ++funcIndex) {
 >     var func = String.prototype[testFuncs[funcIndex]];
@@ -35,6 +35,7 @@
 < substring(, 5.3,7.6): 
 < substring(, 7,2): 
 < substring(, -5,-1): 
+< substring(, 3,NaN): 
 < substring(, 3,Infinity): 
 < substring(, 3,-Infinity): 
 < substring(, ,5): 
@@ -62,6 +63,7 @@
 < substring(abcdefghijklmnopqrstuvwxyz, 5.3,7.6): fg
 < substring(abcdefghijklmnopqrstuvwxyz, 7,2): cdefg
 < substring(abcdefghijklmnopqrstuvwxyz, -5,-1): 
+< substring(abcdefghijklmnopqrstuvwxyz, 3,NaN): abc
 < substring(abcdefghijklmnopqrstuvwxyz, 3,Infinity): defghijklmnopqrstuvwxyz
 < substring(abcdefghijklmnopqrstuvwxyz, 3,-Infinity): abc
 < substring(abcdefghijklmnopqrstuvwxyz, ,5): abcde
@@ -89,6 +91,7 @@
 < substring(object, 5.3,7.6): yu
 < substring(object, 7,2): ertyu
 < substring(object, -5,-1): 
+< substring(object, 3,NaN): qwe
 < substring(object, 3,Infinity): rtyuiop
 < substring(object, 3,-Infinity): qwe
 < substring(object, ,5): qwert
@@ -116,6 +119,7 @@
 < substr(, 5.3,7.6): 
 < substr(, 7,2): 
 < substr(, -5,-1): 
+< substr(, 3,NaN): 
 < substr(, 3,Infinity): 
 < substr(, 3,-Infinity): 
 < substr(, ,5): 
@@ -143,9 +147,10 @@
 < substr(abcdefghijklmnopqrstuvwxyz, 5.3,7.6): fghijkl
 < substr(abcdefghijklmnopqrstuvwxyz, 7,2): hi
 < substr(abcdefghijklmnopqrstuvwxyz, -5,-1): 
+< substr(abcdefghijklmnopqrstuvwxyz, 3,NaN): 
 < substr(abcdefghijklmnopqrstuvwxyz, 3,Infinity): defghijklmnopqrstuvwxyz
 < substr(abcdefghijklmnopqrstuvwxyz, 3,-Infinity): 
-< substr(abcdefghijklmnopqrstuvwxyz, ,5): 
+< substr(abcdefghijklmnopqrstuvwxyz, ,5): abcde
 < substr(abcdefghijklmnopqrstuvwxyz, 5,10): fghijklmno
 < substr(abcdefghijklmnopqrstuvwxyz, obj1,obj2): bcdefghij
 < substr(object, ): qwertyuiop
@@ -170,9 +175,10 @@
 < substr(object, 5.3,7.6): yuiop
 < substr(object, 7,2): io
 < substr(object, -5,-1): 
+< substr(object, 3,NaN): 
 < substr(object, 3,Infinity): rtyuiop
 < substr(object, 3,-Infinity): 
-< substr(object, ,5): 
+< substr(object, ,5): qwert
 < substr(object, 5,10): yuiop
 < substr(object, obj1,obj2): wertyuiop
 < slice(, ): 
@@ -197,6 +203,7 @@
 < slice(, 5.3,7.6): 
 < slice(, 7,2): 
 < slice(, -5,-1): 
+< slice(, 3,NaN): 
 < slice(, 3,Infinity): 
 < slice(, 3,-Infinity): 
 < slice(, ,5): 
@@ -224,6 +231,7 @@
 < slice(abcdefghijklmnopqrstuvwxyz, 5.3,7.6): fg
 < slice(abcdefghijklmnopqrstuvwxyz, 7,2): 
 < slice(abcdefghijklmnopqrstuvwxyz, -5,-1): vwxy
+< slice(abcdefghijklmnopqrstuvwxyz, 3,NaN): 
 < slice(abcdefghijklmnopqrstuvwxyz, 3,Infinity): defghijklmnopqrstuvwxyz
 < slice(abcdefghijklmnopqrstuvwxyz, 3,-Infinity): 
 < slice(abcdefghijklmnopqrstuvwxyz, ,5): abcde
@@ -251,6 +259,7 @@
 < slice(object, 5.3,7.6): yu
 < slice(object, 7,2): 
 < slice(object, -5,-1): yuio
+< slice(object, 3,NaN): 
 < slice(object, 3,Infinity): rtyuiop
 < slice(object, 3,-Infinity): 
 < slice(object, ,5): qwert
