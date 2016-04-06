@@ -314,11 +314,10 @@
 			return a;
 		}),
 		join: $unconstructable(function join(separator) {
-			var s, s2, l = this.length;
+			var s = '', s2, l = this.length;
 			separator = (separator === void 0 ? ',' : $toString(separator));
-			if ((s = this[0]) == void 0) s = '';
-			for (var i = 1; i < l; ++i) {
-				s += separator;
+			for (var i = 0; i < l; ++i) {
+				if (i > 0) s += separator;
 				if ((s2 = this[i]) != null) s += $toString(s2);
 			}
 			return s;
