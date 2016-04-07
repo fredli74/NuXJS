@@ -360,6 +360,7 @@ double Value::toDouble() const {
 	}
 }
 
+// TODO : toInt32 and toUInt32
 Int32 Value::toInt() const { // FIX : could be faster without toDouble I thinkus
 	double v = toDouble();
 	int i = static_cast<Int32>(v);
@@ -1434,12 +1435,15 @@ void ScriptFrame::updatedCode() {
 
 Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
-	Int32 index;
-	const String* name = key.getString();
-	if (codeDef->lookupNameIndex(name, index)) {
-		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-		*v = indexedPointer[index];
-		return DONT_DELETE_FLAG | EXISTS_FLAG;
+	const String* name = &EMPTY_STRING;
+	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+		name = key.getString();
+		Int32 index;
+		if (codeDef->lookupNameIndex(name, index)) {
+			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+			*v = indexedPointer[index];
+			return DONT_DELETE_FLAG | EXISTS_FLAG;
+		}
 	}
 	if (parentFrame == 0) {
 		return getCompleteObject(engine)->getOwnProperty(engine, key, v);
@@ -1459,12 +1463,15 @@ Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) co
 
 bool ScriptFrame::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
-	Int32 index;
-	const String* name = key.getString();
-	if (codeDef->lookupNameIndex(name, index)) {
-		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-		indexedPointer[index] = v;
-		return true;
+	const String* name = &EMPTY_STRING;
+	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+		name = key.getString();
+		Int32 index;
+		if (codeDef->lookupNameIndex(name, index)) {
+			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+			indexedPointer[index] = v;
+			return true;
+		}
 	}
 	if (parentFrame == 0) {
 		return getCompleteObject(engine)->setOwnProperty(engine, key, v, flags);
@@ -1486,10 +1493,13 @@ bool ScriptFrame::setOwnProperty(Engine& engine, const Value& key, const Value& 
 
 bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	const CodeDefinition* codeDef = function->getDefinition();
-	Int32 index;
-	const String* name = key.getString();
-	if (codeDef->lookupNameIndex(name, index)) {
-		return false;
+	const String* name = &EMPTY_STRING;
+	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+		name = key.getString();
+		Int32 index;
+		if (codeDef->lookupNameIndex(name, index)) {
+			return false;
+		}
 	}
 	if (parentFrame == 0) {
 		return getCompleteObject(engine)->deleteProperty(engine, key);
@@ -3739,10 +3749,10 @@ struct Support {
 			if (arrayObject != 0) {
 				Value v;
 				if (arrayObject->getPropertyDeep(engine, Value(&LENGTH_STRING), &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
-					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
-					Int32 length = std::max(v.toInt() - offset, 0);
+					UInt32 offset = (argc > 3 ? argv[3].toInt() : 0U);
+					UInt32 length = std::max(static_cast<UInt32>(v.toInt()) - offset, 0U);
 					args.resize(length);
-					for (Int32 i = 0; i < length; ++i) {
+					for (UInt32 i = 0; i < length; ++i) {
 						args[i] = Value::UNDEFINED;
 						arrayObject->getPropertyDeep(engine, Value(i + offset), &args[i]);
 					}

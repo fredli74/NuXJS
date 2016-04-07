@@ -108,6 +108,7 @@
 			var s;
 			return '[object ' + (((s = $support.getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
 		}),
+		toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 		hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
 		propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
 		isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
@@ -116,9 +117,6 @@
 			}
 			return false;
 		})
-	});
-	$defineProperties(Object.prototype, { dontEnum: true }, {
-		toLocaleString: Object.prototype.toString
 	});
 
 	/* --- Function --- */
@@ -202,7 +200,7 @@
 			var r;
 			if (radix === void 0 || !$isFinite(n)) {
 				return '' + n;
-			} else if ((r = $toInteger(radix)) != radix || r < 2 || r > 36) {
+			} else if ((r = $toInteger(radix)) < 2 || r > 36) {
 				throw RangeError("illegal radix for toString()");
 			} else {
 				// TODO : fraction?
@@ -356,6 +354,42 @@
 				--this.length;
 			}
 			return elementZero;
+		}),
+		sort: $unconstructable(function sort(comparefn) {
+			var self = this;
+			function swap(arr, aIndex, bIndex) {
+				var a = arr[aIndex];
+				if (bIndex in arr) arr[aIndex] = arr[bIndex]; else delete arr[aIndex];
+				if (aIndex in arr) arr[bIndex] = a; else delete arr[bIndex];
+			};
+			function compare(arr, aIndex, bIndex) {
+				var a = arr[aIndex];
+				var b = arr[bIndex];
+				return comparefn(a, b);
+			};
+			function qsort(from, to) {
+				var swp = swap, cmp = compare, arr = self, mid;
+				for (--to; from + 1 < to; from = low) {
+					for (var low = from, high = to, mid = $floor((low + high) / 2); low < high; ) {
+						while (low <= high && cmp(arr, low, mid) <= 0 && cmp(arr, high, mid) >= 0) {
+							++low;
+							--high;
+						}
+						while (low <= high && cmp(arr, high, mid) > 0) --high;
+						while (low <= high && cmp(arr, low, mid) < 0) ++low;
+						if (mid === low || mid === high) mid ^= high ^ low;
+						if (low < high) swp(arr, low, high);
+					}
+					qsort(from, low)
+				}
+				if (from < to && cmp(arr, from, to) > 0) swp(arr, from, to)
+			};
+			if (comparefn === void 0) {
+				comparefn = function(a, b) {
+					return ((a = $toString(a)) < (b = $toString(b)) ? -1 : (a > b ? 1 : 0));
+				}
+			};
+			qsort(0, this.length >>> 0);
 		}),
 		toString: $unconstructable(function toString() {
 			$checkClass(this, 'Array', 'toString');
