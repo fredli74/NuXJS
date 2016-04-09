@@ -3749,8 +3749,8 @@ struct Support {
 			if (arrayObject != 0) {
 				Value v;
 				if (arrayObject->getPropertyDeep(engine, Value(&LENGTH_STRING), &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
-					UInt32 offset = (argc > 3 ? argv[3].toInt() : 0U);
-					UInt32 length = std::max(static_cast<UInt32>(v.toInt()) - offset, 0U);
+					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
+					UInt32 length = static_cast<UInt32>(std::max(v.toInt() - offset, 0));
 					args.resize(length);
 					for (UInt32 i = 0; i < length; ++i) {
 						args[i] = Value::UNDEFINED;

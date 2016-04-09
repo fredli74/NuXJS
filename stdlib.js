@@ -338,9 +338,9 @@
 			--len;
 			for (var leftIndex = 0; leftIndex < mid; ++leftIndex) {
 				var rightIndex = len - leftIndex;
-				var right = this[rightIndex];
+				var gotRight = (rightIndex in this), rightValue = this[rightIndex];
 				if (leftIndex in this) this[rightIndex] = this[leftIndex]; else delete this[rightIndex];
-				if (rightIndex in this) this[leftIndex] = right; else delete this[leftIndex];
+				if (gotRight) this[leftIndex] = rightValue; else delete this[leftIndex];
 			}
 			return this;
 		}),
@@ -358,19 +358,36 @@
 		sort: $unconstructable(function sort(comparefn) {
 			var self = this;
 			function swap(arr, aIndex, bIndex) {
-				var a = arr[aIndex];
+				var gotA = (aIndex in arr), aValue = arr[aIndex];
 				if (bIndex in arr) arr[aIndex] = arr[bIndex]; else delete arr[aIndex];
-				if (aIndex in arr) arr[bIndex] = a; else delete arr[bIndex];
+				if (gotA) arr[bIndex] = aValue; else delete arr[bIndex];
 			};
 			function compare(arr, aIndex, bIndex) {
-				var a = arr[aIndex];
-				var b = arr[bIndex];
-				return comparefn(a, b);
+				if (!(aIndex in arr) && !(bIndex in arr)) {
+					return 0;
+				} else if (!(aIndex in arr)) {
+					return 1;
+				} else if (!(bIndex in arr)) {
+					return -1;
+				} else {
+					var a = arr[aIndex];
+					var b = arr[bIndex];
+					if (a === void 0 && b === void 0) {
+						return 0;
+					} else if (a === void 0) {
+						return 1;
+					} else if (b === void 0) {
+						return -1;
+					} else {
+						return comparefn(a, b);
+					}
+				}
 			};
 			function qsort(from, to) {
 				var swp = swap, cmp = compare, arr = self, mid;
 				for (--to; from + 1 < to; from = low) {
-					for (var low = from, high = to, mid = $floor((low + high) / 2); low < high; ) {
+					var low = from, high = to, mid = $floor((low + high) / 2);
+					while (low < high) {
 						while (low <= high && cmp(arr, low, mid) <= 0 && cmp(arr, high, mid) >= 0) {
 							++low;
 							--high;

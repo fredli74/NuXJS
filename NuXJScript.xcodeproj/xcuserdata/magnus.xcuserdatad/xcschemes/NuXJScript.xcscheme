@@ -68,7 +68,7 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "temp.js"
+            argument = "temp/stdlib1.js"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
