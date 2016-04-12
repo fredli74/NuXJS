@@ -61,6 +61,7 @@
 //		Split ScriptFrame -> GlobalFrame & ScriptFrame
 //		make variable lookup non-recusrive loop outside the objects, abuse to use get/setOwnProperty for this
 //		setting array length needs to do a to_number, how to do this asynchronously?
+//		(new String("abcd"))[2] should work again, cause it really is no difference from "abcd"[2] according to Ecma spec... this would mean a violation with strict ES 3, since this came in ES 5 first... but really, it is *so* useful (and common I guess).
 //
 //	Compiler
 //
@@ -740,7 +741,6 @@ class WrapperObject : public ScriptObject {
 				}
 };
 
-#if (!STRICTLY_ES3)
 // FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
@@ -760,7 +760,6 @@ class StringWrapper : public ScriptObject {
 					super::gcMark(heap);
 				}
 };
-#endif
 
 class Array : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;

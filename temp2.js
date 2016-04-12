@@ -1,0 +1,24 @@
+var regexp = /^(abc|abcdef)((def|(x|u(zonk)*e)*)(x|y)|ghi)$/;
+function tezt(s) { print(s + ': ' + regexp.test(s)); }
+tezt('abc');
+tezt('abcdef');
+tezt('abcdefghi');
+tezt('abcdefghij');
+tezt('abcdefx');
+tezt('abcdefy');
+tezt('abcx');
+tezt('abcxx');
+tezt('abcxxxxxxx');
+tezt('abcxy');
+tezt('abcxxxxxy');
+tezt('abcdefxxxxxy');
+tezt('abcdefuffx');
+tezt('abcdefzonkzonk');
+tezt('abcdefzonkzonky');
+tezt('abcdefzonkzon');
+tezt('abcdefzonkxzonk');
+tezt('abcdefzonkxzonkx');
+tezt('abcdefuzonkeuzonke');
+tezt('abcdefuzonkeuzonkey');
+tezt('abcdefuey');
+tezt('abcdefuexuzonkexx');

@@ -252,14 +252,14 @@
 			for (var i = 0; i < n; ++i) s += $toString(args[i]);
 			return s;
 		}),
-		slice: $unconstructable(function substring(start, end) {
+		slice: $unconstructable(function slice(start, end) {
 			var s = $toString(this);
 			if ((start = $toInteger(start)) < 0) start = s.length + start;
 			if (end === void 0) end = $Infinity;
 			else if ((end = $toInteger(end)) < 0) end = s.length + end;
 			return $support.substring(s, start, end);
 		}),
-		substr: $unconstructable(function substring(start, length) {
+		substr: $unconstructable(function substr(start, length) {
 			var s = $toString(this);
 			if ((start = $toInteger(start)) < 0) start = s.length + start;
 			return $support.substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));

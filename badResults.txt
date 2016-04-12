@@ -17,7 +17,9 @@
 !!!! Line: 1
 !!!! SyntaxError: Unterminated string
 !!!! Line: 1
-!!!! SyntaxError: Illegal escape character
+!!!! SyntaxError: Illegal escape sequence
+!!!! Line: 1
+!!!! SyntaxError: Illegal escape sequence
 !!!! Line: 1
 !!!! SyntaxError: Expected ')'
 !!!! Line: 1
