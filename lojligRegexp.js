@@ -278,32 +278,48 @@ function test(s, pos, captures) {
 
 
 /*
-      start((abc|def)*end)*end.*
-repeat       01     
-junction            1  0
-capture      02   3    1
+      start((abc|de)*end)*end
+repeat     01     
+junction              1    0
+capture    02       3    1
 
 startabcabcdefendabcendendabcend
 */
 
+function submatch(s, pos, str) { return (s.substr(pos, str.length) === str); }
 
-function test(s, pos) {
+function test(s, pos, captures) {
 	function match(pos, str) {
 		return submatch(s, pos, str);
 	}
 	function junction0(pos) {
-		return match(pos, 'end') && s[pos + 3] === void 0;
+		return match(pos, 'end');
 	}
 	function junction1(pos) {
-		return match(pos, 'end') && repeat0(pos + 1);
+		return match(pos, 'end') && repeat0(pos + 3);
 	}
 	function repeat1(pos) {
-		return match(pos, 'abc') && repeat1(pos + 3)
-				|| match(pos, 'def') && repeat1(pos + 3)
-				|| junction1(pos)
+        var prev2 = captures[2], prev3 = captures[3];
+		return match(pos, 'abc') && (captures[2] = pos, repeat1(pos + 3) || (captures[2] = prev2, false))
+				|| match(pos, 'de') && (captures[2] = pos, repeat1(pos + 2) || (captures[2] = prev2, false))
+				|| (captures[3] = pos, junction1(pos) || (captures[3] = prev3, false));
 	}
 	function repeat0(pos) {
-		return repeat1(pos) || junction0(pos)
+		return repeat1(pos) || junction0(pos);
 	}
-	return match(pos, 'start') && repeat0(pos + 5)
+	return match(pos, 'start') && repeat0(pos + 5);
 }
+
+function tezt(s) {
+    var captures = [ ];
+	console.log(s + " : " + RegExp("start((abc|de)*end)*end").test(s) + ", " + test(s, 0, captures));
+    console.log(captures);
+}
+
+tezt("end");
+tezt("start");
+tezt("startend");
+tezt("startdeend");
+tezt("startdeendend");
+tezt("startabcabcdeenddeendendabcend");
+
