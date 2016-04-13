@@ -526,3 +526,13 @@ single char: s[p] === char
 multiple chars: match(p, 'chars')
 any char (.): s[p] !== void 0
 end char ($): s[p] === void 0
+
+function compileRegExp(source) {
+	var p = 0, c, literalBegin = 0;
+	while ((c = source[p]) !== void 0) {
+		switch (c) {
+			default: ++c; break;
+			case '.': 
+	}
+}
+
