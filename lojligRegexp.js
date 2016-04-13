@@ -323,3 +323,206 @@ tezt("startdeend");
 tezt("startdeendend");
 tezt("startabcabcdeenddeendendabcend");
 
+
+
+
+
+
+
+/*
+      start((abc|de)*end)*end
+repeat     01     
+junction             1    0
+capture    02      3    1
+
+startabcabcdefendabcendendabcend
+*/
+
+function submatch(s, pos, str) { return (s.substr(pos, str.length) === str); }
+
+function test(s, pos, captures) {
+	function match(pos, str) {
+		return submatch(s, pos, str);
+	}
+	function repeat1(pos) {
+        var prev2 = captures[2];
+        captures[2] = pos;
+		var success = match(pos, 'abc') && repeat1(pos + 3)
+				|| match(pos, 'de') && repeat1(pos + 2);
+        if (!success) {
+          captures[2] = prev2;
+          var prev3 = captures[3];
+          captures[3] = pos;
+          success = match(pos, 'end') && repeat0(pos + 3);
+          if (!success) captures[3] = prev3;
+        }
+        return success;
+	}
+	function repeat0(pos) {
+        var prev0 = captures[0];
+        captures[0] = pos;
+		var success = repeat1(pos);
+        if (!success) {
+          captures[0] = prev0;
+          var prev1 = captures[1];
+          captures[1] = pos;
+          success = match(pos, 'end');
+          if (!success) captures[1] = prev1;
+        }
+        return success;
+	}
+	return match(pos, 'start') && repeat0(pos + 5);
+}
+
+function tezt(s) {
+    var captures = [ ];
+	console.log(s + " : " + RegExp("start((abc|de)*end)*end").test(s) + ", " + test(s, 0, captures));
+    console.log(captures);
+}
+
+tezt("end");
+tezt("start");
+tezt("startend");
+tezt("startdeend");
+tezt("startdeendend");
+tezt("startabcabcdeenddeendendabcend");
+
+
+
+/*
+      start((abc|de)*end)*end
+repeat     01     
+capture    02      3    1
+
+startabcabcdefendabcendendabcend
+*/
+
+function submatch(s, pos, str) { return (s.substr(pos, str.length) === str); }
+
+function test(s, pos, captures) {
+	function match(pos, str) {
+		return submatch(s, pos, str);
+	}
+/*	function repeat1(pos) {
+        var prev2 = captures[2];
+        captures[2] = pos;
+		var success = match(pos, 'abc') && repeat1(pos + 3)
+				|| match(pos, 'de') && repeat1(pos + 2);
+        if (!success) {
+          captures[2] = prev2;
+          var prev3 = captures[3];
+          captures[3] = pos;
+          success = match(pos, 'end') && repeat0(pos + 3);
+          if (!success) captures[3] = prev3;
+        }
+        return success;
+	}*/
+	function repeat1(pos) {
+        var rollback2 = captures[2];
+        captures[2] = pos;
+		if (match(pos, 'abc') && repeat1(pos + 3)
+				|| match(pos, 'de') && repeat1(pos + 2)) {
+          return true;
+        }
+        captures[2] = rollback2;
+        var rollback3 = captures[3];
+        captures[3] = pos;
+        if (match(pos, 'end') && repeat0(pos + 3)) return true;
+        captures[3] = rollback3;
+        return false;
+	}
+	
+	function repeat0(pos) {
+        var prev0 = captures[0];
+        captures[0] = pos;
+		var success = repeat1(pos);
+        if (!success) {
+          captures[0] = prev0;
+          var prev1 = captures[1];
+          captures[1] = pos;
+          success = match(pos, 'end');
+          if (!success) captures[1] = prev1;
+        }
+        return success;
+	}
+	return match(pos, 'start') && repeat0(pos + 5);
+}
+
+function tezt(s) {
+    var captures = [ ];
+    var m = s.match("start((abc|de)*end)*end");
+	console.log(s + " : " + (m !== null) + ", " + test(s, 0, captures));
+    if (m !== null) {
+      for (var i = 0; i < captures.length; i += 2) {
+        console.log(i / 2 + ': ' + m[1 + i / 2] + ', ' + (captures[i] === void 0 ? 'undefined' : s.substring(captures[i], captures[i + 1])));
+      }
+    }
+}
+
+tezt("end");
+tezt("start");
+tezt("startend");
+tezt("startdeend");
+tezt("startdeendend");
+tezt("startabcabcabcendend");
+tezt("startabcabcdeenddeendendabcend");
+tezt("startabcabcdeenddeendendabcendend");
+
+
+
+
+
+function test(s, pos, captures) {
+	function match(pos, str) {
+		return submatch(s, pos, str);
+	}
+	function repeat1(pos) {
+        var rollback;
+        return (rollback = captures[2], captures[2] = pos, match(pos, 'abc') && repeat1(pos + 3) || match(pos, 'de') && repeat1(pos + 2))
+        	|| (captures[2] = rollback, rollback = captures[3], captures[3] = pos, match(pos, 'end') && repeat0(pos + 3))
+        	|| (captures[3] = rollback, false);
+	}
+	function repeat0(pos) {
+        var rollback;
+        return (rollback = captures[0], captures[0] = pos, repeat1(pos))
+        	|| (captures[0] = rollback, rollback = captures[1], captures[1] = pos, match(pos, 'end'))
+        	|| (captures[1] = rollback, false);
+	}
+	return match(pos, 'start') && repeat0(pos + 5);
+}
+
+function tezt(s) {
+    var captures = [ ];
+    var m = s.match("start((abc|de)*end)*end");
+	console.log(s + " : " + (m !== null) + ", " + test(s, 0, captures));
+    if (m !== null) {
+      for (var i = 0; i < captures.length; i += 2) {
+        console.log(i / 2 + ': ' + m[1 + i / 2] + ', ' + (captures[i] === void 0 ? 'undefined' : s.substring(captures[i], captures[i + 1])));
+      }
+    }
+}
+
+tezt("end");
+tezt("start");
+tezt("startend");
+tezt("startdeend");
+tezt("startdeendend");
+tezt("startabcabcabcendend");
+tezt("startabcabcdeenddeendendabcend");
+tezt("startabcabcdeenddeendendabcendend");
+
+
+
+.*e
+
+
+function repeat0(pos) {
+	return s[pos] !== void 0 && repeat0(pos + 1) || s[pos] === 'e';
+}
+
+
+
+single char: s[p] === char
+multiple chars: match(p, 'chars')
+any char (.): s[p] !== void 0
+end char ($): s[p] === void 0
