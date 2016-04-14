@@ -138,9 +138,9 @@ function compileRegExp(s) {
 						++p;
 						var repeatCall = '';
 						if (quantity = quantifier()) {
-							return quantify(code, offset + 1, junction, 's[' + positionToCode(0) + '] !== void 0', 1);
+							return quantify(code, offset + 1, junction, positionToCode(0) + '< l', 1);
 						}
-						code = and(and(code, 's[' + positionToCode(offset) + '] !== void 0'), repeatCall);
+						code = and(and(code, positionToCode(offset) + '< l'), repeatCall);
 						++offset;
 						break;
 					}
