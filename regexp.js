@@ -79,11 +79,7 @@ function compileRegExp(s) {
 				++p;
 			}
 		}
-		return (seq.length ? seq : void 0);
-	}
-
-	function assertion() {
-		return false;
+		return (seq.length ? seq : null);
 	}
 
 	function posToCode(offset) {
@@ -102,45 +98,59 @@ function compileRegExp(s) {
 		}
 	}
 
-	var code = '';
-	var func = '';
-	var expression = '';
-	var offset = 0;
-	var funcCounter = 1;
+	var funcs = [ ];
 
-	function append(code) {
-		if (expression !== '') {
-			expression += ' && ';
-		}
-		expression += code;
+	function and(a, b) {
+		return (a === '' ? b : (b === '' ? a : a + ' && ' + b));
 	}
 
-	function repeat(code) {
-		return "f" + (funcCounter++);
+	function or(a, b) {
+		return (a === '' ? b : a + ' || ' + (b === '' ? true : b));
 	}
 
-	var seq, c;
-	while (p < e) {
-		if (assertion()) {
-		} else if (seq = sequence()) {
-			var q = quantifier();
-			if (q) {
-				var f = repeat(seqToCode(seq.pop(), 0));
-				append(seqToCode(seq, offset));
-				append(f + "(" + posToCode(offset + seq.length) + ")");
-			} else {
-				append(seqToCode(seq, offset));
+	function terms() {
+		var seq, q, c, code = '', offset = 0;
+		while (true) {
+			if (seq = sequence()) {
+				var repeatCall = '';
+				if (q = quantifier()) {
+					var rep = seq.pop();
+					var tail = terms(tail);
+					repeatCall = 'rep(' + posToCode(rep.length) + ')';
+					funcs.push('function rep() { return ' + or(and(seqToCode(rep, 0), repeatCall), tail.code) + ' }');
+				}
+				code = and(and(code, seqToCode(seq, offset)), repeatCall);
 				offset += seq.length;
-			}
-		} else {
-			switch (c = s[p]) {
-				case '.': ++p; ++offset; break;
+			} else {
+				switch (c = s[p]) {
+					case '.': ++p; ++offset; break;
+					default: return { code: code, minLength: offset, maxLength: offset };
+				}
 			}
 		}
 	}
-	return expression;
+
+	function disjunction() {
+		var code = '', minLength = +Infinity, maxLength = 0;
+		while (true) {
+			var t = terms();
+			code = or(code, t.code);
+			minLength = Math.min(minLength, t.minLength);
+			maxLength = Math.max(maxLength, t.maxLength);
+			if (s[p] === '|') {
+				++p;
+			} else {
+				return { code: code, minLength: minLength, maxLength: maxLength };
+			}
+		}
+	}
+
+	var d = disjunction(); 
+	for (var i = 0; i < funcs.length; ++i) print(funcs[i]);
+	return d.code;
 }
 print(compileRegExp("\\n\\rab\\nc\\u1234\\cA\\0\""));
 print(compileRegExp("a"));
 print(compileRegExp("ade...bfg*"));
 print(compileRegExp("a\\n"));
+print(compileRegExp("a|bdef.gh|iopq*"));
