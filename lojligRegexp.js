@@ -522,17 +522,72 @@ function repeat0(pos) {
 
 
 
-single char: s[p] === char
-multiple chars: match(p, 'chars')
-any char (.): s[p] !== void 0
-end char ($): s[p] === void 0
+single char: s[p] === char && rest(p + 1)
+multiple chars: match(p, <chars>) && rest(p + <chars>.length)
+any char (.): s[p] !== void 0 && rest(p + 1)
+end char ($): s[p] === void 0 && rest(p)
+a|b: a || b
 
-function compileRegExp(source) {
-	var p = 0, c, literalBegin = 0;
-	while ((c = source[p]) !== void 0) {
-		switch (c) {
-			default: ++c; break;
-			case '.': 
+function compileRegExp(s) {
+	var NO_ESCAPE = 1, SPECIAL_CHAR = 2, DECIMAL_CHAR = 4, ESCAPE_CHAR = 8, LETTER_CHAR = 16, CHAR_CLASSES = { };
+
+	function setupCharClass(mask, chars) {
+		for (var i in chars) CHAR_CLASSES[chars[i]] = mask;
 	}
-}
+	function isClass(char, mask) {
+		return ((CHAR_CLASSES[char] & mask) !== 0);
+	}
+	setupCharClass(SPECIAL_CHAR, "\\^$.*+?()[]{}|");
+	setupCharClass(DECIMAL_CHAR, "0123456789");
+	setupCharClass(ESCAPE_CHAR, "fnrtv");
+	setupCharClass(LETTER_CHAR, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	for (var i = 32; i <= 126) CHAR_CLASSES[i] |= NO_ESCAPE;
+// [\0-\60\72-\101\133-\137\140\173-\180]
 
+	var b, p = 0, e = source.length;
+	
+	function literal() {
+		var c0, c1, c2, n;
+		var escaped = '';
+		while (p < e && !isClass(c0 = s[p], SPECIAL_CHAR) || c0 === '\\')) {
+			if (c0 === '\\') {
+				if ((c1 = s[p + 1]) === '0' && !isClass(s[p + 2], DECIMAL_CHAR)) {
+					escaped += "\\0";
+					p += 2;
+				} else if (isClass(c1, DECIMAL_CHAR)) {
+					return escaped;
+				} else if (isClass(c1, ESCAPE_CHAR)) {
+					escaped += "\\" + c1;
+					p += 2;
+				} else if (c1 === 'c' && isClass(c2 = s[p + 2], LETTER_CHAR)) {
+					escaped += "\\x" + c2.charCodeAt(0) & 31).toString(16);
+					p += 3;
+				} else if (c1 === 'x') {
+					escaped += "\\x" + s[p + 2] + s[p + 3];
+					p += 4;
+				} else if (c1 === 'u') {
+					escaped += "\\u" + s.substring(p + 2, p + 6);
+					p += 6;
+				// } else if (identity
+				} else {
+					throw "bad" // FIX
+				}
+			} else if (isClass(c0, NO_ESCAPE)) {
+				escaped += c0;
+			} else {
+				escaped += "\\u" + ("0000" + n.toString(16)).slice(-4);
+			}
+		}
+		return escaped;
+	}
+
+	function matchRule() {
+		switch (s[p]) {
+			default: {
+
+				return "submatch(s, pos, '" + 
+	}
+
+	while (p < e) {
+		pattern();
+}
