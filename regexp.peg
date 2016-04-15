@@ -1,0 +1,65 @@
+root                    <-  Disjunction !.
+    
+Disjunction             <-  Alternative ('|' Alternative)*
+    
+Alternative             <-  Term*
+    
+Term                    <-  Assertion
+                            / Atom Quantifier?
+    
+Assertion               <-  '^'
+                            / '$'
+                            / '\\b'
+                            / '\\B'
+    
+Quantifier              <-  QuantifierPrefix '?'?
+    
+QuantifierPrefix        <-  '*'
+                            / '+' 
+                            / '?' 
+                            / '{' DecimalDigits (',' DecimalDigits?)? '}'
+    
+Atom                    <-  PatternCharacter 
+                            / '.' 
+                            / '\\' AtomEscape 
+                            / CharacterClass
+                            / '(' ('?' (':' / '=' / '!'))? Disjunction ')'
+    
+PatternCharacter        <-  ![^$\\.*+?()[\]{}|] .
+    
+AtomEscape              <-  DecimalEscape
+                            / CharacterEscape
+                            / CharacterClassEscape
+    
+CharacterEscape         <-  ControlEscape
+                            / 'c' ControlLetter
+                            / HexEscapeSequence
+                            / UnicodeEscapeSequence
+                            / IdentityEscape
+
+ControlEscape           <-  [fnrtv]
+    
+ControlLetter           <-  [a-zA-Z]
+    
+IdentityEscape          <-  [\0-\60\72-\101\133-\137\140\173-\180]
+    
+DecimalEscape           <-  '0' ![0-9]
+                            / [1-9] [0-9]*
+
+CharacterClassEscape    <-  [dDsSwW]
+
+CharacterClass          <-  '[' '^'? (ClassAtom ('-' ClassAtom)?)* ']'
+
+ClassAtom               <-  ![\\\]] .
+                            / '\\' ClassEscape
+
+ClassEscape             <-  '0' ![0-9]
+                            / 'b'
+                            / CharacterEscape
+                            / CharacterClassEscape
+
+HexEscapeSequence       <-  'x' HexDigit HexDigit
+
+UnicodeEscapeSequence   <-  'u' HexDigit HexDigit HexDigit HexDigit
+
+HexDigit                <-  [0-9a-fA-F]
