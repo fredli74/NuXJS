@@ -1,36 +1,45 @@
-function compileRegExp(s) {
-	print('');
-	print(s);
-	print("-------------");
-	var NO_ESCAPE = 1, SPECIAL_CHAR = 2, DECIMAL_CHAR = 4, HEX_CHAR = 8, ESCAPE_CHAR = 16, LETTER_CHAR = 32;
-	var CHAR_CLASSES = { };
+"use strict";
 
-	function setupCharClass(mask, chars) {
-		for (var i in chars) CHAR_CLASSES[chars[i]] |= mask;
+var OK_IN_STRING_LITERAL = 1, SPECIAL_CHAR = 2, DECIMAL_CHAR = 4, HEX_CHAR = 8, ESCAPE_CHAR = 16, LETTER_CHAR = 32, NEWLINE_CHAR = 64, SPACE_CHAR = 128, WORD_CHAR = 256, EMPTY_CHAR = 512; // FIX : sort, make array?
+var CC = { };
+
+function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask; }
+
+setupCharClass(SPECIAL_CHAR, "\\^$.*+?()[]{}|");
+setupCharClass(DECIMAL_CHAR | HEX_CHAR | WORD_CHAR, "0123456789");
+setupCharClass(HEX_CHAR | LETTER_CHAR | WORD_CHAR, "abcdefABCDEF");
+setupCharClass(LETTER_CHAR | WORD_CHAR, "ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ");
+setupCharClass(NEWLINE_CHAR | SPACE_CHAR, "\n\r\u2028\u2029");
+setupCharClass(SPACE_CHAR, " \t\v\f\xA0");
+CC['_'] |= WORD_CHAR;
+CC['undefined'] |= EMPTY_CHAR;
+CC[''] |= EMPTY_CHAR;
+setupCharClass(ESCAPE_CHAR, "fnrtv");
+for (var i = 32; i <= 126; ++i) {
+	var c = String.fromCharCode(i);
+	if (c !== '"') {
+		CC[String.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
 	}
-	function isClass(char, mask) {
-		return ((CHAR_CLASSES[char] & mask) !== 0);
-	}
+}
+
+function compileRegExp(s) {
+// [\0-\60\72-\101\133-\137\140\173-\180]
+
+	function isClass(char, mask) { return ((CC[char] & mask) !== 0); }
 	function areClass(str, mask) {
 		for (var i = str.length - 1; i >= 0; --i) {
-			if ((CHAR_CLASSES[str[i]] & mask) === 0) {
+			if ((CC[str[i]] & mask) === 0) {
 				return false;
 			}
 		}
 		return true;
 	}
-	setupCharClass(SPECIAL_CHAR, "\\^$.*+?()[]{}|");
-	setupCharClass(DECIMAL_CHAR, "0123456789");
-	setupCharClass(HEX_CHAR, "0123456789abcdefABCDEF");
-	setupCharClass(ESCAPE_CHAR, "fnrtv");
-	setupCharClass(LETTER_CHAR, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
-	for (var i = 32; i <= 126; ++i) {
-		var c = String.fromCharCode(i);
-		if (c !== '"') {
-			CHAR_CLASSES[String.fromCharCode(i)] |= NO_ESCAPE;
-		}
-	}
-// [\0-\60\72-\101\133-\137\140\173-\180]
+	var CHAR_CLASS_RULES = {
+		'D': [ DECIMAL_CHAR, true ], 'd': [ DECIMAL_CHAR, false ],
+		'S': [ SPACE_CHAR, true ], 's': [ SPACE_CHAR, false ],
+		'W': [ WORD_CHAR, true ], 'w': [ WORD_CHAR, false ],
+		'.': [ NEWLINE_CHAR, true ]
+	};
 
 	var p = 0, e = s.length;
 
@@ -75,9 +84,9 @@ function compileRegExp(s) {
 				// } else if (identity
 				// CharacterClass
 				} else {
-					throw "bad"; // FIX
+					break;
 				}
-			} else if (isClass(c0, NO_ESCAPE)) {
+			} else if (isClass(c0, OK_IN_STRING_LITERAL)) {
 				literalSequence.push(c0);
 				++p;
 			} else if (c0 === '"') {
@@ -147,9 +156,13 @@ function compileRegExp(s) {
 		}
 	}
 
+	function charClassToCode(offset, mask, invert) {
+		return (invert ? '!' : '!!') + '(CC[s[' + positionToCode(offset) + ']]&' + (invert ? mask | EMPTY_CHAR : mask) + ')';
+	}
+
 	function terms(offset, junction) {
-		var literalSequence, quantity, code = '';
-		while (true) {
+		var literalSequence, quantity, code = '', c;
+		termLoop: for (;;) {
 			if (literalSequence = literal()) {
 				if (quantity = quantifier()) {
 					var repeatLiteral = literalSequence.pop();
@@ -160,19 +173,30 @@ function compileRegExp(s) {
 				code = and(code, literalSequenceToCode(literalSequence, offset));
 				offset += literalSequence.length;
 			} else {
-				switch (s[p]) {
+				switch ((c = s[p])) {
+					case void 0: code = and(code, '(e=' + positionToCode(offset) + ',true)'); break termLoop;
 					case '*': case '+': case '?': case '{': throw "Nothing to repeat"; // FIX
+					case '^': {
+						++p;
+						code = and(code, positionToCode(offset) + '===0')
+						break;
+					}
 					case '$': {
 						++p;
 						code = and(code, positionToCode(offset) + '===l');
 						break;
 					}
+					case '\\': c = s[++p]; // fall-through
 					case '.': {
+						var rule;
+						if (!(rule = CHAR_CLASS_RULES[c])) {
+							break termLoop;
+						}
 						++p;
 						if (quantity = quantifier()) {
-							return quantify(code, offset, junction, positionToCode(0) + ' < l', 1);
+							return quantify(code, offset, junction, charClassToCode(0, rule[0], rule[1]), 1);
 						}
-						code = and(code, positionToCode(offset) + ' < l');
+						code = and(code, charClassToCode(offset, rule[0], rule[1]));
 						++offset;
 						break;
 					}
@@ -220,16 +244,16 @@ function compileRegExp(s) {
 						}
 						return { code: code, offset: offset };
 					}
-					case void 0: code = and(code, '(e=' + positionToCode(offset) + ',true)'); /* fall through */
-					default: return { code: join(code, junction, offset), offset: offset };
+					default: break termLoop;
 				}
 			}
 		}
+		return { code: join(code, junction, offset), offset: offset };
 	}
 
 	function disjunction(offset, junction) {
 		var code = '', minOffset = +Infinity, maxOffset = 0;
-		while (true) {
+		for (;;) {
 			var t = terms(offset, junction);
 			code = or(code, t.code);
 			minOffset = Math.min(minOffset, t.offset);
@@ -244,15 +268,88 @@ function compileRegExp(s) {
 
 	var disjunc = disjunction(0, ''); 
 	if (p < e) throw "error"; // FIX
-	var s = "function test(s, p) {\n\tvar l=s.length,e";
+	var s = "(function(s, p) {\n\tvar l=s.length,e";
 	for (var i = 0; i < captureCounter * 2; ++i) s += ",c" + i;
 	s += ";\n";
 	for (var i = 0; i < funcs.length; ++i) s += "\t" + funcs[i] + "\n";
-	s += "\treturn [ (" + disjunc.code + ') ,e';
+	s += "\tif (" + disjunc.code + ") return [p,e";
 	for (var i = 0; i < captureCounter * 2; ++i) s += ",c" + i;
-	s += "];\n}\n";
+	s += "];\n})";
 	return s;
 }
+
+function submatch(s, pos, str) { return (s.substr(pos, str.length) === str); }
+
+function $isNaN(v) { return isNaN(v); }
+function $isFinite(v) { return isFinite(v); }
+function $floor(v) { return Math.floor(v); }
+
+function $isPrimitive(v) {
+	var v, t;
+	return (((t = typeof v) !== "object" || v === null) && t !== "function");
+}
+
+function $toInteger(v) {
+	return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))));
+}
+
+function $toString(o) {
+	return '' + ($isPrimitive(o) ? o : $support.toPrimitiveString(o));
+}
+
+var REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' };
+
+function MyRegExp(pattern, flags) {
+	pattern = (pattern === void 0 ? '' : $toString(pattern));
+	flags = (flags === void 0 ? '' : $toString(flags));
+	this.global = this.ignoreCase = this.multiline = false;
+	for (var i = flags.length - 1; i >= 0; --i) {
+		var p;
+		if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || this[p]) {
+			throw SyntaxError("Invalid RegExp flags");
+		}
+		this[p] = true; // FIX : { DontDelete, ReadOnly, DontEnum }.
+	}
+	this.source = pattern; // FIX : { DontDelete, ReadOnly, DontEnum }.
+	this.match = eval(compileRegExp(pattern));
+	this.lastIndex = 0; // FIX : { DontDelete, DontEnum }.
+}
+
+function $execRegExp(re, string) {
+	var i, m, l;
+	string = $toString(string);
+	if ((i = (re.global ? $toInteger(re.lastIndex) : 0)) >= 0) {
+		for (l = string.length; i < l; ++i) {
+			if (m = re.match(string, i)) {
+				if (re.global) {
+					re.lastIndex = m[1];
+				}
+				return m;
+			}
+		}
+	}
+	re.lastIndex = 0;
+}
+
+MyRegExp.prototype.exec = function(string) {
+	var m, a = null;
+	if (m = $execRegExp(this, string)) {
+		(a = [ ]).input = string;
+		a.index = m[0];
+		for (var j = 0; j < m.length; j += 2) {
+			a[a.length] = string.substring(m[j], m[j + 1]);
+		}
+	}
+	return a;
+};
+
+MyRegExp.prototype.toString = function() {
+	return '/' + this.source + '/' + (this.global ? 'g' : '') + (this.ignoreCase ? 'i' : '') + (this.multiline ? 'm' : '');
+};
+
+MyRegExp.prototype.test = function(string) { return $execRegExp(this, string) !== void 0; };
+
+/*
 print(compileRegExp("\\n\\rab\\nc\\u1234\\cA\\0\""));
 print(compileRegExp("a"));
 print(compileRegExp("ade...bfg*"));
@@ -281,3 +378,45 @@ print(compileRegExp("(abc(def)|(ghi)jkl)*"));
 print(compileRegExp("b(a|b*|c)e"));
 print(compileRegExp(".*"));
 print(compileRegExp("s(a)??(a)?$"));
+*/
+
+function testRE(re, s) {
+	var m = re.exec(s);
+	var r = '';
+	if (!m) {
+		r = 'null';
+	} else {
+		r = '{ ';
+		for (var i = 0; i < m.length; ++i) {
+			r += (i > 0 ? ', ' : '') + m[i];
+		}
+		r += ' } @ ' + m.index + ' (next: ' + re.lastIndex + ')';
+	}
+	print(re.toString() + " on " + s + ": " + r + "\n");
+}
+
+var t = new MyRegExp("abcdef", "g");
+var m;
+testRE(t, "abcdef");
+testRE(t, "abc");
+testRE(t, "abcdeabcdefabcde");
+
+var t = new MyRegExp("^abcdef");
+testRE(t, "abcdef");
+testRE(t, "abcdeabcdefabcde");
+
+var t = new MyRegExp(".*$");
+testRE(t, "abc\ndef");
+testRE(t, "abc\u2029def");
+testRE(t, "abc");
+
+var t = new MyRegExp("\\w\\w\\w");
+testRE(t, "");
+testRE(t, "123");
+testRE(t, "12a");
+testRE(t, "12#");
+var t = new MyRegExp("\\W\\W\\W");
+testRE(t, "12#");
+testRE(t, "#%)");
+var t = new MyRegExp("\\w\\w\\w\\W\\s\\s\\s\\S\\S\\S\\d\\d\\d\\d\\D\\D\\D\\D");
+testRE(t, "q9_!\n \u2028lm_9124qwer");

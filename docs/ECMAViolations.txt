@@ -5,6 +5,8 @@
 *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
 	FIX : yes it does now, except \uFEFF
 
+	Also: no other "<USP>" ("space separator") is considered white space (not in RegExps either!)
+
 *) Unicode in identifiers are not allowed
 	FIX : why not?
 
