@@ -77,7 +77,7 @@ function compileRegExp(s) {
 					return null;
 				}
 				if (min > max) {
-					throw "bad"; // FIX
+					throw SyntaxError("Min greater than max in regular expression quantifier"); // FIX
 				}
 				++p;
 				break;
@@ -218,11 +218,8 @@ function compileRegExp(s) {
 				offset += literalSequence.length;
 			} else {
 				switch ((c = s[p])) {
-					case void 0: code = and(code, '(e=' + positionToCode(offset) + ',true)'); break termLoop;
-					case '*': case '+': case '?': case '{': {
-						if (parseQuantifier() !== null) {
-							throw "Nothing to repeat"; // FIX
-						}
+					case void 0: {
+						code = and(code, '(e=' + positionToCode(offset) + ',true)');
 						break termLoop;
 					}
 					case '^': {
@@ -271,7 +268,7 @@ function compileRegExp(s) {
 							openCaptureTo = captureCounter * 2;
 						}
 						if (s[p] !== ')') {
-							throw "err"; // FIX
+							throw SyntaxError("Unterminated group in regular expression");
 						}
 						++p;
 						var quantity = parseQuantifier();
@@ -329,7 +326,9 @@ function compileRegExp(s) {
 	}
 
 	var disjunc = compileDisjunction(0, ''); 
-	if (p < e) throw "error"; // FIX
+	if (p < e) {
+		throw SyntaxError("Invalid regular expression");
+	}
 	var code = "(function(s, p) {\n\tvar l=s.length,e";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
 	code += initCounters + ";\n" + functions + "\tif (" + disjunc.code + ") return [p,e";
@@ -367,7 +366,7 @@ function MyRegExp(pattern, flags) {
 	for (var i = flags.length - 1; i >= 0; --i) {
 		var p;
 		if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || this[p]) {
-			throw SyntaxError("Invalid RegExp flags");
+			throw SyntaxError("Invalid regular expression flags");
 		}
 		this[p] = true; // FIX : { DontDelete, ReadOnly, DontEnum }.
 	}
@@ -473,6 +472,9 @@ testRE(t, "abcdef");
 testRE(t, "abc");
 testRE(t, "abcdeabcdefabcde");
 
+var t = new MyRegExp("\\n\\rab\\nc\\u1234\\cA\\0\"");
+testRE(t, "\n\rab\nc\u1234\x01\0\"");
+
 var t = new MyRegExp("^abcdef");
 testRE(t, "abcdef");
 testRE(t, "abcdeabcdefabcde");
@@ -529,3 +531,10 @@ testRE(t, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 t = new MyRegExp("(a){1,1}?$");
 testRE(t, "a");
 testRE(t, "aa");
+
+t = new MyRegExp("(?:abc)def");
+print(t.match);
+
+t = new MyRegExp("(?:abc)def");
+print(t.match);
+
