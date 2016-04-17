@@ -22,9 +22,10 @@ for (var i = 32; i <= 126; ++i) {
 	}
 }
 
-function compileRegExp(s) {
+// Identity chars
 // [\0-\60\72-\101\133-\137\140\173-\180]
 
+function compileRegExp(s) {
 	function isClass(char, mask) { return ((CC[char] & mask) !== 0); }
 	function areClass(str, mask) {
 		for (var i = str.length - 1; i >= 0; --i) {
@@ -64,7 +65,7 @@ function compileRegExp(s) {
 			case '{': {
 				var b = p, n;
 				++p;
-				if ((min = max = parseNumber(+void 0)) !== min) { // !isNaN
+				if ((min = max = parseNumber(-1)) < 0) {
 					p = b;
 					return null;
 				}
@@ -147,10 +148,7 @@ function compileRegExp(s) {
 		}
 	}
 
-	var functions = '';
-	var functionCounter = 0;
-	var captureCounter = 0;
-	var initCounters = '';
+	var functions = '', functionCounter = 0, captureCounter = 0, initCounters = '', maxBackReference = 0;
 
 	function and(a, b) {
 		switch (a) {
@@ -166,10 +164,6 @@ function compileRegExp(s) {
 			case 'true': return 'true';
 			default: return (b === 'false' ? a: a + ' || ' + b);
 		}
-	}
-
-	function join(a, junction, offset) { // FIX : no sub
-		return (junction === '' ? a : and(a, junction + '(' + positionToCode(offset) + ')'));
 	}
 	
 	function addFunction(definition) {
@@ -205,7 +199,7 @@ function compileRegExp(s) {
 	}
 
 	function compileTerms(offset, junction) {
-		var literalSequence, quantity, code = 'true', c;
+		var literalSequence, quantity, code = 'true', c, n;
 		termLoop: for (;;) {
 			if (literalSequence = parseLiteral()) {
 				if (quantity = parseQuantifier()) {
@@ -232,7 +226,19 @@ function compileRegExp(s) {
 						code = and(code, positionToCode(offset) + '===l');
 						break;
 					}
-					case '\\': c = s[++p]; // fall-through
+					case '\\': {
+						++p;
+						if ((n = parseNumber(-1)) >= 0) {
+							if (n > maxBackReference) {
+								maxBackReference = n;
+							}
+							n = (n - 1) * 2;
+							code = and(code, '(c' + n + '===void 0 || submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + ')) && (p+=c' + (n + 1) + '-c' + n + ',true))');
+							break;
+						}
+						c = s[p];
+						// fall-through
+					}
 					case '.': {
 						var rule;
 						if (!(rule = CHAR_CLASS_RULES[c])) {
@@ -315,7 +321,7 @@ function compileRegExp(s) {
 		for (;;) {
 			var t = compileTerms(offset, junction);
 			code = or(code, t.code);
-			minOffset = Math.min(minOffset, t.offset);
+			minOffset = Math.min(minOffset, t.offset); // FIX : if used, use unmodifiable min/max routines
 			maxOffset = Math.max(maxOffset, t.offset);
 			if (s[p] === '|') {
 				++p;
@@ -328,6 +334,9 @@ function compileRegExp(s) {
 	var disjunc = compileDisjunction(0, ''); 
 	if (p < e) {
 		throw SyntaxError("Invalid regular expression");
+	}
+	if (maxBackReference > captureCounter) {
+		throw SyntaxError("Invalid back reference in regular expression");
 	}
 	var code = "(function(s, p) {\n\tvar l=s.length,e";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
@@ -532,9 +541,50 @@ t = new MyRegExp("(a){1,1}?$");
 testRE(t, "a");
 testRE(t, "aa");
 
-t = new MyRegExp("(?:abc)def");
+t = new MyRegExp("(abc)\\1");
+testRE(t, "abc");
+testRE(t, "abcabc");
+testRE(t, "qwertyabcabc");
+
+t = new MyRegExp("^qwerty(abc|def)\\1$");
+testRE(t, "qwertyabcabc");
+testRE(t, "qwertydefdef");
+testRE(t, "qwertyabcdef");
+testRE(t, "qwertydefabc");
+
+t = new MyRegExp("^(ab|def|ghij)?(\\1){5}$");
+testRE(t, "");
+testRE(t, "ababababab");
+testRE(t, "abababababab");
+testRE(t, "defdefdefdefdefdef");
+testRE(t, "ghijghijghijghijghijghij");
+
+t = new MyRegExp("^(ab|ab..)?(\\1){5}$");
+testRE(t, "");
+testRE(t, "abababababab");
+testRE(t, "abababababababababababab");
+testRE(t, "abcdabcdabcdabcdabcdabcd");
+
+t = new MyRegExp("^(a|ab)(bc|c)(\\1\\2){5}$");
+testRE(t, "abcabcabcabcabcabc");
+
+t = new MyRegExp("((?:a)*)(\\1){3}$");
+testRE(t, "");
+testRE(t, "xxxxa");
+testRE(t, "xxxxaaaa");
+testRE(t, "xxxxaaaaaa");
+testRE(t, "xxxxaaaaaaaa");
+
+try { t = new MyRegExp("\\1"); } catch (x) { print(x); }
+try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
+
+t = new MyRegExp("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\1\\2\\3\\4\\5\\6\\7\\8\\9\\10\\11\\12");
+testRE(t, "abcdefghijklabcdefghijkl");
+
+/*
+
+t = new MyRegExp("(?:abc(def)*)ghi");
 print(t.match);
 
-t = new MyRegExp("(?:abc)def");
-print(t.match);
-
+// /(?=(abc|ab))abcdef\1/.exec('abcdefab')
+*/
