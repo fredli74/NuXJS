@@ -263,7 +263,7 @@ static double stringToDouble(const String& s) {
 	const Char* p = s.begin();
 	const Char* e = s.end();
 	p = eatStringWhite(p, e);
-	if (p != e && p[0] == '0' && p + 1 != e && p[1] == 'x') {
+	if (p != e && *p == '0' && p + 1 != e && p[1] == 'x') {
 		UInt32 u;
 		const Char* b = p + 2;
 		p = parseHex(b, e, u);
@@ -637,6 +637,9 @@ Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 static Table _strings;
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
+	if (b == e) {
+		return &EMPTY_STRING;
+	}
 	String* s = heap.manage(new String(b, e));
 	s->calcHash();
 	Table::Bucket* bucket = _strings.insert(s);
@@ -1898,6 +1901,13 @@ bool Processor::privateRun() {
 				push(Value(heap.manage(new Array())));
 				break;
 			}
+			
+			case NEW_REG_EXP_OP: { // FIX : all these very similar
+				Value* returnPointer = vsp - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
+				*returnPointer = engine.createRegExpFunction->call(engine, *this, 2, returnPointer, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				--vsp;
+				break;
+			}
 
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
@@ -2061,7 +2071,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
-		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY"
+		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
 		, "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC", "DECLARE"
@@ -2284,6 +2294,25 @@ void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
 }
 
 bool Compiler::isLeadingIdentifierChar(Char c) {
+/* TODO:
+IdentifierStart
+
+UnicodeLetter
+any character in the Unicode categories “Uppercase letter (Lu)”, “Lowercase letter (Ll)”, “Titlecase letter (Lt)”,
+“Modifier letter (Lm)”, “Other letter (Lo)”, or “Letter number (Nl)”.
+
+\u HexDigit HexDigit HexDigit HexDigit
+
++ IdentifierPart:
+
+UnicodeCombiningMark See 7.6
+any character in the Unicode categories “Non-spacing mark (Mn)” or “Combining spacing mark (Mc)”
+UnicodeDigit See 7.6
+any character in the Unicode category “Decimal number (Nd)”
+UnicodeConnectorPunctuation See 7.6
+any character in the Unicode category “Connector punctuation (Pc)”
+
+*/
 	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_');
 }
 
@@ -2874,6 +2903,29 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						++p;
 						discard(xr);
 						xr = arrayInitialiser();
+						break;
+					}
+					
+					case '/': {
+						while (++p != e && !isLineTerminator(*p) && *p != '/') {
+							if (*p == '\\' && p + 1 != e && !isLineTerminator(p[1])) {
+								++p;
+							}
+						}
+						if (p == e || *p != '/') {
+							error(SYNTAX_ERROR, "Unterminated regular expression");
+						} else {
+							discard(xr);
+							const String* regExpSource = String::newHashedString(heap, b + 1, p);
+							emitWithConstant(Processor::CONST_OP, Value(regExpSource));
+							++p;
+							const Char* b = p;
+							token();
+							const String* regExpFlags = String::newHashedString(heap, b, p);
+							emitWithConstant(Processor::CONST_OP, Value(regExpFlags));
+							emit(Processor::NEW_REG_EXP_OP);
+							xr = ExpressionResult(ExpressionResult::PUSHED);
+						}
 						break;
 					}
 					
@@ -3851,7 +3903,7 @@ static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), objectPrototype(0), evalFunction(false)
-		, evalDirectFunction(true), toNumberFunction(0), toStringFunction(0)
+		, evalDirectFunction(true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(&B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype) {
@@ -3938,15 +3990,21 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	gcHeap.gc();
 
 	// FIX: ScriptFunction cast sucks! call() instead of chain() in Processor so that we can have arbitrary object
-	toNumberFunction = reinterpret_cast<ScriptFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asObject());
+	// FIX : sub v
+	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
 	// FIX : all these gcHeap.manage(new String()) ... could be a utility function!
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveNumber"))))));
 	}
 	
-	toStringFunction = reinterpret_cast<ScriptFunction*>(supportObject->getPropertyDeep(*this, "toPrimitiveString").asObject());
+	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
 		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.toPrimitiveString"))))));
+	}
+
+	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
+	if (toStringFunction == 0) {
+		throw Exception(gcHeap, Value(gcHeap.manage(new Error(GENERIC_ERROR, gcHeap.manage(new String("Standard library is missing support.createRegExp"))))));
 	}
 }
 

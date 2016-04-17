@@ -129,12 +129,12 @@
 					PBXFileDataSource_Warnings_ColumnID,
 				);
 			};
-			PBXPerProjectTemplateStateSaveDate = 481218760;
-			PBXWorkspaceStateSaveDate = 481218760;
+			PBXPerProjectTemplateStateSaveDate = 482530137;
+			PBXWorkspaceStateSaveDate = 482530137;
 		};
 		perUserProjectItems = {
 			F76AFC421CAED0CB0026643C /* PBXTextBookmark */ = F76AFC421CAED0CB0026643C /* PBXTextBookmark */;
-			F7ACD6B71C98A70D005D9F12 /* PBXTextBookmark */ = F7ACD6B71C98A70D005D9F12 /* PBXTextBookmark */;
+			F78B66FB1CC2D35C0004ECAB /* PBXTextBookmark */ = F78B66FB1CC2D35C0004ECAB /* PBXTextBookmark */;
 		};
 		sourceControlManager = F74E7E0516D1A3E7003A6AB6 /* Source Control */;
 		userBuildSettings = {
@@ -162,9 +162,9 @@
 	};
 	F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {
 		uiCtxt = {
-			sepNavIntBoundsRect = "{{0, 0}, {1179, 51792}}";
+			sepNavIntBoundsRect = "{{0, 0}, {1179, 56069}}";
 			sepNavSelRange = "{98427, 0}";
-			sepNavVisRange = "{48534, 2386}";
+			sepNavVisRange = "{48758, 2215}";
 			sepNavWindowFrame = "{{50, 0}, {1390, 878}}";
 		};
 	};
@@ -246,15 +246,15 @@
 		vrLen = 2386;
 		vrLoc = 48534;
 	};
-	F7ACD6B71C98A70D005D9F12 /* PBXTextBookmark */ = {
+	F78B66FB1CC2D35C0004ECAB /* PBXTextBookmark */ = {
 		isa = PBXTextBookmark;
 		fRef = F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */;
-		name = "NuXJScript.cpp: 2743";
+		name = "NuXJScript.cpp: 2633";
 		rLen = 0;
 		rLoc = 98427;
 		rType = 0;
-		vrLen = 2945;
-		vrLoc = 47945;
+		vrLen = 2215;
+		vrLoc = 48758;
 	};
 	F7CB917916D6263800D3007B /* NuXJScript.h */ = {
 		uiCtxt = {

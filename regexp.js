@@ -43,23 +43,55 @@ function compileRegExp(s) {
 
 	var p = 0, e = s.length;
 
-	function quantifier() {
-		var q;
+	function parseNumber(defaultValue) {
+		var n = defaultValue;
+		if (isClass(s[p], DECIMAL_CHAR)) {
+			n = 0;
+			do {
+				n = n * 10 + (s.charCodeAt(p) - 48);
+				++p;
+			} while (isClass(s[p], DECIMAL_CHAR))
+		}
+		return n;
+	}
+
+	function parseQuantifier() {
+		var min = 0, max = Infinity, greedy = true;
 		switch (s[p]) {
-			case '*': ++p; q = { min: 0, max: +Infinity, greedy: true }; break;
-			case '+': ++p; q = { min: 1, max: +Infinity, greedy: true }; break;
-			case '?': ++p; q = { min: 0, max: 1, greedy: true }; break;
-			// case '{'
+			case '*': ++p; break;
+			case '+': ++p; min = 1; break;
+			case '?': ++p; max = 1; break;
+			case '{': {
+				var b = p, n;
+				++p;
+				if ((min = max = parseNumber(+void 0)) !== min) { // !isNaN
+					p = b;
+					return null;
+				}
+				if (s[p] === ',') {
+					++p;
+					max = parseNumber(Infinity);
+				}
+				if (s[p] !== '}') {
+					p = b;
+					return null;
+				}
+				if (min > max) {
+					throw "bad"; // FIX
+				}
+				++p;
+				break;
+			}
 			default: return null;
 		}
 		if (s[p] === '?') {
 			++p;
-			q.greedy = false;
+			greedy = false;
 		}
-		return q;
+		return { min: min, max: max, greedy: greedy };
 	}
 	
-	function literal() {
+	function parseLiteral() {
 		var c0, c1, c2, sub;
 		var literalSequence = [ ];
 		while (p < e && (!isClass(c0 = s[p], SPECIAL_CHAR) || c0 === '\\')) {
@@ -82,7 +114,6 @@ function compileRegExp(s) {
 					literalSequence.push("\\u" + sub);
 					p += 6;
 				// } else if (identity
-				// CharacterClass
 				} else {
 					break;
 				}
@@ -116,29 +147,42 @@ function compileRegExp(s) {
 		}
 	}
 
-	var funcs = [ ];
+	var functions = '';
 	var functionCounter = 0;
 	var captureCounter = 0;
+	var initCounters = '';
 
 	function and(a, b) {
-		return (a === '' ? b : (b === '' ? a : a + ' && ' + b));
+		switch (a) {
+			case 'false': return 'false';
+			case 'true': return b;
+			default: return (b === 'true' ? a : a + ' && ' + b);
+		}
 	}
 
 	function or(a, b) {
-		return (a === '' ? '' : a + ' || ') + (b === '' ? true : b);
+		switch (a) {
+			case 'false': return b;
+			case 'true': return 'true';
+			default: return (b === 'false' ? a: a + ' || ' + b);
+		}
 	}
 
 	function join(a, junction, offset) { // FIX : no sub
 		return (junction === '' ? a : and(a, junction + '(' + positionToCode(offset) + ')'));
 	}
+	
+	function addFunction(definition) {
+		functions += "\tfunction " + definition + "\n";
+	}
 
 	function quantify(code, offset, junction, repeatCode, repeatLength) {
 		var functionName = 'f' + (functionCounter++);
-		var tail = terms(0, junction);
-		funcs.push('function ' + functionName + '(p) { return ' + or(and(repeatCode, functionName + '(' + positionToCode(repeatLength) + ')'), tail.code) + '; }');
+		var tail = compileTerms(0, junction);
+		addFunction(functionName + '(p) { return ' + or(and(repeatCode, functionName + '(' + positionToCode(repeatLength) + ')'), tail.code) + '; }');
 		return { code: and(code, functionName + '(' + positionToCode(offset) + ')'), offset: offset };
 	}
-
+	
 	function captureWrap(fromCapture, toCapture, code) {
 		if (fromCapture === toCapture) {
 			return 'return ' + code;
@@ -160,11 +204,11 @@ function compileRegExp(s) {
 		return (invert ? '!' : '!!') + '(CC[s[' + positionToCode(offset) + ']]&' + (invert ? mask | EMPTY_CHAR : mask) + ')';
 	}
 
-	function terms(offset, junction) {
-		var literalSequence, quantity, code = '', c;
+	function compileTerms(offset, junction) {
+		var literalSequence, quantity, code = 'true', c;
 		termLoop: for (;;) {
-			if (literalSequence = literal()) {
-				if (quantity = quantifier()) {
+			if (literalSequence = parseLiteral()) {
+				if (quantity = parseQuantifier()) {
 					var repeatLiteral = literalSequence.pop();
 					return quantify(and(code, literalSequenceToCode(literalSequence, offset))
 							, offset + literalSequence.length, junction, literalSequenceToCode(repeatLiteral, 0)
@@ -175,7 +219,12 @@ function compileRegExp(s) {
 			} else {
 				switch ((c = s[p])) {
 					case void 0: code = and(code, '(e=' + positionToCode(offset) + ',true)'); break termLoop;
-					case '*': case '+': case '?': case '{': throw "Nothing to repeat"; // FIX
+					case '*': case '+': case '?': case '{': {
+						if (parseQuantifier() !== null) {
+							throw "Nothing to repeat"; // FIX
+						}
+						break termLoop;
+					}
 					case '^': {
 						++p;
 						code = and(code, positionToCode(offset) + '===0')
@@ -193,7 +242,7 @@ function compileRegExp(s) {
 							break termLoop;
 						}
 						++p;
-						if (quantity = quantifier()) {
+						if (quantity = parseQuantifier()) {
 							return quantify(code, offset, junction, charClassToCode(0, rule[0], rule[1]), 1);
 						}
 						code = and(code, charClassToCode(offset, rule[0], rule[1]));
@@ -201,8 +250,9 @@ function compileRegExp(s) {
 						break;
 					}
 					case '(': {
-						var groupName = 'g' + (++functionCounter);
-						var junctionName = 'j' + (++functionCounter);
+						var thisFunctionNumber = ++functionCounter;
+						var groupName = 'g' + thisFunctionNumber;
+						var junctionName = 'j' + thisFunctionNumber;
 						var doCapture = true;
 						++p;
 						if (s[p] === '?') {
@@ -216,7 +266,7 @@ function compileRegExp(s) {
 						if (doCapture) {
 							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
 						}
-						var disjunc = disjunction(0, junctionName);
+						var disjunc = compileDisjunction(0, junctionName);
 						if (doCapture) {
 							openCaptureTo = captureCounter * 2;
 						}
@@ -224,16 +274,28 @@ function compileRegExp(s) {
 							throw "err"; // FIX
 						}
 						++p;
-						var quantity = quantifier();
-						var tail = terms(0, junction);
-						funcs.push('function ' + groupName + '(p) { ' + captureWrap(openCaptureFrom, openCaptureTo, or('', disjunc.code)) + '; }');
+						var quantity = parseQuantifier();
+						var tail = compileTerms(0, junction);
+						var inner = disjunc.code;
+						var tearDown = '';
+						if (quantity && (quantity.max > 1 && quantity.max < Infinity || quantity.min > 1)) {
+							initCounters += ',n' + thisFunctionNumber + '=0';
+							if (quantity.max < Infinity) {
+								inner = and('++n' + thisFunctionNumber + '<=' + quantity.max, inner);
+							}
+							if (quantity.min > 1) {
+								inner = and(inner, 'n' + thisFunctionNumber + '>=' + quantity.min, inner);
+							}
+							inner = or(inner, '(--n' + thisFunctionNumber + ',false)');
+						}
+						addFunction(groupName + '(p) { ' + captureWrap(openCaptureFrom, openCaptureTo, inner) + '; }');
 						if (quantity && quantity.max > 1) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail.code) : or(tail.code, recursionCall));
-							funcs.push('function ' + junctionName + '(p) { '+ captureWrap(closeCaptureFrom, closeCaptureTo, inner) + '; }');
+							addFunction(junctionName + '(p) { '+ captureWrap(closeCaptureFrom, closeCaptureTo, inner) + '; }');
 							code = and(code, (quantity.min === 0 ? junctionName : groupName) + '(' + positionToCode(offset) + ')');
 						} else {
-							funcs.push('function ' + junctionName + '(p) { ' + captureWrap(closeCaptureFrom, closeCaptureTo, or('', tail.code)) + '; }');
+							addFunction(junctionName + '(p) { ' + captureWrap(closeCaptureFrom, closeCaptureTo, tail.code) + '; }');
 							var groupCall = groupName + '(' + positionToCode(offset) + ')';
 							if (quantity && quantity.min === 0) {
 								var junctionCall = junctionName + '(' + positionToCode(offset) + ')';
@@ -248,13 +310,13 @@ function compileRegExp(s) {
 				}
 			}
 		}
-		return { code: join(code, junction, offset), offset: offset };
+		return { code: (junction === '' ? code : and(code, junction + '(' + positionToCode(offset) + ')')), offset: offset };
 	}
 
-	function disjunction(offset, junction) {
-		var code = '', minOffset = +Infinity, maxOffset = 0;
+	function compileDisjunction(offset, junction) {
+		var code = 'false', minOffset = Infinity, maxOffset = 0;
 		for (;;) {
-			var t = terms(offset, junction);
+			var t = compileTerms(offset, junction);
 			code = or(code, t.code);
 			minOffset = Math.min(minOffset, t.offset);
 			maxOffset = Math.max(maxOffset, t.offset);
@@ -266,16 +328,15 @@ function compileRegExp(s) {
 		}
 	}
 
-	var disjunc = disjunction(0, ''); 
+	var disjunc = compileDisjunction(0, ''); 
 	if (p < e) throw "error"; // FIX
-	var s = "(function(s, p) {\n\tvar l=s.length,e";
-	for (var i = 0; i < captureCounter * 2; ++i) s += ",c" + i;
-	s += ";\n";
-	for (var i = 0; i < funcs.length; ++i) s += "\t" + funcs[i] + "\n";
-	s += "\tif (" + disjunc.code + ") return [p,e";
-	for (var i = 0; i < captureCounter * 2; ++i) s += ",c" + i;
-	s += "];\n})";
-	return s;
+	var code = "(function(s, p) {\n\tvar l=s.length,e";
+	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
+	code += initCounters + ";\n" + functions + "\tif (" + disjunc.code + ") return [p,e";
+	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
+	code += "];\n})";
+print('');print(s);print('---');print(code);print('');
+	return code;
 }
 
 function submatch(s, pos, str) { return (s.substr(pos, str.length) === str); }
@@ -319,7 +380,7 @@ function $execRegExp(re, string) {
 	var i, m, l;
 	string = $toString(string);
 	if ((i = (re.global ? $toInteger(re.lastIndex) : 0)) >= 0) {
-		for (l = string.length; i < l; ++i) {
+		for (l = string.length; i <= l; ++i) {
 			if (m = re.match(string, i)) {
 				if (re.global) {
 					re.lastIndex = m[1];
@@ -337,7 +398,7 @@ MyRegExp.prototype.exec = function(string) {
 		(a = [ ]).input = string;
 		a.index = m[0];
 		for (var j = 0; j < m.length; j += 2) {
-			a[a.length] = string.substring(m[j], m[j + 1]);
+			a[a.length] = ((m[j] === void 0) ? void 0 : string.substring(m[j], m[j + 1]));
 		}
 	}
 	return a;
@@ -380,6 +441,17 @@ print(compileRegExp(".*"));
 print(compileRegExp("s(a)??(a)?$"));
 */
 
+function myescape(s) {
+	var o = '', b = 0, c;
+	for (var i = 0; i < s.length; ++i) {
+		if ((c = s[i]) < ' ' || c > '\x7E') {
+			o += s.substring(b, i) + ("\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4));
+			b = i + 1;
+		}
+	}
+	return o + (b > 0 ? s.substring(b, i) : s);
+}
+
 function testRE(re, s) {
 	var m = re.exec(s);
 	var r = '';
@@ -388,11 +460,11 @@ function testRE(re, s) {
 	} else {
 		r = '{ ';
 		for (var i = 0; i < m.length; ++i) {
-			r += (i > 0 ? ', ' : '') + m[i];
+			r += (i > 0 ? ', ' : '') + myescape('' + m[i]);
 		}
 		r += ' } @ ' + m.index + ' (next: ' + re.lastIndex + ')';
 	}
-	print(re.toString() + " on " + s + ": " + r + "\n");
+	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
 var t = new MyRegExp("abcdef", "g");
@@ -410,6 +482,18 @@ testRE(t, "abc\ndef");
 testRE(t, "abc\u2029def");
 testRE(t, "abc");
 
+var t = new MyRegExp("^(a|bc|def)$");
+testRE(t, "");
+testRE(t, "a");
+testRE(t, "bc");
+testRE(t, "def");
+testRE(t, "bcdef");
+
+var t = new MyRegExp("^(|a|bc|def)$");
+testRE(t, "");
+testRE(t, "def");
+testRE(t, "bcdef");
+
 var t = new MyRegExp("\\w\\w\\w");
 testRE(t, "");
 testRE(t, "123");
@@ -420,3 +504,28 @@ testRE(t, "12#");
 testRE(t, "#%)");
 var t = new MyRegExp("\\w\\w\\w\\W\\s\\s\\s\\S\\S\\S\\d\\d\\d\\d\\D\\D\\D\\D");
 testRE(t, "q9_!\n \u2028lm_9124qwer");
+
+var t = new MyRegExp("(z)(((?:a)+)?((?:b)+)?(c))*");
+testRE(t, "");
+testRE(t, "zaacbbbcac");
+t = new MyRegExp("s(a)??(a)?$");
+testRE(t, "");
+testRE(t, "s");
+testRE(t, "sa");
+testRE(t, "saa");
+testRE(t, "saaa");
+
+t = new MyRegExp("(a){3}");
+testRE(t, "a");
+testRE(t, "aa");
+testRE(t, "aaa");
+testRE(t, "aaaa");
+t = new MyRegExp("(a){3,}");
+testRE(t, "aa");
+testRE(t, "aaa");
+testRE(t, "aaaa");
+t = new MyRegExp("(a){13,23}$");
+testRE(t, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+t = new MyRegExp("(a){1,1}?$");
+testRE(t, "a");
+testRE(t, "aa");

@@ -994,8 +994,9 @@ class Engine {
 				Array arrayPrototype;
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
-				ScriptFunction* toNumberFunction;
-				ScriptFunction* toStringFunction;
+				Function* toNumberFunction;
+				Function* toStringFunction;
+				Function* createRegExpFunction;
 };
 
 class ScriptFrame : public LazyObject<Frame> {
@@ -1196,6 +1197,7 @@ class Processor : public GCItem {
 					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
+					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object		// FIX : I suppose this could be two immediate constants, or one 2-element array constant or even a string with a special flags prefix?
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value

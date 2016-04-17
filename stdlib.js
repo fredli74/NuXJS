@@ -413,6 +413,19 @@
 			return this.join();
 		})
 	});
+	
+	/* --- RegExp --- */
+	
+	var $regExpPrototype;
+	var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
+			return ($support.getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
+		}, function RegExp(pattern, flags) {
+			return $support.createWrapper('RegExp', { }, $regExpPrototype);
+		}
+	);
+	$defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $regExpPrototype = RegExp.prototype });
+	$defineProperties(RegExp.prototype, { dontEnum: true }, {
+	});
 
 	/* --- Set up globals --- */
 
@@ -423,6 +436,7 @@
 		Math: $support.createWrapper('Math', void 0),
 		Number: Number,
 		Object: Object,
+		RegExp: RegExp,
 		String: String,
 		isFinite: $unconstructable(function isFinite(v) { return $isFinite(+v) }),
 		isNaN: $unconstructable(function isNaN(v) { return $isNaN(+v) }),
