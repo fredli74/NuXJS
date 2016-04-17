@@ -1,6 +1,9 @@
 "use strict";
 
-var OK_IN_STRING_LITERAL = 1, SPECIAL_CHAR = 2, DECIMAL_CHAR = 4, HEX_CHAR = 8, ESCAPE_CHAR = 16, LETTER_CHAR = 32, NEWLINE_CHAR = 64, SPACE_CHAR = 128, WORD_CHAR = 256, EMPTY_CHAR = 512; // FIX : sort, make array?
+var v = 1;
+var EMPTY_CHAR = v, NEWLINE_CHAR = (v <<= 1), SPACE_CHAR = (v <<= 1), WORD_CHAR = (v <<= 1), DECIMAL_CHAR = (v <<= 1);
+var LETTER_CHAR = (v <<= 1), HEX_CHAR = (v <<= 1), ESCAPE_CHAR = (v <<= 1), SPECIAL_CHAR = (v <<= 1);
+var OK_IN_STRING_LITERAL = (v <<= 1);
 var CC = { };
 
 function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask; }
@@ -190,7 +193,7 @@ function compileRegExp(s) {
 				}
 				rollbacks += (i > fromCapture ? ',c' : 'c') + i + '=r' + i;
 			}
-			return declares + '; return ' + captures + ', ' + code + ' || (' + rollbacks + ',false)';
+			return declares + '; return ' + captures + ', ' + or(code, '(' + rollbacks + ',false)');
 		}
 	}
 
@@ -253,31 +256,36 @@ function compileRegExp(s) {
 						break;
 					}
 					case '(': {
+						var b = p; // FIX : only used because of break termLoop further down...
 						var thisFunctionNumber = ++functionCounter;
 						var groupName = 'g' + thisFunctionNumber;
+						var groupCall = groupName + '(' + positionToCode(offset) + ')';
 						var junctionName = 'j' + thisFunctionNumber;
-						var doCapture = true;
+						var junctionCall = junctionName + '(' + positionToCode(offset) + ')';
+						var doCapture = true, lookAhead = false, negativeLookAhead = false;
 						++p;
 						if (s[p] === '?') {
-							switch (s[++p]) {
-								case ':': doCapture = false; break;
-								default: throw "error"; // FIX
+							switch (s[p + 1]) {
+								case '!': negativeLookAhead = true;
+								case '=': lookAhead = true;
+								case ':': doCapture = false; p += 2;
 							}
-							++p;
 						}
 						var openCaptureFrom = null, openCaptureTo = null, closeCaptureFrom = null, closeCaptureTo = null;
 						if (doCapture) {
 							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
 						}
-						var disjunc = compileDisjunction(0, junctionName);
+						var disjunc = compileDisjunction(0, (lookAhead ? '' : junctionName));
 						if (doCapture) {
 							openCaptureTo = captureCounter * 2;
 						}
 						if (s[p] !== ')') {
+							p = b; // FIX : a bit silly maybe, why not throw here directly?
+							break termLoop; // FIX : following message doesn't really work if we are not truly at the end, e.g. (?%) aborts at ? and ends up here
 							throw SyntaxError("Unterminated group in regular expression");
 						}
 						++p;
-						var quantity = parseQuantifier();
+						var quantity = (lookAhead ? null : parseQuantifier());
 						var tail = compileTerms(0, junction);
 						var inner = disjunc.code;
 						var tearDown = '';
@@ -291,17 +299,18 @@ function compileRegExp(s) {
 							}
 							inner = or(inner, '(--n' + thisFunctionNumber + ',false)');
 						}
+						if (lookAhead) {
+							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionCall);
+						}
 						addFunction(groupName + '(p) { ' + captureWrap(openCaptureFrom, openCaptureTo, inner) + '; }');
 						if (quantity && quantity.max > 1) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail.code) : or(tail.code, recursionCall));
 							addFunction(junctionName + '(p) { '+ captureWrap(closeCaptureFrom, closeCaptureTo, inner) + '; }');
-							code = and(code, (quantity.min === 0 ? junctionName : groupName) + '(' + positionToCode(offset) + ')');
+							code = and(code, (quantity.min === 0 ? junctionCall : groupCall));
 						} else {
 							addFunction(junctionName + '(p) { ' + captureWrap(closeCaptureFrom, closeCaptureTo, tail.code) + '; }');
-							var groupCall = groupName + '(' + positionToCode(offset) + ')';
 							if (quantity && quantity.min === 0) {
-								var junctionCall = junctionName + '(' + positionToCode(offset) + ')';
 								code = and(code, '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')');
 							} else {
 								code = and(code, groupCall);
@@ -581,10 +590,29 @@ try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
 t = new MyRegExp("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\1\\2\\3\\4\\5\\6\\7\\8\\9\\10\\11\\12");
 testRE(t, "abcdefghijklabcdefghijkl");
 
-/*
+t = new MyRegExp("^(?=abc)abcdef$");
+testRE(t, 'def');
+testRE(t, 'abcabcdef');
+testRE(t, 'abcdef');
 
-t = new MyRegExp("(?:abc(def)*)ghi");
-print(t.match);
+t = new MyRegExp("^(?=(abc|ab))abcdef\\1$");
+testRE(t, 'abcdefabc');
+testRE(t, 'abcdefab');
+t = new MyRegExp("^(?=(ab|abc))abcdef\\1$");
+testRE(t, 'abcdefabc');
+testRE(t, 'abcdefab');
 
-// /(?=(abc|ab))abcdef\1/.exec('abcdefab')
-*/
+/*t = new MyRegExp("(?=((?:a)+))(?:a)*b\\1");
+testRE(t, "baaabac");*/
+
+try { t = new MyRegExp("^(?=ab)*abcdef$"); } catch (x) { print(x); }
+try { t = new MyRegExp("(?%)"); } catch (x) { print(x); }
+try { t = new MyRegExp("("); } catch (x) { print(x); }
+
+t = new MyRegExp("^(?!abc)(.)+$");
+testRE(t, "abc");
+testRE(t, "ab");
+testRE(t, "abcd");
+
+t = new MyRegExp("^(?!(abc))(.)+$");
+testRE(t, "abab");
