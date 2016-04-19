@@ -186,7 +186,7 @@
 	};
 	(function() {
 		var c, bidirectional = {
-			"A":"a", "B":"b", "C":"c", "D":"d", "E":"e", "F":"f", "G":"g", "H":"h", "I":"i", "J":"j", "K":"k", "L":"l",	"M":"m",
+			"A":"a", "B":"b", "C":"c", "D":"d", "E":"e", "F":"f", "G":"g", "H":"h", "I":"i", "J":"j", "K":"k", "L":"l", "M":"m",
 			"N":"n", "O":"o", "P":"p", "Q":"q", "R":"r", "S":"s", "T":"t", "U":"u", "V":"v", "W":"w", "X":"x", "Y":"y", "Z":"z",
 			"\xc0":"\xe0",  // LATIN CAPITAL LETTER A WITH GRAVE
 			"\xc1":"\xe1",  // LATIN CAPITAL LETTER A WITH ACUTE
@@ -276,7 +276,7 @@
 			"\u0172":"\u0173",  // LATIN CAPITAL LETTER U WITH OGONEK
 			"\u0174":"\u0175",  // LATIN CAPITAL LETTER W WITH CIRCUMFLEX
 			"\u0176":"\u0177",  // LATIN CAPITAL LETTER Y WITH CIRCUMFLEX
-			"\u0178":"\xff",    // LATIN CAPITAL LETTER Y WITH DIAERESIS
+			"\u0178":"\xff",  // LATIN CAPITAL LETTER Y WITH DIAERESIS
 			"\u0179":"\u017a",  // LATIN CAPITAL LETTER Z WITH ACUTE
 			"\u017b":"\u017c",  // LATIN CAPITAL LETTER Z WITH DOT ABOVE
 			"\u017d":"\u017e",  // LATIN CAPITAL LETTER Z WITH CARON
