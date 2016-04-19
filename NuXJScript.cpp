@@ -4289,3 +4289,4 @@ if (!supressStdErr) {
 	if (pauseBeforeQuit) std::wcin.get();
 	return 0;
 }
+launchctl stop se.elysian.hashback.plist
