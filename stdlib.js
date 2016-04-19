@@ -260,6 +260,12 @@
 		for (c in bidirectional) $lowerToUpper[$upperToLower[c] = bidirectional[c]] = c;
 	})();
 
+	function $translateString(string, table) {
+		var i = -1, l = string.length, s = '', t, c;
+		while (++i < l) s += (t = table[c = string[i]]) ? t : c;
+		return s;
+	}
+
 	var String = $support.specialConstructor(function String(v) {
 			return (arguments.length ? $toString(v) : '');
 		}, function String(v) {
@@ -314,16 +320,10 @@
 			}
 			return $support.substring($toString(this), start, end);
 		}),
-		toUpperCase: $unconstructable(function() {
-			var i = -1, t, l = (t = $toString(this)).length, l2u = $lowerToUpper, s = '', u, c;
-			while (++i < l) s += (u = l2u[c = t[i]]) ? u : c;
-			return s;
-		}),
-		toLowerCase: $unconstructable(function() {
-			var i = -1, t, l = (t = $toString(this)).length, u2l = $upperToLower, s = '', u, c;
-			while (++i < l) s += (u = u2l[c = t[i]]) ? u : c;
-			return s;
-		}),
+		toUpperCase: $unconstructable(function() { return $translateString($toString(this), $lowerToUpper); }),
+		toLocaleUpperCase: $unconstructable(function() { return $translateString($toString(this), $lowerToUpper); }),
+		toLowerCase: $unconstructable(function() { return $translateString($toString(this), $upperToLower); }),
+		toLocaleLowerCase: $unconstructable(function() { return $translateString($toString(this), $upperToLower); }),
 		valueOf: $unconstructable(function valueOf() {
 			$checkClass(this, 'String', 'valueOf');
 			return $support.getInternalProperty(this, 'value');
