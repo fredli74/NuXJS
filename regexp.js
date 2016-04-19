@@ -151,7 +151,7 @@ function compileRegExp(s) {
 		}
 	}
 
-	var functions = '', functionCounter = 0, captureCounter = 0, initCounters = '', maxBackReference = 0;
+	var functions = '', functionCounter = 0, captureCounter = 0, closureVars = '', maxBackReference = 0;
 
 	function and(a, b) {
 		switch (a) {
@@ -173,31 +173,38 @@ function compileRegExp(s) {
 		functions += "\tfunction " + name + '(p) { ' + definition + "; }\n";
 	}
 
-	function quantify(code, offset, junction, repeatCode, quantity) {
+	function quantify(code, offset, junction, repeatCode, quantity, stepSize) {
 		var functionName = 'q' + (++functionCounter);
 		var tail = compileTerms(0, junction);
 		if (quantity.greedy) {
-			addFunction(functionName, 'var b=p+' + quantity.min + ',e=p+' + quantity.max + '; while (' + and('p<e', repeatCode) + ') ++p; while (' + and('p>=b', '!(' + tail + ')') + ') --p; return p>=b');
+			addFunction(functionName, 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h'
+					: 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
+					+ '; while (' + and('p>=b', '!(' + tail + ')') + ') ' + (stepSize ? 'p-=h' : '--p') + '; return p>=b');
 		} else {
 			addFunction(functionName, 'var b=p+' + quantity.min + ',e=p+' + quantity.max + '; while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ++p }; return true');
 		}
 		return and(code, functionName + '(' + positionToCode(offset) + ')');
 	}
 	
-	function captureWrap(fromCapture, toCapture, code) {
-		if (fromCapture === toCapture) {
+	function captureWrap(capturePrefix, fromCapture, toCapture, code, looping, extraEndlessCheck) {
+		if (fromCapture === toCapture && !looping) {
 			return 'return ' + code;
 		} else {
 			var declares = '', captures = '', rollbacks = '';
 			for (var i = fromCapture; i < toCapture; i += 2) {
-				declares += (i > fromCapture ? ',r' : 'var r') + i + '=c' + i;
-				captures += (i === fromCapture + 2 ? ',c' : 'c') + i + (i === fromCapture ? '=p' : '=');
+				declares += (i > fromCapture ? ',r' : 'var r') + i + '=' + capturePrefix + i;
+				captures += (i === fromCapture + 2 ? ',' : '') + capturePrefix + i + (i === fromCapture ? '=p' : '=');
 				if (i === toCapture - 2 && fromCapture + 2 < toCapture) {
 					captures += 'void 0';
 				}
-				rollbacks += (i > fromCapture ? ',c' : 'c') + i + '=r' + i;
+				rollbacks += (i > fromCapture ? ',' : '') + capturePrefix + i + '=r' + i;
 			}
-			return declares + '; return ' + captures + ', ' + or(code, '(' + rollbacks + ',false)');
+			code = captures + ', ' + or(code, '(' + rollbacks + ',false)');
+			if (looping) {
+				var endlessCheck = capturePrefix + fromCapture + '!=p';
+				code = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, '(' + code + ')');
+			}
+			return declares + '; return ' + code;
 		}
 	}
 
@@ -240,14 +247,15 @@ function compileRegExp(s) {
 								maxBackReference = n;
 							}
 							n = (n - 1) * 2;
+							var stepSize = 'c' + (n + 1) + '-c' + n;
 							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							if (quantity = parseQuantifier()) {
-								return quantify(code, offset, '', backMatchCode, quantity);
+								return quantify(code, offset, '', backMatchCode, quantity, stepSize);
 							}
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
-							return and(code, '(' + or(and('c' + n + '===void 0', tailName + '(' + positionToCode(offset) + ')'), and(backMatchCode, tailName + '(' + positionToCode(offset) + '+c' + (n + 1) + '-c' + n + ')')) + ')');
+							return and(code, '(' + or(and('c' + n + '===void 0', tailName + '(' + positionToCode(offset) + ')'), and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
 						}
 						c = s[p];
 						// fall-through
@@ -281,9 +289,10 @@ function compileRegExp(s) {
 								case ':': doCapture = false; p += 2;
 							}
 						}
-						var openCaptureFrom = null, openCaptureTo = null, closeCaptureFrom = null, closeCaptureTo = null;
+						var capturePrefix = 'c', openCaptureFrom = null, openCaptureTo = null, closeCaptureFrom = null, closeCaptureTo = null;
 						if (doCapture) {
 							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
+							closureVars += ',c' + openCaptureFrom + ',c' + closeCaptureFrom;
 						}
 						var disjunction = compileDisjunction(0, (lookAhead ? '' : junctionName));
 						if (doCapture) {
@@ -296,11 +305,17 @@ function compileRegExp(s) {
 						}
 						++p;
 						var quantity = (lookAhead ? null : parseQuantifier());
+						var looping = (quantity && quantity.max > 1);
+						if (looping && !doCapture) {
+							openCaptureTo = (openCaptureFrom = functionNumber) + 2;
+							capturePrefix = 'p';
+							closureVars += ',p' + functionNumber;
+						}
 						var tail = compileTerms(0, junction);
 						var inner = disjunction;
-						var tearDown = '';
-						if (quantity && (quantity.max > 1 && quantity.max < Infinity || quantity.min > 1)) {
-							initCounters += ',n' + functionNumber + '=0';
+						var extraEndlessCheck = '';
+						if (looping && (quantity.max < Infinity || quantity.min > 1)) {
+							closureVars += ',n' + functionNumber + '=0';
 							if (quantity.max < Infinity) {
 								inner = and('++n' + functionNumber + '<=' + quantity.max, inner);
 							} else {
@@ -308,20 +323,21 @@ function compileRegExp(s) {
 							}
 							if (quantity.min > 1) {
 								inner = and(inner, 'n' + functionNumber + '>=' + quantity.min, inner);
+								extraEndlessCheck = 'n' + functionNumber + '<' + quantity.min;
 							}
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
-						if (lookAhead) {
+						if (lookAhead) { // FIX : inner can contain ||, this doesn't work then right?
 							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionCall);
 						}
-						addFunction(groupName, captureWrap(openCaptureFrom, openCaptureTo, inner));
-						if (quantity && quantity.max > 1) {
+						addFunction(groupName, captureWrap(capturePrefix, openCaptureFrom, openCaptureTo, inner, looping, extraEndlessCheck));
+						if (looping) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
-							addFunction(junctionName, captureWrap(closeCaptureFrom, closeCaptureTo, inner));
+							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, inner));
 							code = and(code, (quantity.min === 0 ? junctionCall : groupCall));
 						} else {
-							addFunction(junctionName, captureWrap(closeCaptureFrom, closeCaptureTo, tail));
+							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, tail));
 							if (quantity && quantity.min === 0) {
 								code = and(code, (quantity.max === 0 ? junctionCall
 										: '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')'));
@@ -356,12 +372,11 @@ function compileRegExp(s) {
 	if (maxBackReference > captureCounter) {
 		throw SyntaxError("Invalid back reference in regular expression");
 	}
-	var code = "(function(s, p) {\n\tvar l=s.length,e";
-	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
-	code += initCounters + ";\n" + functions + "\tif (" + disjunction + ") return [p,e";
+	var code = "(function(s, p) {\n\"use strict\";\n\tvar l=s.length,e"; // FIX : not "use strict"
+	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,e";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
 	code += "];\n})";
-print('');print(s);print('---');print(code);print('');
+//print('');print(s);print('---');print(code);print('');
 	return code;
 }
 
@@ -493,6 +508,8 @@ function testRE(re, s) {
 	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
+//MyRegExp = RegExp;
+
 var t = new MyRegExp("abcdef", "g");
 var m;
 testRE(t, "abcdef");
@@ -583,6 +600,33 @@ testRE(t, "qwertydefdef");
 testRE(t, "qwertyabcdef");
 testRE(t, "qwertydefabc");
 
+t = new MyRegExp("^qwerty(abc|defg)\\1?$");
+testRE(t, "qwertyabc");
+testRE(t, "qwertydefgdefg");
+testRE(t, "qwertyabcabcabc");
+
+t = new MyRegExp("^qwerty(abc|defg)\\1*$");
+testRE(t, "qwertyabc");
+testRE(t, "qwertydefgdefg");
+testRE(t, "qwertyabcabcabc");
+
+t = new MyRegExp("^qwerty(abc|defg)\\1+$");
+testRE(t, "qwertyabc");
+testRE(t, "qwertydefgdefg");
+testRE(t, "qwertyabcabcabc");
+
+t = new MyRegExp("^qwerty(abc|defg)\\1+?$");
+print(t.match);
+testRE(t, "qwertyabc");
+testRE(t, "qwertydefgdefg");
+testRE(t, "qwertyabcabcabcabcabc");
+
+t = new MyRegExp("^qwerty(abc|defg|)\\1*end$");
+print(t.match);
+testRE(t, "qwertyabc");
+testRE(t, "qwertydefgdefg");
+testRE(t, "qwertyend");
+
 t = new MyRegExp("^(ab|def|ghij)?\\1{5}$");
 testRE(t, "");
 testRE(t, "ababababab");
@@ -615,6 +659,11 @@ testRE(t, "xxxxa");
 testRE(t, "xxxxaaaa");
 testRE(t, "xxxxaaaaaa");
 testRE(t, "xxxxaaaaaaaa");
+
+t = new MyRegExp("((?:a)*)(\\1){3,}$");
+testRE(t, "");
+testRE(t, "xxxxaaaa");
+testRE(t, "xxxxaaaaaaaaaaaaa");
 
 try { t = new MyRegExp("\\1"); } catch (x) { print(x); }
 try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
@@ -713,12 +762,26 @@ testRE(t, "startxxxxxxxxxxend");
 t = new MyRegExp("(?=(a+))a*b\\1");
 testRE(t, "baaabac");
 
-t = new MyRegExp("^(?:(a)b|(ab))(?:\\2)+$");
-testRE(t, "ababab");
-
 t = new MyRegExp("(a*)*q");
+//print(t.match);
 testRE(t, "aaq");
+t = new MyRegExp("((?:a)*)*q");
+//print(t.match);
+testRE(t, "aaq");
+t = new MyRegExp("(a*|b*)*q");
+testRE(t, "aaq");
+testRE(t, "bbq");
 
 t = new MyRegExp("(a*)b(\\1)+");
 testRE(t, "baaaac");
 
+t = new MyRegExp("^(?:(a)b|(ab))(?:\\2)+$");
+testRE(t, "ababab");
+
+t = new MyRegExp("(a+)*q");
+//print(t.match);
+testRE(t, "aaq");
+
+t = new MyRegExp("(a*)+q");
+//print(t.match);
+testRE(t, "aaq");
