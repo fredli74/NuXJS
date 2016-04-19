@@ -1,4 +1,4 @@
-/**
+/***
 	upperCase / lowerCase string conversion based on Unicode 2.1.8 specification
 
 	## TODO ##
@@ -15,7 +15,7 @@
 	// Turkish
 	0049; 0049; 0131; 0131; tr; # LATIN CAPITAL LETTER I
 	0069; 0069; 0130; 0130; tr; # LATIN SMALL LETTER I
-**/
+***/
 
 (function() {
 	var $lowerToUpper = {
@@ -804,19 +804,20 @@
 		for (c in bidirectional) $lowerToUpper[$upperToLower[c] = bidirectional[c]] = c;
 	})();
 
-	String.prototype.uniUpperCase = function() {
+	String.prototype["uniUpperCase"] = function() {
 		var u, i, s = "";
 		for (i = 0; i < this.length; ++i) u = $lowerToUpper[this[i]], s += u === void 0 ? this[i] : u;
 		return s;
 	};
-	String.prototype.uniLowerCase = function() {
+
+	String.prototype["uniLowerCase"] = function() {
 		var u, i, s = "";
 		for (i = 0; i < this.length; ++i) u = $upperToLower[this[i]], s += u === void 0 ? this[i] : u;
 		return s;
 	};	
 })();
 
-/**
+/***
 	// TEST conversions towards native toLowerCase and toUpperCase 
 	(function() {
 		function hexEncode(s) {
@@ -847,4 +848,4 @@
 			if (up !== myUp) console.log("toUpperCase compare failed, char " + c + " (" + hexEncode(c) + ") -> " + myUp + " (" + hexEncode(myUp) + ") !== " + up + " (" + hexEncode(up) + ")");
 		}
 	})();
-**/
+***/
