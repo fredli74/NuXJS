@@ -806,12 +806,12 @@
 
 	String.prototype.uniUpperCase = function() {
 		var u, i, s = "";
-		for (i = 0; i < this.length; ++i) u = lowerToUpper[this[i]], s += u === void 0 ? this[i] : u;
+		for (i = 0; i < this.length; ++i) u = $lowerToUpper[this[i]], s += u === void 0 ? this[i] : u;
 		return s;
 	};
 	String.prototype.uniLowerCase = function() {
 		var u, i, s = "";
-		for (i = 0; i < this.length; ++i) u = upperToLower[this[i]], s += u === void 0 ? this[i] : u;
+		for (i = 0; i < this.length; ++i) u = $upperToLower[this[i]], s += u === void 0 ? this[i] : u;
 		return s;
 	};	
 })();
