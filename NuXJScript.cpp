@@ -582,6 +582,7 @@ Flags String::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 		*v = Value(static_cast<Int32>(size()));
 		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
+	// FIX : use toArrayIndex
 	const double d = key.toDouble(); // FIX : this is not right, it shouldn't accept "  123  " as a number...
 	const UInt32 i = static_cast<UInt32>(d);
 	if (i == d && i < size()) {
@@ -4116,7 +4117,7 @@ supressStdErr = false;
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;
 	bool doTime = false;
-	long gcRate = 20000000;
+	long gcRate = 1000000;
 	bool pauseBeforeQuit = false;
 	for (int argi = 1; argi < argc; ++argi) {
 		if (strcmp(argv[argi], "-t") == 0) doTime = true;
