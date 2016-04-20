@@ -173,15 +173,17 @@ function compileRegExp(s) {
 		functions += "\tfunction " + name + '(p) { ' + definition + "; }\n";
 	}
 
-	function quantify(code, offset, junction, repeatCode, quantity, stepSize) {
+	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
 		var functionName = 'q' + (++functionCounter);
-		var tail = compileTerms(0, junction);
+		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h' : 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; ';
+		if (stepSize) {
+			head += 'if (h===0 || h!==h) return ' + tail + '; ';
+		} 
 		if (quantity.greedy) {
-			addFunction(functionName, 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h'
-					: 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
+			addFunction(functionName, head + 'while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
 					+ '; while (' + and('p>=b', '!(' + tail + ')') + ') ' + (stepSize ? 'p-=h' : '--p') + '; return p>=b');
 		} else {
-			addFunction(functionName, 'var b=p+' + quantity.min + ',e=p+' + quantity.max + '; while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ++p }; return true');
+			addFunction(functionName, head + 'while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ' + (stepSize ? 'p+=h' : '++p') + '; }; return true');
 		}
 		return and(code, functionName + '(' + positionToCode(offset) + ')');
 	}
@@ -219,7 +221,8 @@ function compileRegExp(s) {
 				if (quantity = parseQuantifier()) {
 					var repeatLiteral = literalSequence.pop();
 					return quantify(and(code, literalSequenceToCode(literalSequence, offset))
-							, offset + literalSequence.length, junction, literalSequenceToCode(repeatLiteral, 0)
+							, offset + literalSequence.length, literalSequenceToCode(repeatLiteral, 0)
+							, compileTerms(0, junction)
 							, quantity);
 				}
 				code = and(code, literalSequenceToCode(literalSequence, offset));
@@ -247,15 +250,17 @@ function compileRegExp(s) {
 								maxBackReference = n;
 							}
 							n = (n - 1) * 2;
+							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
 							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
-							if (quantity = parseQuantifier()) {
-								return quantify(code, offset, '', backMatchCode, quantity, stepSize);
-							}
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
+							var tailCall = tailName + '(' + positionToCode(offset) + ')';
 							addFunction(tailName, 'return ' + tail);
-							return and(code, '(' + or(and('c' + n + '===void 0', tailName + '(' + positionToCode(offset) + ')'), and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
+							if (quantity) {
+								return quantify(code, offset, backMatchCode, tailCall, quantity, stepSize);
+							}
+							return and(code, '(' + or(and('c' + n + '===void 0', tailCall), and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
 						}
 						c = s[p];
 						// fall-through
@@ -267,7 +272,7 @@ function compileRegExp(s) {
 						}
 						++p;
 						if (quantity = parseQuantifier()) {
-							return quantify(code, offset, junction, charClassToCode(0, rule[0], rule[1]), quantity);
+							return quantify(code, offset, charClassToCode(0, rule[0], rule[1]), compileTerms(0, junction), quantity);
 						}
 						code = and(code, charClassToCode(offset, rule[0], rule[1]));
 						++offset;
@@ -327,7 +332,7 @@ function compileRegExp(s) {
 							}
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
-						if (lookAhead) { // FIX : inner can contain ||, this doesn't work then right?
+						if (lookAhead) {
 							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionCall);
 						}
 						addFunction(groupName, captureWrap(capturePrefix, openCaptureFrom, openCaptureTo, inner, looping, extraEndlessCheck));
@@ -355,13 +360,15 @@ function compileRegExp(s) {
 	}
 
 	function compileDisjunction(offset, junction) {
-		var code = 'false', minOffset = Infinity, maxOffset = 0;
-		for (;;) {
-			code = or(code, compileTerms(offset, junction));
-			if (s[p] !== '|') {
-				return code;
-			}
-			++p;
+		var code = compileTerms(offset, junction);
+		if (s[p] !== '|') {
+			return code;
+		} else {
+			do {
+				++p;
+				code = or(code, compileTerms(offset, junction));
+			} while (s[p] === '|');
+			return '(' + code + ')';
 		}
 	}
 
@@ -508,7 +515,7 @@ function testRE(re, s) {
 	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
-//MyRegExp = RegExp;
+MyRegExp = RegExp;
 
 var t = new MyRegExp("abcdef", "g");
 var m;
@@ -589,6 +596,12 @@ t = new MyRegExp("(a){1,1}?$");
 testRE(t, "a");
 testRE(t, "aa");
 
+t = new MyRegExp("^(a|bc|def){3,5}$");
+testRE(t, "abcdef");
+testRE(t, "defbca");
+testRE(t, "aaaaa");
+testRE(t, "abcdefabcdef");
+
 t = new MyRegExp("(abc)\\1");
 testRE(t, "abc");
 testRE(t, "abcabc");
@@ -616,16 +629,27 @@ testRE(t, "qwertydefgdefg");
 testRE(t, "qwertyabcabcabc");
 
 t = new MyRegExp("^qwerty(abc|defg)\\1+?$");
-print(t.match);
 testRE(t, "qwertyabc");
 testRE(t, "qwertydefgdefg");
 testRE(t, "qwertyabcabcabcabcabc");
 
-t = new MyRegExp("^qwerty(abc|defg|)\\1*end$");
-print(t.match);
-testRE(t, "qwertyabc");
+t = new MyRegExp("^qwerty(abc|defg|)\\1*abc$");
+testRE(t, "qwertydefg");
 testRE(t, "qwertydefgdefg");
-testRE(t, "qwertyend");
+testRE(t, "qwertyabc");
+
+t = new MyRegExp("^(ab|def|ghij)?\\1{0}$");
+testRE(t, "");
+testRE(t, "ghij");
+testRE(t, "ababababab");
+testRE(t, "abababababab");
+
+t = new MyRegExp("^(ab|def|ghij)?\\1{1}$");
+testRE(t, "");
+testRE(t, "def");
+testRE(t, "defdef");
+testRE(t, "ababababab");
+testRE(t, "abababababab");
 
 t = new MyRegExp("^(ab|def|ghij)?\\1{5}$");
 testRE(t, "");
@@ -665,9 +689,6 @@ testRE(t, "");
 testRE(t, "xxxxaaaa");
 testRE(t, "xxxxaaaaaaaaaaaaa");
 
-try { t = new MyRegExp("\\1"); } catch (x) { print(x); }
-try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
-
 t = new MyRegExp("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\1\\2\\3\\4\\5\\6\\7\\8\\9\\10\\11\\12");
 testRE(t, "abcdefghijklabcdefghijkl");
 
@@ -676,6 +697,16 @@ testRE(t, 'def');
 testRE(t, 'abcabcdef');
 testRE(t, 'abcdef');
 
+t = new MyRegExp("^(?=abc|ab)abcdef$");
+testRE(t, 'abcdef');
+testRE(t, 'abcdefabc');
+testRE(t, 'abcdefab');
+
+t = new MyRegExp("^(?=nope|ab)abcdef$");
+testRE(t, 'abcdef');
+testRE(t, 'abcdefabc');
+testRE(t, 'abcdefab');
+
 t = new MyRegExp("^(?=(abc|ab))abcdef\\1$");
 testRE(t, 'abcdefabc');
 testRE(t, 'abcdefab');
@@ -683,12 +714,8 @@ t = new MyRegExp("^(?=(ab|abc))abcdef\\1$");
 testRE(t, 'abcdefabc');
 testRE(t, 'abcdefab');
 
-/*t = new MyRegExp("(?=((?:a)+))(?:a)*b\\1");
-testRE(t, "baaabac");*/
-
-try { t = new MyRegExp("^(?=ab)*abcdef$"); } catch (x) { print(x); }
-try { t = new MyRegExp("(?%)"); } catch (x) { print(x); }
-try { t = new MyRegExp("("); } catch (x) { print(x); }
+t = new MyRegExp("(?=((?:a)+))(?:a)*b\\1");
+testRE(t, "baaabac");
 
 t = new MyRegExp("^(?!abc)(.)+$");
 testRE(t, "abc");
@@ -762,11 +789,21 @@ testRE(t, "startxxxxxxxxxxend");
 t = new MyRegExp("(?=(a+))a*b\\1");
 testRE(t, "baaabac");
 
+t = new MyRegExp("(a+)*q");
+testRE(t, "aaq");
+
+t = new MyRegExp("^(?:(a)b|(ab))(?:\\2)+$");
+testRE(t, "ababab");
+
+/*
+	Here, I'm interpreting the ES specs differently from the browser engines that I've tried, but similar to (at least
+	older versions of) PCRE. The first capture will be empty because the empty string is the last successful match to
+	(a*), after which we are not progressing on the input so we break out of the two '*' loops. I believe my
+	interpretation is correct, but I am not 100%. See 15.10.2.5 in the ES spec.
+*/
 t = new MyRegExp("(a*)*q");
-//print(t.match);
 testRE(t, "aaq");
 t = new MyRegExp("((?:a)*)*q");
-//print(t.match);
 testRE(t, "aaq");
 t = new MyRegExp("(a*|b*)*q");
 testRE(t, "aaq");
@@ -775,13 +812,12 @@ testRE(t, "bbq");
 t = new MyRegExp("(a*)b(\\1)+");
 testRE(t, "baaaac");
 
-t = new MyRegExp("^(?:(a)b|(ab))(?:\\2)+$");
-testRE(t, "ababab");
-
-t = new MyRegExp("(a+)*q");
-//print(t.match);
-testRE(t, "aaq");
-
 t = new MyRegExp("(a*)+q");
-//print(t.match);
 testRE(t, "aaq");
+
+
+try { t = new MyRegExp("\\1"); } catch (x) { print(x); }
+try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
+try { t = new MyRegExp("^(?=ab)*abcdef$"); } catch (x) { print(x); }
+try { t = new MyRegExp("(?%)"); } catch (x) { print(x); }
+try { t = new MyRegExp("("); } catch (x) { print(x); }
