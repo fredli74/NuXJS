@@ -26,7 +26,7 @@ Atom                    <-  PatternCharacter
                             / '(' ('?' (':' / '=' / '!'))? Disjunction ')'
     
 PatternCharacter        <-  ![^$\\.*+?()[\]{}|] .
-    
+
 AtomEscape              <-  DecimalEscape
                             / CharacterEscape
                             / CharacterClassEscape
@@ -41,7 +41,7 @@ ControlEscape           <-  [fnrtv]
     
 ControlLetter           <-  [a-zA-Z]
     
-IdentityEscape          <-  [\0-\60\72-\101\133-\137\140\173-\180]
+IdentityEscape          <-  [\0-\57\72-\100\133-\136\140\173-\177]
     
 DecimalEscape           <-  '0' ![0-9]
                             / [1-9] [0-9]*
