@@ -6,30 +6,35 @@ var LETTER_CHAR = (v <<= 1), HEX_CHAR = (v <<= 1), ESCAPE_CHAR = (v <<= 1), SPEC
 var OK_IN_STRING_LITERAL = (v <<= 1);
 var CC = { };
 
-function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask; }
+(function() {
+	function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask; }
 
-setupCharClass(SPECIAL_CHAR, "\\^$.*+?()[]{}|");
-setupCharClass(DECIMAL_CHAR | HEX_CHAR | WORD_CHAR, "0123456789");
-setupCharClass(HEX_CHAR | LETTER_CHAR | WORD_CHAR, "abcdefABCDEF");
-setupCharClass(LETTER_CHAR | WORD_CHAR, "ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ");
-setupCharClass(NEWLINE_CHAR | SPACE_CHAR, "\n\r\u2028\u2029");
-setupCharClass(SPACE_CHAR, " \t\v\f\xA0");
-CC['_'] |= WORD_CHAR;
-CC['undefined'] |= EMPTY_CHAR;
-CC[''] |= EMPTY_CHAR;
-setupCharClass(ESCAPE_CHAR, "fnrtv");
-for (var i = 32; i <= 126; ++i) {
-	var c = String.fromCharCode(i);
-	if (c !== '"') {
-		CC[String.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
+	setupCharClass(SPECIAL_CHAR, "^$.*+?()[]{}|");
+	setupCharClass(DECIMAL_CHAR | HEX_CHAR | WORD_CHAR, "0123456789");
+	setupCharClass(HEX_CHAR | LETTER_CHAR | WORD_CHAR, "abcdefABCDEF");
+	setupCharClass(LETTER_CHAR | WORD_CHAR, "ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ");
+	setupCharClass(NEWLINE_CHAR | SPACE_CHAR, "\n\r\u2028\u2029");
+	setupCharClass(SPACE_CHAR, " \t\v\f\xA0");
+	CC['_'] |= WORD_CHAR;
+	CC['undefined'] |= EMPTY_CHAR;
+	CC[''] |= EMPTY_CHAR;
+	setupCharClass(ESCAPE_CHAR, "fnrtv");
+	for (var i = 32; i <= 126; ++i) {
+		var c = String.fromCharCode(i);
+		if (c !== '"' && c !== '\\') {
+			CC[String.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
+		}
 	}
-}
+})();
 
 // Identity chars
-// [\0-\60\72-\101\133-\137\140\173-\180]
+// \0-\60 \72-\101 \133-\137 \140 \173-\180
 
 function compileRegExp(s) {
-	function isClass(char, mask) { return ((CC[char] & mask) !== 0); }
+	function isClass(char, mask) {
+		return ((CC[char] & mask) !== 0);
+	}
+
 	function areClass(str, mask) {
 		for (var i = str.length - 1; i >= 0; --i) {
 			if ((CC[str[i]] & mask) === 0) {
@@ -38,6 +43,7 @@ function compileRegExp(s) {
 		}
 		return true;
 	}
+
 	var CHAR_CLASS_RULES = {
 		'D': [ DECIMAL_CHAR, true ], 'd': [ DECIMAL_CHAR, false ],
 		'S': [ SPACE_CHAR, true ], 's': [ SPACE_CHAR, false ],
@@ -45,7 +51,7 @@ function compileRegExp(s) {
 		'.': [ NEWLINE_CHAR, true ]
 	};
 
-	var p = 0, e = s.length;
+	var p = 0, functions = '', functionCounter = 0, captureCounter = 0, closureVars = '', maxBackReference = 0;
 
 	function parseNumber(defaultValue) {
 		var n = defaultValue;
@@ -94,47 +100,83 @@ function compileRegExp(s) {
 		}
 		return { min: min, max: max, greedy: greedy };
 	}
-	
-	function parseLiteral() {
-		var c0, c1, c2, sub;
-		var literalSequence = [ ];
-		while (p < e && (!isClass(c0 = s[p], SPECIAL_CHAR) || c0 === '\\')) {
-			if (c0 === '\\') {
-				if ((c1 = s[p + 1]) !== '0' && isClass(c1, DECIMAL_CHAR)) {
-					break;
-				} else if (c1 === '0' && !isClass(s[p + 2], DECIMAL_CHAR)) {
-					literalSequence.push("\\0");
-					p += 2;
-				} else if (isClass(c1, ESCAPE_CHAR)) {
-					literalSequence.push("\\" + c1);
-					p += 2;
-				} else if (c1 === 'c' && isClass(c2 = s[p + 2], LETTER_CHAR)) {
-					literalSequence.push("\\x" + ("00" + (c2.charCodeAt(0) & 31).toString(16)).slice(-2));
-					p += 3;
-				} else if (c1 === 'x' && areClass(sub = s.substring(p + 2, p + 4), HEX_CHAR)) {
-					literalSequence.push("\\x" + sub);
-					p += 4;
-				} else if (c1 === 'u' && areClass(sub = s.substring(p + 2, p + 6), HEX_CHAR)) {
-					literalSequence.push("\\u" + sub);
-					p += 6;
-				// } else if (identity
-				} else {
+
+	function parseLiteralCharacter() {
+		var c0, c1, sub;
+		if (isClass(c0 = s[p], OK_IN_STRING_LITERAL)) {
+			++p;
+			return c0;
+		} else if (c0 === '\\') {
+			switch (c1 = s[p + 1]) {
+				case '0': {
+					if (!isClass(s[p + 2], DECIMAL_CHAR)) {
+						p += 2;
+						return "\\0";
+					}
 					break;
 				}
-			} else if (isClass(c0, OK_IN_STRING_LITERAL)) {
-				literalSequence.push(c0);
-				++p;
-			} else if (c0 === '"') {
-				literalSequence.push('\\"');
-				++p;
-			} else {
-				literalSequence.push("\\u" + ("0000" + c0.charCodeAt(0).toString(16)).slice(-4));
-				++p;
+				case 'c': {
+					if (isClass(s[p + 2], LETTER_CHAR)) {
+						p += 3;
+						return "\\x" + ("00" + (s[p - 1].charCodeAt(0) & 31).toString(16)).slice(-2);
+					}
+					break;
+				}
+				case 'x': {
+					if (areClass(sub = s.substring(p + 2, p + 4), HEX_CHAR)) {
+						p += 4;
+						return "\\x" + sub;
+					}
+					break;
+				}
+				case 'u': {
+					if (areClass(sub = s.substring(p + 2, p + 6), HEX_CHAR)) {
+						p += 6;
+						return "\\u" + sub;
+					}
+					break;
+				}
+				default: {
+					if (isClass(c1, ESCAPE_CHAR)) {
+						p += 2;
+						return "\\" + c1;
+					} // } else if (identity
+					break;
+				}
 			}
+		} else if (c0 === '"') {
+			++p;
+			return '\\"';
+		} else if (c0) {
+			++p;
+			return "\\u" + ("0000" + c0.charCodeAt(0).toString(16)).slice(-4);
+		}
+	}
+
+	function parseLiteralSequence() {
+		var literalSequence = [ ], v;
+		while (!isClass(s[p], SPECIAL_CHAR) && (v = parseLiteralCharacter())) {
+			literalSequence.push(v);
 		}
 		return (literalSequence.length ? literalSequence : null);
 	}
 
+	function parseClassAtom() {
+		var v, rule, c;
+		if ((c = s[p]) !== ']' && (v = parseLiteralCharacter())) {
+			return v;
+		} else if (c === '\\') {
+			if ((c = s[p + 1]) === 'b') {
+				p += 2;
+				return "\\b";
+			}
+			if (rule = CHAR_CLASS_RULES[c]) {
+				p += 2;
+				return rule;
+			}
+		}
+	}
+	
 	function positionToCode(offset) {
 		return (offset === 0 ? 'p' : 'p+' + offset);
 	}
@@ -150,8 +192,6 @@ function compileRegExp(s) {
 			return 'submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
-
-	var functions = '', functionCounter = 0, captureCounter = 0, closureVars = '', maxBackReference = 0;
 
 	function and(a, b) {
 		switch (a) {
@@ -210,14 +250,14 @@ function compileRegExp(s) {
 		}
 	}
 
-	function charClassToCode(offset, mask, invert) {
-		return (invert ? '!' : '!!') + '(CC[s[' + positionToCode(offset) + ']]&' + (invert ? mask | EMPTY_CHAR : mask) + ')';
+	function charClassToCode(ch, rule) {
+		return (rule[1] ? '!' : '!!') + '(CC[' + ch + ']&' + (rule[0] | (rule[1] ? EMPTY_CHAR : 0)) + ')';
 	}
 
 	function compileTerms(offset, junction) {
-		var literalSequence, quantity, code = 'true', c, n;
+		var literalSequence, quantity, code = 'true';
 		termLoop: for (;;) {
-			if (literalSequence = parseLiteral()) {
+			if (literalSequence = parseLiteralSequence()) {
 				if (quantity = parseQuantifier()) {
 					var repeatLiteral = literalSequence.pop();
 					return quantify(and(code, literalSequenceToCode(literalSequence, offset))
@@ -228,7 +268,8 @@ function compileRegExp(s) {
 				code = and(code, literalSequenceToCode(literalSequence, offset));
 				offset += literalSequence.length;
 			} else {
-				switch ((c = s[p])) {
+				var c;
+				switch (c = s[p]) {
 					case void 0: {
 						code = and(code, '(e=' + positionToCode(offset) + ',true)');
 						break termLoop;
@@ -243,7 +284,39 @@ function compileRegExp(s) {
 						code = and(code, positionToCode(offset) + '===l');
 						break;
 					}
+					case '[': {
+						var negative = false, v0, v1, classCode = 'false';
+						if (s[++p] === '^') {
+							negative = true;
+							++p;
+						}
+						while (v0 = parseClassAtom()) {
+							var b = p;
+							if (s[p] === '-' && (++p, v1 = parseClassAtom())) {
+								if (typeof v0 === 'string' && typeof v1 === 'string' && v0 <= v1) {
+									classCode = or(classCode, and('c>="' + v0 + '"', 'c<="' + v1 + '"'));
+								} else {
+									throw SyntaxError("Invalid character class syntax in regular expression");
+								}
+							} else if (typeof v0 === 'string') {
+								p = b;
+								classCode = or(classCode, 'c==="' + v0 + '"');
+							} else {
+								classCode = or(classCode, charClassToCode('c', v0));
+							}
+						}
+						if (s[p] !== ']') {
+							throw SyntaxError("Invalid character class syntax in regular expression");
+						}
+						++p;
+						var functionName = 'k' + (++functionCounter);
+						addFunction(functionName, 'var c=s[p]; return ' + (negative ? '!(' + classCode + ')' : classCode));
+						code = and(code, functionName + '(' + positionToCode(offset) + ')');
+						++offset;
+						break;
+					}
 					case '\\': {
+						var n;
 						++p;
 						if ((n = parseNumber(-1)) >= 0) {
 							if (n > maxBackReference) {
@@ -272,9 +345,9 @@ function compileRegExp(s) {
 						}
 						++p;
 						if (quantity = parseQuantifier()) {
-							return quantify(code, offset, charClassToCode(0, rule[0], rule[1]), compileTerms(0, junction), quantity);
+							return quantify(code, offset, charClassToCode('s[' + positionToCode(0) + ']', rule), compileTerms(0, junction), quantity);
 						}
-						code = and(code, charClassToCode(offset, rule[0], rule[1]));
+						code = and(code, charClassToCode('s[' + positionToCode(offset) + ']', rule));
 						++offset;
 						break;
 					}
@@ -373,7 +446,7 @@ function compileRegExp(s) {
 	}
 
 	var disjunction = compileDisjunction(0, ''); 
-	if (p < e) {
+	if (p < s.length) {
 		throw SyntaxError("Invalid regular expression");
 	}
 	if (maxBackReference > captureCounter) {
@@ -815,9 +888,38 @@ testRE(t, "baaaac");
 t = new MyRegExp("(a*)+q");
 testRE(t, "aaq");
 
+t = new MyRegExp("^[]$"); testRE(t, ""); testRE(t, "x"); testRE(t, "xy");
+t = new MyRegExp("^[^]$"); testRE(t, ""); testRE(t, "x"); testRE(t, "xy");
+t = new MyRegExp("^[a]$"); testRE(t, "x");
+t = new MyRegExp("^[x]$"); testRE(t, "x");
+t = new MyRegExp("^[a-z]$"); testRE(t, "x"); testRE(t, "X");
+t = new MyRegExp("^[^a-z]$"); testRE(t, "x"); testRE(t, "X");
+t = new MyRegExp("^[a-chioggf-z]$"); testRE(t, "x"); testRE(t, "X");
+t = new MyRegExp("^[\\n]$"); testRE(t, "\\n"); testRE(t, "X");
+t = new MyRegExp("^[\\cA]$"); testRE(t, "\u0001"); testRE(t, "X");
+t = new MyRegExp("^[\u1234]$"); testRE(t, "\u1234"); testRE(t, "X");
+t = new MyRegExp("^[\0-\uFFFF]$"); testRE(t, "\u1234"); testRE(t, "X");
+t = new MyRegExp("^[\\b]$"); testRE(t, "\b"); testRE(t, "X");
+t = new MyRegExp("^[\\w]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
+t = new MyRegExp("^[\\W]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
+t = new MyRegExp("^[\\s]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
+t = new MyRegExp("^[\\S]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
+t = new MyRegExp("^[\\d]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
+t = new MyRegExp("^[\\D]$"); testRE(t, "z"); testRE(t, "X"); testRE(t, "1"); testRE(t, "!"); testRE(t, "\n"); testRE(t, " ");
 
 try { t = new MyRegExp("\\1"); } catch (x) { print(x); }
 try { t = new MyRegExp("\\2(a)\\1"); } catch (x) { print(x); }
 try { t = new MyRegExp("^(?=ab)*abcdef$"); } catch (x) { print(x); }
 try { t = new MyRegExp("(?%)"); } catch (x) { print(x); }
 try { t = new MyRegExp("("); } catch (x) { print(x); }
+
+try { t = new MyRegExp("["); } catch (x) { print(x); }
+try { t = new MyRegExp("[^"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\p]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\3]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\01]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\w-1]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[1-\\w]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\S-\\w]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[\\B]"); } catch (x) { print(x); }
+try { t = new MyRegExp("[b-a]"); } catch (x) { print(x); }
