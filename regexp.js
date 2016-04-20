@@ -671,7 +671,7 @@ function testRE(re, s) {
 	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
-MyRegExp = RegExp;
+// MyRegExp = RegExp;
 
 var t = new MyRegExp("abcdef", "g");
 var m;
