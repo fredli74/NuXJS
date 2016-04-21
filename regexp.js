@@ -291,8 +291,8 @@ function compileRegExp(s, ignoreCase, multiline) {
 		return and(code, functionName + '(' + positionToCode(offset) + ')');
 	}
 	
-	function captureWrap(capturePrefix, fromCapture, toCapture, code, looping, extraEndlessCheck) {
-		if (fromCapture === toCapture && !looping) {
+	function captureWrap(capturePrefix, fromCapture, toCapture, code, doEndlessCheck, extraEndlessCheck) {
+		if (fromCapture === toCapture && !doEndlessCheck) {
 			return 'return ' + code;
 		} else {
 			var declares = '', captures = '', rollbacks = '';
@@ -305,7 +305,7 @@ function compileRegExp(s, ignoreCase, multiline) {
 				rollbacks += (i > fromCapture ? ',' : '') + capturePrefix + i + '=r' + i;
 			}
 			code = captures + ', ' + or(code, '(' + rollbacks + ',false)');
-			if (looping) {
+			if (doEndlessCheck) {
 				var endlessCheck = capturePrefix + fromCapture + '!=p';
 				code = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, '(' + code + ')');
 			}
@@ -452,7 +452,9 @@ function compileRegExp(s, ignoreCase, multiline) {
 							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
 							closureVars += ',c' + openCaptureFrom + ',c' + closeCaptureFrom;
 						}
+						var innerCapturesStart = captureCounter; // FIX : these two are only used for negative lookAhead, use for open/close captures too?
 						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
+						var innerCapturesEnd = captureCounter;
 						if (doCapture) {
 							openCaptureTo = captureCounter * 2;
 						}
@@ -462,9 +464,11 @@ function compileRegExp(s, ignoreCase, multiline) {
 						++p;
 						var quantity = (lookAhead ? null : parseQuantifier());
 						var looping = (quantity && quantity.max > 1);
-						if (looping && !doCapture) {
-							openCaptureTo = (openCaptureFrom = functionNumber) + 2;
-							capturePrefix = 'p';
+						if (looping) {
+							if (!doCapture) {
+								openCaptureTo = (openCaptureFrom = functionNumber) + 2;
+								capturePrefix = 'p';
+							}
 							closureVars += ',p' + functionNumber;
 						}
 						var tail = compileTerms(0, junction);
@@ -484,14 +488,24 @@ function compileRegExp(s, ignoreCase, multiline) {
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
 						if (lookAhead) {
-							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionName + '(' + positionToCode(0) + ')');
+							if (negativeLookAhead) {
+								/*for (var i = innerCapturesStart; i < innerCapturesEnd; ++i) {
+									captures += (i === fromCapture + 2 ? ',' : '') + capturePrefix + i + (i === fromCapture ? '=p' : '=');
+									if (i === toCapture - 2 && fromCapture + 2 < toCapture) {
+										captures += 'void 0';
+									}
+									rollbacks += (i > fromCapture ? ',' : '') + capturePrefix + i + '=r' + i;
+								}*/
+								inner = '!(' + inner + ')';
+							}
+							inner = and(inner, junctionName + '(' + positionToCode(0) + ')');
 						}
 						addFunction(groupName, captureWrap(capturePrefix, openCaptureFrom, openCaptureTo, inner, looping, extraEndlessCheck));
 						if (looping) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
 							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, inner));
-							code = and(code, (quantity.min === 0 ? junctionCall : groupCall));
+							code = and(code, (looping ? '(p' + functionNumber + '=void 0),' : '') + (quantity.min === 0 ? junctionCall : groupCall));
 						} else {
 							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, tail));
 							if (quantity && quantity.min === 0) {
@@ -672,7 +686,7 @@ function testRE(re, s) {
 	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
- //MyRegExp = RegExp;
+ MyRegExp = RegExp;
 
 var t = new MyRegExp("abcdef", "g");
 var m;
@@ -1058,6 +1072,9 @@ testRE(t, "baaaac")
 
 t = new MyRegExp("(.*?)a(?!(a+)b\\2c)\\2(.*)");
 testRE(t, "baaabaac");
+
+t = new MyRegExp("(?:(a)|(a))(?!(?:\\2)+)\\2\\2\\2$");
+testRE(t, "aaaa");
 
 print(t.match)
 
