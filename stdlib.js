@@ -751,10 +751,6 @@ function $compileRegExp(s, ignoreCase, multiline) {
 			} else { // TODO: make subs of these
 				var c;
 				switch (c = s[p]) {
-					case void 0: {
-						code = and(code, '(e=' + positionToCode(offset) + ',true)');
-						break termLoop;
-					}
 					case '^': {
 						++p;
 						var condition = positionToCode(offset) + '===0';
@@ -808,6 +804,9 @@ function $compileRegExp(s, ignoreCase, multiline) {
 						++p;
 						var functionName = 'k' + (++functionCounter);
 						addFunction(functionName, 'var c=s[p]; return ' + (negative ? '!(' + classCode + ')' : classCode));
+						if (quantity = parseQuantifier()) {
+							return quantify(code, offset, functionName + '(' + positionToCode(0) + ')', compileTerms(0, junction), quantity);
+						}
 						code = and(code, functionName + '(' + positionToCode(offset) + ')');
 						++offset;
 						break;
@@ -871,7 +870,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
 							closureVars += ',c' + openCaptureFrom + ',c' + closeCaptureFrom;
 						}
-						var disjunction = compileDisjunction(0, (lookAhead ? '' : junctionName));
+						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
 						if (doCapture) {
 							openCaptureTo = captureCounter * 2;
 						}
@@ -926,20 +925,23 @@ function $compileRegExp(s, ignoreCase, multiline) {
 				}
 			}
 		}
-		return (junction === '' ? code : and(code, junction + '(' + positionToCode(offset) + ')'));
+		switch (junction) {
+			case void 0: return code;
+			case '': return and(code, '(q=' + positionToCode(offset) + ',true)');
+			default: return and(code, junction + '(' + positionToCode(offset) + ')');
+		}
 	}
 
-	function compileDisjunction(offset, junction) {
+	function compileDisjunction(offset, junction) { // junction = function name, undefined (for none for lookahead) or '' (for end of pattern)
 		var code = compileTerms(offset, junction);
-		if (s[p] !== '|') {
-			return code;
-		} else {
+		if (s[p] === '|') {
 			do {
 				++p;
 				code = or(code, compileTerms(offset, junction));
 			} while (s[p] === '|');
-			return '(' + code + ')';
+			code = '(' + code + ')';
 		}
+		return code;
 	}
 
 	var disjunction = compileDisjunction(0, ''); 
@@ -949,17 +951,17 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	if (maxBackReference > captureCounter) {
 		throw SyntaxError("Invalid back reference in regular expression");
 	}
-	var code = "(function(s, p) {\n\"use strict\";\n" // FIX : not "use strict"
+	var code = "(function(s, p) {\n\"use strict\";\n"
 	if (ignoreCase) {
 		code += "\ts=$regExpCanonicalize(s)\n";
 	}
-	code += "\tvar l=s.length,e";
-	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,e";
+	code += "\tvar l=s.length,q"; // FIX : not "use strict"
+	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,q";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
 	code += "];\n})";
-//print('');print(s);print('---');print(code);print('');
 	return code;
 }
+
 
 function $eval(s) { return eval(s); }
 
