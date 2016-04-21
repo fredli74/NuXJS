@@ -406,12 +406,12 @@ function compileRegExp(s, ignoreCase, multiline) {
 							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
-							var tailCall = tailName + '(' + positionToCode(offset) + ')';
 							addFunction(tailName, 'return ' + tail);
 							if (quantity) {
-								return quantify(code, offset, backMatchCode, tailCall, quantity, stepSize);
+								return quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize);
 							}
-							return and(code, '(' + or(and('c' + n + '===void 0', tailCall), and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
+							return and(code, '(' + or(and('c' + n + '===void 0', tailName + '(' + positionToCode(offset) + ')')
+									, and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
 						} else if ((c = s[p]) === 'b' || c === 'B') {
 							++p;
 							code = and(code, (c === 'b' ? '!!((CC[s[' : '!((CC[s[') + positionToCode(offset - 1) + ']]^CC[s[' + positionToCode(offset) + ']])&' + WORD_CHAR + ')');
@@ -484,7 +484,7 @@ function compileRegExp(s, ignoreCase, multiline) {
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
 						if (lookAhead) {
-							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionCall);
+							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionName + '(' + positionToCode(0) + ')');
 						}
 						addFunction(groupName, captureWrap(capturePrefix, openCaptureFrom, openCaptureTo, inner, looping, extraEndlessCheck));
 						if (looping) {
@@ -672,7 +672,7 @@ function testRE(re, s) {
 	print(myescape(re.toString()) + " on " + myescape(s) + ": " + r + "\n");
 }
 
-// MyRegExp = RegExp;
+ //MyRegExp = RegExp;
 
 var t = new MyRegExp("abcdef", "g");
 var m;
@@ -1052,6 +1052,13 @@ t = new MyRegExp("a|ab");
 testRE(t, "abc");
 t = new MyRegExp("a[a-z]{2,4}");
 testRE(t, "abcdefghi");
+
+t = new MyRegExp("(a*)b\\1+");
+testRE(t, "baaaac")
+
+t = new MyRegExp("(.*?)a(?!(a+)b\\2c)\\2(.*)");
+testRE(t, "baaabaac");
+
 print(t.match)
 
 try { t = new MyRegExp("\\"); } catch (x) { print(x); }
