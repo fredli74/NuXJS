@@ -166,16 +166,11 @@ static const Char* parseDouble(const Char* p, const Char* e, double& v) {
 			}
 		}
 		if (q != e && (*q == 'E' || *q == 'e')) {
-			Int32 i;
-const Char* t;
-{
-	const Char* p = q + 1;
-	bool negative = (e - p >= 2 && ((*p == '+' || *p == '-') && p[1] >= '0' && p[1] <= '9') ? (*p++ == '-') : false);
-	UInt32 ui;
-	p = parseUnsignedInt(p, e, ui);
-	i = (negative ? -static_cast<Int32>(ui) : ui);
-	t = p;
-}
+			const Char* t = q + 1;
+			bool negative = (e - t >= 2 && ((*t == '+' || *t == '-') && t[1] >= '0' && t[1] <= '9') ? (*t++ == '-') : false);
+			UInt32 ui;
+			t = parseUnsignedInt(t, e, ui);
+			const Int32 i = (negative ? -static_cast<Int32>(ui) : ui);
 			if (t != q + 1) {
 				d *= pow(10, static_cast<double>(i));
 				q = t;
@@ -385,7 +380,13 @@ bool Value::toArrayIndex(UInt32& index) const {
 		}
 		case STRING_TYPE: {
 			const Char* const e = var.string->end();
-			const Char* p = parseUnsignedInt(var.string->begin(), e, index);
+			const Char* p = var.string->begin();
+			if (*p == '0') {
+				index = 0;
+				++p;
+			} else {
+				p = parseUnsignedInt(p, e, index);
+			}
 			return p == e;
 		}
 		default: return false;
@@ -2561,37 +2562,30 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 Value Compiler::stringOrNumberConstant() {
 	switch (*p) {
 		case '0': {
-			if (p + 1 != e && (p[1] == 'x' || p[1] == 'X')) {
-				UInt32 u;
-				const Char* b = p;
-				p = parseHex(b + 2, e, u);
-				if (p == b + 2) {
-					p = b;
-					break;
-				}
-				return Value(u);
-			} else if (p + 1 != e && (p[1] == '.' || p[1] == 'e' || p[1] == 'E')) {
-				/* fall through */
-			} else {
-				if (p + 1 != e && isLeadingIdentifierChar(p[1])) {
-					break;
-				}
+			if (p + 1 == e || (p[1] != '.' && !isLeadingIdentifierChar(p[1]))) {
 				++p;
 				return Value(0);
+			} else if (p[1] == 'x' || p[1] == 'X') {
+				UInt32 u;
+				const Char* q = parseHex(p + 2, e, u);
+				if (q != p + 2) {
+					p = q;
+					return Value(u);
+				}
+				break;
+			} else if (p[1] != '.' && p[1] != 'e' && p[1] != 'E') {
+				break;
 			}
+			/* fall through */
 		}
 		case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
 			double d;
-			const Char* b = p;
-			p = parseDouble(p, e, d);
-			if (p == b) {
-				break;
+			const Char* q = parseDouble(p, e, d);
+			if (q != p && (q == e || !isLeadingIdentifierChar(*q))) {
+				p = q;
+				return Value(d);
 			}
-			if (p != e && isLeadingIdentifierChar(*p)) {
-				p = b;
-				break;
-			}
-			return Value(d);
+			break;
 		}
 		case '\'': case '"': {
 			UInt32 maxLength = unescapedMaxLength(p, e);
