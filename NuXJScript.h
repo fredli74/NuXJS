@@ -195,7 +195,6 @@ class Value {
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
 				// FIX : Value from (heap and) const char* ?
 	
-				bool exists() const { return type != NONEXISTENT_TYPE; } // FIX : I think NONEXISTENT_TYPE *can* and *should* disappear very soon, only used in "legacy code" now (WELL actually, arrays *might* need them in the future if we don't have full flags instead like in tables)
 				bool isUndefined() const { return type == UNDEFINED_TYPE; }
 				bool isNull() const { return type == NULL_TYPE; }
 				bool isBoolean() const { return type == BOOLEAN_TYPE; }
@@ -222,15 +221,14 @@ class Value {
 				Value add(GCHeap& heap, const Value& r) const;
 				void gcMark(GCHeap& heap) const;
 
-				static const Value NONEXISTENT;		// Used in tables for deleted entries. Never seen by script-code.
 				static const Value UNDEFINED;
-				static const Value NUL; // Sorry, NULL is a sensitive word, e.g. macro in Windows
-				static const Value NOT_A_NUMBER; // Sorry, NAN is sensitive, defined by some math.h
-				static const Value INFINITE_NUMBER; // Sorry, INFINITY is also sensitive
+				static const Value NUL;					// Sorry, NULL is a sensitive word, e.g. macro in Windows
+				static const Value NOT_A_NUMBER;		// Sorry, NAN is sensitive, defined by some math.h
+				static const Value INFINITE_NUMBER;		// Sorry, INFINITY is also sensitive
 
 				// WARNING! Do NOT change order of elements in Type enum.
 	protected:	enum Type {
-					NONEXISTENT_TYPE, UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
+					UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
 					, NUMBER_TYPE, STRING_TYPE, OBJECT_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
@@ -246,7 +244,7 @@ class Value {
 				explicit Value(Type type) throw() : type(type) { }
 				explicit Value(Type type, const Variable& var) throw() : type(type), var(var) { }
 				bool compareStrictly(const Value& y) const;
-				static const String* TYPE_STRINGS[7];
+				static const String* TYPE_STRINGS[5];
 	
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };

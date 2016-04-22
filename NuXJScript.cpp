@@ -326,7 +326,7 @@ const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 
 /* --- Value --- */
 
-const String* Value::TYPE_STRINGS[7] = { 0, &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING, 0 };
+const String* Value::TYPE_STRINGS[5] = { &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING };
 
 Function* Value::asFunction() const { return (type == OBJECT_TYPE ? var.object->asFunction() : 0); }
 
@@ -422,8 +422,7 @@ bool Value::operator==(const Value& r) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
-		case NULL_TYPE:
-		case NONEXISTENT_TYPE: return true;
+		case NULL_TYPE: return true;
 		case BOOLEAN_TYPE: return var.boolean == r.var.boolean;
 		case NUMBER_TYPE: return var.number == r.var.number;
 		case STRING_TYPE: return var.string->isEqualTo(*r.var.string);
@@ -437,8 +436,7 @@ bool Value::operator<(const Value& r) const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
-		case NULL_TYPE:
-		case NONEXISTENT_TYPE: return false;
+		case NULL_TYPE: return false;
 		case BOOLEAN_TYPE: return var.boolean < r.var.boolean;
 		case NUMBER_TYPE: return var.number < r.var.number;
 		case STRING_TYPE: return var.string->isLessThan(*r.var.string);
@@ -537,7 +535,6 @@ void Value::gcMark(GCHeap& heap) const {
 	}
 }
 
-const Value Value::NONEXISTENT(Value::NONEXISTENT_TYPE);
 const Value Value::UNDEFINED(Value::UNDEFINED_TYPE);
 const Value Value::NUL(Value::NULL_TYPE);
 const Value Value::NOT_A_NUMBER(NaN());
@@ -805,7 +802,6 @@ Table::Bucket* Table::insert(const String* key) {
 }
 
 bool Table::update(Bucket* bucket, const Value& value, Byte flags) {
-	assert(value.exists());
 	assert(bucket->keyExists());
 	if ((bucket->flags & READ_ONLY_FLAG) != 0) {
 		return false;
@@ -1034,7 +1030,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	if (object == 0) {
 		return false;
 	}
-	Value v(Value::NONEXISTENT);
+	Value v(Value::UNDEFINED);
 	getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
@@ -1837,7 +1833,7 @@ bool Processor::privateRun() {
 					break;
 				}
 				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Value v(Value::NONEXISTENT);
+				Value v(Value::UNDEFINED);
 				Function* f;
 				const Value& name = vsp[-n];
 				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
@@ -1882,7 +1878,7 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.manage(new String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING)));
 					break;
 				}
-				Value v(Value::NONEXISTENT);
+				Value v(Value::UNDEFINED);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.manage(new ScriptObject(prototype != 0 ? prototype : &engine.objectPrototype));
@@ -2232,7 +2228,7 @@ struct Compiler::Scope {
 struct Compiler::ExpressionResult {
 	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
 	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
-	ExpressionResult(Type type, const Value& value = Value::NONEXISTENT) : t(type), v(value) { }
+	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
 	Type t;
 	Value v;
 };
@@ -3509,8 +3505,9 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				flushXR(evalXR);
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);
-				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it)
+				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
 					accessCodeInt32(testsCode, *it) -= outputCode->size() - startOffset;
+				}
 				outputCode->insert(outputCode->end(), testsCode.begin(), testsCode.end());
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
