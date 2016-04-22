@@ -138,14 +138,6 @@ static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
 	return p;
 }
 
-static const Char* parseInt(const Char* p, const Char* e, Int32& i) {
-	bool negative = (e - p >= 2 && ((*p == '+' || *p == '-') && p[1] >= '0' && p[1] <= '9') ? (*p++ == '-') : false);
-	UInt32 ui;
-	p = parseUnsignedInt(p, e, ui);
-	i = (negative ? -static_cast<Int32>(ui) : ui);
-	return p;
-}
-
 static const Char* parseDouble(const Char* p, const Char* e, double& v) {
 	assert(p <= e);
 	double d = 0;
@@ -175,8 +167,19 @@ static const Char* parseDouble(const Char* p, const Char* e, double& v) {
 		}
 		if (q != e && (*q == 'E' || *q == 'e')) {
 			Int32 i;
-			const Char* t = parseInt(q + 1, e, i);
-			if (t != q + 1) { d *= pow(10, static_cast<double>(i)); q = t; }
+const Char* t;
+{
+	const Char* p = q + 1;
+	bool negative = (e - p >= 2 && ((*p == '+' || *p == '-') && p[1] >= '0' && p[1] <= '9') ? (*p++ == '-') : false);
+	UInt32 ui;
+	p = parseUnsignedInt(p, e, ui);
+	i = (negative ? -static_cast<Int32>(ui) : ui);
+	t = p;
+}
+			if (t != q + 1) {
+				d *= pow(10, static_cast<double>(i));
+				q = t;
+			}
 		}
 	}
 	v = d * sign;
@@ -582,14 +585,11 @@ Flags String::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 		*v = Value(static_cast<Int32>(size()));
 		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
-	// FIX : use toArrayIndex
-	const double d = key.toDouble(); // FIX : this is not right, it shouldn't accept "  123  " as a number...
-	const UInt32 i = static_cast<UInt32>(d);
-	if (i == d && i < size()) {
-		const Char* p = begin() + i;
-		if (*p < 127) *v = QUICK_CONSTANTS.ascii[*p];
-		else *v = Value(engine.getHeap().manage(new String(p, p + 1)));
-		return (STANDARD_FLAGS | EXISTS_FLAG);
+	UInt32 index;
+	if (key.toArrayIndex(index) && index < size()) {
+		const Char* p = begin() + index;
+		*v = (*p < 127 ? QUICK_CONSTANTS.ascii[*p] : Value(engine.getHeap().manage(new String(p, p + 1))));
+		return (READ_ONLY_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
 	return NONEXISTENT;
 }
@@ -2569,15 +2569,26 @@ Value Compiler::stringOrNumberConstant() {
 					error(SYNTAX_ERROR, "Invalid number");
 				}
 				return Value(u);
+			} else if (p + 1 != e && (p[1] == '.' || p[1] == 'e' || p[1] == 'E')) {
+				/* fall through */
+			} else {
+				if (p + 1 != e && isLeadingIdentifierChar(p[1])) {
+					break;
+				}
+				++p;
+				return Value(0);
 			}
-			/* else continue */
 		}
 		case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': case '.': {
 			double d;
 			const Char* b = p;
 			p = parseDouble(p, e, d);
 			if (p == b) {
-				error(SYNTAX_ERROR, "Invalid number");
+				break;
+			}
+			if (p != e && isLeadingIdentifierChar(*p)) {
+				p = b;
+				break;
 			}
 			return Value(d);
 		}
@@ -2965,7 +2976,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 	ExpressionResult xr;
 	if (!optionalExpression(xr, precedence)) {
-		error(SYNTAX_ERROR, "Expected expression");
+		error(SYNTAX_ERROR, "Missing / invalid expression");
 	}
 	return xr;
 }
