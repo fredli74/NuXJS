@@ -726,6 +726,26 @@
 > testRE(t, "baaabaac");
 < /(.*?)a(?!(a+)b\2c)\2(.*)/ on baaabaac: { baaabaac, ba, undefined, abaac } @ 0
 -
+> t = RegExp("(?:(a)|(a))(?!(?:\\2)+)\\2\\2\\2$");
+> testRE(t, "aaaa");
+< /(?:(a)|(a))(?!(?:\2)+)\2\2\2$/ on aaaa: null
+-
+> t = RegExp("(\\1(a)){2}$");
+> testRE(t, "aa");
+< /(\1(a)){2}$/ on aa: { aa, a, a } @ 0
+-
+> t = RegExp("(z)((a+)?(b+)?(c))*");
+> testRE(t, "zaacbbbcac");
+< /(z)((a+)?(b+)?(c))*/ on zaacbbbcac: { zaacbbbcac, z, ac, a, undefined, c } @ 0
+-
+> t = RegExp("(z)(?:(a+)?(b+)?(c))*");
+> testRE(t, "zaacbbbcac");
+< /(z)(?:(a+)?(b+)?(c))*/ on zaacbbbcac: { zaacbbbcac, z, a, undefined, c } @ 0
+-
+> t = RegExp("^\\1(?!(a)bc)bc$");
+> testRE(t, "abc");
+< /^\1(?!(a)bc)bc$/ on abc: null
+-
 > t = RegExp("\\");
 ! !!!! SyntaxError: Invalid escape in regular expression
 -
@@ -749,8 +769,6 @@
 -
 > t = RegExp("x{5,3}");
 ! !!!! SyntaxError: Min greater than max in regular expression quantifier
--
-> 
 -
 > t = RegExp("[");
 ! !!!! SyntaxError: Invalid character class syntax in regular expression

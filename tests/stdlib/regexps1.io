@@ -20,7 +20,7 @@
 < ,
 -
 > print(/(a*)b\1+/.exec("baaaac").toString())
-< ba,
+< b,
 -
 > print(/(?=(a+))/.exec("baaabac").toString())
 < ,aaa
@@ -29,5 +29,5 @@
 < aba,a
 -
 > print(/(.*?)a(?!(a+)b\2c)\2(.*)/.exec("baaabaac").toString())
-< baaabaac,baa,aa,c
+< baaabaac,ba,,abaac
 -

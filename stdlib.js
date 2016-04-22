@@ -698,7 +698,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		var functionName = 'q' + (++functionCounter);
 		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h' : 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; ';
 		if (stepSize) {
-			head += 'if (h===0 || h!==h) return ' + tail + '; ';
+			head += 'if (h<=0 || h!==h) return ' + tail + '; ';
 		} 
 		if (quantity.greedy) {
 			addFunction(functionName, head + 'while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
@@ -709,25 +709,34 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		return and(code, functionName + '(' + positionToCode(offset) + ')');
 	}
 	
-	function captureWrap(capturePrefix, fromCapture, toCapture, code, looping, extraEndlessCheck) {
-		if (fromCapture === toCapture && !looping) {
+	function captureWrap(code, capture, resetCaptureFrom, resetCaptureTo) {
+		if (capture === null && resetCaptureFrom === resetCaptureTo) {
 			return 'return ' + code;
 		} else {
 			var declares = '', captures = '', rollbacks = '';
-			for (var i = fromCapture; i < toCapture; i += 2) {
-				declares += (i > fromCapture ? ',r' : 'var r') + i + '=' + capturePrefix + i;
-				captures += (i === fromCapture + 2 ? ',' : '') + capturePrefix + i + (i === fromCapture ? '=p' : '=');
-				if (i === toCapture - 2 && fromCapture + 2 < toCapture) {
+			if (capture !== null) {
+				declares += 'r' + capture + '=c' + capture;
+				captures = 'c' + capture + '=p';
+				rollbacks = 'c' + capture + '=r' + capture;
+			}
+			for (var i = resetCaptureFrom; i < resetCaptureTo; ++i) {
+				var j = i * 2;
+				if (capture !== null || i > resetCaptureFrom) {
+					declares += ',';
+					rollbacks += ',';
+					if (i === resetCaptureFrom) {
+						captures += ',';
+					}
+				}
+				declares += 'r' + j + '=c' + j;
+				captures += 'c' + j + '=';
+				rollbacks += 'c' + j + '=r' + j;
+				if (i === resetCaptureTo - 1) {
 					captures += 'void 0';
 				}
-				rollbacks += (i > fromCapture ? ',' : '') + capturePrefix + i + '=r' + i;
 			}
 			code = captures + ', ' + or(code, '(' + rollbacks + ',false)');
-			if (looping) {
-				var endlessCheck = capturePrefix + fromCapture + '!=p';
-				code = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, '(' + code + ')');
-			}
-			return declares + '; return ' + code;
+			return 'var ' + declares + '; return ' + code;
 		}
 	}
 
@@ -821,6 +830,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							n = (n - 1) * 2;
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
+				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
 							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
@@ -828,8 +838,8 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							if (quantity) {
 								return quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize);
 							}
-							return and(code, '(' + or(and('c' + n + '===void 0', tailName + '(' + positionToCode(offset) + ')')
-									, and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')) + ')');
+							return and(code, '(c' + n + '<c' + (n + 1) + ' ? ' + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')
+									+ ' : ' + tailName + '(' + positionToCode(offset) + '))');
 						} else if ((c = s[p]) === 'b' || c === 'B') {
 							++p;
 							code = and(code, (c === 'b' ? '!!((CC[s[' : '!((CC[s[') + positionToCode(offset - 1) + ']]^CC[s[' + positionToCode(offset) + ']])&' + WORD_CHAR + ')');
@@ -865,29 +875,23 @@ function $compileRegExp(s, ignoreCase, multiline) {
 								case ':': doCapture = false; p += 2;
 							}
 						}
-						var capturePrefix = 'c', openCaptureFrom = null, openCaptureTo = null, closeCaptureFrom = null, closeCaptureTo = null;
+						var openCapture = null, closeCapture = null;
 						if (doCapture) {
-							closeCaptureTo = (closeCaptureFrom = (openCaptureFrom = (captureCounter++) * 2) + 1) + 2;
-							closureVars += ',c' + openCaptureFrom + ',c' + closeCaptureFrom;
+							(closeCapture = (openCapture = (captureCounter++) * 2) + 1);
+							closureVars += ',c' + openCapture + ',c' + closeCapture;
 						}
+						var innerCapturesStart = captureCounter; // FIX : these two are only used for negative lookAhead, use for open/close captures too?
 						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
-						if (doCapture) {
-							openCaptureTo = captureCounter * 2;
-						}
+						var innerCapturesEnd = captureCounter;
 						if ((c = s[p]) !== ')') {
 							throw SyntaxError(c ? "Unterminated group in regular expression" : "Invalid regular expression");
 						}
 						++p;
 						var quantity = (lookAhead ? null : parseQuantifier());
-						var looping = (quantity && quantity.max > 1);
-						if (looping && !doCapture) {
-							openCaptureTo = (openCaptureFrom = functionNumber) + 2;
-							capturePrefix = 'p';
-							closureVars += ',p' + functionNumber;
-						}
 						var tail = compileTerms(0, junction);
 						var inner = disjunction;
 						var extraEndlessCheck = '';
+						var looping = (quantity && quantity.max > 1);
 						if (looping && (quantity.max < Infinity || quantity.min > 1)) {
 							closureVars += ',n' + functionNumber + '=0';
 							if (quantity.max < Infinity) {
@@ -902,16 +906,33 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
 						if (lookAhead) {
-							inner = and((negativeLookAhead ? '!(' + inner + ')' : inner), junctionCall);
+							var call = junctionName + '(' + positionToCode(0) + ')';
+							if (negativeLookAhead) {
+								inner = '!(' + inner + ')';
+								if (innerCapturesStart < innerCapturesEnd) {
+									var captureResets = '';
+									for (var i = innerCapturesStart; i < innerCapturesEnd; ++i) {
+										captureResets += 'c' + i * 2 + '=';
+									}
+									call = '(' + captureResets + 'void 0, ' + call + ')';
+								}
+							}
+							inner = and(inner, call);
 						}
-						addFunction(groupName, captureWrap(capturePrefix, openCaptureFrom, openCaptureTo, inner, looping, extraEndlessCheck));
+						if (looping) {
+							closureVars += ',p' + functionNumber;
+							var endlessCheck = 'p' + functionNumber + '!=p';
+							inner = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, '(p' + functionNumber + '=p, ' + inner + ')');
+						}
+						addFunction(groupName, captureWrap(inner, openCapture, innerCapturesStart, innerCapturesEnd));
 						if (looping) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
-							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, inner));
-							code = and(code, (quantity.min === 0 ? junctionCall : groupCall));
+							addFunction(junctionName, captureWrap(inner, closeCapture));
+							var call = (quantity.min === 0 ? junctionCall : groupCall);
+							code = and(code, (looping ? '(p' + functionNumber + '=void 0,' + call + ')' : call));
 						} else {
-							addFunction(junctionName, captureWrap(capturePrefix, closeCaptureFrom, closeCaptureTo, tail));
+							addFunction(junctionName, captureWrap(tail, closeCapture));
 							if (quantity && quantity.min === 0) {
 								code = and(code, (quantity.max === 0 ? junctionCall
 										: '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')'));
@@ -951,7 +972,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	if (maxBackReference > captureCounter) {
 		throw SyntaxError("Invalid back reference in regular expression");
 	}
-	var code = "(function(s, p) {\n\"use strict\";\n"
+	var code = "(function(s, p) {\n"
 	if (ignoreCase) {
 		code += "\ts=$regExpCanonicalize(s)\n";
 	}

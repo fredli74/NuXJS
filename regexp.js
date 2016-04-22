@@ -280,7 +280,7 @@ function compileRegExp(s, ignoreCase, multiline) {
 		var functionName = 'q' + (++functionCounter);
 		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h' : 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; ';
 		if (stepSize) {
-			head += 'if (h===0 || h!==h) return ' + tail + '; ';
+			head += 'if (h<=0 || h!==h) return ' + tail + '; ';
 		} 
 		if (quantity.greedy) {
 			addFunction(functionName, head + 'while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
@@ -420,8 +420,8 @@ function compileRegExp(s, ignoreCase, multiline) {
 							if (quantity) {
 								return quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize);
 							}
-							return and(code, '(c' + n + '===void 0 ? ' + tailName + '(' + positionToCode(offset) + ') : '
-									+ and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')') + ')');
+							return and(code, '(c' + n + '<c' + (n + 1) + ' ? ' + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')
+									+ ' : ' + tailName + '(' + positionToCode(offset) + '))');
 						} else if ((c = s[p]) === 'b' || c === 'B') {
 							++p;
 							code = and(code, (c === 'b' ? '!!((CC[s[' : '!((CC[s[') + positionToCode(offset - 1) + ']]^CC[s[' + positionToCode(offset) + ']])&' + WORD_CHAR + ')');
@@ -1085,12 +1085,17 @@ testRE(t, "aaaa");
 
 t = new MyRegExp("(\\1(a)){2}$");
 testRE(t, "aa");
+print(t.match);
 
 t = new MyRegExp("(z)((a+)?(b+)?(c))*");
 testRE(t, "zaacbbbcac");
 
 t = new MyRegExp("(z)(?:(a+)?(b+)?(c))*");
 testRE(t, "zaacbbbcac");
+
+t = new MyRegExp("^\\1(?!(a)bc)bc$");
+testRE(t, "abc");
+print(t.match);
 
 try { t = new MyRegExp("\\"); } catch (x) { print(x); }
 try { t = new MyRegExp("\\q"); } catch (x) { print(x); }
