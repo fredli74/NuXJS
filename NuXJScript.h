@@ -20,6 +20,18 @@ const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 16;
 const double EPSILON = 1.0e-300;
 
+class Allocator {
+	public:		virtual void* allocate(size_t size);
+	public:		virtual void* allocateArray(size_t size);
+	public:		virtual void deallocate(void *ptr);
+	public:		virtual void deallocateArray(void *ptr);
+};
+
+inline void* operator new(size_t size, Allocator& allocator) { return allocator.allocate(size); }
+inline void* operator new[](size_t size, Allocator& allocator) { return allocator.allocateArray(size); }
+inline void operator delete(void* ptr, Allocator& allocator) { allocator.deallocate(ptr); }
+inline void operator delete[](void* ptr, Allocator& allocator) { allocator.deallocateArray(ptr); }
+
 // FIX : name
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
 	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
@@ -130,16 +142,22 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:		GCItem() throw();
+	public:/*		static void* operator new(size_t, GCHeap& heap) {
+				static void* operator new[](size_t); // N/A
+			*/
+				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
-				bool gcIsOnHeap() const { return _gcList != 0; };
+				bool gcIsOnHeap() const { return _gcList != 0; }; // FIX : drop?
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
-
+	
 	protected:	GCList* _gcList;
 				GCItem* _gcPrev;
 				GCItem* _gcNext;
+
+/*	private:	static void* operator new(size_t); // N/A
+				static void* operator new[](size_t); // N/A*/
 };
 
 // FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
@@ -908,7 +926,7 @@ class Processor : public GCItem {
 					Frame* frame; // doesn't change during function execution
 					Object* thisObject; // doesn't change during function execution
 				};
-
+				
 				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
 	protected:	struct Catcher {
 					Catcher() { }

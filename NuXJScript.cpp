@@ -412,7 +412,7 @@ Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 		case NULL_TYPE: return 0;
 		case BOOLEAN_TYPE: return new WrapperObject(&B_OOLEAN_STRING, *this, &engine.booleanPrototype);
 		case NUMBER_TYPE: return new WrapperObject(&N_UMBER_STRING, *this, &engine.numberPrototype);
-		case STRING_TYPE: return (requestExtensible ? new WrapperObject(&S_TRING_STRING, *this, &engine.stringPrototype) : static_cast<Object*>(const_cast<String*>(var.string))); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
+		case STRING_TYPE: return (requestExtensible ? engine.getHeap().manage(new WrapperObject(&S_TRING_STRING, *this, &engine.stringPrototype)) : static_cast<Object*>(const_cast<String*>(var.string))); // I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case OBJECT_TYPE: return var.object;
 	}
 }
@@ -3617,14 +3617,23 @@ void Compiler::compile(const String& source) {
 	}
 }
 
+void* Allocator::allocate(size_t size) { return ::operator new(size); }
+void* Allocator::allocateArray(size_t size) { return ::operator new[](size); }
+void Allocator::deallocate(void *ptr) { ::operator delete(ptr); }
+void Allocator::deallocateArray(void *ptr) { ::operator delete[](ptr); }
+
 GCHeap::GCHeap() : currentList(&managedLists[0]), newList(&managedLists[1]) { }
 
-UInt32 GCHeap::size() const { return currentList->size(); }
+UInt32 GCHeap::size() const {
+	return currentList->size();
+}
+
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
 
-	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext)
+	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
 		item->gcMark(*this);
+	}
 	
 	{
 		UInt32 n = 0;

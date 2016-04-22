@@ -45,6 +45,24 @@ var $PARSE_INT_CHARS = (function() {
 	return pic;
 })();
 
+function $StringBuilder() {
+	this.buffers = [ ];
+	for (var i = 0; i < 20; ++i) {
+		this.buffers[i] = '';
+	}
+}
+$StringBuilder.prototype.append = function append(s) {
+	for (var i = 0, n = 256; (this.buffers[i] += s).length >= n && i + 1 < this.buffers.length; n <<= 1, ++i) {
+		s = this.buffers[i];
+		this.buffers[i] = '';
+	}
+}
+$StringBuilder.prototype.toString = function toString() {
+	var s = this.buffers[0];
+	for (var i = 1; i < this.buffers.length; ++i) s += this.buffers[i];
+	return s;
+}
+
 function $toInteger(v) {
 	return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))));
 }
@@ -360,13 +378,13 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	join: $unconstructable(function join(separator) {
-		var s = '', s2, l = this.length;
+		var s = new $StringBuilder, s2, l = this.length;
 		separator = (separator === void 0 ? ',' : $toString(separator));
 		for (var i = 0; i < l; ++i) {
-			if (i > 0) s += separator;
-			if ((s2 = this[i]) != null) s += $toString(s2);
+			if (i > 0) s.append(separator);
+			if ((s2 = this[i]) != null) s.append($toString(s2));
 		}
-		return s;
+		return s.toString();
 	}),
 	pop: $unconstructable(function pop() {
 		var v = void 0, l;
