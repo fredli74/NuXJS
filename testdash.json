@@ -3264,76 +3264,76 @@
 		"category": "tbd"
 	},
 	"language/literals/regexp/7.8.5-2gs": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A1.1_T1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A1.1_T2": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A1.4_T1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A1.4_T2": {
-		"category": "tbd"
+		"category": "todo"
 	},
 	"language/literals/regexp/S7.8.5_A2.1_T1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A2.1_T2": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A2.4_T1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A2.4_T2": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T2": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T3": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T4": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T5": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T6": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T7": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T8": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T9": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A4.1": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A4.2": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/u-astral": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/regexp/u-case-mapping": {
-		"category": "tbd"
+		"category": "not_es3"
 	},
 	"language/literals/regexp/u-surrogate-pairs": {
-		"category": "tbd"
+		"category": "not_es3"
 	},
 	"language/literals/regexp/u-unicode-esc": {
-		"category": "tbd"
+		"category": ""
 	},
 	"language/literals/string/S7.8.4_A2.2_T1": {
 		"category": "todo"
@@ -3531,7 +3531,7 @@
 		"category": ""
 	},
 	"language/reserved-words/7.6.1-4-1": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/reserved-words/7.6.1-4-10": {
 		"category": "not_es3"
@@ -5193,6 +5193,15 @@
 		"category": "not_es3"
 	},
 	"language/statements/variable/12.2.1-22-s": {
+		"category": "not_es3"
+	},
+	"language/statements/with/cptn-abrupt-empty": {
+		"category": "not_es3"
+	},
+	"language/statements/with/cptn-nrml": {
+		"category": "not_es3"
+	},
+	"language/statements/function/13.2-18-1": {
 		"category": "not_es3"
 	}
 }

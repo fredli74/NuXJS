@@ -63,3 +63,5 @@
 		. Case-insensitive matches of character class ranges: is complicated because the standard seem to assume that you do these through lookup tables, but we don't, so matching range 'A-f' for example is done by matching either uppercase or lowercase character to 'A-f' range. Now exactly how this works with complicated unicode translations I'm not sure. See 15.10.2.16 in the ES3 spec.
 
 		. Zero-length captures inside repeats, e.g. '^(a*)*$'. I'm interpreting the ES specs differently from the browser engines that I've tried, but similar to (at least	older versions of) PCRE. The capture will be empty because the empty string is the last successful match to (a*), after which we are not progressing on the input so we break out of the two '*' loops. I believe my interpretation is correct, but I am not 100%. See 15.10.2.5 in the ES3 spec.
+
+*) ';' is required after do-while. In reality, no engine seems to have bothered with this, although it is part of ES3->5 (in ES6 they made ';' optional). Even the old Sputnik tests are wrong. So this is not a violation, but actually a stricter conformance to the standard).
