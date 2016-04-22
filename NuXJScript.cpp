@@ -2563,10 +2563,11 @@ Value Compiler::stringOrNumberConstant() {
 		case '0': {
 			if (p + 1 != e && (p[1] == 'x' || p[1] == 'X')) {
 				UInt32 u;
-				const Char* b = p += 2;
-				p = parseHex(b, e, u);
-				if (p == b) {
-					error(SYNTAX_ERROR, "Invalid number");
+				const Char* b = p;
+				p = parseHex(b + 2, e, u);
+				if (p == b + 2) {
+					p = b;
+					break;
 				}
 				return Value(u);
 			} else if (p + 1 != e && (p[1] == '.' || p[1] == 'e' || p[1] == 'E')) {

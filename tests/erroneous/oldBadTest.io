@@ -1,6 +1,6 @@
 > ( // missing expression
 ! !!!! Line: 1
-! !!!! SyntaxError: Expected expression
+! !!!! SyntaxError: Missing / invalid expression
 -
 > ) // just wrong
 ! !!!! Line: 1
@@ -48,11 +48,11 @@
 -
 > f(,
 ! !!!! Line: 1
-! !!!! SyntaxError: Expected expression
+! !!!! SyntaxError: Missing / invalid expression
 -
 > f(3,
 ! !!!! Line: 1
-! !!!! SyntaxError: Expected expression
+! !!!! SyntaxError: Missing / invalid expression
 -
 > f(3,5 3)
 ! !!!! Line: 1
@@ -124,11 +124,11 @@
 -
 > a = 0x
 ! !!!! Line: 1
-! !!!! SyntaxError: Invalid number
+! !!!! SyntaxError: Missing / invalid expression
 -
 > a = .
 ! !!!! Line: 1
-! !!!! SyntaxError: Invalid number
+! !!!! SyntaxError: Missing / invalid expression
 -
 > var =5
 ! !!!! Line: 1
@@ -180,7 +180,7 @@
 -
 > switch () { }
 ! !!!! Line: 1
-! !!!! SyntaxError: Expected expression
+! !!!! SyntaxError: Missing / invalid expression
 -
 > switch (3) { x=1 }
 ! !!!! Line: 1
@@ -188,7 +188,7 @@
 -
 > switch () { 
 ! !!!! Line: 1
-! !!!! SyntaxError: Expected expression
+! !!!! SyntaxError: Missing / invalid expression
 -
 > (true ? a : b) = 3
 ! !!!! Line: 1
