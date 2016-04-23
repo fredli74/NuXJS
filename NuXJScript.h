@@ -20,25 +20,34 @@ const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 16;
 const double EPSILON = 1.0e-300;
 
-class Allocator {
-	public:		virtual void* allocate(size_t size);
-	public:		virtual void* allocateArray(size_t size);
-	public:		virtual void deallocate(void *ptr);
-	public:		virtual void deallocateArray(void *ptr);
+class Heap {
+	public:		static Heap standard;
+				virtual void* allocate(size_t size) { return ::operator new(size); }
+				virtual void* allocateArray(size_t size) { return ::operator new[](size); }
+				virtual void deallocate(void *ptr) { ::operator delete(ptr); }
+				virtual void deallocateArray(void *ptr) { ::operator delete[](ptr); }
 };
 
-inline void* operator new(size_t size, Allocator& allocator) { return allocator.allocate(size); }
-inline void* operator new[](size_t size, Allocator& allocator) { return allocator.allocateArray(size); }
-inline void operator delete(void* ptr, Allocator& allocator) { allocator.deallocate(ptr); }
-inline void operator delete[](void* ptr, Allocator& allocator) { allocator.deallocateArray(ptr); }
+inline void* operator new(size_t size, Heap& heap) { return heap.allocate(size); }
+inline void* operator new[](size_t size, Heap& heap) { return heap.allocateArray(size); }
+inline void operator delete(void* ptr, Heap& heap) { heap.deallocate(ptr); }
+inline void operator delete[](void* ptr, Heap& heap) { heap.deallocateArray(ptr); }
 
 // FIX : name
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
-	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT) : n(n), p(n <= BUILT_IN_COUNT ? a : new T[n]) { }
-				explicit QuickArray(const QuickArray& copy) : n(0), p(a) { (*this) = copy; }
-
+	public:		explicit QuickArray(Heap& heap)
+						: heap(&heap), n(BUILT_IN_COUNT), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {
+				}
+				explicit QuickArray(UInt32 n, Heap& heap)
+						: heap(&heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {
+				}
+				explicit QuickArray(const QuickArray& copy) : n(0), heap(copy.heap), p(a) { (*this) = copy; }
+				
+				Heap& getHeap() const { return *heap; }
+				
 				void swap(QuickArray& other) {
 					if (this != &other) {
+						std::swap(heap, other.heap);
 						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
 						std::swap(n, other.n);
 						T* x = p;
@@ -49,7 +58,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				
 				QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
-						QuickArray<T, BUILT_IN_COUNT> na(copy.n);
+						QuickArray<T, BUILT_IN_COUNT> na(copy.n, *copy.heap);
 						std::copy(copy.p, copy.p + copy.n, na.p);
 						swap(na);
 					}
@@ -57,7 +66,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				
 				void resize(UInt32 newSize) {
-					QuickArray<T, BUILT_IN_COUNT> na(newSize);
+					QuickArray<T, BUILT_IN_COUNT> na(newSize, *heap);
 					std::copy(p, p + std::min(n, newSize), na.p);
 					swap(na);
 				}
@@ -72,15 +81,24 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				T& operator[](Int32 index) const { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
 				T& operator[](Int32 index) { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; }
 			#endif
-				~QuickArray() { if (p != a) delete [] p; }
+				virtual ~QuickArray() {
+					if (p != a) {
+						for (UInt32 i = n; i > 0; --i) {
+							p[i - 1].~T();
+						}
+						heap->deallocateArray(p);
+					}
+				}
 				
-	protected:	UInt32 n;
+	protected:	Heap* heap;
+				UInt32 n;
 				T* p;
 				T a[BUILT_IN_COUNT];
 };
 
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
-	public:		explicit QuickVector(UInt32 capacity = BUILT_IN_COUNT) : qArray(capacity), count(0) { }
+	public:		explicit QuickVector(Heap& heap) : qArray(BUILT_IN_COUNT, heap), count(0) { }
+				explicit QuickVector(UInt32 capacity, Heap& heap) : qArray(capacity, heap), count(0) { }
 				bool empty() const { return count == 0; }
 				UInt32 size() const { return count; }
 				operator T*() const { return qArray.begin(); }
@@ -142,13 +160,13 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:/*		static void* operator new(size_t, GCHeap& heap) {
-				static void* operator new[](size_t); // N/A
-			*/
+	public:		static void* operator new(size_t n, Heap& heap) { Heap** p = reinterpret_cast<Heap**>(heap.allocate(n + sizeof (heap))); *p = &heap; return p + 1; }
+				static void operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(ptr) - 1; (*p)->deallocate(p); }
+				
 				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
-				bool gcIsOnHeap() const { return _gcList != 0; }; // FIX : drop?
+				GCHeap* gcGetHeap() const;
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 	
@@ -156,26 +174,33 @@ class GCItem {
 				GCItem* _gcPrev;
 				GCItem* _gcNext;
 
-/*	private:	static void* operator new(size_t); // N/A
-				static void* operator new[](size_t); // N/A*/
+	private:	static void* operator new[](size_t, Heap&); // N/A
+				static void operator delete[](void*); // N/A
 };
 
 // FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
 // list (_gcList = 0). But in GCHeap, managed items ought to be deleted, right?
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
-	public:		GCList() throw();
+	public:		GCList(GCHeap& heap);
+				GCHeap& getHeap() const;
 				UInt32 size() const;
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 
-	protected:	UInt32 count;
+	protected:	GCHeap& heap;
+				UInt32 count;
 };
 
-class GCHeap {
-	public:		GCHeap();
+class GCHeap : public Heap {
+	public:		typedef Heap super;
+				GCHeap();
 				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
+				virtual void* allocate(size_t size) { size_t* p = reinterpret_cast<size_t*>(super::allocate(size + sizeof (size_t))); *p = size; return p + 1; }
+				virtual void deallocate(void *ptr) { return super::deallocate(reinterpret_cast<size_t*>(ptr) - 1); }
+				virtual void* allocateArray(size_t size) { return allocate(size); }
+				virtual void deallocateArray(void *ptr) { return deallocate(ptr); }
 				UInt32 size() const;
 				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
@@ -183,11 +208,12 @@ class GCHeap {
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
-	protected:	GCList* currentList;
-				GCList* newList;
-				GCList managedLists[2];
+	protected:	GCList managedListA;
+				GCList managedListB;
 				GCList rootList;
-
+				GCList* currentList;
+				GCList* newList;
+				
 	private:	GCHeap(const GCHeap& other); // N/A
 				GCHeap& operator=(const GCHeap& other); // N/A
 };
@@ -373,7 +399,8 @@ class Table {
 								bool keyExists() const { return key != 0; }
 				};
 				
-				Table(UInt32 n = TABLE_BUILT_IN_N);
+				Table(Heap& heap);
+//				Table(UInt32 n, Heap& heap);
 				UInt32 getLoadCount() const;
 				Bucket* getFirst() const;
 				Bucket* getNext(Bucket* bucket) const;
@@ -413,13 +440,13 @@ class String : public virtual Object, public QuickArray<Char> {
 
 				String();
 // FIX : neeeded?				String(const String& o);
-				String(const Char* b, const Char* e);
-				String(const String& l, const String& r);
-				explicit String(const std::wstring& s);
-				explicit String(UInt32 length) : QArray(length), hash(0) { } // FIX : dangerous, right, make protected?
+				String(const Char* b, const Char* e, Heap& heap);
+				String(const String& l, const String& r, Heap& heap);
+				explicit String(const std::wstring& s, Heap& heap);
+				explicit String(UInt32 length, Heap& heap) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s) : QArray(strlen(s), Heap::standard), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -447,7 +474,7 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(UInt32 initialCapacity);
+				StringListEnumerator(Heap& heap, UInt32 initialCapacity);
 				void add(const String* s);
 				virtual const String* nextPropertyName();
 
@@ -481,7 +508,7 @@ class JoiningEnumerator : public Enumerator {
 class ScriptObject : public virtual Object {
 	public:		typedef Object super;
 				
-				ScriptObject(Object* prototype);
+				ScriptObject(Heap& heap, Object* prototype);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -502,7 +529,7 @@ class ScriptObject : public virtual Object {
 // fix : good candidate for a lazy object
 class WrapperObject : public ScriptObject {
 	public:		typedef ScriptObject super;
-				WrapperObject(const String* className, const Value& value, Object* prototype);
+				WrapperObject(Heap& heap, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
@@ -518,7 +545,7 @@ class WrapperObject : public ScriptObject {
 // FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
-				StringWrapper(const String* string, Object* prototype);
+				StringWrapper(Heap& heap, const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
@@ -538,7 +565,7 @@ class StringWrapper : public ScriptObject {
 class Array : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 	
-				Array();
+				Array(Heap& heap);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
@@ -580,7 +607,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(bool direct) : direct(direct) { }
+				EvalFunction(Heap& heap, bool direct) : direct(direct), functionDefCache(heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -588,7 +615,7 @@ class EvalFunction : public Function {
 				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
 				virtual void gcMark(GCHeap& heap) const {
-					functionDefCache = Table(); // Yeah we just empty everything on each gc sweep
+					functionDefCache = Table(heap); // Yeah we just empty everything on each gc sweep
 					functionDefCache.gcMark(heap);
 					super::gcMark(heap);
 				}
@@ -598,6 +625,7 @@ class Frame;
 
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
+				Constants(Heap& heap) : QuickVector<Value>(heap) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -611,7 +639,7 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Constants* constants);
+				CodeDefinition(Heap& heap, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -622,7 +650,7 @@ class CodeDefinition : public Object {
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 
-	protected:	QuickVector<CodeWord> code;
+	protected:	QuickVector<CodeWord> code; // FIX : should be array really
 				Constants* const constants;
 				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == current catch parameter during compile-time only (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
@@ -778,7 +806,7 @@ class ScriptFrame : public LazyObject<Frame> {
 	
 	public:		typedef LazyObject<Frame> super;
 
-				ScriptFrame(ScriptFunction* function, UInt32 argc, const Value* argv);
+				ScriptFrame(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
@@ -811,7 +839,7 @@ class ScriptFrame : public LazyObject<Frame> {
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
-				EvalFrame(Frame* parentFrame, const CodeDefinition* evalCodeDef);
+				EvalFrame(Heap& heap, Frame* parentFrame, const CodeDefinition* evalCodeDef);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -872,7 +900,7 @@ class WithFrame : public Frame {
 class Arguments : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 
-				Arguments(ScriptFrame* frame, UInt32 argumentsCount);
+				Arguments(Heap& heap, ScriptFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
