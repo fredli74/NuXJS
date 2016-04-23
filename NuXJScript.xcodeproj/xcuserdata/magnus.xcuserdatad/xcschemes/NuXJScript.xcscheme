@@ -73,7 +73,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "temp.js"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
       <AdditionalOptions>

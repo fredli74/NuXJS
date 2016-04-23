@@ -208,6 +208,12 @@ Run-time
 		- there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
 			- the only problem is that it won't help stuff that is pushed on the stack only, e.g. a[x] = y <- both x and y are pushed data on stack and changing those pointers really won't help anyone :)
 
+	* building arrays is slow because of:
+			bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
+				Value dummy;
+				if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
+		getOwnProperty here will convert key to string (on heap!), just to check if it exists somewhere in the chain before setting the array element
+
 Compiler
 ========
 

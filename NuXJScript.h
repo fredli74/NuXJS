@@ -197,11 +197,12 @@ class GCHeap : public Heap {
 				GCHeap();
 				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
-				virtual void* allocate(size_t size) { size_t* p = reinterpret_cast<size_t*>(super::allocate(size + sizeof (size_t))); *p = size; return p + 1; }
-				virtual void deallocate(void *ptr) { return super::deallocate(reinterpret_cast<size_t*>(ptr) - 1); }
+				virtual void* allocate(size_t size) { size_t* p = reinterpret_cast<size_t*>(super::allocate(size + sizeof (size_t))); *p = size; allocated += size; return p + 1; }
+				virtual void deallocate(void *ptr) { size_t* p = reinterpret_cast<size_t*>(ptr) - 1; allocated -= *p; assert(allocated >= 0); return super::deallocate(p); }
 				virtual void* allocateArray(size_t size) { return allocate(size); }
 				virtual void deallocateArray(void *ptr) { return deallocate(ptr); }
-				UInt32 size() const;
+				UInt32 count() const { return currentList->size(); }
+				size_t size() const { return allocated; }
 				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
@@ -213,6 +214,7 @@ class GCHeap : public Heap {
 				GCList rootList;
 				GCList* currentList;
 				GCList* newList;
+				size_t allocated;
 				
 	private:	GCHeap(const GCHeap& other); // N/A
 				GCHeap& operator=(const GCHeap& other); // N/A

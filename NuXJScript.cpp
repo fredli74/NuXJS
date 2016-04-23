@@ -3640,11 +3640,7 @@ void Compiler::compile(const String& source) {
 }
 
 Heap Heap::standard;
-GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA), newList(&managedListB) { }
-
-UInt32 GCHeap::size() const {
-	return currentList->size();
-}
+GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA), newList(&managedListB), allocated(0) { }
 
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
@@ -4269,7 +4265,8 @@ if (!supressStdErr) {
 					UInt32 sweptCount = heap.gc();
 					if (!supressStdErr) {
 						std::cerr << "\tGC swept: " << sweptCount << std::endl;
-						std::cerr << "\tGC kept: " << heap.size() << std::endl;
+						std::cerr << "\tGC kept: " << heap.count() << std::endl;
+						std::cerr << "\tHeap size: " << heap.size() << std::endl;
 					}
 				
 					if (done) {
