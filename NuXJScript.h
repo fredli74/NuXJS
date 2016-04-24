@@ -17,7 +17,7 @@ typedef Byte Flags;
 const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
-const UInt32 STANDARD_BUILT_IN_COUNT = 16;
+const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 const double EPSILON = 1.0e-300;
 
 class Heap {
@@ -35,12 +35,8 @@ inline void operator delete[](void* ptr, Heap& heap) { heap.deallocateArray(ptr)
 
 // FIX : name
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
-	public:		explicit QuickArray(Heap& heap)
-						: heap(&heap), n(BUILT_IN_COUNT), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {
-				}
-				explicit QuickArray(UInt32 n, Heap& heap)
-						: heap(&heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {
-				}
+	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT, Heap& heap = Heap::standard)
+						: heap(&heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {	}
 				explicit QuickArray(const QuickArray& copy) : n(0), heap(copy.heap), p(a) { (*this) = copy; }
 				
 				Heap& getHeap() const { return *heap; }
@@ -91,14 +87,13 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				
 	protected:	Heap* heap;
-				UInt32 n;
 				T* p;
 				T a[BUILT_IN_COUNT];
+				UInt32 n;
 };
 
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
-	public:		explicit QuickVector(Heap& heap) : qArray(BUILT_IN_COUNT, heap), count(0) { }
-				explicit QuickVector(UInt32 capacity, Heap& heap) : qArray(capacity, heap), count(0) { }
+	public:		explicit QuickVector(Heap& heap = Heap::standard) : qArray(BUILT_IN_COUNT, heap), count(0) { }
 				bool empty() const { return count == 0; }
 				UInt32 size() const { return count; }
 				operator T*() const { return qArray.begin(); }
@@ -160,8 +155,8 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:		static void* operator new(size_t n, Heap& heap) { Heap** p = reinterpret_cast<Heap**>(heap.allocate(n + sizeof (heap))); *p = &heap; return p + 1; }
-				static void operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(ptr) - 1; (*p)->deallocate(p); }
+	public:		static void* operator new(size_t n, Heap& heap);
+				static void operator delete(void* ptr);
 				
 				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
@@ -197,12 +192,12 @@ class GCHeap : public Heap {
 				GCHeap();
 				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
-				virtual void* allocate(size_t size) { size_t* p = reinterpret_cast<size_t*>(super::allocate(size + sizeof (size_t))); *p = size; allocated += size; return p + 1; }
-				virtual void deallocate(void *ptr) { size_t* p = reinterpret_cast<size_t*>(ptr) - 1; allocated -= *p; assert(allocated >= 0); return super::deallocate(p); }
-				virtual void* allocateArray(size_t size) { return allocate(size); }
-				virtual void deallocateArray(void *ptr) { return deallocate(ptr); }
-				UInt32 count() const { return currentList->size(); }
-				size_t size() const { return allocated; }
+				virtual void* allocate(size_t size);
+				virtual void deallocate(void *ptr);
+				virtual void* allocateArray(size_t size);
+				virtual void deallocateArray(void *ptr);
+				UInt32 count() const;
+				size_t size() const;
 				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
 				void mark(const GCItem* item);
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
@@ -442,10 +437,10 @@ class String : public virtual Object, public QuickArray<Char> {
 
 				String();
 // FIX : neeeded?				String(const String& o);
-				String(const Char* b, const Char* e, Heap& heap);
-				String(const String& l, const String& r, Heap& heap);
-				explicit String(const std::wstring& s, Heap& heap);
-				explicit String(UInt32 length, Heap& heap) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
+				String(const Char* b, const Char* e, Heap& heap = Heap::standard);
+				String(const String& l, const String& r, Heap& heap = Heap::standard);
+				explicit String(const std::wstring& s, Heap& heap = Heap::standard);
+				explicit String(UInt32 length, Heap& heap = Heap::standard) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				explicit String(const char* s) : QArray(strlen(s), Heap::standard), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }

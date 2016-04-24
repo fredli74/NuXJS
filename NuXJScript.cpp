@@ -676,6 +676,15 @@ const String* String::fromDouble(GCHeap& heap, double d) {
 
 /* --- GCItem --- */
 
+void* GCItem::operator new(size_t n, Heap& heap) {
+	Heap** p = reinterpret_cast<Heap**>(heap.allocate(n + sizeof (&heap)));
+	*p = &heap; return p + 1;
+}
+
+void GCItem::operator delete(void* ptr) {
+	Heap** p = reinterpret_cast<Heap**>(ptr) - 1; (*p)->deallocate(p);
+}
+
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
 GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
@@ -982,7 +991,7 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 
 /* --- StringListEnumerator --- */
 
-StringListEnumerator::StringListEnumerator(Heap& heap, UInt32 initialCapacity) : list(initialCapacity, heap), nextIndex(0) { }
+StringListEnumerator::StringListEnumerator(Heap& heap, UInt32 initialCapacity) : list(heap), nextIndex(0) { list.reserve(initialCapacity); }
 void StringListEnumerator::add(const String* s) { list.append(s); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
 
@@ -3642,6 +3651,25 @@ void Compiler::compile(const String& source) {
 Heap Heap::standard;
 GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA), newList(&managedListB), allocated(0) { }
 
+void* GCHeap::allocate(size_t size) {
+	size_t* p = reinterpret_cast<size_t*>(super::allocate(size + sizeof (size_t)));
+	*p = size;
+	allocated += size;
+	return p + 1;
+}
+
+void GCHeap::deallocate(void *ptr) {
+	size_t* p = reinterpret_cast<size_t*>(ptr) - 1;
+	allocated -= *p;
+	assert(allocated >= 0);
+	return super::deallocate(p);
+}
+
+void* GCHeap::allocateArray(size_t size) { return allocate(size); }
+void GCHeap::deallocateArray(void *ptr) { return deallocate(ptr); }
+UInt32 GCHeap::count() const { return currentList->size(); }
+size_t GCHeap::size() const { return allocated; }
+
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
 
@@ -3820,7 +3848,7 @@ struct Support {
 			return Value();
 		} else {
 			Object* newThis = (argc > 1 ? argv[1].toObject(engine, true) : 0);
-			QuickArray<Value> args(heap);
+			QuickArray<Value> args(0, heap);
 			Object* arrayObject = (argc > 2 ? argv[2].toObject(engine, false) : 0);
 			if (arrayObject != 0) {
 				Value v;
@@ -4148,12 +4176,16 @@ supressStdErr = false;
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;
 	bool doTime = false;
-	long gcRate = 1000000;
+	long gcRate = 256;
+	bool autoGCRate = true;
 	bool pauseBeforeQuit = false;
 	for (int argi = 1; argi < argc; ++argi) {
 		if (strcmp(argv[argi], "-t") == 0) doTime = true;
 		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
-		else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) gcRate = atol(argv[++argi]);
+		else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
+			gcRate = atol(argv[++argi]);
+			autoGCRate = false;
+		}
 		else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
 		else if (inputFileStream.get() == 0) {
 			inputFileStream.reset(new std::wifstream(argv[argi]));
@@ -4261,12 +4293,23 @@ if (!supressStdErr) {
 				do {
 					processor.resetTimeOut(gcRate);
 					done = !processor.run();
-				
-					UInt32 sweptCount = heap.gc();
-					if (!supressStdErr) {
-						std::cerr << "\tGC swept: " << sweptCount << std::endl;
-						std::cerr << "\tGC kept: " << heap.count() << std::endl;
-						std::cerr << "\tHeap size: " << heap.size() << std::endl;
+					{
+						long beforeSize = static_cast<long>(heap.size());
+						UInt32 sweptCount = heap.gc();
+						long nowSize = static_cast<long>(heap.size());;
+						if (!supressStdErr) {
+							std::cerr << "\tGC rate: " << gcRate << std::endl;
+							std::cerr << "\tGC swept: " << sweptCount << std::endl;
+							std::cerr << "\tGC kept: " << heap.count() << std::endl;
+							std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+						}
+						if (autoGCRate) {
+							if (beforeSize - nowSize >= 128L * 1024 * 1024) {
+								gcRate = 256;
+							} else if (gcRate < 16 * 1024 * 1024) {
+								gcRate *= 2;
+							}
+						}
 					}
 				
 					if (done) {
