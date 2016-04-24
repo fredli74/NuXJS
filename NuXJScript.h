@@ -21,25 +21,25 @@ const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 const double EPSILON = 1.0e-300;
 
 class Heap {
-	public:		static Heap standard;
-				virtual void* allocate(size_t size) { return ::operator new(size); }
-				virtual void* allocateArray(size_t size) { return ::operator new[](size); }
-				virtual void deallocate(void *ptr) { ::operator delete(ptr); }
-				virtual void deallocateArray(void *ptr) { ::operator delete[](ptr); }
+	public:		virtual void* allocate(size_t size) = 0;
+				virtual void* allocateArray(size_t size) = 0;
+				virtual void deallocate(void *ptr) = 0;
+				virtual void deallocateArray(void *ptr) = 0;
 };
 
-inline void* operator new(size_t size, Heap& heap) { return heap.allocate(size); }
-inline void* operator new[](size_t size, Heap& heap) { return heap.allocateArray(size); }
-inline void operator delete(void* ptr, Heap& heap) { heap.deallocate(ptr); }
-inline void operator delete[](void* ptr, Heap& heap) { heap.deallocateArray(ptr); }
+// Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
+inline void* operator new(size_t size, Heap* heap) { return (heap != 0 ? heap->allocate(size) : ::operator new(size)); }
+inline void* operator new[](size_t size, Heap* heap) { return (heap != 0 ? heap->allocateArray(size) : ::operator new[](size)); }
+inline void operator delete(void* ptr, Heap* heap) { return (heap != 0 ? heap->deallocate(ptr) : ::operator delete(ptr)); }
+inline void operator delete[](void* ptr, Heap* heap) { return (heap != 0 ? heap->deallocateArray(ptr) : ::operator delete[](ptr)); }
 
 // FIX : name
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
-	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT, Heap& heap = Heap::standard)
-						: heap(&heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {	}
+	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT, Heap* heap = 0)
+						: heap(heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {	}
 				explicit QuickArray(const QuickArray& copy) : n(0), heap(copy.heap), p(a) { (*this) = copy; }
 				
-				Heap& getHeap() const { return *heap; }
+				Heap* getHeap() const { return heap; }
 				
 				void swap(QuickArray& other) {
 					if (this != &other) {
@@ -54,7 +54,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				
 				QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
-						QuickArray<T, BUILT_IN_COUNT> na(copy.n, *copy.heap);
+						QuickArray<T, BUILT_IN_COUNT> na(copy.n, copy.heap);
 						std::copy(copy.p, copy.p + copy.n, na.p);
 						swap(na);
 					}
@@ -62,7 +62,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				
 				void resize(UInt32 newSize) {
-					QuickArray<T, BUILT_IN_COUNT> na(newSize, *heap);
+					QuickArray<T, BUILT_IN_COUNT> na(newSize, heap);
 					std::copy(p, p + std::min(n, newSize), na.p);
 					swap(na);
 				}
@@ -72,17 +72,13 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				operator T*() const { return p; }
 				T* begin() const { return p; }
 				T* end() const { return p + n; }
-			// FIX : ambigious according to c++ standard or something, didnt' work -v
-			#if 0 && !defined(NDEBUG) // FIX : test performance in release
-				T& operator[](Int32 index) const { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; } // FIX : shouldn't this be const T&, but that breaks some code...
-				T& operator[](Int32 index) { assert(0 <= index && static_cast<UInt32>(index) < n); return p[index]; }
-			#endif
+
 				virtual ~QuickArray() {
 					if (p != a) {
 						for (UInt32 i = n; i > 0; --i) {
 							p[i - 1].~T();
 						}
-						heap->deallocateArray(p);
+						::operator delete(p, heap);
 					}
 				}
 				
@@ -93,7 +89,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 };
 
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
-	public:		explicit QuickVector(Heap& heap = Heap::standard) : qArray(BUILT_IN_COUNT, heap), count(0) { }
+	public:		explicit QuickVector(Heap* heap = 0) : qArray(BUILT_IN_COUNT, heap), count(0) { }
 				bool empty() const { return count == 0; }
 				UInt32 size() const { return count; }
 				operator T*() const { return qArray.begin(); }
@@ -155,8 +151,9 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:		static void* operator new(size_t n, Heap& heap);
+	public:		static void* operator new(size_t n, Heap* heap);
 				static void operator delete(void* ptr);
+				static void operator delete(void* ptr, Heap* heap);
 				
 				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
@@ -396,8 +393,7 @@ class Table {
 								bool keyExists() const { return key != 0; }
 				};
 				
-				Table(Heap& heap);
-//				Table(UInt32 n, Heap& heap);
+				Table(Heap* heap = 0);
 				UInt32 getLoadCount() const;
 				Bucket* getFirst() const;
 				Bucket* getNext(Bucket* bucket) const;
@@ -437,13 +433,13 @@ class String : public virtual Object, public QuickArray<Char> {
 
 				String();
 // FIX : neeeded?				String(const String& o);
-				String(const Char* b, const Char* e, Heap& heap = Heap::standard);
-				String(const String& l, const String& r, Heap& heap = Heap::standard);
-				explicit String(const std::wstring& s, Heap& heap = Heap::standard);
-				explicit String(UInt32 length, Heap& heap = Heap::standard) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
+				String(const Char* b, const Char* e, Heap* heap = 0);
+				String(const String& l, const String& r, Heap* heap = 0);
+				explicit String(const std::wstring& s, Heap* heap = 0);
+				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s) : QArray(strlen(s), Heap::standard), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -471,7 +467,7 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(Heap& heap, UInt32 initialCapacity);
+				StringListEnumerator(Heap* heap, UInt32 initialCapacity);
 				void add(const String* s);
 				virtual const String* nextPropertyName();
 
@@ -505,7 +501,7 @@ class JoiningEnumerator : public Enumerator {
 class ScriptObject : public virtual Object {
 	public:		typedef Object super;
 				
-				ScriptObject(Heap& heap, Object* prototype);
+				ScriptObject(Heap* heap, Object* prototype);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -526,7 +522,7 @@ class ScriptObject : public virtual Object {
 // fix : good candidate for a lazy object
 class WrapperObject : public ScriptObject {
 	public:		typedef ScriptObject super;
-				WrapperObject(Heap& heap, const String* className, const Value& value, Object* prototype);
+				WrapperObject(Heap* heap, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
@@ -542,7 +538,7 @@ class WrapperObject : public ScriptObject {
 // FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
-				StringWrapper(Heap& heap, const String* string, Object* prototype);
+				StringWrapper(Heap* heap, const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
@@ -562,7 +558,7 @@ class StringWrapper : public ScriptObject {
 class Array : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 	
-				Array(Heap& heap);
+				Array(Heap* heap);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
@@ -604,7 +600,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(Heap& heap, bool direct) : direct(direct), functionDefCache(heap) { }
+				EvalFunction(Heap* heap, bool direct) : direct(direct), functionDefCache(heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -612,7 +608,7 @@ class EvalFunction : public Function {
 				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
 				virtual void gcMark(GCHeap& heap) const {
-					functionDefCache = Table(heap); // Yeah we just empty everything on each gc sweep
+					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
 					functionDefCache.gcMark(heap);
 					super::gcMark(heap);
 				}
@@ -622,7 +618,7 @@ class Frame;
 
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(Heap& heap) : QuickVector<Value>(heap) { }
+				Constants(Heap* heap) : QuickVector<Value>(heap) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -636,7 +632,7 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Heap& heap, Constants* constants);
+				CodeDefinition(Heap* heap, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -803,7 +799,7 @@ class ScriptFrame : public LazyObject<Frame> {
 	
 	public:		typedef LazyObject<Frame> super;
 
-				ScriptFrame(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				ScriptFrame(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
@@ -836,7 +832,7 @@ class ScriptFrame : public LazyObject<Frame> {
 class EvalFrame : public Frame {
 	public:		typedef Frame super;
 
-				EvalFrame(Heap& heap, Frame* parentFrame, const CodeDefinition* evalCodeDef);
+				EvalFrame(Heap* heap, Frame* parentFrame, const CodeDefinition* evalCodeDef);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -897,7 +893,7 @@ class WithFrame : public Frame {
 class Arguments : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 
-				Arguments(Heap& heap, ScriptFrame* frame, UInt32 argumentsCount);
+				Arguments(Heap* heap, ScriptFrame* frame, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
