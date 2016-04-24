@@ -416,7 +416,7 @@ Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 		case NUMBER_TYPE: return heap.manage(new (&heap) WrapperObject(&heap, &N_UMBER_STRING, *this, &engine.numberPrototype));
 		// I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case STRING_TYPE: return (!requestExtensible ? static_cast<Object*>(const_cast<String*>(var.string))
-				: heap.manage(new (&heap) WrapperObject(&heap, &S_TRING_STRING, *this, &engine.stringPrototype)));
+				: heap.manage(new (&heap) StringWrapper(&heap, var.string, &engine.stringPrototype)));
 		case OBJECT_TYPE: return var.object;
 	}
 }
