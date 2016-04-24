@@ -207,6 +207,7 @@ class GCHeap : public Heap {
 				GCList* currentList;
 				GCList* newList;
 				size_t allocated;
+				void* pools[1024 / 16];
 				
 	private:	GCHeap(const GCHeap& other); // N/A
 				GCHeap& operator=(const GCHeap& other); // N/A
