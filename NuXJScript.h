@@ -7,6 +7,9 @@
 #include <string>
 #include <cstring>
 
+#pragma GCC push_options
+#pragma GCC optimize("no-finite-math-only", "no-unsafe-math-optimizations", "no-signaling-nans", "no-trapping-math", "no-math-errno", "no-cx-limited-range", "signed-zeros", "no-associative-math", "no-reciprocal-math", "protect-parens")
+
 typedef unsigned short UInt16;
 typedef int Int32;
 typedef unsigned int UInt32;
@@ -19,6 +22,7 @@ const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 const double EPSILON = 1.0e-300;
+const size_t TINY_STRING_SIZE = sizeof (double) / sizeof (Char);
 
 class Heap {
 	public:		virtual void* allocate(size_t size) = 0;
@@ -268,7 +272,8 @@ class Value {
 				// WARNING! Do NOT change order of elements in Type enum.
 	protected:	enum Type {
 					UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
-					, NUMBER_TYPE, STRING_TYPE, OBJECT_TYPE
+					, NUMBER_TYPE, STRING_TYPE, TINY_STRING_TYPE
+					, OBJECT_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
@@ -278,6 +283,7 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
+					Char tinyString[TINY_STRING_SIZE];
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }
@@ -332,34 +338,6 @@ class Object : public GCItem {
 				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
 				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // checks prototype chain for read-only
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
-};
-
-/*
-	LazyObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
-	
-	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
-	2) Memory: until the user accesses or adds properties, LazyObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
-	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
-		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
-
-	This class is a template so this concept can be used with different super classes.
-*/
-template<class SUPER> class LazyObject : public SUPER {
-	public:		typedef SUPER super;
-				LazyObject();
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-
-	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
-				ScriptObject* getCompleteObject(Engine& engine) const;
-				mutable ScriptObject* completeObject;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(completeObject);
-					super::gcMark(heap);
-				}
 };
 
 class Enumerator : public Object {
@@ -552,6 +530,34 @@ class StringWrapper : public ScriptObject {
 	protected:	const String* const wrapped;
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(wrapped);
+					super::gcMark(heap);
+				}
+};
+
+/*
+	LazyObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
+	
+	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
+	2) Memory: until the user accesses or adds properties, LazyObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
+	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
+		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
+
+	This class is a template so this concept can be used with different super classes.
+*/
+template<class SUPER> class LazyObject : public SUPER {
+	public:		typedef SUPER super;
+				LazyObject();
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+
+	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
+				ScriptObject* getCompleteObject(Engine& engine) const;
+				mutable ScriptObject* completeObject;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(completeObject);
 					super::gcMark(heap);
 				}
 };
@@ -1156,5 +1162,7 @@ class Compiler : public GCItem {
 					super::gcMark(heap);
 				}
 };
+
+#pragma GCC pop_options
 
 #endif

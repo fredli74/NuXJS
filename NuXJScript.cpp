@@ -13,6 +13,10 @@
 #include <vector>
 #include "NuXJScript.h"
 
+// FIX : which options? other compilers?
+#pragma GCC push_options
+#pragma GCC optimize("no-finite-math-only", "no-unsafe-math-optimizations", "no-signaling-nans", "no-trapping-math", "no-math-errno", "no-cx-limited-range", "signed-zeros", "no-associative-math", "no-reciprocal-math", "protect-parens")
+
 	bool supressStdErr = false; // FIX : drop
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
@@ -187,15 +191,19 @@ static Char* intToString(Char buffer[32], Int32 i) {
 	Char* p = buffer + 32;
 	*--p = "9876543210123456789"[9 + i % 10];																			// Mirrored string to handle negative x.
 	Int32 x = i;
-	while ((x /= 10) != 0) *--p = "9876543210123456789"[9 + x % 10];													// Mirrored string to handle negative x.
-	if (i < 0) *--p = '-';
+	while ((x /= 10) != 0) {																							// Mirrored string to handle negative x.
+		*--p = "9876543210123456789"[9 + x % 10];
+	}
+	if (i < 0) {
+		*--p = '-';
+	}
 	assert(p >= buffer);
 	return p;
 }
 
 // Based on code from PikaScript
 // Returns pair of pointers to beginning and end of string
-static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int precision = 15) {
+static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int precision = 21) {
 	assert(1 <= precision && precision <= 24);
 
 	const double SMALL = 1.0e-6;
@@ -208,16 +216,22 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 	Char* pp = dp + 1;
 	Char* ep = pp + precision;
 	
-	double y = x;	
-	for (; x >= 10.0 && pp < ep; x *= 0.1) ++pp;																		// Normalize values > 10 and move period position.
-
+	const double y = x;
+	for (; x >= 10.0 && pp < ep; x *= 0.1) {
+		++pp;																											// Normalize values > 10 and move period position.
+	}
+	
 	if (pp >= ep || y <= SMALL || y >= LARGE) {																			// Exponential treatment of very small or large values.
-		double e = floor(log10(y) + 1.0e-10);
+		const double e = floor(log10(y) + 1.0e-10);
 		int maxp = 15;																									// Limit precision because of rounding errors in log10 etc
-		for (double f = fabs(e); f >= 8; f /= 10) --maxp;
+		for (double f = fabs(e); f >= 8; f /= 10) {
+			--maxp;
+		}
 		std::pair<Char*, Char*> r = doubleToString(buffer, d * pow(0.1, e), std::min(maxp, precision));
 		*r.second++ = 'e';
-		if (e >= 0) *r.second++ = '+';
+		if (e >= 0) {
+			*r.second++ = '+';
+		}
 		bp = intToString(buffer, static_cast<Int32>(e));
 		assert(bp >= r.second);
 		r.second = std::copy(bp, buffer + 32, r.second);
@@ -225,23 +239,40 @@ static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int pre
 	}
 	for (; x < 1.0 && dp < buffer + 32; ++ep, x *= 10.0) {																// For values < 1, spit out leading 0's and increase precision.
 		*dp++ = '0';
-		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
+		if (dp == pp) {																									// Hop over period position (set to 9 to avoid when eliminating 9's).
+			*dp++ = '9';
+		}
 	}
 	for (; dp < ep; ) {																									// Exhaust all remaining digits of mantissa into buffer.
 		UInt32 ix = static_cast<UInt32>(x);
 		*dp++ = ix + '0';
-		if (dp == pp) *dp++ = '9';																						// Hop over period position (set to 9 to avoid when eliminating 9's).
+		if (dp == pp) {																									// Hop over period position (set to 9 to avoid when eliminating 9's).
+			*dp++ = '9';
+		}
 		x = (x - ix) * 10.0;
 	}
 	if (x >= 5) {																										// If remainder is >= 5, increment trailing 9's...
-		while (dp[-1] == '9') *--dp = '0';
-		if (dp == bp) *--bp = '1';																						// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
-		else dp[-1]++;
+		while (dp[-1] == '9') {
+			*--dp = '0';
+		}
+		if (dp == bp) {																									// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
+			*--bp = '1';
+		} else {
+			dp[-1]++;
+		}
 	}
 	*pp = '.';
-	if (ep > pp) while (ep[-1] == '0') --ep;
-	if (ep - 1 == pp) --ep;
-	if (d < 0) *--bp = '-';	
+	if (ep > pp) {
+		while (ep[-1] == '0') {
+			--ep;
+		}
+	}
+	if (ep - 1 == pp) {
+		--ep;
+	}
+	if (d < 0) {
+		*--bp = '-';
+	}
 	return std::pair<Char*, Char*>(bp, ep);
 }
 
@@ -497,13 +528,6 @@ bool Value::isLessThan(const Value& y) const {
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber < otherNumber;
-//	FIX : need to check?
-//	If nx is +0 and ny is −0, return false.
-//	If nx is −0 and ny is +0, return false.
-//	If nx is +∞, return false.
-//	If ny is +∞, return true.
-//	If ny is −∞, return false.
-//	If nx is −∞, return true.
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
@@ -511,13 +535,6 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber <= otherNumber;
-//	FIX : need to check?
-//	If nx is +0 and ny is −0, return false.
-//	If nx is −0 and ny is +0, return false.
-//	If nx is +∞, return false.
-//	If ny is +∞, return true.
-//	If ny is −∞, return false.
-//	If nx is −∞, return true.
 }
 
 Value Value::add(GCHeap& heap, const Value& y) const {
@@ -665,11 +682,19 @@ const String* String::fromInt(GCHeap& heap, Int32 i) {
 
 const String* String::fromDouble(GCHeap& heap, double d) {
 	Int32 i = static_cast<Int32>(d);
-	if (i == d) return fromInt(heap, i);
-	if (isNaN(d)) return &NAN_STRING;
-	double x = fabs(d);
-	if (x <= EPSILON) return &ZERO_STRING;
-	if (x == std::numeric_limits<double>::infinity()) return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING; // FIX : put in doubleToString for consistency
+	if (i == d) {
+		return fromInt(heap, i);
+	}
+	if (isNaN(d)) {
+		return &NAN_STRING;
+	}
+	const double x = fabs(d);
+	if (x <= EPSILON) {
+		return &ZERO_STRING;
+	}
+	if (x == std::numeric_limits<double>::infinity()) {
+		return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING; // FIX : put in doubleToString for consistency
+	}
 	Char buffer[32];
 	std::pair<Char*, Char*> r = doubleToString(buffer, d);
 	return heap.manage(new (&heap) String(r.first, r.second, &heap));
@@ -768,7 +793,7 @@ Flags Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const 
 
 bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
 	Value dummy;
-	if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
+	if (!key.isNumber() && getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
 		const Object* o = this;
 		while ((o = o->getPrototype(engine)) != 0) {
 			if ((o->getOwnProperty(engine, key, &dummy) & READ_ONLY_FLAG) != 0) {
@@ -4157,6 +4182,11 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	};
 
 int main(int argc, const char* argv[]) {
+/*std::cout << sizeof(Value) << std::endl;
+std::cout << sizeof(String) << std::endl;
+std::cout << sizeof(ScriptObject) << std::endl;
+std::cout << sizeof(Array) << std::endl;
+std::cout << sizeof(ScriptFunction) << std::endl;*/
 supressStdErr = true;
 	const String LF_STRING("\n");
 	const String PRINT_STRING("print");
@@ -4392,3 +4422,5 @@ if (!supressStdErr) {
 	if (pauseBeforeQuit) std::wcin.get();
 	return 0;
 }
+
+#pragma GCC pop_options

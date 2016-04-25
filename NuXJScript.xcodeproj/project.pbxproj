@@ -23,6 +23,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F741CE281CCD2240005CF215 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		F741CE2C1CCD2240005CF215 /* NuXJScript Tests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "NuXJScript Tests-Info.plist"; sourceTree = "<group>"; };
+		F741CE2E1CCD2240005CF215 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F741CE301CCD2240005CF215 /* NuXJScript_Tests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = NuXJScript_Tests.m; sourceTree = "<group>"; };
+		F741CE321CCD2240005CF215 /* NuXJScript Tests-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NuXJScript Tests-Prefix.pch"; sourceTree = "<group>"; };
 		F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = NuXJScript.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		F74E7E1116D1A409003A6AB6 /* NuXJScript */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = NuXJScript; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7CB917916D6263800D3007B /* NuXJScript.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; lineEnding = 0; path = NuXJScript.h; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.objcpp; };
@@ -44,9 +49,38 @@
 			children = (
 				F74E7E0F16D1A409003A6AB6 /* NuXJScript.cpp */,
 				F7CB917916D6263800D3007B /* NuXJScript.h */,
+				F741CE2A1CCD2240005CF215 /* NuXJScript Tests */,
+				F741CE271CCD2240005CF215 /* Frameworks */,
 				F74E7E1216D1A409003A6AB6 /* Products */,
 			);
 			name = NuXJScript;
+			sourceTree = "<group>";
+		};
+		F741CE271CCD2240005CF215 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F741CE281CCD2240005CF215 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F741CE2A1CCD2240005CF215 /* NuXJScript Tests */ = {
+			isa = PBXGroup;
+			children = (
+				F741CE301CCD2240005CF215 /* NuXJScript_Tests.m */,
+				F741CE2B1CCD2240005CF215 /* Supporting Files */,
+			);
+			path = "NuXJScript Tests";
+			sourceTree = "<group>";
+		};
+		F741CE2B1CCD2240005CF215 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				F741CE2C1CCD2240005CF215 /* NuXJScript Tests-Info.plist */,
+				F741CE2D1CCD2240005CF215 /* InfoPlist.strings */,
+				F741CE321CCD2240005CF215 /* NuXJScript Tests-Prefix.pch */,
+			);
+			name = "Supporting Files";
 			sourceTree = "<group>";
 		};
 		F74E7E1216D1A409003A6AB6 /* Products */ = {
@@ -95,6 +129,7 @@
 				Japanese,
 				French,
 				German,
+				en,
 			);
 			mainGroup = 08FB7794FE84155DC02AAC07 /* NuXJScript */;
 			productRefGroup = F74E7E1216D1A409003A6AB6 /* Products */;
@@ -116,6 +151,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		F741CE2D1CCD2240005CF215 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F741CE2E1CCD2240005CF215 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		1DEB923208733DC60010E9CD /* Debug */ = {
