@@ -2,12 +2,21 @@ function toString(m) {
   "use strict";
   var s = m;
   if (Math.floor(m) === m) {
-    var n = 0, p = 1.0, happening = false;;
+    var n = 0,
+      p = 1.0,
+      happening = false;;
     do {
       happening = false;
-      for (p = 1.0; n >= -400 && Math.floor(s / (p * 10)) === s / (p * 10); --n) { happening = true; p *= 10; }
+      for (p = 1.0; n >= -400 && Math.floor(s / (p * 1e10)) === s / (p * 1e10); n -= 10) {
+        happening = true;
+        p *= 1e10;
+      }
+      for (; n >= -400 && Math.floor(s / (p * 10)) === s / (p * 10); --n) {
+        happening = true;
+        p *= 10;
+      }
       s = Math.floor(s / p);
-      console.log('s:'+s)
+      console.log('s:' + s)
     } while (happening);
   } else {
     for (var n = 0, p = 1.0; n < 400 && Math.floor(m * p) !== m * p; ++n) p *= 10;
@@ -15,15 +24,16 @@ function toString(m) {
   }
 
   console.log('s:' + s);
-    for (var k = 1, p = 10.0; k < 400 && s >= p; ++k) p *= 10;
-    //p = 10.0 / p;
+  for (var k = 1, p = 10.0; k < 400 && s >= p; ++k) p *= 10;
+  //p = 10.0 / p;
   s /= p;
   p = 10.0;
-  
+
   n = k - n;
   str = '';
   console.log('k:' + k + ',n:' + n)
-  var l = 0.0, nx;
+  var l = 0.0,
+    nx;
   if (k <= n && n <= 21) {
     for (var i = 0; i < n; ++i) {
       var v = (nx = Math.floor(s * p)) - l * 10;
@@ -89,15 +99,14 @@ function toString(m) {
 function toNumber(str) {
   "use strict";
   //str="123456789012345670000";
-  var div = 1, exp = 1.0;
+  var div = 1,
+    exp = 1.0;
   for (var i = str.length - 1, d = 0, v = 1; i >= 0; --i) {
     if (str[i] === '-') {
       d = -d;
-    } else if (str[i] === '+') {
-      ;
-    } else if (str[i] === 'e' || str[i] === 'E') {
-      exp = Math.floor(Math.pow(10.0, d));
-      console.log('exp:'+exp);
+    } else if (str[i] === '+') {} else if (str[i] === 'e' || str[i] === 'E') {
+      exp = eval("1e" + d)
+      console.log('exp:' + exp);
       d = 0.0;
       v = 1.0;
     } else if (str[i] === '.') {
@@ -107,12 +116,12 @@ function toNumber(str) {
       v *= 10;
     }
   }
-  console.log('d:' + d + ', exp:'+ exp + ',div:'+div);
+  console.log('d:' + d + ', exp:' + exp + ',div:' + div);
   return d * (exp / div);
 }
 
 console.log('---');
-var m = 1e45;
+var m = 1.2345678901234567e105;
 console.log('m:' + m);
 var str = toString(m);
 var num = toNumber(str);
