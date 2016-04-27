@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "F74C980F1CD0204C008FFE44"
-               BuildableName = "test"
+               BuildableName = "FloatToStringTests"
                BlueprintName = "FloatToStringTests"
                ReferencedContainer = "container:FloatToStringTests.xcodeproj">
             </BuildableReference>
@@ -33,7 +33,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F74C980F1CD0204C008FFE44"
-            BuildableName = "test"
+            BuildableName = "FloatToStringTests"
             BlueprintName = "FloatToStringTests"
             ReferencedContainer = "container:FloatToStringTests.xcodeproj">
          </BuildableReference>
@@ -52,7 +52,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F74C980F1CD0204C008FFE44"
-            BuildableName = "test"
+            BuildableName = "FloatToStringTests"
             BlueprintName = "FloatToStringTests"
             ReferencedContainer = "container:FloatToStringTests.xcodeproj">
          </BuildableReference>
@@ -70,7 +70,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F74C980F1CD0204C008FFE44"
-            BuildableName = "test"
+            BuildableName = "FloatToStringTests"
             BlueprintName = "FloatToStringTests"
             ReferencedContainer = "container:FloatToStringTests.xcodeproj">
          </BuildableReference>

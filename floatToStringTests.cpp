@@ -21,7 +21,7 @@ std::string toString(double m) {
 			m *= expsM[i];
 		}
 	}
-	for (int i = 0; i < 10; ++i) {
+	for (int i = 0; i < 9; ++i) {
 		if (m <= expsM[i]) {
 			m *= expsP[i];
 		}
@@ -240,13 +240,14 @@ std::string toString3(double m, double exp) {
 }
 
 double toNumber8(const std::string& s, double exp) {
-	double d = 0.0, p = 1e17, e = 0.0;
+	double d = 0.0, p = pow(10, s.size() - 1), e = 0.0;
 	for (int i = 0; i < s.size(); ++i) {
 		int c = s[i] - 48;
 		double x = c * p;
         double y = x - e;
         double t = d + y;
-        e = (t - d) - y;
+        e = t - d;
+		e -= y;
         d = t;
 		p /= 10;
 	}
@@ -257,9 +258,11 @@ std::string toString4(double m, double exp) {
 	std::cout << m << std::endl;
 	std::string s;
 	double d = 0.0, p = 1e17, e = 0.0;
-	double r = m / exp;
+	double r = floor(m / exp);
+	m = r * exp;
 	for (int i = 0; i < 18; ++i) {
 		int c = static_cast<int>(r / p);
+		std::cout << c << std::endl;
 		s += static_cast<char>(48 + c);
 		std::cout << "r: " << r << std::endl;
 		r = (r - c * p);
@@ -267,15 +270,29 @@ std::string toString4(double m, double exp) {
 		double x = c * p;
         double y = x - e;
         double t = d + y;
-        e = (t - d) - y;
+        e = (t - d);
+		e -= y;
         d = t;
 
 		std::cout << "d: " << d << ": " << (d * exp == m ? "true" : "false") << std::endl;
-		if (d * exp == m) break;
 		p /= 10;
+
+		if (d * exp == m) break;
 	}
 	std::cout << "s: " << s << std::endl;
 	return s;
+}
+
+double normalize(double d) {
+	const double expsM[] = { 1e-256, 1e-128, 1e-64, 1e-32, 1e-16, 1e-8, 1e-4, 1e-2, 1e-1 };
+	const double expsP[] = { 1e+256, 1e+128, 1e+64, 1e+32, 1e+16, 1e+8, 1e+4, 1e+2, 1e+1 };
+	double exp = 1.0;
+	for (int i = 0; i < 9; ++i) {
+		if (d / (exp * expsM[i]) < 1e18) {
+			exp *= expsM[i];
+		}
+	}
+	return exp;
 }
 
 int main()
@@ -283,10 +300,15 @@ int main()
 	srand(0);
 	std::cout.precision(24);
 //	const double d = 9182736454637;
-	const double d = 487168764872365558e-300;
+	int fexp;
+	std::cout << frexp(10.1, &fexp)*2 << "*2^" << (fexp-1) << " = " << 0.3010299956639811952137388947244930267682 * (fexp - 1) << std::endl;
+	const double d = toNumber8("1928374", 1.0);
+	std::cout << "d: " << d << std::endl;
+	double exp = normalize(d);
+	std::cout << "exp: " << exp << std::endl;
 	std::string s;
-	std::cout << (s = toString4(d, 1e-300)) << std::endl;
-	std::cout << d << " = " << std::endl << toNumber8(s, 1e-300) << std::endl;
+	std::cout << (s = toString4(d, exp)) << std::endl;
+	std::cout << d << " = " << std::endl << toNumber8(s, exp) << std::endl;
 	std::cout << numeric_limits<double>::min() << std::endl;
 	std::cout << " " << 1e25 << std::endl << 1e33 << std::endl << 1e34 << std::endl << 1e37 << std::endl;
 	
