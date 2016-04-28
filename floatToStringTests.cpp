@@ -240,7 +240,7 @@ std::string toString3(double m, double exp) {
 }
 
 double toNumber8(const std::string& s, double exp) {
-	double d = 0.0, p = pow(10, s.size() - 1), e = 0.0;
+	double d = 0.0, p = 1e17, e = 0.0;
 	for (int i = 0; i < s.size(); ++i) {
 		int c = s[i] - 48;
 		double x = c * p;
@@ -257,30 +257,92 @@ double toNumber8(const std::string& s, double exp) {
 std::string toString4(double m, double exp) {
 	std::cout << m << std::endl;
 	std::string s;
-	double d = 0.0, p = 1e17, e = 0.0;
-	double r = floor(m / exp);
-	m = r * exp;
+	double d = 0.0, p = 1e17 * exp, e = 0.0, e2 = 0.0;
+	double r = m;
 	for (int i = 0; i < 18; ++i) {
 		int c = static_cast<int>(r / p);
 		std::cout << c << std::endl;
 		s += static_cast<char>(48 + c);
 		std::cout << "r: " << r << std::endl;
-		r = (r - c * p);
+		
+		{
+			double x = -c * p;
+			double y = x - e2;
+			double t = r + y;
+			e2 = t - r;
+			e2 -= y;
+			r = t;
+		}
+		
+		{
+			double x = c * p;
+			double y = x - e;
+			double t = d + y;
+			e = t - d;
+			e -= y;
+			d = t;
+		}
 
-		double x = c * p;
-        double y = x - e;
-        double t = d + y;
-        e = (t - d);
-		e -= y;
-        d = t;
-
-		std::cout << "d: " << d << ": " << (d * exp == m ? "true" : "false") << std::endl;
+		std::cout << "d: " << d << ": " << (d == m ? "true" : "false") << std::endl;
 		p /= 10;
 
-		if (d * exp == m) break;
+		if (d == m) break;
 	}
 	std::cout << "s: " << s << std::endl;
 	return s;
+}
+
+double toNumber9(const std::string& s, double exp) {
+	double d = 0.0, n = 1.0, e = 0.0;
+	for (int i = 0; i < s.size(); ++i) {
+		int c = s[i] - 48;
+		double x = c * n;
+        double y = x - e;
+        double t = d + y;
+        e = t - d;
+		e -= y;
+        d = t;
+		n *= 0.1;
+	}
+	return d * exp;
+}
+
+std::string toString5(double m, double exp) {
+	std::cout << m << std::endl;
+	char buffer[256];
+	buffer[0] = '0';
+	char* p = buffer + 1;
+	double r = m / exp, n = 1.0, d = 0.0, e = 0.0;
+	for (int i = 0; i < 18; ++i) {
+		int c = static_cast<int>(r);
+		*p++ = static_cast<char>(48 + c);
+		r = (r - c) * 10;
+		if ((d + ((c + 1) * n - e)) * exp == m) {
+			char* q = p - 1;
+			while (q > buffer && *q == '9') {
+				*q = '0';
+				--q;
+			}
+			++*q;
+			std::cout << "stop2" << std::endl;
+			break;
+		}
+		{
+			double x = c * n;
+			double y = x - e;
+			double t = d + y;
+			e = t - d;
+			e -= y;
+			d = t;
+		}
+		n *= 0.1;
+		std::cout << c << " " << d * exp << std::endl;
+		if (d * exp == m) {
+			std::cout << "stop" << std::endl;
+			break;
+		}
+	}
+	return std::string(buffer, p);
 }
 
 double normalize(double d) {
@@ -302,13 +364,16 @@ int main()
 //	const double d = 9182736454637;
 	int fexp;
 	std::cout << frexp(10.1, &fexp)*2 << "*2^" << (fexp-1) << " = " << 0.3010299956639811952137388947244930267682 * (fexp - 1) << std::endl;
-	const double d = toNumber8("1928374", 1.0);
+	double d = 1.666666;
 	std::cout << "d: " << d << std::endl;
-	double exp = normalize(d);
+	double exp = 1e300;
+	d = toNumber9("13333", exp);//toNumber8("1928374", 1e-11);
+	std::cout << "d: " << d << std::endl;
+//	double exp = normalize(d);
 	std::cout << "exp: " << exp << std::endl;
 	std::string s;
-	std::cout << (s = toString4(d, exp)) << std::endl;
-	std::cout << d << " = " << std::endl << toNumber8(s, exp) << std::endl;
+	std::cout << (s = toString5(d, exp)) << std::endl;
+	std::cout << d << " = " << std::endl << toNumber9(s, exp) << std::endl;
 	std::cout << numeric_limits<double>::min() << std::endl;
 	std::cout << " " << 1e25 << std::endl << 1e33 << std::endl << 1e34 << std::endl << 1e37 << std::endl;
 	
