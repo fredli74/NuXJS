@@ -293,7 +293,7 @@ std::string toString4(double m, double exp) {
 }
 
 double toNumber9(const std::string& s, double exp) {
-	double d = 0.0, n = 1.0, e = 0.0;
+	double d = 0.0, n = exp, e = 0.0;
 	for (int i = 0; i < s.size(); ++i) {
 		int c = s[i] - 48;
 		double x = c * n;
@@ -302,68 +302,21 @@ double toNumber9(const std::string& s, double exp) {
         e = t - d;
 		e -= y;
         d = t;
-		n *= 0.1;
+		n /= 10.0;
 	}
-	return d * exp;
+	return d;
 }
 
-double toNumber10(const char* b, const char* e) {
-	double significand = 0.0, position = 1.0, compensation = 0.0;
-	int exponent = 0;
-	for (const char* p = b; p != e; ++p) {
-		const int digit = *p - '0';
-        const double adjusted = digit * position - compensation;
-        const double sum = significand + adjusted;
-        compensation = sum - significand;
-		compensation -= adjusted;
-        significand = sum;
-		position *= 0.1;
-	}
-	return significand * exponent;
-}
+typedef unsigned int UInt32;
+typedef int Int32;
+typedef char Char;
 
-std::string toString5(double m, double exp) {
-	std::cout << m << std::endl;
-	char buffer[256];
-	buffer[0] = '0';
-	char* b = buffer + 1;
-	char* p = b;
-	double r = m / exp, n = 1.0, d = 0.0, e = 0.0;
-	for (int i = 0; i < 18; ++i) {
-		int c = static_cast<int>(r);
-		*p++ = static_cast<char>(48 + c);
-		r = (r - c) * 10;
-		volatile double fff = (d + ((c + 1) * n - e)) * exp;
-		if (fff == m) {
-			char* q = p - 1;
-			while (q > buffer && *q == '9') {
-				*q = '0';
-				--q;
-			}
-			++*q;
-			if (q < b) {
-				b = q;
-			}
-			std::cout << "stop2" << std::endl;
-			break;
-		}
-		{
-			double x = c * n;
-			double y = x - e;
-			double t = d + y;
-			e = t - d;
-			e -= y;
-			d = t;
-		}
-		n *= 0.1;
-		fff = d * exp;
-		std::cout << c << " " << fff << std::endl;
-		if (fff == m) {
-			std::cout << "stop" << std::endl;
-			break;
-		}
+static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
+	i = 0;
+	for (; p != e && *p >= '0' && *p <= '9'; ++p) {
+		i = i * 10 + (*p - '0');
 	}
-	return std::string(b, p);
+	return p;
 }
 
 const int MAX_EXPONENT = 308;
@@ -378,10 +331,114 @@ struct QuickConstants {
 	double exp10s[MAX_EXPONENT - MIN_EXPONENT + 1];
 } QUICK_CONSTANTS;
 
+const char* parseUnsignedDouble(const char* b, const char* e, double& value) {
+	value = 0.0;
+
+	int exponent = -1;
+	const char* p = b;
+			
+	while (p != e && *p >= '0' && *p <= '9') {
+		++exponent;
+		++p;
+	}
+	if (p != e && *p == '.') {
+		++p;
+		while (p != e && *p >= '0' && *p <= '9') {
+			++p;
+		}
+		if (p == b + 1) {
+			return b;
+		}
+	}
+	const char* significandEnd = p;
+	const char* numberEnd = p;
+
+	if (e - p >= 2 && (*p == 'e' || *p == 'E')) {
+		++p;
+		int sign = (*p == '-' ? -1 : 1);
+		if (*p == '+' || *p == '-') {
+			++p;
+		}
+		UInt32 ui;
+		const Char* q = parseUnsignedInt(p, e, ui);
+		if (q != p) {
+			exponent += sign * static_cast<int>(ui);
+			numberEnd = q;
+		}
+	}
+	
+	if (exponent > MAX_EXPONENT) {
+		value = std::numeric_limits<double>::infinity();
+	} else if (exponent >= MIN_EXPONENT) {
+		double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT];
+		double compensation = 0.0;
+
+		for (p = b; p != significandEnd; ++p) {
+			if (*p != '.') {
+				const double adjusted = (*p - '0') * magnitude - compensation;
+				const double sum = value + adjusted;
+				compensation = sum - value;
+				compensation -= adjusted;
+				value = sum;
+				magnitude /= 10.0;
+			}
+		}
+	}
+	return numberEnd;
+}
+
+std::string toString5(double m, double exp) {
+//	std::cout << m << std::endl;
+	char buffer[256];
+	buffer[0] = '0';
+	char* b = buffer + 1;
+	char* p = b;
+	double r = m, x = exp, n = exp, d = 0.0, e = 0.0;
+	for (int i = 0; i < 18; ++i) {
+		int c = static_cast<int>(r / x);
+		*p++ = static_cast<char>(48 + c);
+		r = (r - c * x);
+// std::cout << c << std::endl;
+		double prevD = d;
+		{
+			double x = c * n;
+			double y = x - e;
+			double t = d + y;
+			e = t - d;
+			e -= y;
+			d = t;
+		}
+		volatile double fff;
+		fff = d;
+// std::cout << " " << fff << std::endl;
+		if (fff == m) {
+// std::cout << "stop" << std::endl;
+			break;
+		}
+		fff = (prevD + ((c + 1) * n - e));
+		if (fff == m) {
+			char* q = p - 1;
+			while (q > buffer && *q == '9') {
+				--q;
+			}
+			++*q;
+			if (q < b) {
+				b = q;
+			}
+			p = q + 1;
+// std::cout << "stop2" << std::endl;
+			break;
+		}
+		n /= 10;
+		x /= 10;
+	}
+	return std::string(b, p);
+}
+
 double findExp1(double d) {
 	int x2;
 	frexp(d, &x2);
-	int x10 = max(static_cast<int>(ceil(0.3010299956639811952137388947244930267682 * (x2 - 1))) - 2 - MIN_EXPONENT, 0);
+	int x10 = max(static_cast<int>(ceil(0.3010299956639811952137388947244930267682 * (x2 - 1))) - 2 - MIN_EXPONENT, 0); // FIX : -2? -1? -0??
 	while (x10 < MAX_EXPONENT - MIN_EXPONENT && d >= QUICK_CONSTANTS.exp10s[x10 + 1]) {
 		++x10;
 	}
@@ -446,16 +503,29 @@ int main()
 //	const double d = 9182736454637;
 	double d = 1.666666;
 	std::cout << "d: " << d << std::endl;
-	double exp = pow(10.0, 14.0);
-	d = toNumber9("123456789012345", exp);//toNumber8("1928374", 1e-11);
+	const char* str = "003.145927e0";
+	const char* e = parseUnsignedDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
 	std::cout << "d: " << d << std::endl;
-	exp = findExp1(d);
+	double exp = findExp1(d);
 	std::cout << "exp: " << exp << std::endl;
 	std::string s;
 	std::cout << (s = toString5(d, exp)) << std::endl;
 	std::cout << d << " = " << std::endl << toNumber9(s, exp) << std::endl;
 	std::cout << numeric_limits<double>::min() << std::endl;
 	std::cout << " " << 1e25 << std::endl << 1e33 << std::endl << 1e34 << std::endl << 1e37 << std::endl;
+	
+	{
+		double d = 0;
+		for (;;) {
+			double exp = findExp1(d);
+			std::string s = toString5(d, exp);
+			std::cout << s << std::endl;
+			if (d + 1 == d) {
+				break;
+			}
+			++d;
+		}
+	}
 	
 	{
 		static const double testExps[] = {

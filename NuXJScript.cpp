@@ -580,9 +580,7 @@ struct QuickConstants {
 	Value ascii[127];
 	String asciiChars[127];
 	String integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
-};
-
-QuickConstants QUICK_CONSTANTS;
+} QUICK_CONSTANTS;
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e, Heap* heap) : QArray(e - b, heap), hash(0) { std::copy(b, e, begin()); }
