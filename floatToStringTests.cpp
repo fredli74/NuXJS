@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include "MersenneTwister.h"
 
 using namespace std;
 
@@ -385,13 +386,13 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 		value = 0.0;
 	} else {
 		double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT];
-		double compensation = 0.0;
+		volatile double compensation = 0.0;
 		
 		double d = 0.0;
 		for (p = significandBegin; p != significandEnd; ++p) {
 			if (*p != '.') {
-				const double adjusted = (*p - '0') * magnitude - compensation;
-				const double sum = d + adjusted;
+				const double adjusted = (*p - '0') * magnitude - compensation;	// Kahan summation for greater accuracy
+				volatile double sum = d + adjusted;
 				compensation = sum - d;
 				compensation -= adjusted;
 				d = sum;
@@ -404,64 +405,93 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 	return numberEnd;
 }
 
-std::pair<Char*, Char*> convertDoubleToString(Char buffer[32], const double value) {
-	const double absValue = (value < 0 ? -value : value);
-	
-	char* b = buffer + 2;
-	char* p = b;
+static Char* intToString(Char buffer[32], Int32 i) {
+	Char* p = buffer + 32;
+	*--p = "9876543210123456789"[9 + i % 10];																			// Mirrored string to handle negative x.
+	Int32 x = i;
+	while ((x /= 10) != 0) {																							// Mirrored string to handle negative x.
+		*--p = "9876543210123456789"[9 + x % 10];
+	}
+	if (i < 0) {
+		*--p = '-';
+	}
+	return p;
+}
+
+Char* convertDoubleToString(Char buffer[32], const double value) {
+	double absValue = value;	
+	Char* p = buffer;
+	if (value < 0) {
+		*p++ = '-';
+		absValue = -value;
+	}
 
 	int base2Exponent;
 	frexp(absValue, &base2Exponent);	// frexp is fast and precise and gives log2(x), log10(x) = log2(x) / log2(10)
-	Int32 base10Exponent = max(static_cast<Int32>(ceil(0.30102999566398119521 * (base2Exponent - 1))) - 1 - MIN_EXPONENT, 0);
-	if (base10Exponent < MAX_EXPONENT - MIN_EXPONENT && absValue >= QUICK_CONSTANTS.exp10s[base10Exponent + 1]) {
+	Int32 base10Exponent = max(static_cast<Int32>(ceil(0.30102999566398119521 * (base2Exponent - 1))) - 1, MIN_EXPONENT);
+	if (base10Exponent < MAX_EXPONENT && absValue >= QUICK_CONSTANTS.exp10s[base10Exponent + 1 - MIN_EXPONENT]) {
 		++base10Exponent;
 	}
+	bool eNotation = (base10Exponent < -6 || base10Exponent >= 21);
+	if (!eNotation && base10Exponent < 0) {
+		base10Exponent = 0;
+	}
+	Char* periodPosition = p + (eNotation ? 0 : base10Exponent) + 1;
 	
-	double magnitude = QUICK_CONSTANTS.exp10s[base10Exponent];
+	double magnitude = QUICK_CONSTANTS.exp10s[base10Exponent - MIN_EXPONENT];
 	double residual = absValue;
-	double d = 0.0;
-	double compensation = 0.0;
-	for (Int32 i = 0; i < 18; ++i) {
-		Int32 digit = static_cast<Int32>(residual / magnitude);
-		*p++ = static_cast<Char>(48 + digit);
-		residual = (residual - digit * magnitude);
-// std::cout << digit << std::endl;
-		double prevD = d;
-		{
-			const double adjusted = digit * magnitude - compensation;
-			const double sum = d + adjusted;
-			compensation = sum - d;
-			compensation -= adjusted;
-			d = sum;
+	double reconstructed = 0.0;
+	volatile double compensation = 0.0;
+	while (p < buffer + 27) {	// An extra precaution if the toNumber(toString(x)) == x condition is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
+		if (p == periodPosition) {
+			*p++ = '.';
 		}
-		volatile double fff;
-		fff = d;
-// std::cout << " " << fff << std::endl;
-		if (fff == absValue) {
-// std::cout << "stop" << std::endl;
+		Int32 digit = static_cast<Int32>(residual / magnitude);
+		*p++ = '0' + digit;
+		residual -= digit * magnitude;
+
+		const double adjusted = digit * magnitude - compensation;	// Kahan summation for greater accuracy
+		volatile double sum = reconstructed + adjusted;
+		compensation = sum - reconstructed;
+		compensation -= adjusted;
+
+		if (sum == absValue) {
+			std::cout << "stop1 " << sum << std::endl;
 			break;
 		}
-		fff = (prevD + ((digit + 1) * magnitude - compensation));
-		if (fff == absValue) {
+		const double altAdjusted = (digit + 1) * magnitude - compensation;
+		volatile double altSum = reconstructed + altAdjusted;
+		if (false && altSum == absValue) {
 			Char* q = p - 1;
-			while (q > buffer + 2 && *q == '9') {
+			while (q > buffer && (*q == '9' || *q == '.')) {
 				--q;
 			}
-			++*q;
-			if (q < b) {
-				b = q;
+			if (*q >= '0' && *q <= '8') {	// in the extremely rare situation we end up on a '9' digit etc we leave the value unrounded
+				(*q)++;
+				p = q + 1;
+			std::cout << "stop2 " << altSum << std::endl;
+				break;
 			}
-			p = q + 1;
-// std::cout << "stop2" << std::endl;
-			break;
 		}
+		reconstructed = sum;
 		magnitude /= 10;
 	}
-	if (value < 0) {
-		--b;
-		*b = '-';
+	if (p == buffer + 27) {
+		static int x;
+		x = 1;
+		std::cout << "oops" << std::endl;
+		// oops;
 	}
-	return std::make_pair(b, p);
+	while (p < periodPosition) {
+		*p++ = '0';
+	}
+	if (eNotation) {
+		*p++ = 'e';
+		*p++ = (base10Exponent < 0 ? '-' : '+');
+		// intToString fills the buffer from right (buffer + 32) to left and there should always be enough space
+		p = std::copy(intToString(buffer, base10Exponent < 0 ? -base10Exponent : base10Exponent), buffer + 32, p);
+	}
+	return p;
 }
 
 std::string toString5(double m, double exp) {
@@ -570,6 +600,7 @@ int tezt() {
 	return 0;
 }
 
+MTRand rnd(1234);
 
 int main()
 {
@@ -580,12 +611,12 @@ int main()
 	std::cout << "d: " << d << std::endl;
 	{
 		double d;
-		const Char* str = "-1.2398e33";
+		const Char* str = "1234.5678e19";
 		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
 		if (e > str) {
 			Char buffer[32];
-			std::pair<Char*, Char*> beginEnd = convertDoubleToString(buffer, d);
-			std::cout << std::string(beginEnd.first, beginEnd.second) << std::endl;
+			Char* end = convertDoubleToString(buffer, d);
+			std::cout << std::string(buffer, end) << std::endl;
 	double exp = findExp1(d);
 	std::string s;
 	std::cout << (s = toString5(d, exp)) << std::endl;
@@ -603,9 +634,28 @@ int main()
 	{
 		double d = 0;
 		for (;;) {
-			double exp = findExp1(d);
-			std::string s = toString5(d, exp);
-			std::cout << s << std::endl;
+			char buffer[32];
+			const double rndD = rnd.rand53();
+			Char* end = convertDoubleToString(buffer, rndD);
+			std::cout << std::string(buffer, end) << std::endl;
+			double t;
+			if (parseDouble(buffer, end, t) != end) {
+				std::cout << "BAD!" << std::endl;
+				return 1;
+			}
+			if (t != rndD) {
+				std::cout << "BAD!" << std::endl;
+				return 1;
+			}
+		}
+	}
+
+	{
+		double d = 0;
+		for (;;) {
+			char buffer[32];
+			Char* end = convertDoubleToString(buffer, d);
+		//	std::cout << s << std::endl;
 			if (d + 1 == d) {
 				break;
 			}
@@ -652,7 +702,7 @@ int main()
 	std::cout << "--------" << std::endl;
 	for (int i = 0; i < 10000; ++i) {
 		std::string s;
-		int l = (rand() % 20) + 3;
+		int l = (rnd.randInt(19)) + 3;
 		for (int j = 0; j < l; ++j) s += static_cast<char>(48 + (rand() % 10));
 		std::cout << s << std::endl;
 		const double exp = 1.0;
