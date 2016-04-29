@@ -331,82 +331,158 @@ struct QuickConstants {
 	double exp10s[MAX_EXPONENT - MIN_EXPONENT + 1];
 } QUICK_CONSTANTS;
 
-const char* parseUnsignedDouble(const char* b, const char* e, double& value) {
-	value = 0.0;
+const Char* parseDouble(const Char* const b, const Char* const e, double& value) {
+	Int32 exponent = -1;
+	double sign = 1.0;
+	const Char* significandBegin = b;
 
-	int exponent = -1;
-	const char* p = b;
+	const Char* p = b;
+	if (p != e && (*p == '-' || *p == '+')) {
+		sign = (*p == '-' ? -1.0 : 1.0);
+		++p;
+		significandBegin = p;
+	}
 			
 	while (p != e && *p >= '0' && *p <= '9') {
 		++exponent;
 		++p;
 	}
 	if (p != e && *p == '.') {
+		if (p == significandBegin) {
+			++significandBegin;
+		}
 		++p;
 		while (p != e && *p >= '0' && *p <= '9') {
 			++p;
 		}
-		if (p == b + 1) {
-			return b;
-		}
 	}
-	const char* significandEnd = p;
-	const char* numberEnd = p;
+
+	if (p == significandBegin) {
+		value = 0.0;
+		return b;
+	}
+
+	const Char* significandEnd = p;
+	const Char* numberEnd = p;
 
 	if (e - p >= 2 && (*p == 'e' || *p == 'E')) {
 		++p;
-		int sign = (*p == '-' ? -1 : 1);
+		Int32 sign = (*p == '-' ? -1 : 1);
 		if (*p == '+' || *p == '-') {
 			++p;
 		}
 		UInt32 ui;
 		const Char* q = parseUnsignedInt(p, e, ui);
 		if (q != p) {
-			exponent += sign * static_cast<int>(ui);
+			exponent += sign * static_cast<Int32>(ui);
 			numberEnd = q;
 		}
 	}
 	
 	if (exponent > MAX_EXPONENT) {
 		value = std::numeric_limits<double>::infinity();
-	} else if (exponent >= MIN_EXPONENT) {
+	} else if (exponent < MIN_EXPONENT) {
+		value = 0.0;
+	} else {
 		double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT];
 		double compensation = 0.0;
-
-		for (p = b; p != significandEnd; ++p) {
+		
+		double d = 0.0;
+		for (p = significandBegin; p != significandEnd; ++p) {
 			if (*p != '.') {
 				const double adjusted = (*p - '0') * magnitude - compensation;
-				const double sum = value + adjusted;
-				compensation = sum - value;
+				const double sum = d + adjusted;
+				compensation = sum - d;
 				compensation -= adjusted;
-				value = sum;
+				d = sum;
 				magnitude /= 10.0;
 			}
 		}
+		value = d;
 	}
+	value *= sign;
 	return numberEnd;
+}
+
+std::pair<Char*, Char*> convertDoubleToString(Char buffer[32], const double value) {
+	const double absValue = (value < 0 ? -value : value);
+	
+	char* b = buffer + 2;
+	char* p = b;
+
+	int base2Exponent;
+	frexp(absValue, &base2Exponent);	// frexp is fast and precise and gives log2(x), log10(x) = log2(x) / log2(10)
+	Int32 base10Exponent = max(static_cast<Int32>(ceil(0.30102999566398119521 * (base2Exponent - 1))) - 1 - MIN_EXPONENT, 0);
+	if (base10Exponent < MAX_EXPONENT - MIN_EXPONENT && absValue >= QUICK_CONSTANTS.exp10s[base10Exponent + 1]) {
+		++base10Exponent;
+	}
+	
+	double magnitude = QUICK_CONSTANTS.exp10s[base10Exponent];
+	double residual = absValue;
+	double d = 0.0;
+	double compensation = 0.0;
+	for (Int32 i = 0; i < 18; ++i) {
+		Int32 digit = static_cast<Int32>(residual / magnitude);
+		*p++ = static_cast<Char>(48 + digit);
+		residual = (residual - digit * magnitude);
+// std::cout << digit << std::endl;
+		double prevD = d;
+		{
+			const double adjusted = digit * magnitude - compensation;
+			const double sum = d + adjusted;
+			compensation = sum - d;
+			compensation -= adjusted;
+			d = sum;
+		}
+		volatile double fff;
+		fff = d;
+// std::cout << " " << fff << std::endl;
+		if (fff == absValue) {
+// std::cout << "stop" << std::endl;
+			break;
+		}
+		fff = (prevD + ((digit + 1) * magnitude - compensation));
+		if (fff == absValue) {
+			Char* q = p - 1;
+			while (q > buffer + 2 && *q == '9') {
+				--q;
+			}
+			++*q;
+			if (q < b) {
+				b = q;
+			}
+			p = q + 1;
+// std::cout << "stop2" << std::endl;
+			break;
+		}
+		magnitude /= 10;
+	}
+	if (value < 0) {
+		--b;
+		*b = '-';
+	}
+	return std::make_pair(b, p);
 }
 
 std::string toString5(double m, double exp) {
 //	std::cout << m << std::endl;
-	char buffer[256];
+	Char buffer[256];
 	buffer[0] = '0';
-	char* b = buffer + 1;
-	char* p = b;
-	double r = m, x = exp, n = exp, d = 0.0, e = 0.0;
-	for (int i = 0; i < 18; ++i) {
-		int c = static_cast<int>(r / x);
-		*p++ = static_cast<char>(48 + c);
-		r = (r - c * x);
+	Char* b = buffer + 1;
+	Char* p = b;
+	double r = m, magnitude = exp, d = 0.0, compensation = 0.0;
+	for (Int32 i = 0; i < 18; ++i) {
+		Int32 digit = static_cast<Int32>(r / magnitude);
+		*p++ = static_cast<Char>(48 + digit);
+		r = (r - digit * magnitude);
 // std::cout << c << std::endl;
 		double prevD = d;
 		{
-			double x = c * n;
-			double y = x - e;
-			double t = d + y;
-			e = t - d;
-			e -= y;
-			d = t;
+			const double adjusted = digit * magnitude - compensation;
+			const double sum = d + adjusted;
+			compensation = sum - d;
+			compensation -= adjusted;
+			d = sum;
 		}
 		volatile double fff;
 		fff = d;
@@ -415,9 +491,9 @@ std::string toString5(double m, double exp) {
 // std::cout << "stop" << std::endl;
 			break;
 		}
-		fff = (prevD + ((c + 1) * n - e));
+		fff = (prevD + ((digit + 1) * magnitude - compensation));
 		if (fff == m) {
-			char* q = p - 1;
+			Char* q = p - 1;
 			while (q > buffer && *q == '9') {
 				--q;
 			}
@@ -429,8 +505,7 @@ std::string toString5(double m, double exp) {
 // std::cout << "stop2" << std::endl;
 			break;
 		}
-		n /= 10;
-		x /= 10;
+		magnitude /= 10;
 	}
 	return std::string(b, p);
 }
@@ -503,8 +578,19 @@ int main()
 //	const double d = 9182736454637;
 	double d = 1.666666;
 	std::cout << "d: " << d << std::endl;
-	const char* str = "003.145927e0";
-	const char* e = parseUnsignedDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
+	{
+		double d;
+		const Char* str = "-1.2398e33";
+		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
+		if (e > str) {
+			Char buffer[32];
+			std::pair<Char*, Char*> beginEnd = convertDoubleToString(buffer, d);
+			std::cout << std::string(beginEnd.first, beginEnd.second) << std::endl;
+	double exp = findExp1(d);
+	std::string s;
+	std::cout << (s = toString5(d, exp)) << std::endl;
+		}
+	}
 	std::cout << "d: " << d << std::endl;
 	double exp = findExp1(d);
 	std::cout << "exp: " << exp << std::endl;

@@ -80,6 +80,7 @@ Run-time
 
 	* Global object should have standard object prototype, so e.g. 'toString' should be accessible as a global via Object.prototype
 
+	* Must have $toPrimitiveNoHint as well, for + and == (I think those are the only ones). This is for Date() objects to work I guess. See 8.6.2.6 [[DefaultValue]] (hint)
 
 Compiler
 ========

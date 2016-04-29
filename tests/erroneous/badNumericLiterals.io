@@ -22,6 +22,18 @@
 ! !!!! Line: 1
 ! !!!! SyntaxError: Missing / invalid expression
 -
+> +e
+! !!!! Line: 1
+! !!!! SyntaxError: Missing / invalid expression
+-
+> +e+
+! !!!! Line: 1
+! !!!! SyntaxError: Missing / invalid expression
+-
+> +e103
+! !!!! Line: 1
+! !!!! SyntaxError: Missing / invalid expression
+-
 > +1e+
 ! !!!! Line: 1
 ! !!!! SyntaxError: Missing / invalid expression

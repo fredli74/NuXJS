@@ -4,6 +4,30 @@
 > print(parseFloat('    '))
 < NaN
 -
+> print(parseFloat('    - '))
+< NaN
+-
+> print(parseFloat('    + '))
+< NaN
+-
+> print(parseFloat('    +e '))
+< NaN
+-
+> print(parseFloat('    +e33 '))
+< NaN
+-
+> print(parseFloat('    +0e '))
+< NaN
+-
+> print(parseFloat('    +0e+ '))
+< NaN
+-
+> print(parseFloat('    +1 e+33 '))
+< NaN
+-
+> print(parseFloat('    0x1234 '))
+< NaN
+-
 > print(parseFloat('    1234'))
 < 1234
 -
@@ -18,6 +42,9 @@
 -
 > print(parseFloat('    -1234.1234e+3kokobello'))
 < -1234123.4
+-
+> print(parseFloat('    +1234.1234e+3kokobello'))
+< 1234123.4
 -
 > print(parseFloat({ toString: function() { return "  \n  \t 12345.66789" } }))
 < 12345.66789

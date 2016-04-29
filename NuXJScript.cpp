@@ -292,7 +292,7 @@ static double stringToDouble(const String& s) {
 	const Char* p = s.begin();
 	const Char* e = s.end();
 	p = eatStringWhite(p, e);
-	if (p != e && *p == '0' && p + 1 != e && p[1] == 'x') {
+	if (p != e && *p == '0' && p + 1 != e && (p[1] == 'x' || p[1] == 'X')) {
 		UInt32 u;
 		const Char* b = p + 2;
 		p = parseHex(b, e, u);
