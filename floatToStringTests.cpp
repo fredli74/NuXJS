@@ -442,7 +442,6 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 	
 	double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
 	double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
-	double rcp = 1.0 / magnitude;
 	double residual = absValue;
 	double reconstructed = 0.0;
 	volatile double compensation = 0.0;
@@ -450,12 +449,19 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 		if (p == periodPosition) {
 			*p++ = '.';
 		}
-double test = residual / magnitude / scale;
-		Int32 digit = min(static_cast<Int32>(residual * rcp / scale), 9);	// In extreme circumstances (e.g. the lowest denormals), rounding causes residual / magnitude to be 1.0, hence the 9 limit.
-		assert(0 <= digit && digit <= 9);
+		Int32 digit = static_cast<Int32>(residual / magnitude / scale);	// In extreme circumstances (e.g. the lowest denormals), rounding causes residual / magnitude to be 1.0, hence the 9 limit.
+		if (!(0 <= digit && digit <= 9)) {
+			static int x;
+			x = 1;
+		}
+		double x = digit * magnitude * scale;
+		if (residual - x < 0 || digit == 10) {
+			--digit;
+			x = digit * magnitude * scale;
+		}
 		*p++ = '0' + digit;
-		const double x = digit * magnitude * scale;
 		residual -= x;
+		assert(residual >= 0);
 
 		const double adjusted = x - compensation;	// Kahan summation for greater accuracy
 		volatile double sum = reconstructed + adjusted;
@@ -464,7 +470,7 @@ double test = residual / magnitude / scale;
 			break;
 		}
 		if (digit < 9) {	// Catch shorter rounded solutions by trying one digit higher too (except if last digit was 9 in which case we should have caught the rounded solution in the previous step anyhow).
-			const double altAdjusted = (digit + 1) * magnitude / scale - compensation;
+			const double altAdjusted = (digit + 1) * magnitude * scale - compensation;
 			volatile double altSum = reconstructed + altAdjusted;
 			if (altSum == absValue) {
 				p[-1]++;
@@ -476,7 +482,6 @@ double test = residual / magnitude / scale;
 		compensation -= adjusted;
 		reconstructed = sum;
 		magnitude /= 10;
-		rcp *= 10.0;
 	}
 	if (p == buffer + 27) {
 		static int x;
@@ -613,17 +618,12 @@ int main()
 	std::cout << "d: " << d << std::endl;
 	{
 		double d;
-		const Char* str = "3e-9";
+		const Char* str = "1.5e-323";
 		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
-	d = 9000000*pow(10,-39);
 		if (e > str) {
 			Char buffer[32];
 			Char* end = convertDoubleToString(buffer, d);
 			std::cout << std::string(buffer, end) << std::endl;
-		double back;
-		const Char* endAgain = parseDouble(buffer, end, back);
-		assert(endAgain == end);
-		assert(d == back);
 	double exp = findExp1(d);
 	std::string s;
 	std::cout << (s = toString5(d, exp)) << std::endl;
@@ -640,13 +640,13 @@ int main()
 	
 	{
 		double d = 0;
-		for (; false;) {
+		for (; true;) {
 			char buffer[32];
 			const double m = rnd.rand53();
 			const int x = static_cast<int>(rnd.randInt(MAX_EXPONENT - MIN_EXPONENT)) + MIN_EXPONENT;
 			const double rndD = m * pow(10.0, x);
 			Char* end = convertDoubleToString(buffer, rndD);
-			std::cout << std::string(buffer, end) << std::endl;
+		//	std::cout << std::string(buffer, end) << std::endl;
 			double t;
 			if (parseDouble(buffer, end, t) != end) {
 				std::cout << "BAD!" << std::endl;
@@ -662,12 +662,12 @@ int main()
 
 	{
 		double d = 0;
-		for (;;) {
+		for (; true;) {
 			char buffer[32];
 			const int exp = (double)(static_cast<int>(rnd.randInt(200)) - 100);
 			const double x = d * pow(10.0, exp);
 			Char* end = convertDoubleToString(buffer, x);
-	//		std::cout << std::string(buffer, end) << std::endl;
+			std::cout << std::string(buffer, end) << std::endl;
 			double t;
 			if (parseDouble(buffer, end, t) != end) {
 				std::cout << "BAD!" << std::endl;
