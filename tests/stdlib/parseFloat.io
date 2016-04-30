@@ -17,16 +17,16 @@
 < NaN
 -
 > print(parseFloat('    +0e '))
-< NaN
+< 0
 -
 > print(parseFloat('    +0e+ '))
-< NaN
+< 0
 -
 > print(parseFloat('    +1 e+33 '))
-< NaN
+< 1
 -
 > print(parseFloat('    0x1234 '))
-< NaN
+< 0
 -
 > print(parseFloat('    1234'))
 < 1234

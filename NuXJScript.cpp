@@ -58,6 +58,48 @@ static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_lim
 
 static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
 
+// Returns pointer to beginning of string
+// End of string is always buffer + 32 (*not* zero-terminated by this routine)
+static Char* intToString(Char buffer[32], Int32 i) {
+	Char* p = buffer + 32;
+	*--p = "9876543210123456789"[9 + i % 10];																			// Mirrored string to handle negative x.
+	Int32 x = i;
+	while ((x /= 10) != 0) {																							// Mirrored string to handle negative x.
+		*--p = "9876543210123456789"[9 + x % 10];
+	}
+	if (i < 0) {
+		*--p = '-';
+	}
+	assert(p >= buffer);
+	return p;
+}
+
+const int MAX_EXPONENT = 308;
+const int MIN_EXPONENT = -323;
+
+const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
+struct QuickConstants {
+	QuickConstants() {
+		for (int i = 0; i < 127; ++i) {
+			Char buf[1] = { static_cast<Char>(i) };
+			asciiChars[i] = String(buf, buf + 1);
+			ascii[i] = Value(&asciiChars[i]);
+		}
+		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
+			Char buffer[32];
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = String(intToString(buffer, i), buffer + 32); // FIX : newHashedString
+			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE].calcHash();
+		}
+		for (int i = MIN_EXPONENT; i <= MAX_EXPONENT; ++i) {
+			exp10s[i - MIN_EXPONENT] = pow(10.0, static_cast<double>(i));
+		}
+	}
+	Value ascii[127];
+	String asciiChars[127];
+	String integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
+	double exp10s[MAX_EXPONENT - MIN_EXPONENT + 1];
+} QUICK_CONSTANTS;
+
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
 static int strncmp(const Char* a, const char* b, UInt32 n) {
 	UInt32 i = 0;
@@ -142,138 +184,172 @@ static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
 	return p;
 }
 
-static const Char* parseDouble(const Char* p, const Char* e, double& v) {
-	assert(p <= e);
-	double d = 0;
-	const Char* q = p;
-	double sign = (e - q > 1 && (*q == '+' || *q == '-') ? (*q++ == '-' ? -1.0 : 1.0) : 1.0);
-	if (e - q >= 8 && strncmp(q, "Infinity", 8) == 0) {
-		q += 8;
-		d = std::numeric_limits<double>::infinity();
+const Char* parseDouble(const Char* const b, const Char* const e, double& value) {
+	Int32 exponent = -1;
+	double sign = 1.0;
+	const Char* significandBegin = b;
+	const Char* numberEnd;
+
+	const Char* p = b;
+	if (p != e && (*p == '-' || *p == '+')) {
+		sign = (*p == '-' ? -1.0 : 1.0);
+		++p;
+		significandBegin = p;
+	}
+	if (e - p >= 8 && strncmp(p, "Infinity", 8) == 0) {
+		p += 8;
+		value = std::numeric_limits<double>::infinity();
+		numberEnd = p;
 	} else {
-		if (q == e || (*q != '.' && (*q < '0' || *q > '9'))) {
-			v = 0.0;
-			return p;
+		while (p != e && *p >= '0' && *p <= '9') {
+			++exponent;
+			++p;
 		}
-		const Char* b = q;
-		while (q != e && *q >= '0' && *q <= '9') {
-			d = d * 10.0 + (*q++ - '0');
-		}
-		if (q != e && *q == '.') {
-			double f = 1.0;
-			while (++q != e && *q >= '0' && *q <= '9') {
-				d += (*q - '0') * (f *= 0.1);
+		if (p != e && *p == '.') {
+			if (p == significandBegin) {
+				++significandBegin;
 			}
-			if (q == b + 1) {
-				v = 0.0;
-				return p;
+			++p;
+			while (p != e && *p >= '0' && *p <= '9') {
+				++p;
 			}
 		}
-		if (q != e && (*q == 'E' || *q == 'e')) {
-			const Char* t = q + 1;
-			bool negative = (e - t >= 2 && ((*t == '+' || *t == '-') && t[1] >= '0' && t[1] <= '9') ? (*t++ == '-') : false);
+
+		if (p == significandBegin) {
+			value = 0.0;
+			return b;
+		}
+
+		const Char* significandEnd = p;
+		numberEnd = p;
+
+		if (e - p >= 2 && (*p == 'e' || *p == 'E')) {
+			++p;
+			Int32 sign = (*p == '-' ? -1 : 1);
+			if (*p == '+' || *p == '-') {
+				++p;
+			}
 			UInt32 ui;
-			t = parseUnsignedInt(t, e, ui);
-			const Int32 i = (negative ? -static_cast<Int32>(ui) : ui);
-			if (t != q + 1) {
-				d *= pow(10, static_cast<double>(i));
-				q = t;
+			const Char* q = parseUnsignedInt(p, e, ui);
+			if (q != p) {
+				exponent += sign * static_cast<Int32>(ui);
+				numberEnd = q;
 			}
 		}
-	}
-	v = d * sign;
-	return q;
-}
-
-// Returns pointer to beginning of string
-// End of string is always buffer + 32 (*not* zero-terminated by this routine)
-static Char* intToString(Char buffer[32], Int32 i) {
-	Char* p = buffer + 32;
-	*--p = "9876543210123456789"[9 + i % 10];																			// Mirrored string to handle negative x.
-	Int32 x = i;
-	while ((x /= 10) != 0) {																							// Mirrored string to handle negative x.
-		*--p = "9876543210123456789"[9 + x % 10];
-	}
-	if (i < 0) {
-		*--p = '-';
-	}
-	assert(p >= buffer);
-	return p;
-}
-
-// Based on code from PikaScript
-// Returns pair of pointers to beginning and end of string
-static std::pair<Char*, Char*> doubleToString(Char buffer[32], double d, int precision = 21) {
-	assert(1 <= precision && precision <= 24);
-
-	const double SMALL = 1.0e-6;
-	const double LARGE = 1.0e+21;
-
-	double x = fabs(d);
-
-	Char* bp = buffer + 2;
-	Char* dp = bp;
-	Char* pp = dp + 1;
-	Char* ep = pp + precision;
-	
-	const double y = x;
-	for (; x >= 10.0 && pp < ep; x *= 0.1) {
-		++pp;																											// Normalize values > 10 and move period position.
-	}
-	
-	if (pp >= ep || y <= SMALL || y >= LARGE) {																			// Exponential treatment of very small or large values.
-		const double e = floor(log10(y) + 1.0e-10);
-		int maxp = 15;																									// Limit precision because of rounding errors in log10 etc
-		for (double f = fabs(e); f >= 8; f /= 10) {
-			--maxp;
+		
+		p = significandBegin;
+		while (p != significandEnd && (*p == '0' || *p == '.')) {
+			if (*p == '0') {
+				--exponent;
+			}
+			++p;
 		}
-		std::pair<Char*, Char*> r = doubleToString(buffer, d * pow(0.1, e), std::min(maxp, precision));
-		*r.second++ = 'e';
-		if (e >= 0) {
-			*r.second++ = '+';
-		}
-		bp = intToString(buffer, static_cast<Int32>(e));
-		assert(bp >= r.second);
-		r.second = std::copy(bp, buffer + 32, r.second);
-		return r;
-	}
-	for (; x < 1.0 && dp < buffer + 32; ++ep, x *= 10.0) {																// For values < 1, spit out leading 0's and increase precision.
-		*dp++ = '0';
-		if (dp == pp) {																									// Hop over period position (set to 9 to avoid when eliminating 9's).
-			*dp++ = '9';
-		}
-	}
-	for (; dp < ep; ) {																									// Exhaust all remaining digits of mantissa into buffer.
-		UInt32 ix = static_cast<UInt32>(x);
-		*dp++ = ix + '0';
-		if (dp == pp) {																									// Hop over period position (set to 9 to avoid when eliminating 9's).
-			*dp++ = '9';
-		}
-		x = (x - ix) * 10.0;
-	}
-	if (x >= 5) {																										// If remainder is >= 5, increment trailing 9's...
-		while (dp[-1] == '9') {
-			*--dp = '0';
-		}
-		if (dp == bp) {																									// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
-			*--bp = '1';
+		
+		if (p == significandEnd || exponent < MIN_EXPONENT - 1) {
+			value = 0.0;
+		} else if (exponent > MAX_EXPONENT) {
+			value = std::numeric_limits<double>::infinity();
 		} else {
-			dp[-1]++;
+			double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
+			double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
+			volatile double compensation = 0.0;
+			
+			double d = 0.0;
+			while (p != significandEnd) {
+				if (*p != '.') {
+					const Int32 digit = (*p - '0');
+					const double x = digit * magnitude * scale;
+					const double adjusted = x - compensation;	// Kahan summation for greater accuracy
+					volatile double sum = d + adjusted;
+					compensation = sum - d;
+					compensation -= adjusted;
+					d = sum;
+					magnitude /= 10.0;
+				}
+				++p;
+			}
+			value = d;
 		}
 	}
-	*pp = '.';
-	if (ep > pp) {
-		while (ep[-1] == '0') {
-			--ep;
+	value *= sign;
+	return numberEnd;
+}
+
+Char* doubleToString(Char buffer[32], const double value) {
+	Char* p = buffer;
+	if (value == 0.0) {
+		*p++ = '0';
+		return p;
+	}
+	if (value < 0) {
+		*p++ = '-';
+	}
+
+	const double absValue = (value < 0 ? -value : value);
+	int base2Exponent;
+	frexp(absValue, &base2Exponent);	// frexp is fast and precise and gives log2(x), log10(x) = log2(x) / log2(10)
+	Int32 exponent = std::max(static_cast<Int32>(ceil(0.30102999566398119521 * (base2Exponent - 1))) - 1, MIN_EXPONENT - 1);
+	if (exponent < MAX_EXPONENT && absValue >= QUICK_CONSTANTS.exp10s[exponent + 1 - MIN_EXPONENT]) {
+		++exponent;
+	}
+	const bool eNotation = (exponent < -6 || exponent >= 21);
+	Char* periodPosition = p + (eNotation || exponent < 0 ? 0 : exponent) + 1;
+	if (!eNotation && exponent < 0) {
+		*p++ = '0';
+		*p++ = '.';
+		while (p < periodPosition - exponent) {
+			*p++ = '0';
 		}
 	}
-	if (ep - 1 == pp) {
-		--ep;
+	
+	const double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
+	double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
+	double residual = absValue;
+	double reconstructed = 0.0;
+	volatile double compensation = 0.0;
+	while (p < buffer + 27 && magnitude != 0.0 && residual != 0.0) {	// p < buffer + 27 is an extra precaution if toNumber(toString(x)) == x is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
+		if (p == periodPosition) {
+			*p++ = '.';
+		}
+		const Int32 digit = static_cast<Int32>(residual / magnitude / scale);
+		*p++ = '0' + digit;
+		double x = digit * magnitude * scale;
+		if (residual - x < 0 || digit == 10) { 	// When underflowing the residual (because of rounding problems) we drop to a lower digit. Also with some extreme values (e.g. the lowest denormals), rounding can cause residual / magnitude to become 1.0 and we must turn the 10 into a 9.
+			p[-1]--;
+			x = (digit - 1) * magnitude * scale;
+		}
+		residual -= x;
+		assert(residual >= 0);
+
+		const double adjusted = x - compensation;	// Kahan summation for greater accuracy
+		volatile double sum = reconstructed + adjusted;
+
+		if (sum == absValue) {
+			break;
+		}
+		if (digit < 9) {	// Catch shorter rounded solutions by trying one digit higher too (except if last digit was 9 in which case we should have caught the rounded solution in the previous step anyhow).
+			const double altAdjusted = (digit + 1) * magnitude * scale - compensation;
+			volatile double altSum = reconstructed + altAdjusted;
+			if (altSum == absValue) {
+				p[-1]++;
+				break;
+			}
+		}
+
+		compensation = sum - reconstructed;
+		compensation -= adjusted;
+		reconstructed = sum;
+		magnitude /= 10.0;
 	}
-	if (d < 0) {
-		*--bp = '-';
+	while (p < periodPosition) {
+		*p++ = '0';
 	}
-	return std::pair<Char*, Char*>(bp, ep);
+	if (eNotation) {
+		*p++ = 'e';
+		*p++ = (exponent < 0 ? '-' : '+');
+		p = std::copy(intToString(buffer, exponent < 0 ? -exponent : exponent), buffer + 32, p);	// intToString fills the buffer from right (buffer + 32) to left and there should always be enough space
+	}
+	return p;
 }
 
 static const Char* eatStringWhite(const Char* p, const Char* e) {
@@ -332,7 +408,6 @@ const String TRUE_STRING("true");
 const String NAN_STRING("NaN");
 const String INFINITY_STRING("Infinity");
 const String MINUS_INFINITY_STRING("-Infinity");
-const String ZERO_STRING("0");
 const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
@@ -563,25 +638,6 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
-const int QUICK_CONSTANTS_INTEGERS_RANGE = 1000;
-struct QuickConstants {
-	QuickConstants() {
-		for (int i = 0; i < 127; ++i) {
-			Char buf[1] = { static_cast<Char>(i) };
-			asciiChars[i] = String(buf, buf + 1);
-			ascii[i] = Value(&asciiChars[i]);
-		}
-		for (int i = -QUICK_CONSTANTS_INTEGERS_RANGE; i <= QUICK_CONSTANTS_INTEGERS_RANGE; ++i) {
-			Char buffer[32];
-			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE] = String(intToString(buffer, i), buffer + 32); // FIX : newHashedString
-			integers[i + QUICK_CONSTANTS_INTEGERS_RANGE].calcHash();
-		}
-	}
-	Value ascii[127];
-	String asciiChars[127];
-	String integers[QUICK_CONSTANTS_INTEGERS_RANGE * 2 + 1];
-} QUICK_CONSTANTS;
-
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
 String::String(const Char* b, const Char* e, Heap* heap) : QArray(e - b, heap), hash(0) { std::copy(b, e, begin()); }
 // FIX : needed ? String::String(const String& o) : QArray(o), hash(o.hash) { }
@@ -679,23 +735,21 @@ const String* String::fromInt(GCHeap& heap, Int32 i) {
 }
 
 const String* String::fromDouble(GCHeap& heap, double d) {
+	const String* s;
 	Int32 i = static_cast<Int32>(d);
 	if (i == d) {
-		return fromInt(heap, i);
+		s = fromInt(heap, i);
+	} else if (isNaN(d)) {
+		s = &NAN_STRING;
+	} else if (d == std::numeric_limits<double>::infinity()) {
+		s = &INFINITY_STRING;
+	} else if (d == -std::numeric_limits<double>::infinity()) {
+		s = &MINUS_INFINITY_STRING;
+	} else {
+		Char buffer[32];
+		s = heap.manage(new (&heap) String(buffer, doubleToString(buffer, d), &heap));
 	}
-	if (isNaN(d)) {
-		return &NAN_STRING;
-	}
-	const double x = fabs(d);
-	if (x <= EPSILON) {
-		return &ZERO_STRING;
-	}
-	if (x == std::numeric_limits<double>::infinity()) {
-		return d < 0 ? &MINUS_INFINITY_STRING : &INFINITY_STRING; // FIX : put in doubleToString for consistency
-	}
-	Char buffer[32];
-	std::pair<Char*, Char*> r = doubleToString(buffer, d);
-	return heap.manage(new (&heap) String(r.first, r.second, &heap));
+	return s;
 }
 
 /* --- GCItem --- */

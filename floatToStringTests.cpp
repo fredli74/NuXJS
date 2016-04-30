@@ -337,6 +337,7 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 	Int32 exponent = -1;
 	double sign = 1.0;
 	const Char* significandBegin = b;
+	const Char* numberEnd;
 
 	const Char* p = b;
 	if (p != e && (*p == '-' || *p == '+')) {
@@ -344,64 +345,80 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 		++p;
 		significandBegin = p;
 	}
-			
-	while (p != e && *p >= '0' && *p <= '9') {
-		++exponent;
-		++p;
-	}
-	if (p != e && *p == '.') {
-		if (p == significandBegin) {
-			++significandBegin;
-		}
-		++p;
-		while (p != e && *p >= '0' && *p <= '9') {
-			++p;
-		}
-	}
-
-	if (p == significandBegin) {
-		value = 0.0;
-		return b;
-	}
-
-	const Char* significandEnd = p;
-	const Char* numberEnd = p;
-
-	if (e - p >= 2 && (*p == 'e' || *p == 'E')) {
-		++p;
-		Int32 sign = (*p == '-' ? -1 : 1);
-		if (*p == '+' || *p == '-') {
-			++p;
-		}
-		UInt32 ui;
-		const Char* q = parseUnsignedInt(p, e, ui);
-		if (q != p) {
-			exponent += sign * static_cast<Int32>(ui);
-			numberEnd = q;
-		}
-	}
-	
-	if (exponent > MAX_EXPONENT) {
+	if (e - p >= 8 && strncmp(p, "Infinity", 8) == 0) {
+		p += 8;
 		value = std::numeric_limits<double>::infinity();
-	} else if (exponent < MIN_EXPONENT - 1) {
-		value = 0.0;
+		numberEnd = p;
 	} else {
-		double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
-		double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
-		double compensation = 0.0;
-		
-		double d = 0.0;
-		for (p = significandBegin; p != significandEnd; ++p) {
-			if (*p != '.') {
-				const double adjusted = (*p - '0') * magnitude * scale - compensation;	// Kahan summation for greater accuracy
-				double sum = d + adjusted;
-				compensation = sum - d;
-				compensation -= adjusted;
-				d = sum;
-				magnitude /= 10.0;
+		while (p != e && *p >= '0' && *p <= '9') {
+			++exponent;
+			++p;
+		}
+		if (p != e && *p == '.') {
+			if (p == significandBegin) {
+				++significandBegin;
+			}
+			++p;
+			while (p != e && *p >= '0' && *p <= '9') {
+				++p;
 			}
 		}
-		value = d;
+
+		if (p == significandBegin) {
+			value = 0.0;
+			return b;
+		}
+
+		const Char* significandEnd = p;
+		numberEnd = p;
+
+		if (e - p >= 2 && (*p == 'e' || *p == 'E')) {
+			++p;
+			Int32 sign = (*p == '-' ? -1 : 1);
+			if (*p == '+' || *p == '-') {
+				++p;
+			}
+			UInt32 ui;
+			const Char* q = parseUnsignedInt(p, e, ui);
+			if (q != p) {
+				exponent += sign * static_cast<Int32>(ui);
+				numberEnd = q;
+			}
+		}
+		
+		p = significandBegin;
+		while (p != significandEnd && (*p == '0' || *p == '.')) {
+			if (*p == '0') {
+				--exponent;
+			}
+			++p;
+		}
+		
+		if (p == significandEnd || exponent < MIN_EXPONENT - 1) {
+			value = 0.0;
+		} else if (exponent > MAX_EXPONENT) {
+			value = std::numeric_limits<double>::infinity();
+		} else {
+			double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
+			double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
+			volatile double compensation = 0.0;
+			
+			double d = 0.0;
+			while (p != significandEnd) {
+				if (*p != '.') {
+					const Int32 digit = (*p - '0');
+					const double x = digit * magnitude * scale;
+					const double adjusted = x - compensation;	// Kahan summation for greater accuracy
+					volatile double sum = d + adjusted;
+					compensation = sum - d;
+					compensation -= adjusted;
+					d = sum;
+					magnitude /= 10.0;
+				}
+				++p;
+			}
+			value = d;
+		}
 	}
 	value *= sign;
 	return numberEnd;
@@ -421,53 +438,60 @@ static Char* intToString(Char buffer[32], Int32 i) {
 }
 
 Char* convertDoubleToString(Char buffer[32], const double value) {
-	double absValue = value;	
 	Char* p = buffer;
+	if (value == 0.0) {
+		*p++ = '0';
+		return p;
+	}
 	if (value < 0) {
 		*p++ = '-';
-		absValue = -value;
 	}
 
+	const double absValue = (value < 0 ? -value : value);
 	int base2Exponent;
 	frexp(absValue, &base2Exponent);	// frexp is fast and precise and gives log2(x), log10(x) = log2(x) / log2(10)
 	Int32 exponent = max(static_cast<Int32>(ceil(0.30102999566398119521 * (base2Exponent - 1))) - 1, MIN_EXPONENT - 1);
 	if (exponent < MAX_EXPONENT && absValue >= QUICK_CONSTANTS.exp10s[exponent + 1 - MIN_EXPONENT]) {
 		++exponent;
 	}
-	bool eNotation = (exponent < -6 || exponent >= 21);
+	const bool eNotation = (exponent < -6 || exponent >= 21);
+	Char* periodPosition = p + (eNotation || exponent < 0 ? 0 : exponent) + 1;
 	if (!eNotation && exponent < 0) {
-		exponent = 0;
+		*p++ = '0';
+		*p++ = '.';
+		while (p < periodPosition - exponent) {
+			*p++ = '0';
+		}
 	}
-	Char* periodPosition = p + (eNotation ? 0 : exponent) + 1;
 	
-	double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
+	const double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
 	double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
 	double residual = absValue;
 	double reconstructed = 0.0;
-	double compensation = 0.0;
+	volatile double compensation = 0.0;
 	while (p < buffer + 27 && magnitude != 0.0 && residual != 0.0) {	// p < buffer + 27 is an extra precaution if toNumber(toString(x)) == x is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
 		if (p == periodPosition) {
 			*p++ = '.';
 		}
-		Int32 digit = static_cast<Int32>(residual / magnitude / scale);
+		const Int32 digit = static_cast<Int32>(residual / magnitude / scale);
+		*p++ = '0' + digit;
 		double x = digit * magnitude * scale;
 		if (residual - x < 0 || digit == 10) { 	// When underflowing the residual (because of rounding problems) we drop to a lower digit. Also with some extreme values (e.g. the lowest denormals), rounding can cause residual / magnitude to become 1.0 and we must turn the 10 into a 9.
-			--digit;
-			x = digit * magnitude * scale;
+			p[-1]--;
+			x = (digit - 1) * magnitude * scale;
 		}
-		*p++ = '0' + digit;
 		residual -= x;
 		assert(residual >= 0);
 
 		const double adjusted = x - compensation;	// Kahan summation for greater accuracy
-		double sum = reconstructed + adjusted;
+		volatile double sum = reconstructed + adjusted;
 
 		if (sum == absValue) {
 			break;
 		}
 		if (digit < 9) {	// Catch shorter rounded solutions by trying one digit higher too (except if last digit was 9 in which case we should have caught the rounded solution in the previous step anyhow).
 			const double altAdjusted = (digit + 1) * magnitude * scale - compensation;
-			double altSum = reconstructed + altAdjusted;
+			volatile double altSum = reconstructed + altAdjusted;
 			if (altSum == absValue) {
 				p[-1]++;
 				break;
@@ -603,31 +627,23 @@ int main()
 	srand(0);
 	std::cout.precision(24);
 //	const double d = 9182736454637;
-	double d = 1.666666;
-	std::cout << "d: " << d << std::endl;
 //	std::cout << std::hexfloat << 1e-73 << std::endl;
 	{
 		double d;
-		const Char* str = "1.5e-323";
+		const Char* str = "1.7976931348623156e+308";
 		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
 		if (e > str) {
-		d = 4*pow(10,-5);
 			Char buffer[32];
 			Char* end = convertDoubleToString(buffer, d);
 			std::cout << std::string(buffer, end) << std::endl;
 	double exp = findExp1(d);
 	std::string s;
 	std::cout << (s = toString5(d, exp)) << std::endl;
+			double back;
+			const Char* e = parseDouble(buffer, end, back);
+			assert(e == end && back == d);
 		}
 	}
-	std::cout << "d: " << d << std::endl;
-	double exp = findExp1(d);
-	std::cout << "exp: " << exp << std::endl;
-	std::string s;
-	std::cout << (s = toString5(d, exp)) << std::endl;
-	std::cout << d << " = " << std::endl << toNumber9(s, exp) << std::endl;
-	std::cout << numeric_limits<double>::min() << std::endl;
-	std::cout << " " << 1e25 << std::endl << 1e33 << std::endl << 1e34 << std::endl << 1e37 << std::endl;
 	
 	{
 		double d = 0;
