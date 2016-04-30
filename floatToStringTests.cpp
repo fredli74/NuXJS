@@ -388,13 +388,13 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 	} else {
 		double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
 		double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
-		volatile double compensation = 0.0;
+		double compensation = 0.0;
 		
 		double d = 0.0;
 		for (p = significandBegin; p != significandEnd; ++p) {
 			if (*p != '.') {
 				const double adjusted = (*p - '0') * magnitude * scale - compensation;	// Kahan summation for greater accuracy
-				volatile double sum = d + adjusted;
+				double sum = d + adjusted;
 				compensation = sum - d;
 				compensation -= adjusted;
 				d = sum;
@@ -444,18 +444,14 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 	double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
 	double residual = absValue;
 	double reconstructed = 0.0;
-	volatile double compensation = 0.0;
+	double compensation = 0.0;
 	while (p < buffer + 27 && magnitude != 0.0 && residual != 0.0) {	// p < buffer + 27 is an extra precaution if toNumber(toString(x)) == x is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
 		if (p == periodPosition) {
 			*p++ = '.';
 		}
-		Int32 digit = static_cast<Int32>(residual / magnitude / scale);	// In extreme circumstances (e.g. the lowest denormals), rounding causes residual / magnitude to be 1.0, hence the 9 limit.
-		if (!(0 <= digit && digit <= 9)) {
-			static int x;
-			x = 1;
-		}
+		Int32 digit = static_cast<Int32>(residual / magnitude / scale);
 		double x = digit * magnitude * scale;
-		if (residual - x < 0 || digit == 10) {
+		if (residual - x < 0 || digit == 10) { 	// When underflowing the residual (because of rounding problems) we drop to a lower digit. Also with some extreme values (e.g. the lowest denormals), rounding can cause residual / magnitude to become 1.0 and we must turn the 10 into a 9.
 			--digit;
 			x = digit * magnitude * scale;
 		}
@@ -464,14 +460,14 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 		assert(residual >= 0);
 
 		const double adjusted = x - compensation;	// Kahan summation for greater accuracy
-		volatile double sum = reconstructed + adjusted;
+		double sum = reconstructed + adjusted;
 
 		if (sum == absValue) {
 			break;
 		}
 		if (digit < 9) {	// Catch shorter rounded solutions by trying one digit higher too (except if last digit was 9 in which case we should have caught the rounded solution in the previous step anyhow).
 			const double altAdjusted = (digit + 1) * magnitude * scale - compensation;
-			volatile double altSum = reconstructed + altAdjusted;
+			double altSum = reconstructed + altAdjusted;
 			if (altSum == absValue) {
 				p[-1]++;
 				break;
@@ -481,13 +477,7 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 		compensation = sum - reconstructed;
 		compensation -= adjusted;
 		reconstructed = sum;
-		magnitude /= 10;
-	}
-	if (p == buffer + 27) {
-		static int x;
-		x = 1;
-		std::cout << "oops" << std::endl;
-		// oops;
+		magnitude /= 10.0;
 	}
 	while (p < periodPosition) {
 		*p++ = '0';
@@ -495,8 +485,7 @@ Char* convertDoubleToString(Char buffer[32], const double value) {
 	if (eNotation) {
 		*p++ = 'e';
 		*p++ = (exponent < 0 ? '-' : '+');
-		// intToString fills the buffer from right (buffer + 32) to left and there should always be enough space
-		p = std::copy(intToString(buffer, exponent < 0 ? -exponent : exponent), buffer + 32, p);
+		p = std::copy(intToString(buffer, exponent < 0 ? -exponent : exponent), buffer + 32, p);	// intToString fills the buffer from right (buffer + 32) to left and there should always be enough space
 	}
 	return p;
 }
@@ -616,11 +605,13 @@ int main()
 //	const double d = 9182736454637;
 	double d = 1.666666;
 	std::cout << "d: " << d << std::endl;
+//	std::cout << std::hexfloat << 1e-73 << std::endl;
 	{
 		double d;
 		const Char* str = "1.5e-323";
 		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
 		if (e > str) {
+		d = 4*pow(10,-5);
 			Char buffer[32];
 			Char* end = convertDoubleToString(buffer, d);
 			std::cout << std::string(buffer, end) << std::endl;
@@ -640,13 +631,13 @@ int main()
 	
 	{
 		double d = 0;
-		for (; true;) {
+		for (int i = 0; i < 100000; ++i) {
 			char buffer[32];
 			const double m = rnd.rand53();
 			const int x = static_cast<int>(rnd.randInt(MAX_EXPONENT - MIN_EXPONENT)) + MIN_EXPONENT;
 			const double rndD = m * pow(10.0, x);
 			Char* end = convertDoubleToString(buffer, rndD);
-		//	std::cout << std::string(buffer, end) << std::endl;
+			std::cout << std::string(buffer, end) << std::endl;
 			double t;
 			if (parseDouble(buffer, end, t) != end) {
 				std::cout << "BAD!" << std::endl;
@@ -662,9 +653,9 @@ int main()
 
 	{
 		double d = 0;
-		for (; true;) {
+		for (int i = 0; i < 100000; ++i) {
 			char buffer[32];
-			const int exp = (double)(static_cast<int>(rnd.randInt(200)) - 100);
+			const int exp = 0;//(double)(static_cast<int>(rnd.randInt(200)) - 100);
 			const double x = d * pow(10.0, exp);
 			Char* end = convertDoubleToString(buffer, x);
 			std::cout << std::string(buffer, end) << std::endl;
@@ -692,6 +683,11 @@ int main()
 		for (int i = -324; i <= 308; ++i) {
 			if (pow(10, static_cast<double>(i)) != testExps[i + 324]) {
 				std::cout << pow(10, static_cast<double>(i)) << " != " << testExps[i + 324] << std::endl;
+				union U { double d; int64_t i; } u;
+				u.d = pow(10, static_cast<double>(i));
+				std::cout << std::hex << u.i << std::endl;
+				u.d = testExps[i + 324];
+				std::cout << std::hex << u.i << std::endl;
 			}
 		}
 	}
@@ -703,50 +699,4 @@ int main()
 			}
 		}
 	}
-	
-	std::cout << "toNumber4: " << toNumber5("9014846160420776", 1.0) << std::endl;
-	std::cout << "toNumber2: " << toNumber2("12345678901234578787476", 10e-245) << std::endl;
-	std::cout << "toNumber3: " << toNumber3("12345678901234578787476", 10e-245) << std::endl;
-	std::cout << "toNumber4: " << toNumber3("12345678901234578787476", 10e-245) << std::endl;
-	std::cout << "toNumber2: " << toNumber2("89898999", 10e-33) << std::endl;
-	std::cout << "toNumber3: " << toNumber3("89898999", 10e-33) << std::endl;
-	std::cout << "toNumber4: " << toNumber3("89898999", 10e-33) << std::endl;
-	std::cout << "toNumber2: " << toNumber2("19999123456798765435678", 10e33) << std::endl;
-	std::cout << "toNumber3: " << toNumber3("19999123456798765435678", 10e33) << std::endl;
-	std::cout << "toNumber4: " << toNumber4("19999123456798765435678", 10e33) << std::endl;
-	std::cout << "toNumber2: " << toNumber2("8983771932771280445826", 10e140) << std::endl;
-	std::cout << "toNumber3: " << toNumber3("8983771932771280445826", 10e140) << std::endl;
-	std::cout << "toNumber4: " << toNumber4("8983771932771280445826", 10e140) << std::endl;
-	std::cout << "toNumber5: " << toNumber5("8983771932771280445826", 10e140) << std::endl;
-	std::cout << "toNumber6: " << toNumber6("8983771932771280445826", 10e140) << std::endl;
-	std::cout << "toNumber7: " << toNumber7("8983771932771280445826", 10e140) << std::endl;
-
-	std::cout << "--------" << std::endl;
-	for (int i = 0; i < 10000; ++i) {
-		std::string s;
-		int l = (rnd.randInt(19)) + 3;
-		for (int j = 0; j < l; ++j) s += static_cast<char>(48 + (rand() % 10));
-		std::cout << s << std::endl;
-		const double exp = 1.0;
-		double n2 = toNumber2(s, exp);
-		double n3 = toNumber3(s, exp);
-		double n4 = toNumber4(s, exp);
-		double n5 = toNumber5(s, exp);
-		double n6 = toNumber6(s, exp);
-		double n7 = toNumber7(s, exp);
-		std::cout << "n2: " << n2 << std::endl;
-		std::cout << "n3: " << n3 << std::endl;
-		std::cout << "n4: " << n4 << std::endl;
-		std::cout << "n5: " << n5 << std::endl;
-		std::cout << "n6: " << n6 << std::endl;
-		std::cout << "n7: " << n7 << std::endl;
-	}
-	std::cout << "--------" << std::endl;
-	
-
-	const double m = 8423768723648716237612813e141;
-	s = "8423768723648716237612813e141";
-	const double n = toNumber(s);
-	std::cout << n << " ==\n" << m << " : " << (n == m ? "mmm" : "nää") << std::endl;
-	std::cout << toString(1.2345678901234578e-222) << std::endl;
 }
