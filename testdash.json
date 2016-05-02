@@ -5203,5 +5203,14 @@
 	},
 	"language/statements/function/13.2-18-1": {
 		"category": "not_es3"
+	},
+	"language/statements/try/cptn-finally-skip-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/try/cptn-finally-wo-catch": {
+		"category": "not_es3"
+	},
+	"language/statements/try/cptn-try": {
+		"category": "not_es3"
 	}
 }

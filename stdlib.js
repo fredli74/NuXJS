@@ -107,6 +107,54 @@ function $checkClass(object, expectedClass, forFunction) {
 	}
 }
 
+function $toFixed(value, digits) {
+	var string = '';
+	if (value < 0) {
+		value = -value;
+		string = '-';
+	}
+	if ($isNaN(value) || value >= 1e21) {
+		string += value;
+	} else {
+		var magnitude = $support.pow(10, digits);
+		var integer = $floor(value);
+		var decimals = $floor((value - integer) * magnitude + 0.5);
+		string += integer + (decimals >= magnitude ? 1 : 0);
+		if (digits > 0) {
+			string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+		}
+	}
+	return string;
+}
+
+function $normalizeFloat(value) {
+	var significand = 0; 
+	var exponent = 0;
+	if (value !== 0) {
+		if (value < 1e-323) {
+			exponent = -324;
+			significand = value / 1e-323 * 10.0;
+		} else {
+			exponent = $floor($support.log(value) * 0.4342944819032518);
+			if (exponent < -323) {
+				exponent = -323;
+			}
+			var magnitude = $support.pow(10, exponent);
+			if (value >= magnitude * 10.0) {
+				magnitude *= 10.0;
+				++exponent;
+			}
+			significand = value / magnitude;
+		}
+	}
+	return [ significand, exponent ];
+}
+
+function $getInternalNumber(object, forFunction) {
+	$checkClass(object, 'Number', forFunction);
+	return $support.getInternalProperty(object, 'value');
+}
+
 /* --- Object --- */
 
 var Object = function Object(v) {
@@ -132,7 +180,7 @@ $defineProperties(Object.prototype, { dontEnum: true }, {
 	propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
 	isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
 		while (v = $support.getInternalProperty(v, 'prototype')) {
-			if (v == this) return true;
+			if (v === this) return true;
 		}
 		return false;
 	})
@@ -209,31 +257,78 @@ $defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, 
 });
 $defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: $unconstructable(function valueOf() {
-		$checkClass(this, 'Number', 'valueOf');
-		return $support.getInternalProperty(this, 'value');
-	}),
+	valueOf: $unconstructable(function valueOf() { return $getInternalNumber(this, 'valueOf'); }),
 	toString: $unconstructable(function toString(radix) {
-		$checkClass(this, 'Number', 'toString');
-		var n = $support.getInternalProperty(this, 'value');
-		var r;
-		if (radix === void 0 || !$isFinite(n)) {
-			return '' + n;
-		} else if ((r = $toInteger(radix)) < 2 || r > 36) {
+		var value = $getInternalNumber(this, 'toString')
+		if (radix === void 0 || !$isFinite(value)) {
+			return '' + value;
+		} else if ((radix = $toInteger(radix)) < 2 || radix > 36) {
 			throw RangeError("illegal radix for toString()");
 		} else {
 			// TODO : fraction?
-			var v, sign = '', s = '';
-			if ((v = $toInteger(n)) < 0) {
-				v = -v;
-				sign = '+';
+			var sign = '', s = '';
+			if ((value = $toInteger(value)) < 0) {
+				value = -value;
+				sign = '-';
 			}
 			do {
-				s = $ALPHA_DIGITS_LOWER[v % r] + s;
-				v = $floor(v / r);
-			} while (v > 0);
+				s = $ALPHA_DIGITS_LOWER[value % radix] + s;
+				value = $floor(value / radix);
+			} while (value > 0);
 			return sign + s;
 		}
+	}),
+	toExponential: $unconstructable(function toExponential(fractionDigits) {
+		var value = $getInternalNumber(this, 'toExponential')
+		var string = '';
+		if (!$isFinite(value)) {
+			string += value;
+		} else {
+			var digits = $toInteger(fractionDigits);
+			if (fractionDigits !== void 0 && (digits < 0 || digits > 20)) {
+				throw RangeError("Illegal fractionDigits argument for toExponential()");
+			}
+			if (value < 0) {
+				value = -value;
+				string = '-';
+			}
+			var normalized = $normalizeFloat(value);
+			string += (fractionDigits === void 0 ? normalized[0] : $toFixed(normalized[0], digits))
+					+ (normalized[1] >= 0 ? 'e+' : 'e') + normalized[1];
+		}
+		return string;
+	}),
+	toFixed: $unconstructable(function toFixed(fractionDigits) {
+		var value = $getInternalNumber(this, 'toFixed')
+		var digits = $toInteger(fractionDigits);
+		if (digits < 0 || digits > 20) {
+			throw RangeError("Illegal fractionDigits argument for toFixed()");
+		}
+		return $toFixed(value, digits);
+	}),
+	toPrecision: $unconstructable(function toPrecision(precision) {
+		var value = $getInternalNumber(this, 'toPrecision')
+		var string = '';
+		if (precision === void 0 || !$isFinite(value)) {
+			string += value;
+		} else {
+			var digits = $toInteger(precision);
+			if (digits < 1 || digits > 21) {
+				throw RangeError("Illegal precision argument for toPrecision()");
+			}
+			if (value < 0) {
+				value = -value;
+				string = '-';
+			}
+			var normalized = $normalizeFloat(value);
+			var exponent = normalized[1];
+			if (exponent < -6 || exponent >= digits) {
+				string += $toFixed(normalized[0], digits - 1) + (exponent >= 0 ? 'e+' : 'e') + exponent;
+			} else {
+				string += $toFixed(value, digits - exponent - 1);
+			}
+		}
+		return string;
 	})
 });
 

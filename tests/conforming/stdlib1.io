@@ -50,9 +50,9 @@
 < Infinity : dontEnum,dontDelete, (deleted:false)
 < undefined: undefined
 < undefined : dontEnum,dontDelete, (deleted:false)
-< MAX_VALUE: 1.797693134862e+308
+< MAX_VALUE: 1.7976931348623156e+308
 < MAX_VALUE : dontEnum,readOnly,dontDelete, (deleted:false)
-< MIN_VALUE: 0
+< MIN_VALUE: 5e-324
 < MIN_VALUE : dontEnum,readOnly,dontDelete, (deleted:false)
 < NaN: NaN
 < NaN : dontEnum,readOnly,dontDelete, (deleted:false)

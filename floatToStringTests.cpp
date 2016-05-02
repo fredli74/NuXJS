@@ -632,6 +632,7 @@ int main()
 		double d;
 		const Char* str = "1.7976931348623156e+308";
 		const Char* e = parseDouble(str, str + strlen(str), d);//toNumber8("1928374", 1e-11);
+	d = 1e-223;
 		if (e > str) {
 			Char buffer[32];
 			Char* end = convertDoubleToString(buffer, d);
