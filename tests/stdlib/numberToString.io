@@ -253,3 +253,9 @@
 > try { (NaN).toPrecision(22); print("ok") } catch (x) { print("wrong") }
 < ok
 -
+> print((9.999999999999998).toExponential(2))
+< 1.00e+1
+-
+> print((9.999999999999998).toPrecision(2))
+< 10
+-

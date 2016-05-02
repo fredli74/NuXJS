@@ -135,7 +135,7 @@ function $normalizeFloat(value) {
 			exponent = -324;
 			significand = value / 1e-323 * 10.0;
 		} else {
-			exponent = $floor($support.log(value) * 0.4342944819032518);
+			exponent = $floor($support.log(value) * 0.43429448190325182765113);
 			if (exponent < -323) {
 				exponent = -323;
 			}
@@ -293,8 +293,24 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 				string = '-';
 			}
 			var normalized = $normalizeFloat(value);
-			string += (fractionDigits === void 0 ? normalized[0] : $toFixed(normalized[0], digits))
-					+ (normalized[1] >= 0 ? 'e+' : 'e') + normalized[1];
+			var significand = normalized[0], exponent = normalized[1];
+			if (fractionDigits === void 0) {
+				string += significand;
+			} else {
+				var magnitude = $support.pow(10, digits);
+				var integer = $floor(significand);
+				var decimals = $floor((significand - integer) * magnitude + 0.5);
+				integer += (decimals >= magnitude ? 1 : 0);
+				if (integer >= 10) {
+					integer = 1;
+					++exponent;
+				}
+				string += integer;
+				if (digits > 0) {
+					string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+				}
+			}
+			string += (exponent >= 0 ? 'e+' : 'e') + exponent;
 		}
 		return string;
 	}),
@@ -312,8 +328,8 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		if (precision === void 0 || !$isFinite(value)) {
 			string += value;
 		} else {
-			var digits = $toInteger(precision);
-			if (digits < 1 || digits > 21) {
+			var digits = $toInteger(precision) - 1;
+			if (digits < 0 || digits > 20) {
 				throw RangeError("Illegal precision argument for toPrecision()");
 			}
 			if (value < 0) {
@@ -321,11 +337,23 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 				string = '-';
 			}
 			var normalized = $normalizeFloat(value);
-			var exponent = normalized[1];
-			if (exponent < -6 || exponent >= digits) {
-				string += $toFixed(normalized[0], digits - 1) + (exponent >= 0 ? 'e+' : 'e') + exponent;
+			var significand = normalized[0], exponent = normalized[1];
+			var magnitude = $support.pow(10, digits);
+			var integer = $floor(significand);
+			var decimals = $floor((significand - integer) * magnitude + 0.5);
+			integer += (decimals >= magnitude ? 1 : 0);
+			if (integer >= 10) {
+				integer = 1;
+				++exponent;
+			}
+			if (exponent < -6 || exponent > digits) {
+				string += integer;
+				if (digits > 0) {
+					string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+				}
+				string += (exponent >= 0 ? 'e+' : 'e') + exponent;
 			} else {
-				string += $toFixed(value, digits - exponent - 1);
+				string += $toFixed(value, digits - exponent);
 			}
 		}
 		return string;
@@ -1219,19 +1247,18 @@ $defineProperties($global, { dontEnum: true, dontDelete: true }, {
 
 /* --- Math --- */
 
-// FIX : more decimals needed? these are from ECMA-262
 $defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
-	E: 2.7182818284590452354,
-	LN10: 2.302585092994046,
-	LN2: 0.6931471805599453,
-	LOG2E: 1.4426950408889634,
-	LOG10E: 0.4342944819032518,
+	E: 2.718281828459045235360,
+	LN10: 2.302585092994045684018,
+	LN2: 0.6931471805599453094172,
+	LOG10E: 0.43429448190325182765113,
+	LOG2E: 1.442695040888963407360,
 	PI: 3.1415926535897932,
-	SQRT1_2: 0.7071067811865476,
-	SQRT2: 1.4142135623730951
+	SQRT1_2: 0.7071067811865475244008,
+	SQRT2: 1.414213562373095048802
 });
 
-$defineProperties(Math, { dontEnum: true }, { // FIX : construction from array instead?
+$defineProperties(Math, { dontEnum: true }, {
 	abs: $unconstructable(function abs(v) { return ((v = +v) < 0 ? -v : v) }),
 	acos: $unconstructable(function acos(v) { return $support.acos(+v); }),
 	asin: $unconstructable(function asin(v) { return $support.asin(+v); }),
@@ -1245,12 +1272,10 @@ $defineProperties(Math, { dontEnum: true }, { // FIX : construction from array i
 	max: $unconstructable(function max(x, y) { var m = -$Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
 	min: $unconstructable(function min(x, y) { var m = $Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
 	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y); }),
-	round: $unconstructable(function round(v) { return $floor(v + 0.5); }), // FIX : -0 rule in ES262
+	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))); }),
 	sin: $unconstructable(function sin(v) { return $support.sin(+v); }),
-	sign: $unconstructable(function sign(v) { return ((v = +v) < 0 ? -1 : (v > 0 ? 1 : 0)) }), // FIX : not ES3 standard??
 	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v); }),
 	tan: $unconstructable(function tan(v) { return $support.tan(+v); })
-	// trunc etc from ES6?
 });
 
 /* --- Errors --- */

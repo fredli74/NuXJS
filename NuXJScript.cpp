@@ -58,6 +58,56 @@ static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_lim
 
 static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
 
+/* --- String constants --- */
+
+// FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
+const String EMPTY_STRING("");
+const String ANONYMOUS_STRING("anonymous");
+const String UNDEFINED_STRING("undefined");
+const String OBJECT_STRING("object");
+const String O_BJECT_STRING("Object");
+const String A_RRAY_STRING("Array");
+const String BOOLEAN_STRING("boolean");
+const String B_OOLEAN_STRING("Boolean");
+const String BRACKET_OBJECT_STRING("[object ");
+const String END_BRACKET_STRING("]");
+const String NUMBER_STRING("number");
+const String N_UMBER_STRING("Number");
+const String STRING_STRING("string");
+const String S_TRING_STRING("String");
+const String FUNCTION_STRING("function");
+const String F_UNCTION_STRING("Function");
+const String NULL_STRING("null");
+const String FALSE_STRING("false");
+const String TRUE_STRING("true");
+const String NAN_STRING("NaN");
+const String INFINITY_STRING("Infinity");
+const String MINUS_INFINITY_STRING("-Infinity");
+const String LENGTH_STRING("length");
+const String ARGUMENTS_STRING("arguments");
+const String A_RGUMENTS_STRING("Arguments");
+const String CALLEE_STRING("callee");
+const String PROTOTYPE_STRING("prototype");
+const String CLASS_STRING("class");
+const String VALUE_STRING("value");
+const String CONSTRUCTOR_STRING("constructor");
+const String EVAL_STRING("eval");
+const String NATIVE_FUNCTION_STRING("function() { [native code] }");
+const String E_RROR_STRING("Error");
+const String MESSAGE_STRING("message");
+const String NAME_STRING("name");
+const String FUNCTION_SPACE("function ");
+const String COLON_SPACE(": ");
+const String CANNOT_CONVERT_TO_OBJECT_STRING("Cannot convert undefined or null to object");
+const String IS_NOT_A_FUNCTION_STRING(" is not a function");
+const String IS_NOT_DEFINED_STRING(" is not defined");
+const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
+const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
+	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
+};
+
+/* --- Utilities --- */
+
 // Returns pointer to beginning of string
 // End of string is always buffer + 32 (*not* zero-terminated by this routine)
 static Char* intToString(Char buffer[32], Int32 i) {
@@ -382,54 +432,6 @@ static double stringToDouble(const String& s) {
 	p = eatStringWhite(p, e);
 	return (p == e ? v : NaN());
 }
-
-/* --- String constants --- */
-
-// FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
-const String EMPTY_STRING("");
-const String ANONYMOUS_STRING("anonymous");
-const String UNDEFINED_STRING("undefined");
-const String OBJECT_STRING("object");
-const String O_BJECT_STRING("Object");
-const String A_RRAY_STRING("Array");
-const String BOOLEAN_STRING("boolean");
-const String B_OOLEAN_STRING("Boolean");
-const String BRACKET_OBJECT_STRING("[object ");
-const String END_BRACKET_STRING("]");
-const String NUMBER_STRING("number");
-const String N_UMBER_STRING("Number");
-const String STRING_STRING("string");
-const String S_TRING_STRING("String");
-const String FUNCTION_STRING("function");
-const String F_UNCTION_STRING("Function");
-const String NULL_STRING("null");
-const String FALSE_STRING("false");
-const String TRUE_STRING("true");
-const String NAN_STRING("NaN");
-const String INFINITY_STRING("Infinity");
-const String MINUS_INFINITY_STRING("-Infinity");
-const String LENGTH_STRING("length");
-const String ARGUMENTS_STRING("arguments");
-const String A_RGUMENTS_STRING("Arguments");
-const String CALLEE_STRING("callee");
-const String PROTOTYPE_STRING("prototype");
-const String CLASS_STRING("class");
-const String VALUE_STRING("value");
-const String CONSTRUCTOR_STRING("constructor");
-const String EVAL_STRING("eval");
-const String NATIVE_FUNCTION_STRING("function() { [native code] }");
-const String E_RROR_STRING("Error");
-const String MESSAGE_STRING("message");
-const String NAME_STRING("name");
-const String FUNCTION_SPACE("function ");
-const String COLON_SPACE(": ");
-const String CANNOT_CONVERT_TO_OBJECT_STRING("Cannot convert undefined or null to object");
-const String IS_NOT_A_FUNCTION_STRING(" is not a function");
-const String IS_NOT_DEFINED_STRING(" is not defined");
-const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
-const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
-	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
-};
 
 /* --- Value --- */
 
