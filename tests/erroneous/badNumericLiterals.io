@@ -23,16 +23,14 @@
 ! !!!! SyntaxError: Missing / invalid expression
 -
 > +e
-! !!!! Line: 1
-! !!!! SyntaxError: Missing / invalid expression
+! !!!! ReferenceError: e is not defined
 -
 > +e+
 ! !!!! Line: 1
 ! !!!! SyntaxError: Missing / invalid expression
 -
 > +e103
-! !!!! Line: 1
-! !!!! SyntaxError: Missing / invalid expression
+! !!!! ReferenceError: e103 is not defined
 -
 > +1e+
 ! !!!! Line: 1
