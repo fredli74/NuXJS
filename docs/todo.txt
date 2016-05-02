@@ -9,13 +9,6 @@ Run-time
 			- we should build a VM test routine that checks each opcode, how much it changes the stack and stuff
 		- also implement a max recursion on compiler to not overload stack (function in function in function etc)
 
-	* array object (length property support, optimized for numerical indexes?)
-		- take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
-		- only downside to that would be read and write named, which assumes the constant is a string pointer
-		- also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
-		- ok, one thought: normally an array only contains a cotninuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal ScriptObject (accessed as through a proxy now)
-		- more thoughts: use different compressed variations (templates) when type is homogenous over all the array, e.g. number array, object array, string array. One could even consider an int array.
-
 	* basic library (math, string, array ops)
 
 	* it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
@@ -65,8 +58,6 @@ Run-time
 			- check futures/promises in C++11, is that something useful for chaining?
 
 	* at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
-
-	* why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 
 	* perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
 
@@ -118,9 +109,6 @@ Run-time
 		- also isnan is not standard C++ :(, on Windows it is called _isnan
 		- do a special Value variation that tracks NAN and Infinities?
 
-	* (1.0E-3 == 0.001) is not true (due to accuracy problems I guess), I think it should be
-		- same problem with (0.003e3 == 3.0)
-
 	* I don't know but the "emulation" in arguments object feels a bit over the top (registering deleted items etc)
 
 	* Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
@@ -129,6 +117,13 @@ Run-time
 		- good to have the name accessible for tracing/debugging (future stack-trace support?)
 
 	* perhaps it would have been better to split Frame into different pointers (more similar to ES-spec): one for running code (not changed by catch and with), one for variable object (not changed by catch, with or eval) and "current scope object" (changed by them all). This way we wouldn't have to declare so many dummy virtuals that just passes stuff upwards the Frame chain.
+
+	* array object (length property support, optimized for numerical indexes?)
+		- take value as key for getproperty etc and we could optimize array and string accesses by not having to go via strings
+		- only downside to that would be read and write named, which assumes the constant is a string pointer
+		- also, how to efficiently convert between continuous array and sparse array / associative array... have QuickArray *and* Table in the object?
+		- ok, one thought: normally an array only contains a continuous array (with start and end)... when too many items are (or are to become) undefined, or when non-integer elements are added, convert to a normal ScriptObject (accessed as through a proxy now)
+		- more thoughts: use different compressed variations (templates) when type is homogenous over all the array, e.g. number array, object array, string array. One could even consider an int array.
 
 Compiler
 ========
@@ -154,9 +149,6 @@ Other
 		  ... or I suppose we could change all methods to return a bool :(
 
 	* also, drop all STL dependencies, incl. std::string even, for simpler / older / stupid compiler compatibility and smaller footprint
-
-	* this ES-262 test fails, why exactly, the number looks right:
-		if (+(Number.MAX_VALUE) !== 1.7976931348623157e308) {
 
 OPTIMIZE
 ########
@@ -272,113 +264,3 @@ GC
 	* automatic gc pace
 
 	* count actual memory allocated as in old NuXScript?
-
-DONE
-====
-
-	* for (;;)
-
-	* comma operator
-
-	* void operator
-
-	* delete operator
-
-	* proper string comparisons (< etc)
-
-	* also probe gcitems with gcheap == 0, so that we can have those safely on stack etc
-		- thinking of dropping mark etc from gcheap and have in engine instead, we could then have a gcheap list for protected items (probe these before general mark phase)
-
-	* break, continue etc (with labels!)
-
-	* virtual machine should include gc etc
-
-	* check that identifier is never one of the reserved words
-
-	* drop the backwards jump for continue in while(), can jump down to the loop instead, for code simplicity (some day we'll do jump optimizations anyhow)
-
-	* maybe drop the scope vector and just put it all on the program stack
-
-	* switch
-
-	* in operator
-
-	* typeof operator
-
-	* we could reuse free variable indexes in safeKeep (by having a way to "return" them and a queue with free ones), but it kind of feels like sub-optimization
-
-	* for (in)
-		- we need to decide what should happen when deleting members still...
-
-	* prototype support
-
-	* new operator
-		- done, but need to implement prototype
-
-	* only initialize Value to some BAD_TYPE in debug target, don't touch anything in release
-
-	* native calls (and returns)
-		- no synchronized return to native code right now
-		- need easier API, shouldn't crash if missing push etc
-		- arguments are reversed on native calls, and will be gc'd as stack has already popped 
-			- arguments no longer reversed since we push forwards now, but will still be gc'd
-
-	* assignable globals this in processor
-
-	* function name() { } syntax
-
-	* literal function names, e.g. myGlobalName = function myLocalName() { ... }
-
-	* ++ should add numbers *only*, now "3"++ is "31", which is wrong
-
-	* eval support
-		- I think the if in the "if (compilingForEval) evalXR = makeRValue(evalXR);" lines are actually unnecessary? 
-			- nope, they weren't
-		- implement rest of eval r-value logic for do while, for, switch and try / catch (any more?)
-			- while, for done, switch and try / catch done, I think, any more?	
-		- global eval support (sets all var and function declarations in global this)
-
-	* object literals
-
-	* array literals
-
-	* true primitive <-> object conversions
-
-	* true toString, toNumber, which is problematic because we might have to execute JS-code then and I want to avoid synchronous callbacks to JS-code (=blocking!)
-
-	* string -> number doesn't conform to the http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1 , e.g. empty string should be 0 , spaces should be accepted etc...
-
-	* are we comparing NaN correctly? e.g. NaN !== NaN
-		- yes
-
-	* I am beginning to give up on the idea of avoiding the property attributes... we need Writable, Enumerable & Configurable... perhaps place them in the hash key?
-
-	* vars added by eval should be deletable: f=function() { eval("var x = 42"); delete x; print(x); }
-
-	* proper error exceptions (TypeError etc)
-
-	* instanceof operator
-
-	* should we? *) Doesn't consider unicode Line separator <LS> (\u2028) or Paragraph separator <PS> (\u2029) to be linefeeds. Only LF or CR. Also <NBSP> (\u00A0) and <ZWNBSP> ZERO WIDTH NO-BREAK SPACE (\uFEFF) are not considered white space.
-
-	* (new) Object(v) should convert v to number, string object etc
-
-	* toPrimitive also for native function arguments like sqrt etc, how?
-		- stubs
-
-	* (new String("abcd"))[2] should work again, cause it really is no difference from "abcd"[2] according to Ecma spec... this would mean a violation with strict ES 3, since this came in ES 5 first... but really, it is *so* useful (and common I guess).
-
-	* arguments container
-		- missing callee
-			- that is, if we don't slaughter the whole stupid non-strict argument object and go for the simpler strict version
-
-	* don't accept lf's after ++ etc (automatic ; insertion logic)
-
-	* for in should also include properties in prototypes, except when they are shadowed... don't know if we should do this top-down or bottom-up
-		- done, but not for strings and arguments objects
-
-	* should "\/" be valid escape sequence? not according to ECMAScript spec, but JSON allows it right? (or wrong?)
-		- actually, any \ that isn't escape is valid, \ is just swallowed see http://www.ecma-international.org/ecma-262/6.0/index.html#sec-literals-string-literals
-		- also \<cr>|<crlf>|<lf>|<ls>|<ps> is valid and should continue string on next line
-			- nope, not in ES3
-

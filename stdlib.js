@@ -107,27 +107,12 @@ function $checkClass(object, expectedClass, forFunction) {
 	}
 }
 
-function $toFixed(value, digits) {
+function $toPrecision(value, digits, eNotationBelow) {
 	var string = '';
 	if (value < 0) {
 		value = -value;
 		string = '-';
 	}
-	if ($isNaN(value) || value >= 1e21) {
-		string += value;
-	} else {
-		var magnitude = $support.pow(10, digits);
-		var integer = $floor(value);
-		var decimals = $floor((value - integer) * magnitude + 0.5);
-		string += integer + (decimals >= magnitude ? 1 : 0);
-		if (digits > 0) {
-			string += '.' + ('00000000000000000000' + decimals).slice(-digits);
-		}
-	}
-	return string;
-}
-
-function $normalizeFloat(value) {
 	var significand = 0; 
 	var exponent = 0;
 	if (value !== 0) {
@@ -147,7 +132,36 @@ function $normalizeFloat(value) {
 			significand = value / magnitude;
 		}
 	}
-	return [ significand, exponent ];
+	if (digits === void 0) {
+		string += significand;
+	} else {
+		var magnitude = $support.pow(10, digits);
+		var integer = $floor(significand);
+		var decimals = $floor((significand - integer) * magnitude + 0.5);
+		integer += (decimals >= magnitude ? 1 : 0);
+		if (integer >= 10) {
+			integer = 1;
+			++exponent;
+		}
+		if (exponent >= eNotationBelow && exponent <= digits) {
+			digits -= exponent;
+			var magnitude = $support.pow(10, digits);
+			var integer = $floor(value);
+			var decimals = $floor((value - integer) * magnitude + 0.5);
+			if (decimals >= magnitude) {
+				++integer;
+			}
+			exponent = null;
+		}
+		string += integer;
+		if (digits > 0) {
+			string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+		}
+	}
+	if (exponent !== null) {
+		string += (exponent >= 0 ? 'e+' : 'e') + exponent;
+	}
+	return string;
 }
 
 function $getInternalNumber(object, forFunction) {
@@ -282,37 +296,16 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		var value = $getInternalNumber(this, 'toExponential')
 		var string = '';
 		if (!$isFinite(value)) {
-			string += value;
+			return value;
+		} else if (fractionDigits === void 0) {
+			return $toPrecision(value, void 0, $Infinity);
 		} else {
 			var digits = $toInteger(fractionDigits);
-			if (fractionDigits !== void 0 && (digits < 0 || digits > 20)) {
+			if (digits < 0 || digits > 20) {
 				throw RangeError("Illegal fractionDigits argument for toExponential()");
 			}
-			if (value < 0) {
-				value = -value;
-				string = '-';
-			}
-			var normalized = $normalizeFloat(value);
-			var significand = normalized[0], exponent = normalized[1];
-			if (fractionDigits === void 0) {
-				string += significand;
-			} else {
-				var magnitude = $support.pow(10, digits);
-				var integer = $floor(significand);
-				var decimals = $floor((significand - integer) * magnitude + 0.5);
-				integer += (decimals >= magnitude ? 1 : 0);
-				if (integer >= 10) {
-					integer = 1;
-					++exponent;
-				}
-				string += integer;
-				if (digits > 0) {
-					string += '.' + ('00000000000000000000' + decimals).slice(-digits);
-				}
-			}
-			string += (exponent >= 0 ? 'e+' : 'e') + exponent;
+			return $toPrecision(value, digits, $Infinity);
 		}
-		return string;
 	}),
 	toFixed: $unconstructable(function toFixed(fractionDigits) {
 		var value = $getInternalNumber(this, 'toFixed')
@@ -320,43 +313,36 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		if (digits < 0 || digits > 20) {
 			throw RangeError("Illegal fractionDigits argument for toFixed()");
 		}
-		return $toFixed(value, digits);
+		if ($isNaN(value) || value <= -1e21 || value >= 1e21) {
+			return '' + value;
+		} else {
+			var string = '';
+			if (value < 0) {
+				value = -value;
+				string = '-';
+			}
+			var magnitude = $support.pow(10, digits);
+			var integer = $floor(value);
+			var decimals = $floor((value - integer) * magnitude + 0.5);
+			string += integer + (decimals >= magnitude ? 1 : 0);
+			if (digits > 0) {
+				string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+			}
+			return string;
+		}
 	}),
 	toPrecision: $unconstructable(function toPrecision(precision) {
 		var value = $getInternalNumber(this, 'toPrecision')
 		var string = '';
 		if (precision === void 0 || !$isFinite(value)) {
-			string += value;
+			return value;
 		} else {
 			var digits = $toInteger(precision) - 1;
 			if (digits < 0 || digits > 20) {
 				throw RangeError("Illegal precision argument for toPrecision()");
 			}
-			if (value < 0) {
-				value = -value;
-				string = '-';
-			}
-			var normalized = $normalizeFloat(value);
-			var significand = normalized[0], exponent = normalized[1];
-			var magnitude = $support.pow(10, digits);
-			var integer = $floor(significand);
-			var decimals = $floor((significand - integer) * magnitude + 0.5);
-			integer += (decimals >= magnitude ? 1 : 0);
-			if (integer >= 10) {
-				integer = 1;
-				++exponent;
-			}
-			if (exponent < -6 || exponent > digits) {
-				string += integer;
-				if (digits > 0) {
-					string += '.' + ('00000000000000000000' + decimals).slice(-digits);
-				}
-				string += (exponent >= 0 ? 'e+' : 'e') + exponent;
-			} else {
-				string += $toFixed(value, digits - exponent);
-			}
+			return $toPrecision(value, digits, -6);
 		}
-		return string;
 	})
 });
 
