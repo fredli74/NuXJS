@@ -21,8 +21,6 @@ const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
-const double EPSILON = 1.0e-300;
-const size_t TINY_STRING_SIZE = sizeof (double) / sizeof (Char);
 
 class Heap {
 	public:		virtual void* allocate(size_t size) = 0;
@@ -272,7 +270,7 @@ class Value {
 				// WARNING! Do NOT change order of elements in Type enum.
 	protected:	enum Type {
 					UNDEFINED_TYPE, NULL_TYPE, BOOLEAN_TYPE
-					, NUMBER_TYPE, STRING_TYPE, TINY_STRING_TYPE
+					, NUMBER_TYPE, STRING_TYPE
 					, OBJECT_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
@@ -283,7 +281,6 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
-					Char tinyString[TINY_STRING_SIZE];
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }

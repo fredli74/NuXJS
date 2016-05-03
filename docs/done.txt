@@ -115,3 +115,11 @@ DONE
 
 	* why is 0000nnn valid number in js, v8 etc? in ES 11.8.3 Numeric Literals it looks like a number need to start with a non-zero
 		- because they support octals
+
+	* fast allocation pools
+
+	* automatic gc pace
+
+	* with statement, it's actually not too bad... check http://stackoverflow.com/questions/61552/are-there-legitimate-uses-for-javascripts-with-statement
+	
+	* FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.

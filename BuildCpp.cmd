@@ -1,13 +1,11 @@
 @ECHO OFF
 SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
-IF "%~1"=="" (
-	ECHO BuildCpp ^<output.exe^> ^<compiler options and source files^>
-	EXIT /B 1
-)
+SET options=/Ox /GL /MT /GS- /GR- /D NDEBUG
+SET model=-m32
 
 SET pfpath=%ProgramFiles(x86)%
-SET temppath=%TEMP%\%~n1\
+
 IF NOT DEFINED pfpath SET pfpath=%ProgramFiles%
 
 IF NOT DEFINED VCINSTALLDIR (
@@ -24,19 +22,57 @@ IF NOT DEFINED VCINSTALLDIR (
 	)
 )
 	
-MKDIR "%TEMP%\%~n1\" >NUL
-ECHO Compiling %~1...
-cl /nologo /W3 /WX- /Ox /GL /GF /Gm- /EHsc /MT /GS- /Gy /arch:SSE /fp:fast /Zc:wchar_t /Zc:forScope /GR- /Gd /wd"4355" /wd"4267" /analyze- /errorReport:queue /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_SCL_SECURE_NO_WARNINGS" /Fo"%TEMP%\\%~n1\\" /Fe%* >"%TEMP%\buildlog.txt"
+
+IF "%~1"=="debug" (
+	SET options=/Od /MTd /GS /GR /Zi /D DEBUG
+	SHIFT
+) ELSE IF "%~1"=="beta" (
+	SET options=/Ox /MTd /GS /GR /Zi /D DEBUG
+	SHIFT
+) ELSE IF "%~1"=="release" (
+	SET options=/Ox /GL /MT /GS- /GR- /D NDEBUG
+	SHIFT
+)
+
+IF "%~1"=="64" (
+	ECHO Not yet implemented
+	EXIT /B 1
+	SHIFT
+) ELSE IF "%~1"=="32" (
+	SHIFT
+)
+
+SET args=%1
+SET name=%~1
+SHIFT
+
+IF "%name%"=="" (
+	ECHO BuildCpp [debug^|beta^|release] [32^|64 ^(bit^)] ^<output.exe^> ^<compiler options and source files^>
+	EXIT /B 1
+)
+
+:argLoop
+	IF "%~1"=="" goto argLoopEnd
+	SET args=%args% %1
+	SHIFT
+goto argLoop
+:argLoopEnd
+
+SET temppath=%TEMP:"=%\%name%\
+
+MKDIR "%temppath%" >NUL
+ECHO Compiling %name%...
+cl /nologo /W3 /WX- /GF /Gm- /EHsc /Gy %options% /arch:SSE /fp:precise /Zc:wchar_t /Zc:forScope /Gd /wd"4355" /wd"4267" /analyze- /errorReport:queue /D "WIN32" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_SCL_SECURE_NO_WARNINGS" /Fo"%TEMP:"=%\\%name%\\" /Fe%args% >"%temppath%\buildlog.txt"
 IF ERRORLEVEL 1 (
-	TYPE %TEMP%\buildlog.txt
-	ECHO Compilation of %~1 failed
-	DEL /Q "%TEMP%\%~n1\*" >NUL
-	RMDIR /Q "%TEMP%\%~n1\" >NUL
+	TYPE "%temppath%\buildlog.txt"
+	ECHO Compilation of %name% failed
+	DEL /Q "%temppath%\*" >NUL
+	RMDIR /Q "%temppath%" >NUL
 	EXIT /B 1
 ) ELSE (
-	ECHO Compiled %~1
-	DEL /Q "%TEMP%\%~n1\*" >NUL
-	RMDIR /Q "%TEMP%\%~n1\" >NUL
+	ECHO Compiled %name%
+	DEL /Q "%temppath%\*" >NUL
+	RMDIR /Q "%temppath%\" >NUL
 
 	EXIT /B 0
 )

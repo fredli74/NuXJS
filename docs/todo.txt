@@ -84,10 +84,6 @@ Compiler
 
 	* support -0.0 (use std::signbit? or whatever...) add to operation matrix test
 	
-	* with statement, it's actually not too bad... check http://stackoverflow.com/questions/61552/are-there-legitimate-uses-for-javascripts-with-statement
-	
-	* FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
-
 GC
 ==
 
@@ -212,6 +208,10 @@ Run-time
 				if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
 		getOwnProperty here will convert key to string (on heap!), just to check if it exists somewhere in the chain before setting the array element
 
+	* have a tiny-string type which fits inside value directly (4 16-bit words or 8 8-bit bytes?), for faster/more economic character handling
+
+	* building strings is still slow, could they be built with an internal temporary type similar to $StringBuilder? Or a "PolyString" which consists of a meta-concatentation of two existing strings (or polystrings), possibly even substrings of those?
+
 Compiler
 ========
 
@@ -258,9 +258,5 @@ GC
 		- actually, I don't think we should think new and old gen... we should think standard heap and "sleepy" heap..
 
 	* no need for recursive marking, just add to one end of the list and continue looping to the end of list
-
-	* fast allocation pools
-
-	* automatic gc pace
 
 	* count actual memory allocated as in old NuXScript?
