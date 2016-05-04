@@ -4093,7 +4093,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), o
 }
 
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
-	ScriptObject* supportObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
+	ScriptObject* supportObject = gcHeap.protect(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	// FIX : no new String?
 	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	supportObject->setOwnProperty(*this, Value(gcHeap.manage(new (&gcHeap) String("prototypes"))), Value(prototypesObject), STANDARD_FLAGS);
@@ -4149,9 +4149,9 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 			Value argv[1] = { Value(supportObject) };
 ++processor.vsp; // FIX!!!
 			f->call(*this, processor, 1, argv, getGlobals());
+			needsMoreTime = processor.run();
+			assert(!needsMoreTime);
 		}
-		needsMoreTime = processor.run();
-		assert(!needsMoreTime);
 	}
 	gcHeap.gc();
 
