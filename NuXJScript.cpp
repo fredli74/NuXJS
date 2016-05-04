@@ -13,10 +13,6 @@
 #include <vector>
 #include "NuXJScript.h"
 
-// FIX : which options? other compilers?
-#pragma GCC push_options
-#pragma GCC optimize("no-finite-math-only", "no-unsafe-math-optimizations", "no-signaling-nans", "no-trapping-math", "no-math-errno", "no-cx-limited-range", "signed-zeros", "no-associative-math", "no-reciprocal-math", "protect-parens")
-
 	bool supressStdErr = false; // FIX : drop
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
@@ -601,14 +597,18 @@ bool Value::isEqualTo(const String& s) const {
 }
 
 bool Value::isLessThan(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return var.string->isLessThan(*y.var.string);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) {
+		return var.string->isLessThan(*y.var.string);
+	}
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber < otherNumber;
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
-	if (type == STRING_TYPE && y.type == STRING_TYPE) return !y.var.string->isLessThan(*var.string);
+	if (type == STRING_TYPE && y.type == STRING_TYPE) {
+		return !y.var.string->isLessThan(*var.string);
+	}
 	double thisNumber = toDouble();
 	double otherNumber = y.toDouble();
 	return thisNumber <= otherNumber;
@@ -4476,5 +4476,3 @@ if (!supressStdErr) {
 	if (pauseBeforeQuit) std::wcin.get();
 	return 0;
 }
-
-#pragma GCC pop_options

@@ -7,9 +7,6 @@
 #include <string>
 #include <cstring>
 
-#pragma GCC push_options
-#pragma GCC optimize("no-finite-math-only", "no-unsafe-math-optimizations", "no-signaling-nans", "no-trapping-math", "no-math-errno", "no-cx-limited-range", "signed-zeros", "no-associative-math", "no-reciprocal-math", "protect-parens")
-
 typedef unsigned short UInt16;
 typedef int Int32;
 typedef unsigned int UInt32;
@@ -1159,7 +1156,5 @@ class Compiler : public GCItem {
 					super::gcMark(heap);
 				}
 };
-
-#pragma GCC pop_options
 
 #endif

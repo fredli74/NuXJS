@@ -851,20 +851,22 @@ function $compileRegExp(s, ignoreCase, multiline) {
 				captures = 'c' + capture + '=p';
 				rollbacks = 'c' + capture + '=r' + capture;
 			}
-			for (var i = resetCaptureFrom; i < resetCaptureTo; ++i) {
-				var j = i * 2;
-				if (capture !== null || i > resetCaptureFrom) {
-					declares += ',';
-					rollbacks += ',';
-					if (i === resetCaptureFrom) {
-						captures += ',';
+			if (resetCaptureTo !== void 0) {
+				for (var i = resetCaptureFrom; i < resetCaptureTo; ++i) {
+					var j = i * 2;
+					if (capture !== null || i > resetCaptureFrom) {
+						declares += ',';
+						rollbacks += ',';
+						if (i === resetCaptureFrom) {
+							captures += ',';
+						}
 					}
-				}
-				declares += 'r' + j + '=c' + j;
-				captures += 'c' + j + '=';
-				rollbacks += 'c' + j + '=r' + j;
-				if (i === resetCaptureTo - 1) {
-					captures += 'void 0';
+					declares += 'r' + j + '=c' + j;
+					captures += 'c' + j + '=';
+					rollbacks += 'c' + j + '=r' + j;
+					if (i === resetCaptureTo - 1) {
+						captures += 'void 0';
+					}
 				}
 			}
 			code = captures + ', ' + or(code, '(' + rollbacks + ',false)');
