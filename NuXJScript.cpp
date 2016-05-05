@@ -4039,6 +4039,29 @@ struct Support {
 		}
 		return Value(&EMPTY_STRING);
 	}
+
+	static Value submatch(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 3) {
+			const String* const text = argv[0].toString(engine.getHeap());
+			const Int32 offset = argv[1].toInt();
+			const String* const match = argv[2].toString(engine.getHeap());
+			const UInt32 matchSize = match->size();
+			if (offset + matchSize <= text->size()
+					&& std::equal(text->begin() + offset, text->begin() + offset + matchSize, match->begin())) {
+				return Value(true);
+			}
+		}
+		return Value(false);
+	}
+
+	static Value getLocalTime(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Value(time(0) * 1000.0);
+	}
+
+	static Value localTimeToUTC(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		time_t t = (argc > 0 ? static_cast<time_t>(argv[0].toDouble() / 1000.0 + 0.5) : time(0));
+		return Value(mktime(gmtime(&t)) * 1000.0);
+	}
 };
 
 static struct {
@@ -4060,8 +4083,10 @@ static struct {
 	{ String("specialConstructor"), Support::specialConstructor }, { String("callWithArgs"), Support::callWithArgs },
 	{ String("hasOwnProperty"), Support::hasOwnProperty }, { String("fromCharCode"), Support::fromCharCode },
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
-	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat }, { String("charCodeAt"), Support::charCodeAt },
-	{ String("substring"), Support::substring }
+	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat },
+	{ String("charCodeAt"), Support::charCodeAt }, { String("substring"), Support::substring },
+	{ String("submatch"), Support::submatch }, { String("getLocalTime"), Support::getLocalTime }
+	, { String("localTimeToUTC"), Support::localTimeToUTC }
 };
 
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
@@ -4155,7 +4180,6 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	gcHeap.gc();
 
-	// FIX: ScriptFunction cast sucks! call() instead of chain() in Processor so that we can have arbitrary object
 	// FIX : sub v
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
@@ -4219,22 +4243,6 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		}
 	};
 
-	struct SubmatchFunction : public Function {
-		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			if (argc >= 3) {
-				const String* const text = argv[0].toString(engine.getHeap());
-				const Int32 offset = argv[1].toInt();
-				const String* const match = argv[2].toString(engine.getHeap());
-				const UInt32 matchSize = match->size();
-				if (offset + matchSize <= text->size()
-						&& std::equal(text->begin() + offset, text->begin() + offset + matchSize, match->begin())) {
-					return Value(true);
-				}
-			}
-			return Value(false);
-		}
-	};
-
 int main(int argc, const char* argv[]) {
 /*std::cout << sizeof(Value) << std::endl;
 std::cout << sizeof(String) << std::endl;
@@ -4258,6 +4266,12 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	heap.protect(&globalsFrame);
 	
 	Engine engine(heap, &globalsFrame);
+
+	PrintFunction printFunction;
+	globalsFrame.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
+	GCFunction gcFunction;
+	const String GC_STRING("gc");
+	globalsFrame.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
 	
 	try {
 		std::wifstream stdlibStream("stdlib.js");
@@ -4275,14 +4289,6 @@ std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
 	}
 supressStdErr = false;
 	
-	PrintFunction printFunction;
-	globalsFrame.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
-	GCFunction gcFunction;
-	const String GC_STRING("gc");
-	globalsFrame.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
-	SubmatchFunction submatchFunction;
-	const String SUBMATCH_STRING("submatch");
-	globalsFrame.setOwnProperty(engine, Value(&SUBMATCH_STRING), Value(heap.protect(&submatchFunction)), DONT_ENUM_FLAG);
 	String source(EMPTY_STRING);
 	std::auto_ptr<std::wifstream> inputFileStream;
 	std::wistream* inStream = &std::wcin;

@@ -24,13 +24,9 @@
 var $global = this;
 var $unconstructable = $support.specialConstructor; // these are the same now, but not guaranteed in the future
 
-var $isNaN = $support.isNaN;
-var $isFinite = $support.isFinite;
-var $floor = $support.floor;
-var $NaN = $support.NaN;
-var $Infinity = $support.Infinity;
-var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz";
-var $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var $isNaN = $support.isNaN, $isFinite = $support.isFinite, $floor = $support.floor, $NaN = $support.NaN
+		, $Infinity = $support.Infinity, $submatch = $support.submatch;
+var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 var $WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 var $PARSE_INT_CHARS = (function() {
 	var pic = { }, ws = $WHITE_SPACES;
@@ -800,7 +796,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		} else if (literalSequence.length === 2) {
 			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return 'submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -965,7 +961,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
 				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
