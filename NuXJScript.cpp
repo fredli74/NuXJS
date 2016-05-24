@@ -4058,9 +4058,20 @@ struct Support {
 		return Value(time(0) * 1000.0 + engine.unixEpochTimeDiff);
 	}
 
-	static Value localTimeToUTC(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		time_t t = (argc > 0 ? static_cast<time_t>(argv[0].toDouble() / 1000.0 + 0.5) : time(0));
-		return Value(mktime(gmtime(&t)) * 1000.0);
+	static Value localTimeDifference(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - engine.unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
+		const struct tm localTM = *localtime(&t);
+		const struct tm utcTM = *gmtime(&t);
+		struct tm newTM;
+		memset(&newTM, 0, sizeof (newTM));
+		newTM.tm_year = utcTM.tm_year;
+		newTM.tm_mon = utcTM.tm_mon;
+		newTM.tm_mday = utcTM.tm_mday;
+		newTM.tm_hour = utcTM.tm_hour;
+		newTM.tm_min = utcTM.tm_min;
+		newTM.tm_sec = utcTM.tm_sec;
+		newTM.tm_isdst = localTM.tm_isdst;
+		return Value(t * 1000.0 - mktime(&newTM) * 1000.0);
 	}
 };
 
@@ -4086,7 +4097,7 @@ static struct {
 	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat },
 	{ String("charCodeAt"), Support::charCodeAt }, { String("substring"), Support::substring },
 	{ String("submatch"), Support::submatch }, { String("getCurrentTime"), Support::getCurrentTime }
-	, { String("localTimeToUTC"), Support::localTimeToUTC }
+	, { String("localTimeDifference"), Support::localTimeDifference }
 };
 
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
