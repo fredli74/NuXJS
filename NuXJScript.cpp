@@ -4059,7 +4059,7 @@ struct Support {
 	}
 
 	static Value localTimeDifference(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - engine.unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
+		const time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - engine.unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
 		const struct tm localTM = *localtime(&t);
 		const struct tm utcTM = *gmtime(&t);
 		struct tm newTM;
@@ -4071,7 +4071,8 @@ struct Support {
 		newTM.tm_min = utcTM.tm_min;
 		newTM.tm_sec = utcTM.tm_sec;
 		newTM.tm_isdst = localTM.tm_isdst;
-		return Value(t * 1000.0 - mktime(&newTM) * 1000.0);
+		const time_t newTime = mktime(&newTM);
+		return (newTime == -1 ? Value::NOT_A_NUMBER : Value(t * 1000.0 - newTime * 1000.0));
 	}
 };
 
@@ -4136,6 +4137,8 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		refTM.tm_mday = 1;
 		time_t refTime = mktime(&refTM);
 		time_t refTimeAsUTC = mktime(gmtime(&refTime));
+		assert(refTime != -1);
+		assert(refTimeAsUTC != -1);
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
