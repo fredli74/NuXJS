@@ -793,6 +793,7 @@ class Engine {
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
+				double unixEpochTimeDiff;
 };
 
 class ScriptFrame : public LazyObject<Frame> {

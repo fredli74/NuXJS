@@ -4054,8 +4054,8 @@ struct Support {
 		return Value(false);
 	}
 
-	static Value getLocalTime(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return Value(time(0) * 1000.0);
+	static Value getCurrentTime(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Value(time(0) * 1000.0 + engine.unixEpochTimeDiff);
 	}
 
 	static Value localTimeToUTC(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4085,7 +4085,7 @@ static struct {
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
 	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat },
 	{ String("charCodeAt"), Support::charCodeAt }, { String("substring"), Support::substring },
-	{ String("submatch"), Support::submatch }, { String("getLocalTime"), Support::getLocalTime }
+	{ String("submatch"), Support::submatch }, { String("getCurrentTime"), Support::getCurrentTime }
 	, { String("localTimeToUTC"), Support::localTimeToUTC }
 };
 
@@ -4097,7 +4097,7 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), o
 		, booleanPrototype(&heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
-		, arrayPrototype(&heap) {
+		, arrayPrototype(&heap), unixEpochTimeDiff(0.0) {
 	assert(heap.belongs(globals));
 
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
@@ -4118,6 +4118,16 @@ Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), o
 }
 
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
+	{	// time() is not guaranteed to return utc time, so we perform some conversions to find the actual implementation
+		struct tm refTM;
+		memset(&refTM, 0, sizeof (refTM));
+		refTM.tm_year = 80;
+		refTM.tm_mday = 1;
+		time_t refTime = mktime(&refTM);
+		time_t refTimeAsUTC = mktime(gmtime(&refTime));
+		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
+	}
+	
 	ScriptObject* supportObject = gcHeap.protect(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	// FIX : no new String?
 	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
