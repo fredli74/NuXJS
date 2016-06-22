@@ -607,29 +607,29 @@ Date.UTC = function(year, month, date, hours, minutes, seconds, ms) {
 	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms));
 };
 Date.prototype.toISOString = function() {
-	var z, y, dt, tm;
-	if ($isNaN(z = this.Value)) throw RangeError("Invalid time value");
+	var z = this.Value;
+	if ($isNaN(z)) throw RangeError("Invalid time value");
 	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z");
 };
 Date.prototype.toUTCString = function() {
-	var z;
-	if ($isNaN(z = this.Value)) throw RangeError("Invalid time value");
-	return ($toDateString(z) + " " + $toTimeString(z) + " GMT");
+	var z = this.Value;
+	if ($isNaN(z)) throw RangeError("Invalid time value");
+	return ($toDateString(z) + " " + $toTimeString(z));
 };
 Date.prototype.toString = function() {
-	var z, l;
-	if ($isNaN(l = $toLocalTime(z = this.Value))) throw RangeError("Invalid time value");
-	return ($toDateString(l) + " " + $toTimeString(l) + " GMT" + $toTimeOffsetString(z));
+	var l = $toLocalTime(this.Value);
+	if ($isNaN(l)) throw RangeError("Invalid time value");
+	return ($toDateString(l) + " " + $toTimeString(l));
 };
 Date.prototype.toDateString = function() {
-	var l;
-	if ($isNaN(l = $toLocalTime(this.Value))) throw RangeError("Invalid time value");
+	var l = $toLocalTime(this.Value);
+	if ($isNaN(l)) throw RangeError("Invalid time value");
 	return $toDateString(l);
 };
 Date.prototype.toTimeString = function() {
-	var z, l;
-	if ($isNaN(l = $toLocalTime(z = this.Value))) throw RangeError("Invalid time value");
-	return ($toTimeString(l) + " GMT" + toTimeOffsetString(z));
+	var l = $toLocalTime(this.Value);
+	if ($isNaN(l)) throw RangeError("Invalid time value");
+	return $toTimeString(l);
 };
 
 Date.prototype.toLocaleString = Date.prototype.toString;
@@ -715,8 +715,7 @@ var $msPerDay = 86400000,
 			argc > 4 ? $int(minutes) : 0, argc > 5 ? $int(seconds) : 0, argc > 6 ? $int(ms) : 0);
 	},
 	$toDateString = function(z) { return (0 <= (y = (dt = $dateFromEpoch(z))[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2); },
-	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : ""); },
-	$toTimeOffsetString = function(z) { var tz = $localTimeDiff(z), tza = (tza = (tz < 0 ? -tz : tz) / $msPerHour), tzh; return (tza > 0 ? (tz < 0 ? "-" : "+") + ("0" + (tzh = $floor(tza))).slice(-2) + ("0" + $floor((tza-tzh) * 60)).slice(-2) : ""); };
+	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : ""); };
 
 
 

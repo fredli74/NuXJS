@@ -4,13 +4,13 @@ var d;
 
 console = { log:print };
 
-// console.log( (d = new Date(1603585029123 + -3*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + -2*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + -1*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + 0*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + 1*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + 2*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
-// console.log( (d = new Date(1603585029123 + 3*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+$support.localTimeDifference(d.valueOf())+")" )
+ console.log( (d = new Date(1603585029123 + -3*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + -2*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + -1*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + 0*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + 1*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + 2*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
+ console.log( (d = new Date(1603585029123 + 3*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
 
 
 // console.log("2020-10-25 00:17:09.123 = " + (new Date(2020,9,25,0,17,9,123)).valueOf() + " == 1603577829123 / " + (new Date(2020,9,25,0,17,9,123)).toString());
@@ -30,7 +30,6 @@ console.log("");
 
 console.log( (new Date()).toString() );
 
-console.log( $support.localTimeDifference( -51506840571000 ) );
 console.log( (new Date(-51506840571000)).toISOString() ); 
 console.log( (new Date(-51506840571000)).toString() ); 
 
