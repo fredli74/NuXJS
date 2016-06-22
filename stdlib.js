@@ -589,6 +589,137 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 	})
 });
 
+/* --- Date --- */
+var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
+	var v;
+	if (!(this instanceof Date)) {
+		return (new Date()).toString()
+	} else if (arguments.length >= 2 && arguments.length <= 7) {
+		this.Value = $timeClip($fromLocalTime($makeDateTime.apply(this, arguments)));
+	} else if (arguments.length === 1) {
+		this.Value = $timeClip(typeof (v = $support.toPrimitiveString(arguments[0])) === "String" ? this.parse(v) : +v);
+	} else {
+		this.Value = $support.getCurrentTime();
+	}
+};
+Date.parse = function(s) { throw "Not implemented"; };
+Date.UTC = function(year, month, date, hours, minutes, seconds, ms) { 
+	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms));
+};
+Date.prototype.toISOString = function() {
+	var z, y, dt, tm;
+	if ($isNaN(z = this.Value)) throw RangeError("Invalid time value");
+	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z");
+};
+Date.prototype.toUTCString = function() {
+	var z;
+	if ($isNaN(z = this.Value)) throw RangeError("Invalid time value");
+	return ($toDateString(z) + " " + $toTimeString(z) + " GMT");
+};
+Date.prototype.toString = function() {
+	var z, l;
+	if ($isNaN(l = $toLocalTime(z = this.Value))) throw RangeError("Invalid time value");
+	return ($toDateString(l) + " " + $toTimeString(l) + " GMT" + $toTimeOffsetString(z));
+};
+Date.prototype.toDateString = function() {
+	var l;
+	if ($isNaN(l = $toLocalTime(this.Value))) throw RangeError("Invalid time value");
+	return $toDateString(l);
+};
+Date.prototype.toTimeString = function() {
+	var z, l;
+	if ($isNaN(l = $toLocalTime(z = this.Value))) throw RangeError("Invalid time value");
+	return ($toTimeString(l) + " GMT" + toTimeOffsetString(z));
+};
+
+Date.prototype.toLocaleString = Date.prototype.toString;
+Date.prototype.toLocaleDateString = Date.prototype.toDateString;
+Date.prototype.toLocaleTimeString = Date.prototype.toTimeString;
+
+Date.prototype.valueOf = function() { return this.Value; };
+Date.prototype.getTime = function() { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return this.Value; };
+Date.prototype.getFullYear = function() { return $dateFromEpoch($toLocalTime(this.Value))[0]; };
+Date.prototype.getUTCFullYear = function() { return $dateFromEpoch(this.Value)[0]; };
+Date.prototype.getMonth = function() { return $dateFromEpoch($toLocalTime(this.Value))[1]; };
+Date.prototype.getUTCMonth = function() { return $dateFromEpoch(this.Value)[1]; };
+Date.prototype.getDate = function() { return $dateFromEpoch($toLocalTime(this.Value))[2]; };
+Date.prototype.getUTCDate = function() { return $dateFromEpoch(this.Value)[2]; };
+Date.prototype.getDay = function() { return $weekdayFromTime($toLocalTime(this.Value)); };
+Date.prototype.getUTCDay = function() { return $weekdayFromTime(this.Value); };
+Date.prototype.getHours = function() { return $hourFromTime($toLocalTime(this.Value)); };
+Date.prototype.getUTCHours = function() { return $hourFromTime(this.Value); };
+Date.prototype.getMinutes = function() { return $minFromTime($toLocalTime(this.Value)); };
+Date.prototype.getUTCMinutes = function() { return $minFromTime(this.Value); };
+Date.prototype.getSeconds = function() { return $secFromTime($toLocalTime(this.Value)); };
+Date.prototype.getUTCSeconds = function() { return $secFromTime(this.Value); };
+Date.prototype.getMilliseconds = function() { return $msFromTime($toLocalTime(this.Value)); };
+Date.prototype.getUTCMilliseconds = function() { return $msFromTime(this.Value); };
+Date.prototype.getTimezoneOffset = function() { return (this.Value - $toLocalTime(this.Value)) / $msPerMinute; };
+Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = $timeClip(+time)); };
+Date.prototype.setMilliseconds = function(ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 3, arguments)))); };
+Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 3, arguments))); };
+Date.prototype.setSeconds = function(sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 2, arguments)))); };
+Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 2, arguments))); };
+Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 1, arguments)))); };
+Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 1, arguments))); };
+Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 0, arguments)))); };
+Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 0, arguments))); };
+Date.prototype.setDate = function(date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 2, arguments)))); };
+Date.prototype.setUTCDate = function(date) { return (this.Value = $timeClip($setDateParts(this.Value, 2, arguments))); };
+Date.prototype.setMonth = function(month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 1, arguments)))); };
+Date.prototype.setUTCMonth = function(month, date) { return (this.Value = $timeClip($setDateParts(this.Value, 1, arguments))); };
+Date.prototype.setFullYear = function(year, month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($isNaN(this.Value) ? 0 : $toLocalTime(this.Value), 0, arguments)))); };
+Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = $timeClip($setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))); };
+
+var $msPerDay = 86400000,
+	$msPerHour = 3600000,
+	$msPerMinute = 60000,
+	$msPerSecond = 1000,
+	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)); },
+	$toPrimitive = function(v) { return (!$isPrimitive(v) ? $support.toPrimitiveNumber(v) : v); },
+	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x); },
+	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))); },
+	$epochFromDate = function(year, month, day) {
+		year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
+		var era = $int( (year >= 0 ? year : year - 399) / 400 );
+		var yoe = year - era * 400;
+		var doy = $int( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
+		var doe = yoe * 365 + $int(yoe / 4) - $int(yoe / 100) + doy;
+		return (era * 146097 + doe - 719468) * $msPerDay;
+	},
+	$dateFromEpoch = function(z) {
+		z = $floor(z / $msPerDay) + 719468;
+		var era = $int( (z >= 0 ? z : z - 146096) / 146097 );
+		var doe = z - era * 146097;
+		var yoe = $int( (doe - $int(doe / 1460) + $int(doe / 36524) - $int(doe / 146096)) / 365 );
+		var y = yoe + era * 400;
+	    var doy = doe - (365 * yoe + $int(yoe / 4) - $int(yoe/100) );
+	    var mp = $int( (5 * doy + 2) / 153);
+	    var m = mp + (mp < 10 ? 2 : -10);
+	    var d = doy - $int( (153 * mp + 2) / 5 ) + 1;
+	    return [ (y + (m <= 1)), m, d ];
+	},
+	$epochFromTime = function(hour, minute, second, ms) { return hour * $msPerHour + minute * $msPerMinute + second * $msPerSecond + ms; },
+	$timeFromEpoch = function(z) { return [ $mod($floor(z / $msPerHour), 24), $mod($floor(z / $msPerMinute), 60), $mod($floor(z / $msPerSecond), 60), $mod(z, $msPerSecond) ]; },
+	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000 /* 2016-01-01T00:00:00.000Z */); },
+	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000 /* 2016-07-01T00:00:00.000Z */); },
+	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); },	// local max is during DST
+	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); }, // local min is timezone (non DST)
+	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l); },
+	$fromLocalTime = function(z) { return (z - $localTimeDiff(z - $localMaxDiff())); },
+	$toLocalTime = function(z) { return z + $localTimeDiff(z); },
+	$makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
+		var argc = arguments.length;
+		return $epochFromDate( (year = $int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
+			$int(month), (argc > 2 ? $int(date) : 1)) + $epochFromTime( argc > 3 ? $int(hours) : 0,
+			argc > 4 ? $int(minutes) : 0, argc > 5 ? $int(seconds) : 0, argc > 6 ? $int(ms) : 0);
+	},
+	$toDateString = function(z) { return (0 <= (y = (dt = $dateFromEpoch(z))[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2); },
+	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : ""); },
+	$toTimeOffsetString = function(z) { var tz = $localTimeDiff(z), tza = (tza = (tz < 0 ? -tz : tz) / $msPerHour), tzh; return (tza > 0 ? (tz < 0 ? "-" : "+") + ("0" + (tzh = $floor(tza))).slice(-2) + ("0" + $floor((tza-tzh) * 60)).slice(-2) : ""); };
+
+
+
 /* --- RegExp --- */
 
 var v = 1;
@@ -1190,6 +1321,7 @@ $defineProperties(RegExp.prototype, { dontEnum: true }, {
 $defineProperties($global, { dontEnum: true }, {
 	Array: Array,
 	Boolean: Boolean,
+	Date: Date,
 	Function: Function,
 	Math: $support.createWrapper('Math', void 0),
 	Number: Number,
