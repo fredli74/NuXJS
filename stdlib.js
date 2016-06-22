@@ -593,11 +593,11 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
 	var v;
 	if (!(this instanceof Date)) {
-		return (new Date()).toString()
+		return (new Date()).toString();
 	} else if (arguments.length >= 2 && arguments.length <= 7) {
 		this.Value = $timeClip($fromLocalTime($makeDateTime.apply(this, arguments)));
 	} else if (arguments.length === 1) {
-		this.Value = $timeClip(typeof (v = $support.toPrimitiveString(arguments[0])) === "String" ? this.parse(v) : +v);
+		this.Value = $timeClip(typeof (v = arguments[0]) === "string" ? Date.parse($support.toPrimitiveString(v)) : +$support.toPrimitiveNumber(v));
 	} else {
 		this.Value = $support.getCurrentTime();
 	}
@@ -675,7 +675,6 @@ var $msPerDay = 86400000,
 	$msPerHour = 3600000,
 	$msPerMinute = 60000,
 	$msPerSecond = 1000,
-	$toPrimitive = function(v) { return (!$isPrimitive(v) ? $support.toPrimitiveNumber(v) : v); },
 	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x); },
 	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))); },
 	$epochFromDate = function(year, month, day) {
@@ -729,7 +728,7 @@ var $msPerDay = 86400000,
 			$int(month), (argc > 2 ? $int(date) : 1)) + $epochFromTime( argc > 3 ? $int(hours) : 0,
 			argc > 4 ? $int(minutes) : 0, argc > 5 ? $int(seconds) : 0, argc > 6 ? $int(ms) : 0);
 	},
-	$toDateString = function(z) { return (0 <= (y = (dt = $dateFromEpoch(z))[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2); },
+	$toDateString = function(z) { var y, dt = $dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2); },
 	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : ""); };
 
 
