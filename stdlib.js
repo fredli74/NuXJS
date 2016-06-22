@@ -675,7 +675,6 @@ var $msPerDay = 86400000,
 	$msPerHour = 3600000,
 	$msPerMinute = 60000,
 	$msPerSecond = 1000,
-	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)); },
 	$toPrimitive = function(v) { return (!$isPrimitive(v) ? $support.toPrimitiveNumber(v) : v); },
 	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x); },
 	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))); },
@@ -701,13 +700,29 @@ var $msPerDay = 86400000,
 	},
 	$epochFromTime = function(hour, minute, second, ms) { return hour * $msPerHour + minute * $msPerMinute + second * $msPerSecond + ms; },
 	$timeFromEpoch = function(z) { return [ $mod($floor(z / $msPerHour), 24), $mod($floor(z / $msPerMinute), 60), $mod($floor(z / $msPerSecond), 60), $mod(z, $msPerSecond) ]; },
-	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000 /* 2016-01-01T00:00:00.000Z */); },
-	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000 /* 2016-07-01T00:00:00.000Z */); },
+	$setDateParts = function(z, n, a) {
+		var i, d = $dateFromEpoch(z), r = $mod(z, $msPerDay);
+		for (i = 0; i < a.length; ++i, ++n) d[n] = $int(a[i]);
+		return $epochFromDate.apply(null, d) + r;
+	},
+	$setTimeParts = function(z, n, a) {
+		var i, t = $timeFromEpoch(z), r = $floor(z / $msPerDay) * $msPerDay;
+		for (i = 0; i < a.length; ++i, ++n) t[n] = $int(a[i]);
+		return $epochFromTime.apply(null, t) + r;
+	},
+	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000); }, // 2016-01-01T00:00:00.000Z
+	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000); }, // 2016-07-01T00:00:00.000Z
 	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); },	// local max is during DST
 	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); }, // local min is timezone (non DST)
 	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l); },
 	$fromLocalTime = function(z) { return (z - $localTimeDiff(z - $localMaxDiff())); },
 	$toLocalTime = function(z) { return z + $localTimeDiff(z); },
+	$weekdayFromTime = function(z) { return $mod($floor(z / $msPerDay) +4, 7); },
+	$hourFromTime = function(z) { return $mod($floor(z / $msPerHour), 24); },
+	$minFromTime = function(z) { return $mod($floor(z / $msPerMinute), 60); },
+	$secFromTime = function(z) { return $mod($floor(z / $msPerSecond), 60); },
+	$msFromTime = function(z) { return $mod(z, $msPerSecond); },
+	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)); },
 	$makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
 		var argc = arguments.length;
 		return $epochFromDate( (year = $int(year)) + (0 <= year && year <= 99 ? 1900 : 0),

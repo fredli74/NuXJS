@@ -12,6 +12,45 @@ console = { log:print };
  console.log( (d = new Date(1603585029123 + 2*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
  console.log( (d = new Date(1603585029123 + 3*60*60*1000)).valueOf() + " = " + String( d ) + " / " + d.toUTCString() + " / " + d.toISOString() + " ("+d.getTimezoneOffset()+")" )
 
+ console.log( d.toDateString() );
+ console.log( d.toTimeString() );
+ console.log( d.toString() );
+ console.log( d.toUTCString() );
+ console.log( d.valueOf() );
+ console.log( d.getTime() );
+ console.log( d.getFullYear() );
+ console.log( d.getUTCFullYear() );
+ console.log( d.getMonth() );
+ console.log( d.getUTCMonth() );
+ console.log( d.getDate() );
+ console.log( d.getUTCDate() );
+ console.log( d.getDay() );
+ console.log( d.getUTCDay() );
+ console.log( d.getHours() );
+ console.log( d.getUTCHours() );
+ console.log( d.getMinutes() );
+ console.log( d.getUTCMinutes() );
+ console.log( d.getSeconds() );
+ console.log( d.getUTCSeconds() );
+ console.log( d.getMilliseconds() );
+ console.log( d.getUTCMilliseconds() );
+ console.log( d.getTimezoneOffset() );
+
+ console.log( d.setTime(123) );
+ console.log( d.setMilliseconds(123) );
+ console.log( d.setUTCMilliseconds(123) );
+ console.log( d.setSeconds(123) );
+ console.log( d.setUTCSeconds(123) );
+ console.log( d.setMinutes(123) );
+ console.log( d.setUTCMinutes(123) );
+ console.log( d.setHours(123) );
+ console.log( d.setUTCHours(123) );
+ console.log( d.setDate(123) );
+ console.log( d.setUTCDate(123) );
+ console.log( d.setMonth(123) );
+ console.log( d.setUTCMonth(123) );
+ console.log( d.setFullYear(123) );
+ console.log( d.setUTCFullYear(123) );
 
 // console.log("2020-10-25 00:17:09.123 = " + (new Date(2020,9,25,0,17,9,123)).valueOf() + " == 1603577829123 / " + (new Date(2020,9,25,0,17,9,123)).toString());
 // console.log("2020-10-25 01:17:09.123 = " + (new Date(2020,9,25,1,17,9,123)).valueOf() + " == 1603581429123 / " + (new Date(2020,9,25,1,17,9,123)).toString());
