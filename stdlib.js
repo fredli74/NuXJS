@@ -602,33 +602,59 @@ var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
 		this.Value = $support.getCurrentTime();
 	}
 };
-Date.parse = function(s) { throw "Not implemented"; };
+Date.parse = function(s) {
+	var z, y, i = 0, ch, tz = $support.undefined, tzh, tzm,
+		readPart = function(l) {
+			var v;
+			for (v = 0;l > 0;--l) if ("0" <= s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
+			return v;
+		};
+
+	z = $epochFromDate(
+		((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
+		s[i] === "-" && (++i, readPart(2) -1),
+		s[i] === "-" && (++i, readPart(2)) || 1) + $epochFromTime(
+		((ch = s[i]) === "T" || ch === " ") && (++i, readPart(2)) || 0,
+		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+		(ch = s[i]) === "." && (++i, readPart(3)) || 0);
+
+	while (ch !== $support.undefined && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
+
+	if (ch === "Z") tz = 0;
+	else if (ch === "+" || ch === "-") {
+		++i, tzh = readPart(2) * $msPerHour,
+		s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * $msPerMinute,
+		$isNaN(tzh) || (tz = ch === "-" ? -tzh : tzh);
+    }
+	return (tz === $support.undefined ? $fromLocalTime(z) : z - tz);
+};
 Date.UTC = function(year, month, date, hours, minutes, seconds, ms) { 
 	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms));
 };
 Date.prototype.toISOString = function() {
 	var z = this.Value;
-	if ($isNaN(z)) throw RangeError("Invalid time value");
+	if ($isNaN(z)) throw RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
 	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z");
 };
 Date.prototype.toUTCString = function() {
 	var z = this.Value;
-	if ($isNaN(z)) throw RangeError("Invalid time value");
+	if ($isNaN(z)) return "Invalid Date";
 	return ($toDateString(z) + " " + $toTimeString(z));
 };
 Date.prototype.toString = function() {
 	var l = $toLocalTime(this.Value);
-	if ($isNaN(l)) throw RangeError("Invalid time value");
+	if ($isNaN(l)) return "Invalid Date";
 	return ($toDateString(l) + " " + $toTimeString(l));
 };
 Date.prototype.toDateString = function() {
 	var l = $toLocalTime(this.Value);
-	if ($isNaN(l)) throw RangeError("Invalid time value");
+	if ($isNaN(l)) return "Invalid Date";
 	return $toDateString(l);
 };
 Date.prototype.toTimeString = function() {
 	var l = $toLocalTime(this.Value);
-	if ($isNaN(l)) throw RangeError("Invalid time value");
+	if ($isNaN(l)) return "Invalid Date";
 	return $toTimeString(l);
 };
 
@@ -714,8 +740,8 @@ var $msPerDay = 86400000,
 	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); },	// local max is during DST
 	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); }, // local min is timezone (non DST)
 	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l); },
-	$fromLocalTime = function(z) { return (z - $localTimeDiff(z - $localMaxDiff())); },
-	$toLocalTime = function(z) { return z + $localTimeDiff(z); },
+	$fromLocalTime = function(z) { return $isNaN(z) ? z : (z - $localTimeDiff(z - $localMaxDiff())); },
+	$toLocalTime = function(z) { return $isNaN(z) ? z : z + $localTimeDiff(z); },
 	$weekdayFromTime = function(z) { return $mod($floor(z / $msPerDay) +4, 7); },
 	$hourFromTime = function(z) { return $mod($floor(z / $msPerHour), 24); },
 	$minFromTime = function(z) { return $mod($floor(z / $msPerMinute), 60); },
