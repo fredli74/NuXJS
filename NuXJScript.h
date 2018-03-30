@@ -105,7 +105,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					count = newSize;
 				}
 				void insert(T* p, const T* b, const T* e) {
-					assert(0 <= p && p <= begin() + count);
+					assert(begin() <= p && p <= begin() + count);
 					assert(b <= e);
 					UInt32 o = p - begin();
 					reserve(count + (e - b));
