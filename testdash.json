@@ -1380,7 +1380,7 @@
 		"category": "not_es3"
 	},
 	"language/expressions/assignment/fn-name-fn": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/assignment/fn-name-gen": {
 		"category": "not_es3"
@@ -1905,7 +1905,7 @@
 		"category": "not_es3"
 	},
 	"language/expressions/function/name": {
-		"category": "todo"
+		"category": "not_es3"
 	},
 	"language/expressions/generators/has-instance": {
 		"category": "not_es3"

@@ -13,6 +13,23 @@
 		getInternalProperty(object: object, 'class'|'value'|'prototype'): any
 		hasOwnProperty(object: object, name: string): boolean
 		isPropertyEnumerable(object: object, name: string): boolean
+		pow(x: number, y: number): number
+		parseFloat(s: string) : number
+		charCodeAt(s: string, i: number): string
+		substring(s: string, from: number, to: number): string
+		submatch(text: string, offset: number, match: string): boolean
+		getCurrentTime(): number
+		localTimeDifference(): number
+		acos(x: number): number
+		asin(x: number): number
+		atan(x: number): number
+		cos(x: number): number
+		exp(x: number): number
+		floor(x: number): number
+		log(x: number): number
+		sin(x: number): number
+		sqrt(x: number): number
+		tan(x: number): number
 		undefined
 		NaN
 		Infinity
@@ -423,6 +440,18 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		for (var i = 0; i < n; ++i) s += $toString(args[i]);
 		return s;
 	}),
+	indexOf: $unconstructable(function indexOf(searchString, position) {
+		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length;
+		if ((i = $toInteger(position)) < 0) i = 0;
+		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
+		return -1;
+	}),
+	lastIndexOf: $unconstructable(function indexOf(searchString, position) {
+		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length;
+		if ($isNaN(position = +position) || (i = $toInteger(position)) > e) i = e;
+		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
+		return -1;
+	}),
 	slice: $unconstructable(function slice(start, end) {
 		var s = $toString(this);
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
@@ -445,10 +474,10 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		}
 		return $support.substring($toString(this), start, end);
 	}),
-	toUpperCase: $unconstructable(function() { return $translateString($toString(this), $lowerToUpper); }),
-	toLocaleUpperCase: $unconstructable(function() { return $translateString($toString(this), $lowerToUpper); }),
-	toLowerCase: $unconstructable(function() { return $translateString($toString(this), $upperToLower); }),
-	toLocaleLowerCase: $unconstructable(function() { return $translateString($toString(this), $upperToLower); }),
+	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
+	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
+	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), $upperToLower); }),
+	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), $upperToLower); }),
 	valueOf: $unconstructable(function valueOf() {
 		$checkClass(this, 'String', 'valueOf');
 		return $support.getInternalProperty(this, 'value');
