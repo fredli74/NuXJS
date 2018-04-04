@@ -500,7 +500,6 @@ class WrapperObject : public ScriptObject {
 	public:		typedef ScriptObject super;
 				WrapperObject(Heap* heap, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
-				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 	protected:	const String* const className;
 				const Value wrapped;
@@ -741,7 +740,7 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 };
 
 enum ErrorType {
-	GENERIC_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, ERROR_TYPE_COUNT
+	GENERIC_ERROR, EVAL_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, URI_ERROR, ERROR_TYPE_COUNT
 };
 
 class Error : public LazyObject<Object> {

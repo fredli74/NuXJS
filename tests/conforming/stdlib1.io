@@ -140,6 +140,17 @@
 < Error.length: 1
 < length : dontEnum,readOnly,dontDelete, (deleted:false)
 -
+> testConstructor("EvalError");
+< EvalError: function
+< EvalError : dontEnum, (deleted:true)
+< EvalError.prototype: EvalError
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< EvalError.prototype.constructor: function
+< constructor : dontEnum, (deleted:true)
+< true
+< EvalError.length: 1
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+-
 > testConstructor("RangeError");
 < RangeError: function
 < RangeError : dontEnum, (deleted:true)
@@ -182,6 +193,17 @@
 < constructor : dontEnum, (deleted:true)
 < true
 < TypeError.length: 1
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+-
+> testConstructor("URIError");
+< URIError: function
+< URIError : dontEnum, (deleted:true)
+< URIError.prototype: URIError
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< URIError.prototype.constructor: function
+< constructor : dontEnum, (deleted:true)
+< true
+< URIError.length: 1
 < length : dontEnum,readOnly,dontDelete, (deleted:false)
 -
 >     

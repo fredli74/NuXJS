@@ -17,6 +17,8 @@
 	Again, I redefine that. It's strictly ES3 now.
 
 *) No RegExp support. Including literals etc.
+	
+	It's there now after all.
 
 *) implicit valueOf and toString conversions are done earlier than in ECMA standard and not necessarily in the same order or number of times. E.g. v[o]++ in Ecmascript means two calls to toString() but one in NuXJScript.
 
@@ -34,7 +36,7 @@
 
 *) The following point:
 		
-		12.4: In Edition 3, an object is created, as if by new Object()to serve as the scope for resolving the name of the exception parameter passed to a catch clause of a try statement. If the actual exception object is a function and it is called from within the catch clause, the scope object will be passed as the this value of the call. The body of the function can then define new properties on its this value and those property names become visible identifiers bindings within the scope of the catch clause after the function returns. In Edition 5, when an exception parameter is called as a function, undefined is passed as the this value. 
+		12.4: In Edition 3, an object is created, as if by new Object() to serve as the scope for resolving the name of the exception parameter passed to a catch clause of a try statement. If the actual exception object is a function and it is called from within the catch clause, the scope object will be passed as the this value of the call. The body of the function can then define new properties on its this value and those property names become visible identifiers bindings within the scope of the catch clause after the function returns. In Edition 5, when an exception parameter is called as a function, undefined is passed as the this value. 
 
 	*is* respected (sort of), although it is a 5.1 change... this will be the global object as a regular function call (which is the same in effect as undefined because it is converted to the global object).
 
@@ -72,3 +74,5 @@
 		// prototype-chain has the same name. This is a side-effect of a q&d fix for a performance problem concerning adding
 		// elements to arrays. Since creating your own read-only properties isn't a part of Ecmascript 3 standard (and no
 		// built-in object has read-only numerical properties), I'm going to let this pass.
+
+*) For String.prototype.match the Ecmascript 3 specification doesn't state that null should be returned for global regular expression patterns when no match is found, but it seems like this has always been the de-facto behavior. It was documented first in Ecmascript 5 but NuXJScript conforms to this rule anyhow. Also, the ES3 spec doesn't say that the *standard* built-in function RegExp.prototype.exec should be used, so a strict interpretation would allow the user to change the function used by reassigning RegExp.prototype.exec. We follow the ES5 spec here and will disregard any custom RegExp.prototype.exec function. See 15.5.4.10.

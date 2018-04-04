@@ -10,6 +10,7 @@
 		createWrapper(className: string, internalValue: any, prototype: object): object
 		specialConstructor(regularCall: function): function									// = exception on construction and no .prototype either
 		specialConstructor(regularCall: function, constructorCall: function): function
+		callWithArgs(func: function, [this: object], [args: array], [offset: number]): any
 		getInternalProperty(object: object, 'class'|'value'|'prototype'): any
 		hasOwnProperty(object: object, name: string): boolean
 		isPropertyEnumerable(object: object, name: string): boolean
@@ -42,7 +43,9 @@ var $global = this;
 var $unconstructable = $support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = $support.isNaN, $isFinite = $support.isFinite, $floor = $support.floor, $NaN = $support.NaN
-		, $Infinity = $support.Infinity, $submatch = $support.submatch;
+		, $Infinity = $support.Infinity, $submatch = $support.submatch
+		, $getInternalProperty = $support.getInternalProperty, $callWithArgs = $support.callWithArgs;
+var $regExpExec;
 var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 var $WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 var $PARSE_INT_CHARS = (function() {
@@ -64,6 +67,19 @@ function $StringBuilder() {
 		this.buffers[i] = '';
 	}
 }
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
 $StringBuilder.prototype.append = function append(s) {
 	for (var i = 0, n = 256; (this.buffers[i] += s).length >= n && i + 1 < this.buffers.length; n <<= 1, ++i) {
 		s = this.buffers[i];
@@ -115,7 +131,7 @@ function $defineProperties(object, attribs, props) {
 }
 
 function $checkClass(object, expectedClass, forFunction) {
-	if ($support.getInternalProperty(object, 'class') !== expectedClass) {
+	if ($getInternalProperty(object, 'class') !== expectedClass) {
 		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
 	}
 }
@@ -179,7 +195,7 @@ function $toPrecision(value, digits, eNotationBelow) {
 
 function $getInternalNumber(object, forFunction) {
 	$checkClass(object, 'Number', forFunction);
-	return $support.getInternalProperty(object, 'value');
+	return $getInternalProperty(object, 'value');
 }
 
 /* --- Object --- */
@@ -200,13 +216,13 @@ $defineProperties(Object.prototype, { dontEnum: true }, {
 	valueOf: $unconstructable(function valueOf() { return this; }),
 	toString: $unconstructable(function toString() {
 		var s;
-		return '[object ' + (((s = $support.getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
+		return '[object ' + (((s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
 	}),
 	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 	hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
 	propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
 	isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
-		while (v = $support.getInternalProperty(v, 'prototype')) {
+		while (v = $getInternalProperty(v, 'prototype')) {
 			if (v === this) return true;
 		}
 		return false;
@@ -231,17 +247,17 @@ $defineProperties(Function.prototype, { dontEnum: true }, {
 	apply: $unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
 		var theClass;
 		if (argArray == null) argArray = [ ];
-		else if ((theClass = $support.getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
+		else if ((theClass = $getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
 			throw TypeError("Argument list has wrong type");
 		};
-		return $support.callWithArgs(this, thisArg, argArray, 0);
+		return $callWithArgs(this, thisArg, argArray, 0);
 	}),
 	call: $unconstructable(function call(thisArg) { // FIX : <- 100% native version in the future I think
-		return $support.callWithArgs(this, thisArg, arguments, 1);
+		return $callWithArgs(this, thisArg, arguments, 1);
 	}),
 	toString: $unconstructable(function toString() { // FIX : <- generic, make a factory function
 		$checkClass(this, 'Function', 'toString');
-		return $support.getInternalProperty(this, 'value');
+		return $getInternalProperty(this, 'value');
 	})
 });
 
@@ -258,11 +274,11 @@ $defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: $unconstructable(function valueOf() {
 		$checkClass(this, 'Boolean', 'valueOf');
-		return $support.getInternalProperty(this, 'value');
+		return $getInternalProperty(this, 'value');
 	}),
 	toString: $unconstructable(function toString() {
 		$checkClass(this, 'Boolean', 'toString');
-		return '' + $support.getInternalProperty(this, 'value');
+		return '' + $getInternalProperty(this, 'value');
 	})
 });
 
@@ -440,17 +456,36 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		for (var i = 0; i < n; ++i) s += $toString(args[i]);
 		return s;
 	}),
-	indexOf: $unconstructable(function indexOf(searchString, position) {
-		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length;
-		if ((i = $toInteger(position)) < 0) i = 0;
+	indexOf: $unconstructable(function indexOf(searchString) { // .length should be 1
+		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
+		if ((i = $toInteger(pos)) < 0) i = 0;
 		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
-	lastIndexOf: $unconstructable(function indexOf(searchString, position) {
-		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length;
-		if ($isNaN(position = +position) || (i = $toInteger(position)) > e) i = e;
+	lastIndexOf: $unconstructable(function lastIndexOf(searchString) { // .length should be 1
+		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
+		if ($isNaN(pos = +pos) || (i = $toInteger(pos)) > e) i = e;
 		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
 		return -1;
+	}),
+	localeCompare: $unconstructable(function localeCompare(that) {
+		var me, him;
+		return ((me = $toString(this)) === (him = $toString(that)) ? 0 : (me < him ? -1 : 1));
+	}),
+	match: $unconstructable(function match(regexp) {
+		if ($getInternalProperty(regexp, 'class') !== 'RegExp') regexp = new RegExp(regexp);
+		var args = [ $toString(this) ];
+		if (!regexp.global) return $callWithArgs($regExpExec, regexp, args);
+		else {
+			var i = regexp.lastIndex = 0, a = [ ], s;
+			do {
+				if ((r = $callWithArgs($regExpExec, regexp, args)) === null) {
+					return (i === 0 ? null : a);
+				}
+				a[i++] = (s = r[0]);
+				if (s === '') ++regexp.lastIndex;
+			} while (true);
+		}
 	}),
 	slice: $unconstructable(function slice(start, end) {
 		var s = $toString(this);
@@ -480,11 +515,11 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), $upperToLower); }),
 	valueOf: $unconstructable(function valueOf() {
 		$checkClass(this, 'String', 'valueOf');
-		return $support.getInternalProperty(this, 'value');
+		return $getInternalProperty(this, 'value');
 	}),
 	toString: $unconstructable(function toString() {
 		$checkClass(this, 'String', 'toString');
-		return $support.getInternalProperty(this, 'value');
+		return $getInternalProperty(this, 'value');
 	})
 });
 
@@ -506,7 +541,7 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 	concat: $unconstructable(function concat(item1) {
 		var a = [ ], argv, argc = (argv = arguments).length, n = 0, v = this;
 		for (var i = -1; i < argc; v = argv[++i]) {
-			if ($support.getInternalProperty(v, 'class') !== 'Array') {
+			if ($getInternalProperty(v, 'class') !== 'Array') {
 				a[n++] = v;
 			} else {
 				for (var j = 0, e = v.length; j < e; ++j) if (j in v) a[n + j] = v[j];
@@ -1319,7 +1354,7 @@ function $execRegExp(re, string) {
 	string = $toString(string);
 	if ((i = (re.global ? $toInteger(re.lastIndex) : 0)) >= 0) {
 		for (l = string.length; i <= l; ++i) {
-			if (m = $support.getInternalProperty(re, 'value')(string, i)) {
+			if (m = $getInternalProperty(re, 'value')(string, i)) {
 				if (re.global) {
 					re.lastIndex = m[1];
 				}
@@ -1335,7 +1370,7 @@ var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multil
 var $regExpCache = { };
 var $regExpPrototype;
 var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
-		return ($support.getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
+		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
 		// TODO : short-cut most of this through cache instead of only the func def.
 		pattern = (pattern === void 0 ? '' : $toString(pattern));
@@ -1362,7 +1397,7 @@ var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp
 
 $defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $regExpPrototype = RegExp.prototype });
 $defineProperties(RegExp.prototype, { dontEnum: true }, {
-	exec: $unconstructable(function exec(string) {
+	exec: $unconstructable($regExpExec = function exec(string) {
 		$checkClass(this, 'RegExp', 'exec');
 		var m, a = null;
 		if (m = $execRegExp(this, string)) {
@@ -1453,8 +1488,8 @@ $defineProperties(Math, { dontEnum: true }, {
 	exp: $unconstructable(function exp(v) { return $support.exp(+v); }),
 	floor: $unconstructable(function floor(v) { return $floor(+v); }),
 	log: $unconstructable(function log(v) { return $support.log(+v); }),
-	max: $unconstructable(function max(x, y) { var m = -$Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
-	min: $unconstructable(function min(x, y) { var m = $Infinity, v; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
+	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
+	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
 	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y); }),
 	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))); }),
 	sin: $unconstructable(function sin(v) { return $support.sin(+v); }),
@@ -1474,7 +1509,7 @@ function createErrorConstructor(name, prototype) {
 };
 
 (function() {
-	var ERROR_NAMES = [ 'Error', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError' ];
+	var ERROR_NAMES = [ 'Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError' ];
 
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
@@ -1503,10 +1538,10 @@ function createErrorConstructor(name, prototype) {
 
 $defineProperties(Array, { dontEnum: true }, {
 	isArray: $unconstructable(function isArray(o) {
-		return $support.getInternalProperty(o, 'class') === 'Array';
+		return $getInternalProperty(o, 'class') === 'Array';
 	}),
 	getPrototypeOf: $unconstructable(function getPrototypeOf(o) {
-		return $support.getInternalProperty(o, 'prototype');
+		return $getInternalProperty(o, 'prototype');
 	})
 });
 
@@ -1515,7 +1550,7 @@ $defineProperties(Object, { dontEnum: true }, {
 		$support.defineProperty(o, $toString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
 	}),
 	getPrototypeOf: $unconstructable(function getPrototypeOf(o) {
-		return $support.getInternalProperty(o, 'prototype');
+		return $getInternalProperty(o, 'prototype');
 	})
 });
 

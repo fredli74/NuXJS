@@ -99,7 +99,8 @@ const String IS_NOT_A_FUNCTION_STRING(" is not a function");
 const String IS_NOT_DEFINED_STRING(" is not defined");
 const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
 const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
-	String("Error"), String("RangeError"), String("ReferenceError"), String("SyntaxError"), String("TypeError")
+	String("Error"), String("EvalError"), String("RangeError"), String("ReferenceError"), String("SyntaxError")
+	, String("TypeError"), String("URIError")
 };
 
 /* --- Utilities --- */
@@ -1035,7 +1036,6 @@ WrapperObject::WrapperObject(Heap* heap, const String* className, const Value& v
 }
 
 const String* WrapperObject::getClassName() const { return className; }
-const String* WrapperObject::toString(GCHeap& heap) const { return (wrapped.isUndefined() ? super::toString(heap) : wrapped.toString(heap)); }
 Value WrapperObject::getInternalValue(GCHeap& heap) const { return wrapped; }
 
 /* --- StringWrapper --- */

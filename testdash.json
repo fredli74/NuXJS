@@ -3288,7 +3288,7 @@
 		"category": ""
 	},
 	"language/literals/regexp/S7.8.5_A2.4_T2": {
-		"category": ""
+		"category": "todo"
 	},
 	"language/literals/regexp/S7.8.5_A3.1_T1": {
 		"category": ""
@@ -3324,7 +3324,7 @@
 		"category": ""
 	},
 	"language/literals/regexp/u-astral": {
-		"category": ""
+		"category": "todo"
 	},
 	"language/literals/regexp/u-case-mapping": {
 		"category": "not_es3"
@@ -3333,7 +3333,7 @@
 		"category": "not_es3"
 	},
 	"language/literals/regexp/u-unicode-esc": {
-		"category": ""
+		"category": "not_es3"
 	},
 	"language/literals/string/S7.8.4_A2.2_T1": {
 		"category": "todo"
@@ -5212,5 +5212,11 @@
 	},
 	"language/statements/try/cptn-try": {
 		"category": "not_es3"
+	},
+	"language/statements/variable/S12.2_A4": {
+		"category": "todo"
+	},
+	"language/statements/function/S13_A7_T1": {
+		"category": "todo"
 	}
 }
