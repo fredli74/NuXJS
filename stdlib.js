@@ -479,11 +479,8 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		else {
 			var i = regexp.lastIndex = 0, a = [ ], s;
 			do {
-				if ((r = $callWithArgs($regExpExec, regexp, args)) === null) {
-					return (i === 0 ? null : a);
-				}
-				a[i++] = (s = r[0]);
-				if (s === '') ++regexp.lastIndex;
+				if ((r = $callWithArgs($regExpExec, regexp, args)) === null) return (i === 0 ? null : a);
+				if ((a[i++] = (s = r[0])) === '') ++regexp.lastIndex;
 			} while (true);
 		}
 	}),
