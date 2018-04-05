@@ -300,6 +300,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 			return sign + s;
 		}
 	}),
+	toLocaleString: Object.prototype.toLocaleString,
 	toExponential: $unconstructable(function toExponential(fractionDigits) {
 		var value = $getInternalNumber(this, 'toExponential')
 		var string = '';
@@ -470,6 +471,17 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		else if ((end = $toInteger(end)) < 0) end = s.length + end;
 		return $support.substring(s, start, end);
 	}),
+/*	split: $unconstructable(function split(separator, limit) {
+		var s = $toString(this);
+		var a = [ ];
+		limit = ((limit === void 0) ? 0xFFFFFFFF : $toInteger(limit));
+		var sl = s.length;
+		if ($getInternalProperty(separator, 'class') !== 'RegExp') separator = $toString(separator);
+		if (limit === 0) {
+			return a;
+		}
+
+	}),*/
 	substr: $unconstructable(function substr(start, length) {
 		var s = $toString(this);
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
