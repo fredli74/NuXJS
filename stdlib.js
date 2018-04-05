@@ -61,34 +61,13 @@ var $PARSE_INT_CHARS = (function() {
 	return pic;
 })();
 
-function $StringBuilder() {
-	this.buffers = [ ];
-	for (var i = 0; i < 20; ++i) {
-		this.buffers[i] = '';
-	}
-}
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
-/////// FFFFIIIIIXXX FIX FIX FIX FIX THIS IS SOOOOO WRONG!!! concatenating a small string to a >256 length string will insert the small string first!!
+function $StringBuilder() { var i = 20, b = this.buffers = [ ]; do { b[--i] = ''; } while (i > 0); }
 $StringBuilder.prototype.append = function append(s) {
-	for (var i = 0, n = 256; (this.buffers[i] += s).length >= n && i + 1 < this.buffers.length; n <<= 1, ++i) {
-		s = this.buffers[i];
-		this.buffers[i] = '';
-	}
+	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = ''; }
 }
 $StringBuilder.prototype.toString = function toString() {
-	var s = this.buffers[0];
-	for (var i = 1; i < this.buffers.length; ++i) s += this.buffers[i];
+	var i, b, s = (b = this.buffers)[i = 19];
+	do { s += b[--i]; } while (i > 0);
 	return s;
 }
 
