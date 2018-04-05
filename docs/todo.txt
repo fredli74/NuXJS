@@ -246,7 +246,10 @@ Compiler
 
 	* let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
 
-	* also would be good if a["ko"] or a[3423] didn't create a TO_STRING_OP
+	* also would be good if a["ko"] or a[3423] didn't create a OBJ_TO_STRING_OP, this looks really silly doesn't it?
+		114:CONST #0
+		116:OBJ_TO_STRING
+		117:GET_PROPERTY
 
 	* instead of flushing/discarding results of statements directly, couldn't we keep them until the next statement? i.e. eliminating stuff like "WRITE_INDEXED #-1", "POP", "READ_INDEXED #-1" (except when branch targets of course)
 
