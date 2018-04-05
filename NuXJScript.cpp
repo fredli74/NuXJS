@@ -2568,14 +2568,47 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return d;
 }
 
+void Compiler::maybePrimitive(bool doEmit, bool preferString) {
+	if (doEmit) {
+		emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP);
+	}
+}
+
 Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, bool preferString) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); return xr;
-		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
-		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::PUSHED: {
+			maybePrimitive(toPrimitive, preferString);
+			return xr;
+		}
+		
+		case ExpressionResult::NONE: {
+			emit(Processor::VOID_OP);
+			break;
+		}
+		
+		case ExpressionResult::CONSTANT: {
+			emitWithConstant(Processor::CONST_OP, xr.v);
+			break;
+		}
+		
+		case ExpressionResult::INDEXED: {
+			emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt());
+			maybePrimitive(toPrimitive, preferString);
+			break;
+		}
+		
+		case ExpressionResult::NAMED: {
+			emitWithConstant(Processor::READ_NAMED_OP, xr.v);
+			maybePrimitive(toPrimitive, preferString);
+			break;
+		}
+		
+		case ExpressionResult::PROPERTY: {
+			emit(Processor::GET_PROPERTY_OP);
+			maybePrimitive(toPrimitive, preferString);
+			break;
+		}
+		
 		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);

@@ -123,3 +123,9 @@ DONE
 	* with statement, it's actually not too bad... check http://stackoverflow.com/questions/61552/are-there-legitimate-uses-for-javascripts-with-statement
 	
 	* FIX : The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.    For example:     3in     is an error and not the two input elements 3 and in.
+
+	* also would be good if a["ko"] or a[3423] didn't create a OBJ_TO_STRING_OP, this looks really silly doesn't it?
+		114:CONST #0
+		116:OBJ_TO_STRING
+		117:GET_PROPERTY
+

@@ -1,22 +1,20 @@
 function StringBuilder() {
-	this.buffers = [ ];
-	for (var i = 0; i < 20; ++i) {
-		this.buffers[i] = '';
-	}
+	var i = 20, b = this.buffers = [ ]; do { b[--i] = ''; } while (i > 0);
 }
-StringBuilder.prototype.push = function push(s) {
-	var i = 0, n = 256;
-	while ((this.buffers[i] += s).length >= n && i + 1 < this.buffers.length) {
-		s = this.buffers[i];
-		this.buffers[i] = '';
-		n <<= 1;
-		++i;
-	}
+
+StringBuilder.prototype.append = function append(s) {
+	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = ''; }
 }
-StringBuilder.prototype.get = function get() {
-	var s = this.buffers[0];
-	for (var i = 1; i < this.buffers.length; ++i) s += this.buffers[i];
+
+StringBuilder.prototype.toString = function toString() {
+	var i, b, s = (b = this.buffers)[i = 19];
+	do { s += b[--i]; } while (i > 0);
 	return s;
 }
 
-for (var i = 0; i < 10; ++i) (function() { var builder = new StringBuilder(); for (var i = 0; i < 100000; ++i) builder.push('x'); var s = builder.get(); print(s.length); })();
+for (var i = 0; i < 10; ++i) (function() {
+	var builder = new StringBuilder;
+	for (var i = 0; i < 100000; ++i) builder.append('x');
+	var s = builder.toString();
+	print(s.length);
+})();

@@ -23,7 +23,7 @@ elif [ "$1" == "32" ]; then
 	MODEL="-m32"
 	shift
 else
-	MODEL="-m32"
+	MODEL="-m64"
 fi
 
 if [ $# -lt 2 ]; then
