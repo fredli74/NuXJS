@@ -2568,14 +2568,14 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return d;
 }
 
-Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, bool preferString) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); return xr;
+		case ExpressionResult::PUSHED: if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); return xr;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); break;
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); if (toPrimitive) emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP); break;
 		default: assert(0);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
@@ -2814,8 +2814,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 
 		case IN_OPERATOR: {
-			makeRValue(xr);
-			emit(Processor::OBJ_TO_STRING_OP);
+			makeRValue(xr, true, true);
 			xr = makeRValue(operand(op));
 			emit(op.vmOp);
 			break;
@@ -2948,8 +2947,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case PROPERTY_BRACKETS: {
 			xr = makeRValue(xr);
-			makeRValue(operand(op)); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
-			emit(Processor::OBJ_TO_STRING_OP);
+			makeRValue(operand(op), true, true); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
