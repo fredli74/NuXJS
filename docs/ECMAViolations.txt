@@ -76,3 +76,11 @@
 		// built-in object has read-only numerical properties), I'm going to let this pass.
 
 *) For String.prototype.match the Ecmascript 3 specification doesn't state that null should be returned for global regular expression patterns when no match is found, but it seems like this has always been the de-facto behavior. It was documented first in Ecmascript 5 but NuXJScript conforms to this rule anyhow. Also, the ES3 spec doesn't say that the *standard* built-in function RegExp.prototype.exec should be used, so a strict interpretation would allow the user to change the function used by reassigning RegExp.prototype.exec. We follow the ES5 spec here and will disregard any custom RegExp.prototype.exec function. See 15.5.4.10.
+
+*) Implements the following ES5 methods:
+	15.4.3.2 Array.isArray ( arg )
+	15.2.4.5 Object.prototype.hasOwnProperty (V)
+	15.2.4.6 Object.prototype.isPrototypeOf (V)
+	15.2.3.2 Object.getPrototypeOf ( O )
+	15.2.3.6 Object.defineProperty ( O, P, Attributes )
+	

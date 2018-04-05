@@ -193,11 +193,11 @@ $defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, 
 $defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
 	valueOf: $unconstructable(function valueOf() { return this; }),
+	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 	toString: $unconstructable(function toString() {
 		var s;
 		return '[object ' + (((s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
 	}),
-	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 	hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
 	propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
 	isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
@@ -280,6 +280,7 @@ $defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, 
 $defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
 	valueOf: $unconstructable(function valueOf() { return $getInternalNumber(this, 'valueOf'); }),
+	toLocaleString: Object.prototype.toLocaleString,
 	toString: $unconstructable(function toString(radix) {
 		var value = $getInternalNumber(this, 'toString')
 		if (radix === void 0 || !$isFinite(value)) {
@@ -300,7 +301,6 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 			return sign + s;
 		}
 	}),
-	toLocaleString: Object.prototype.toLocaleString,
 	toExponential: $unconstructable(function toExponential(fractionDigits) {
 		var value = $getInternalNumber(this, 'toExponential')
 		var string = '';
@@ -635,6 +635,7 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		};
 		qsort(0, this.length >>> 0);
 	}),
+	toLocaleString: Object.prototype.toLocaleString,
 	toString: $unconstructable(function toString() {
 		$checkClass(this, 'Array', 'toString');
 		return this.join();
@@ -1335,8 +1336,6 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	return code;
 }
 
-function $eval(s) { return eval(s); }
-
 function $execRegExp(re, string) {
 	var i, m, l;
 	string = $toString(string);
@@ -1354,7 +1353,7 @@ function $execRegExp(re, string) {
 }
 
 var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' };
-
+function $evalThere(s) { return eval(s); } // eval without local variables, FIX : why?
 var $regExpCache = { };
 var $regExpPrototype;
 var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
@@ -1374,7 +1373,7 @@ var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp
 		template.source = pattern;
 		var key, func;
 		if (!(func = $regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
-			$regExpCache[key] = func = $eval($compileRegExp(pattern, template.ignoreCase, template.multiline));
+			$regExpCache[key] = func = $evalThere($compileRegExp(pattern, template.ignoreCase, template.multiline));
 		}
 		var re = $support.createWrapper('RegExp', func, $regExpPrototype);
 		$defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
@@ -1487,7 +1486,7 @@ $defineProperties(Math, { dontEnum: true }, {
 
 /* --- Errors --- */
 
-function createErrorConstructor(name, prototype) {
+function $createErrorConstructor(name, prototype) {
 	return function(message) {
 		var e;
 		$support.defineProperty(e = $support.createWrapper('Error', name, prototype), 'message'
@@ -1502,7 +1501,7 @@ function createErrorConstructor(name, prototype) {
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
 		$support.defineProperty($global, name = ERROR_NAMES[i]
-				, constructor = createErrorConstructor(name, prototype = $support.prototypes[name]), false, true, false);
+				, constructor = $createErrorConstructor(name, prototype = $support.prototypes[name]), false, true, false);
     /* FIX : not necessary for strict es3, where .name isn't included at all in the official specs but is my own extension using standard flags
 		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
     */
@@ -1527,9 +1526,6 @@ function createErrorConstructor(name, prototype) {
 $defineProperties(Array, { dontEnum: true }, {
 	isArray: $unconstructable(function isArray(o) {
 		return $getInternalProperty(o, 'class') === 'Array';
-	}),
-	getPrototypeOf: $unconstructable(function getPrototypeOf(o) {
-		return $getInternalProperty(o, 'prototype');
 	})
 });
 
