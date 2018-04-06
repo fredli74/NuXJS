@@ -133,3 +133,5 @@ DONE
 		- good to have the name accessible for tracing/debugging (future stack-trace support?)
 		- we have it now
 
+	* let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
+

@@ -162,6 +162,7 @@ Run-time
 			- I think this is possible and we could copy the arguments like we do today
 		- third option: simply focus on making a fast mem pool instead
 			- oh snap, it's the gc that's the main performance problem, not the allocation/freeing... gotta look into that
+			- actually, I think it might be the CPU cache rather... reusing the same stack memory is much nicer to the CPU than spraying half the memory full with temporaries and then delete them...
 
 	* could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 
@@ -177,8 +178,10 @@ Run-time
 		- if we don't do the REPUSH idea instead of safe-keeping so much
 
 	* Make writes terminal and REPUSH in a = b = c type of expression...
+		- after a lot of experiments with this I think we better expand this in the future to a general opcode pattern reducer instead (see rev 19228)
 
 	* Don't lookup names in frame when not necessary. (And use hash table!)
+		- we do don't we? (use hash table), not sure what I meant with this bullet at all
 
 	* big array literals goes nuts with ADD_PROPERTY constants, should have an PUSH_ELEMENT or something instead
 		- or PUSH_ELEMENTS and PUSH_CONST_ELEMENTS and have a counter for both. PUSH_ELEMENTS allows us to push in batches of say max 32 elements on stack.
@@ -241,8 +244,6 @@ Compiler
 	* couldn't we share identical strings in the same engine? any disadvantage to that?
 
 	* simple constants pre-calculations
-
-	* let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
 
 	* instead of flushing/discarding results of statements directly, couldn't we keep them until the next statement? i.e. eliminating stuff like "WRITE_INDEXED #-1", "POP", "READ_INDEXED #-1" (except when branch targets of course)
 
