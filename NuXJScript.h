@@ -971,11 +971,11 @@ class Processor : public GCItem {
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
-					, WRITE_INDEXED_OP								// operand: local_index, stack: value ->
+					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
-					, WRITE_NAMED_OP								// operand: const_index (name), stack: value ->
+					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
-					, SET_PROPERTY_OP								// stack: object, name, value ->
+					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
@@ -1092,7 +1092,6 @@ class Compiler : public GCItem {
 				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode op);
 				void emitWithInt32(Processor::Opcode op, Int32 i);
-int lastRepushOffset;
 				QuickVector<CodeWord>* changeOutput(QuickVector<CodeWord>* newOutputCode);
 				void emitMultiple(const CodeWord* begin, const CodeWord* end);
 				int addConstant(const Value& constant);

@@ -1833,7 +1833,7 @@ bool Processor::privateRun() {
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
-			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; pop(1); break;
+			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand()];
 										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -1844,7 +1844,6 @@ bool Processor::privateRun() {
 									break;
 									
 			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
-									pop(1);
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
@@ -1862,7 +1861,8 @@ bool Processor::privateRun() {
 										break;
 									}
 									o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-									pop(3);
+									vsp[-2] = vsp[0];
+									pop(2);
 									break;
 
 			case OBJ_TO_NUMBER_OP:
@@ -2352,7 +2352,7 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
-		, withScopeDepth(0), lastRepushOffset(-1) {
+		, withScopeDepth(0) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2367,27 +2367,12 @@ static Int32& accessCodeInt32(QuickVector<CodeWord>& code, UInt32 offset) {
 }
 
 void Compiler::emit(Processor::Opcode op) {
-	if (op == Processor::REPUSH_OP) {
-		lastRepushOffset = outputCode->size();
-	} else if (op == Processor::POP_OP && lastRepushOffset >= 0) {
-		int n = outputCode->size();
-		if (lastRepushOffset == n - 2 - OPERAND_SIZE) {
-			const CodeWord op = (*outputCode)[n - 1 - OPERAND_SIZE];
-			if (op == Processor::WRITE_INDEXED_OP || op == Processor::WRITE_NAMED_OP) {
-				(*outputCode)[n - 2 - OPERAND_SIZE] = op;
-				accessCodeInt32(*outputCode, n - 1 - OPERAND_SIZE) = accessCodeInt32(*outputCode, n - OPERAND_SIZE);
-				outputCode->resize(n - 1);
-				return;
-			}
-		}
-	}
 	outputCode->append(op);
 }
 
 QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
 	QuickVector<CodeWord>* const outputWas = outputCode;
 	outputCode = newOutputCode;
-lastRepushOffset = -1;
 	return outputWas;
 }
 
@@ -2656,6 +2641,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
+			emit(Processor::POP_OP);
 			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 		}
 		default: return xr;
@@ -2669,6 +2655,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 		if (doReset) {
 			emit(Processor::VOID_OP);
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+			emit(Processor::POP_OP);
 		}
 		codeDef->temporaries.append(index);
 	}
@@ -2677,9 +2664,9 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
-		case ExpressionResult::INDEXED: emit(Processor::REPUSH_OP); emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::NAMED: emit(Processor::REPUSH_OP); emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: emit(Processor::POST_SHUFFLE_OP); emit(Processor::SET_PROPERTY_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
