@@ -2851,26 +2851,28 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case ABSTRACT_EQUAL: {
 			assert(!op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+            assert(op.primitiveOutput);
+			makeRValue(xr, false);
 			makeRValue(operand(op), op.primitiveInput);
 			emit(Processor::PRE_EQ_OP);
 			emit(op.vmOp);
-            assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 
 		case IN_OPERATOR: {
 			assert(!op.primitiveInput);
-			makeRValue(xr, true, true); // left should be primitive, right doesn't have to
-			makeRValue(operand(op), op.primitiveInput);
-			emit(op.vmOp);
             assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+			makeRValue(xr, true, true); // left should be primitive, right doesn't have to
+			makeRValue(operand(op), false);
+			emit(op.vmOp);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 
 		case POST_INC_DEC: {
+            assert(op.primitiveInput);
+            assert(op.primitiveOutput);
 			if (lineTerminatorInRange(b, p)) {
 				p = b;
 				return false;
@@ -2878,42 +2880,40 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			if (xr.t == ExpressionResult::PROPERTY) {
 				emit(Processor::REPUSH_2_OP);
 			}
-			assert(op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+			makeRValue(xr, true);
 			emit(Processor::PLUS_OP);
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			makeAssignment(xr);
 			emit(Processor::POP_OP);
-            assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 		
 		case LOGICAL_AND_OR: {
 			assert(!op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+            assert(!op.primitiveOutput);
+			makeRValue(xr, false);
 			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(Processor::POP_OP);
-			makeRValue(operand(op), op.primitiveInput);
+			makeRValue(operand(op), false);
 			completeForwardBranch(point);
-            assert(!op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED;
 			break;
 		}
 		
 		case CONDITIONAL: {
 			assert(!op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+            assert(!op.primitiveOutput);
+			makeRValue(xr, false);
 			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-			makeRValue(operand(op), op.primitiveInput);
+			makeRValue(operand(op), false);
 			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
 			rvalueExpression(op.prec);
 			completeForwardBranch(endPoint);
-            assert(!op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED;
 			break;
 		}
 		
@@ -2928,6 +2928,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case FUNCTION_CALL: {
+            assert(!op.primitiveInput);
+            assert(!op.primitiveOutput);
 			Processor::Opcode callOp = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
@@ -2935,19 +2937,16 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
 			} else {
-				assert(!op.primitiveInput);
-				makeRValue(xr, op.primitiveInput);
+				makeRValue(xr, false);
 			}
 			functionCall(callOp);
-            assert(!op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED;
 			break;
 		}
 		
 		case NEW_OPERATOR: {
 			discard(xr);
-			assert(!op.primitiveInput);
-			makeRValue(operand(op), op.primitiveInput);
+			makeRValue(operand(op), false);
 			if (!token("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
 			} else {
@@ -2961,6 +2960,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case DELETE_OPERATOR: {
+            assert(!op.primitiveInput);
+            assert(op.primitiveOutput);
 			discard(xr);
 			xr = operand(op);
 			switch (xr.t) {
@@ -2977,58 +2978,61 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case PRE_INC_DEC: {
+            assert(op.primitiveInput);
+            assert(op.primitiveOutput);
 			discard(xr);
 			xr = operand(op);
 			if (xr.t == ExpressionResult::PROPERTY) {
 				emit(Processor::REPUSH_2_OP);
 			}
-			assert(op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+			makeRValue(xr, true);
 			emit(op.vmOp);
 			makeAssignment(xr);
-            assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 		
 		case TYPE_OF: {
+            assert(!op.primitiveInput);
+            assert(op.primitiveOutput);
 			discard(xr);
 			xr = operand(op);
 			if (xr.t == ExpressionResult::NAMED) {
 				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
 			} else {
-				assert(!op.primitiveInput);
-				makeRValue(xr, op.primitiveInput);
+				makeRValue(xr, false);
 				emit(op.vmOp);
 			}
-            assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 		
         case ASSIGNMENT: {
-            const ExpressionResult rxr = makeRValue(operand(op), op.primitiveInput);
+            assert(!op.primitiveInput);
+            assert(!op.primitiveOutput);
+            const ExpressionResult rxr = makeRValue(operand(op), false);
             makeAssignment(xr);
             xr = rxr;
             break;
         }
             
         case COMPOUND_ASSIGNMENT: {
+            assert(op.primitiveInput);
+            assert(op.primitiveOutput);
             if (xr.t == ExpressionResult::PROPERTY) {
                 emit(Processor::REPUSH_2_OP);
             }
-            makeRValue(xr, op.primitiveInput);
-            makeRValue(operand(op), op.primitiveInput);
+            makeRValue(xr, true);
+            makeRValue(operand(op), true);
             emit(op.vmOp);
             makeAssignment(xr);
-            assert(op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
             break;
         }
             
 		case PROPERTY_BRACKETS: {
 			assert(!op.primitiveInput);
-			makeRValue(xr, op.primitiveInput);
+			makeRValue(xr, false);
 			makeRValue(operand(op), true, true); // left doesn't need to be primitive, but right does (and preferred string!)
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
