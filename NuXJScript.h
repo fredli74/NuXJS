@@ -972,10 +972,13 @@ class Processor : public GCItem {
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
+					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
+					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
@@ -1103,7 +1106,7 @@ class Compiler : public GCItem {
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
 				void maybePrimitive(bool doEmit, bool preferString);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
-				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
+				ExpressionResult makeAssignment(const ExpressionResult& xr, bool discard); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 
 				void completeContinues(const Scope* fromScope, const Scope* untilScope);
@@ -1114,11 +1117,11 @@ class Compiler : public GCItem {
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
-				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
+				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList, bool doDiscard = false);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
 				void functionDefinition(const String* functionName, const String* selfName = 0); // selfName is only for named function expressions
-				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
+				bool optionalExpression(ExpressionResult& xr, Precedence precedence, bool doDiscard = false);
 				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
 				void flushXR(ExpressionResult& evalXR);

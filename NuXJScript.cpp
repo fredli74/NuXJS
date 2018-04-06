@@ -1834,6 +1834,7 @@ bool Processor::privateRun() {
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
 			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
+			case WRITE_INDEXED_POP_OP:	indexed[operand()] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand()];
 										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -1845,6 +1846,10 @@ bool Processor::privateRun() {
 									
 			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
 									break;
+
+			case WRITE_NAMED_POP_OP:	frame->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
+										pop(1);
+										break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
 										error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
@@ -1864,6 +1869,14 @@ bool Processor::privateRun() {
 									vsp[-2] = vsp[0];
 									pop(2);
 									break;
+
+			case SET_PROPERTY_POP_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) {
+											error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+											break;
+										}
+										o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+										pop(3);
+										break;
 
 			case OBJ_TO_NUMBER_OP:
 				if ((o = vsp[0].asObject()) != 0) {
@@ -2177,7 +2190,9 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
 		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
-		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
+		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
+		, "READ_NAMED", "WRITE_NAMED", "WRITE_NAMED_POP"
+		, "GET_PROPERTY", "SET_PROPERTY", "SET_PROPERTY_POP", "ADD_PROPERTY"
 		, "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
@@ -2209,7 +2224,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::TRY_OP:
 			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump); break; }
 			case Processor::READ_INDEXED_OP:
-			case Processor::WRITE_INDEXED_OP: {
+			case Processor::WRITE_INDEXED_OP:
+			case Processor::WRITE_INDEXED_POP_OP: {
 				const Int32 index = getInt32(code, offset);
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
@@ -2226,6 +2242,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::DECLARE_OP:
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
+			case Processor::WRITE_NAMED_POP_OP:
 			case Processor::ADD_PROPERTY_OP:
 			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
 			default: break;
@@ -2370,13 +2387,13 @@ static Int32& accessCodeInt32(QuickVector<CodeWord>& code, UInt32 offset) {
 }
 
 void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
-	outputCode->append(op);
+	emit(op);
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	accessCodeInt32(*outputCode, outputCode->size() - OPERAND_SIZE) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
-	outputCode->append(op);
+	emit(op);
 	Int32 point = outputCode->size();
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	return point;
@@ -2629,8 +2646,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				codeDef->varNames.append(0);
 				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
 			}
-			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
-			emit(Processor::POP_OP);
+			emitWithInt32(Processor::WRITE_INDEXED_POP_OP, tempLocalIndex);
 			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 		}
 		default: return xr;
@@ -2643,21 +2659,20 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 		Int32 index = xr.v.toInt();
 		if (doReset) {
 			emit(Processor::VOID_OP);
-			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
-			emit(Processor::POP_OP);
+			emitWithInt32(Processor::WRITE_INDEXED_POP_OP, index);
 		}
 		codeDef->temporaries.append(index);
 	}
 }
 
-Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr, bool discard) {
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
+		case ExpressionResult::INDEXED: emitWithInt32(discard ? Processor::WRITE_INDEXED_POP_OP : Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emitWithConstant(discard ? Processor::WRITE_NAMED_POP_OP : Processor::WRITE_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(discard ? Processor::SET_PROPERTY_POP_OP : Processor::SET_PROPERTY_OP); break;
 	}
-	return ExpressionResult(ExpressionResult::PUSHED);
+	return ExpressionResult(discard ? ExpressionResult::NONE : ExpressionResult::PUSHED);
 }
 
 Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
@@ -2751,7 +2766,7 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 	Int32 lastAddedIndex = 0;
 	while (!token("]", true)) {
 		Compiler::ExpressionResult xr;
-		if (optionalExpression(xr, COMMA_PREC)) {
+		if (optionalExpression(xr, COMMA_PREC, false)) {
 			makeRValue(xr);
 			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(index));
 			lastAddedIndex = index;
@@ -2801,7 +2816,7 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 }
 
 // FIX : split into pre and post operators anyhow, all pre discards xr now
-bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
+bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList, bool doDiscard) {
 	const Char* b = p;
     white();
 	if (eof()) {
@@ -2812,7 +2827,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 	while (i < opCount && !token(opList[i].token, false)) {
 		++i;
 	}
-	if (i >= opCount) return false;
+	if (i >= opCount) {
+		return false;
+	}
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
 		p = b;
@@ -2865,8 +2882,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			emit(Processor::PLUS_OP);
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
-			xr = makeAssignment(xr);
-			emit(Processor::POP_OP);
+			makeAssignment(xr, true);
+			xr = ExpressionResult::PUSHED;
 			break;
 		}
 		
@@ -2946,7 +2963,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			}
 			makeRValue(xr, true);
 			emit(op.vmOp);
-			xr = makeAssignment(xr);
+			xr = makeAssignment(xr, false);
 			break;
 		}
 		
@@ -2974,7 +2991,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			} else {
 				makeRValue(operand(op), op.toPrimitive);
 			}
-			xr = makeAssignment(xr);
+			xr = makeAssignment(xr, false);
 			break;
 		}
 		
@@ -2986,6 +3003,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		default: assert(0);
+	}
+	
+	if (doDiscard) {
+		xr = discard(xr);
 	}
 	return true;
 }
@@ -3005,7 +3026,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 }
 
-bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
+bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence, bool doDiscard) {
 	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
 		if (eof()) {
 			return false;
@@ -3109,6 +3130,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		b = p;
 	}
 	p = b;
+	if (doDiscard) {
+		xr = discard(xr);
+	}
 	return true;
 }
 
@@ -3163,8 +3187,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 		}
 	}
 	if (func) {
-		makeAssignment(lxr);
-		emit(Processor::POP_OP);
+		makeAssignment(lxr, true);
 	}
 	return lxr;
 }
@@ -3174,8 +3197,7 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 	ExpressionResult lxr(declareIdentifier(String::newHashedString(heap, b, p), false));
 	if (token("=", true)) {
 		rvalueExpression(COMMA_PREC);
-		makeAssignment(lxr);
-		emit(Processor::POP_OP);
+		makeAssignment(lxr, true);
 	}
 	return lxr;
 }
@@ -3220,7 +3242,7 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 		makeRValue(xr);
 		returnSafeKept(xr, true);
 	}
-	discard(makeAssignment(iterXR));
+	makeAssignment(iterXR, true);
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	flushXR(evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
@@ -3243,9 +3265,7 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	QuickVector<CodeWord> incCode(&heap);
 	outputCode = &incCode;
 	ExpressionResult incXR;
-	if (optionalExpression(incXR, LOWEST_PREC)) {
-		discard(incXR);
-	}
+	optionalExpression(incXR, LOWEST_PREC, true);
 	expectToken(")", true);
 	outputCode = &codeDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
@@ -3325,10 +3345,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			completeBreaks(&newLabelScope);
 		} else {
 			p = b;
-			optionalExpression(evalXR, LOWEST_PREC);
-			if (compilingFor != FOR_EVAL) {
-				evalXR = discard(evalXR);
-			}
+			optionalExpression(evalXR, LOWEST_PREC, compilingFor != FOR_EVAL);
 			semicolon();
 		}
 	} else {
@@ -3456,7 +3473,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					outputCode = &initCode;
 					acceptInOperator = false;
 					ExpressionResult iterXR;
-					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
+					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC, false);
 					acceptInOperator = true;
 					outputCode = outputCodeWas;
 					if (gotExpression && token("in", true)) {
@@ -3476,7 +3493,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				}
 				ExpressionResult returnXR;
 				if (whiteNoLF()) {
-					optionalExpression(returnXR, LOWEST_PREC);
+					optionalExpression(returnXR, LOWEST_PREC, false);
 				}
 				Scope* s = currentScope;
 				bool safeKept = false;
