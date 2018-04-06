@@ -2583,7 +2583,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	switch (xr.t) {
 		case ExpressionResult::PUSHED: break;
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); toPrimitive = false; break;
-		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
+		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); toPrimitive = false; break;
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
