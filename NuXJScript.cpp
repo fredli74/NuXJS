@@ -1833,7 +1833,7 @@ bool Processor::privateRun() {
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 			case CONST_OP:			push(constants[operand()]); break;
 			case READ_INDEXED_OP:	push(indexed[operand()]); break;
-			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
+			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand()];
 										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -1844,6 +1844,7 @@ bool Processor::privateRun() {
 									break;
 									
 			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
+									pop(1);
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
@@ -1861,8 +1862,7 @@ bool Processor::privateRun() {
 										break;
 									}
 									o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-									vsp[-2] = vsp[0];
-									pop(2);
+									pop(3);
 									break;
 
 			case OBJ_TO_NUMBER_OP:
@@ -2351,7 +2351,8 @@ struct Compiler::ExpressionResult {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true), withScopeDepth(0) {
+		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
+		, withScopeDepth(0), lastRepushOffset(-1) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2361,22 +2362,47 @@ void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.manage(new (&heap) Error(errorType, heap.manage(new (&heap) String(message))))));
 }
 
-void Compiler::emit(Processor::Opcode op) {
-	outputCode->append(op);
-}
-
 static Int32& accessCodeInt32(QuickVector<CodeWord>& code, UInt32 offset) {
 	return *reinterpret_cast<Int32*>(&code[offset]);
 }
 
-void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
+void Compiler::emit(Processor::Opcode op) {
+	if (op == Processor::REPUSH_OP) {
+		lastRepushOffset = outputCode->size();
+	} else if (op == Processor::POP_OP && lastRepushOffset >= 0) {
+		int n = outputCode->size();
+		if (lastRepushOffset == n - 2 - OPERAND_SIZE) {
+			const CodeWord op = (*outputCode)[n - 1 - OPERAND_SIZE];
+			if (op == Processor::WRITE_INDEXED_OP || op == Processor::WRITE_NAMED_OP) {
+				(*outputCode)[n - 2 - OPERAND_SIZE] = op;
+				accessCodeInt32(*outputCode, n - 1 - OPERAND_SIZE) = accessCodeInt32(*outputCode, n - OPERAND_SIZE);
+				outputCode->resize(n - 1);
+				return;
+			}
+		}
+	}
 	outputCode->append(op);
+}
+
+QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
+	QuickVector<CodeWord>* const outputWas = outputCode;
+	outputCode = newOutputCode;
+lastRepushOffset = -1;
+	return outputWas;
+}
+
+void Compiler::emitMultiple(const CodeWord* begin, const CodeWord* end) {
+	outputCode->insert(outputCode->end(), begin, end);
+}
+
+void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
+	emit(op);
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	accessCodeInt32(*outputCode, outputCode->size() - OPERAND_SIZE) = i;
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
-	outputCode->append(op);
+	emit(op);
 	Int32 point = outputCode->size();
 	outputCode->resize(outputCode->size() + OPERAND_SIZE);
 	return point;
@@ -2630,7 +2656,6 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
 			}
 			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
-			emit(Processor::POP_OP);
 			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 		}
 		default: return xr;
@@ -2644,7 +2669,6 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 		if (doReset) {
 			emit(Processor::VOID_OP);
 			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
-			emit(Processor::POP_OP);
 		}
 		codeDef->temporaries.append(index);
 	}
@@ -2653,9 +2677,9 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
-		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
+		case ExpressionResult::INDEXED: emit(Processor::REPUSH_OP); emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emit(Processor::REPUSH_OP); emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(Processor::POST_SHUFFLE_OP); emit(Processor::SET_PROPERTY_OP); break;
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -3139,13 +3163,12 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (compilingFor == FOR_EVAL) {
-		QuickVector<CodeWord>* const outputCodeWas = outputCode;
-		outputCode = &setupCode;
+		QuickVector<CodeWord>* const outputCodeWas = changeOutput(&setupCode);
 		if (!func) {
 			emit(Processor::VOID_OP);
 		}
 		emitWithConstant(Processor::DECLARE_OP, Value(name));
-		outputCode = outputCodeWas;
+		changeOutput(outputCodeWas);
 		return lxr;
 	} else if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Value index;
@@ -3216,7 +3239,7 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterCode.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
 		xr = safeKeep(xr);
-		outputCode->insert(outputCode->end(), iterCode.begin(), iterCode.end());
+		emitMultiple(iterCode.begin(), iterCode.end());
 		makeRValue(xr);
 		returnSafeKept(xr, true);
 	}
@@ -3241,17 +3264,19 @@ void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, Expre
 	}
 	expectToken(";", true);
 	QuickVector<CodeWord> incCode(&heap);
-	outputCode = &incCode;
-	ExpressionResult incXR;
-	if (optionalExpression(incXR, LOWEST_PREC)) {
-		discard(incXR);
+	{
+		QuickVector<CodeWord>* const outputCodeWas = changeOutput(&incCode);
+		ExpressionResult incXR;
+		if (optionalExpression(incXR, LOWEST_PREC)) {
+			discard(incXR);
+		}
+		expectToken(")", true);
+		changeOutput(outputCodeWas);
 	}
-	expectToken(")", true);
-	outputCode = &codeDef->code;
 	statement(emptyLabelScope, emptyLabelScope, evalXR);
 	flushXR(evalXR);
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
-	outputCode->insert(outputCode->end(), incCode.begin(), incCode.end());
+	emitMultiple(incCode.begin(), incCode.end());
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	if (exitLoopPoint != INVALID_CODE_POINT) {
 		completeForwardBranch(exitLoopPoint);
@@ -3273,11 +3298,10 @@ void Compiler::semicolon(bool acceptLF) {
 void Compiler::functionStatement() {
 	const Char* b = identifier(true, false);
 	const String* name = String::newHashedString(heap, b, p);
-	QuickVector<CodeWord>* const outputCodeWas = outputCode;
-	outputCode = &setupCode;
+	QuickVector<CodeWord>* const outputCodeWas = changeOutput(&setupCode);
 	functionDefinition(name);
 	declareIdentifier(name, true);
-	outputCode = outputCodeWas;
+	changeOutput(outputCodeWas);
 }
 
 void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
@@ -3452,17 +3476,16 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				} else {
-					QuickVector<CodeWord>* const outputCodeWas = outputCode;
-					outputCode = &initCode;
+					QuickVector<CodeWord>* const outputCodeWas = changeOutput(&initCode);
 					acceptInOperator = false;
 					ExpressionResult iterXR;
 					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 					acceptInOperator = true;
-					outputCode = outputCodeWas;
+					changeOutput(outputCodeWas);
 					if (gotExpression && token("in", true)) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
-						outputCode->insert(outputCode->end(), initCode.begin(), initCode.end());
+						emitMultiple(initCode.begin(), initCode.end());
 						discard(iterXR);
 						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
@@ -3625,15 +3648,14 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					}
 					else if (token("case", false)) {
 						flushXR(evalXR);
-						QuickVector<CodeWord>* const outputCodeWas = outputCode;
-						outputCode = &testsCode;
+						QuickVector<CodeWord>* const outputCodeWas = changeOutput(&testsCode);
 						makeRValue(controlXR);
 						rvalueExpression();
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
 						emitWithInt32(Processor::JT_OP, outputCodeWas->size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
 						jumpOffsets.append(testsCode.size() - OPERAND_SIZE);
-						outputCode = outputCodeWas;
+						changeOutput(outputCodeWas);
 					} else if (token("default", false)) {
 						expectToken(":", true);
 						if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
@@ -3656,7 +3678,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
 					accessCodeInt32(testsCode, *it) -= outputCode->size() - startOffset;
 				}
-				outputCode->insert(outputCode->end(), testsCode.begin(), testsCode.end());
+				emitMultiple(testsCode.begin(), testsCode.end());
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 				completeForwardBranch(donePoint);
 				completeBreaks(&emptyLabelScope);
@@ -3691,7 +3713,7 @@ void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
-	outputCode = &codeDef->code;
+	changeOutput(&codeDef->code);
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
@@ -3703,11 +3725,10 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	}
 	makeRValue(evalXR);
 	emit(Processor::RETURN_OP);
+	assert(outputCode == &codeDef->code);
 	if (!setupCode.empty()) {
 		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
 	}
-	// FIX : shrink code vector (copy to quickarray instead?)
-	assert(outputCode == &codeDef->code);
 	codeDef->code.shrink();
 	codeDef->constants->shrink();
 if (!supressStdErr) {
