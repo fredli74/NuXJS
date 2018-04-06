@@ -456,7 +456,7 @@ double Value::toDouble() const {
 	switch (type) {
 		default: assert(0);
 		case UNDEFINED_TYPE:
-		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as true ToNumber requires conversion to a primitive type
+		case OBJECT_TYPE: return NaN();  // Notice, you shouldn't normally call toDouble on an object as proper ToNumber requires conversion to a primitive type
 		case NULL_TYPE: return 0.0;
 		case BOOLEAN_TYPE: return var.boolean ? 1.0 : 0.0;
 		case NUMBER_TYPE: return var.number;
@@ -2579,48 +2579,18 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return d;
 }
 
-void Compiler::maybePrimitive(bool doEmit, bool preferString) {
-	if (doEmit) {
-		emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP);
-	}
-}
-
 Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, bool preferString) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: {
-			maybePrimitive(toPrimitive, preferString);
-			return xr;
-		}
-		
-		case ExpressionResult::NONE: {
-			emit(Processor::VOID_OP);
-			break;
-		}
-		
-		case ExpressionResult::CONSTANT: {
-			emitWithConstant(Processor::CONST_OP, xr.v);
-			break;
-		}
-		
-		case ExpressionResult::INDEXED: {
-			emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt());
-			maybePrimitive(toPrimitive, preferString);
-			break;
-		}
-		
-		case ExpressionResult::NAMED: {
-			emitWithConstant(Processor::READ_NAMED_OP, xr.v);
-			maybePrimitive(toPrimitive, preferString);
-			break;
-		}
-		
-		case ExpressionResult::PROPERTY: {
-			emit(Processor::GET_PROPERTY_OP);
-			maybePrimitive(toPrimitive, preferString);
-			break;
-		}
-		
+		case ExpressionResult::PUSHED: break;
+		case ExpressionResult::NONE: emit(Processor::VOID_OP); toPrimitive = false; break;
+		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); break;
+		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
+	}
+	if (toPrimitive) {
+		emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP);
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
