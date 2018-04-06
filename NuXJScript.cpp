@@ -1483,8 +1483,7 @@ bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v,
 
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 	const Value* p = findProperty(key);
-	if (p == 0) return super::deleteProperty(engine, key);
-	else return (deletedArguments[p - frame->getIndexedPointer()] = true);
+    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - frame->getIndexedPointer()] = true));
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
@@ -1824,8 +1823,9 @@ bool Processor::privateRun() {
 	Object* o;
 	Int32 offset;
 	
-	while (clockCyclesLeft >= 0) {
-		--clockCyclesLeft;
+    Int32 cyclesLeft = clockCyclesLeft;
+	while (cyclesLeft >= 0) {
+		--cyclesLeft;
 		switch (*ip++) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
@@ -1927,6 +1927,7 @@ bool Processor::privateRun() {
 							ip += offset;
 							break;
 
+            case DELETE_FRAME_AND_RETURN_OP: delete frame; // fall through
 			case RETURN_OP:	ip = (csp--)->returnIP;
 							assert(ip != 0);
 							assert(csp >= cstackStart);							
@@ -1940,6 +1941,7 @@ bool Processor::privateRun() {
 							pop(1);
 							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
 							// updateInternals();
+                            clockCyclesLeft = cyclesLeft;
 							return false;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
@@ -2153,6 +2155,7 @@ bool Processor::privateRun() {
 			default: assert(0);
 		}
 	}
+    clockCyclesLeft = cyclesLeft;
 	return true;
 }
 

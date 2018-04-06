@@ -816,7 +816,6 @@ class ScriptFrame : public LazyObject<Frame> {
 				ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
-				
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(function);
 					heap.markViaReferences(indexed.begin(), indexed.end());
