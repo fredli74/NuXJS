@@ -129,3 +129,7 @@ DONE
 		116:OBJ_TO_STRING
 		117:GET_PROPERTY
 
+	* function.name is actually not a bad idea, although standardized first in ES6 (in a very complex manner where x = function() also get a name)...
+		- good to have the name accessible for tracing/debugging (future stack-trace support?)
+		- we have it now
+

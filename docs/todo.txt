@@ -109,9 +109,6 @@ Run-time
 
 	* Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
 
-	* function.name is actually not a bad idea, although standardized first in ES6 (in a very complex manner where x = function() also get a name)...
-		- good to have the name accessible for tracing/debugging (future stack-trace support?)
-
 	* perhaps it would have been better to split Frame into different pointers (more similar to ES-spec): one for running code (not changed by catch and with), one for variable object (not changed by catch, with or eval) and "current scope object" (changed by them all). This way we wouldn't have to declare so many dummy virtuals that just passes stuff upwards the Frame chain.
 
 	* array object (length property support, optimized for numerical indexes?)
@@ -162,6 +159,7 @@ Run-time
 		- two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
 			- might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
 		- another option would be to not require a frame *at all* for quick calls that doesn't have eval or sub-functions (is it possible?). Just allocate space on the value stack. But what to do with accepting too few arguments?
+			- I think this is possible and we could copy the arguments like we do today
 		- third option: simply focus on making a fast mem pool instead
 			- oh snap, it's the gc that's the main performance problem, not the allocation/freeing... gotta look into that
 
