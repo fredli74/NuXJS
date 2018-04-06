@@ -24,3 +24,9 @@
 > print(a[0])
 < 0
 -
+> o={valueOf:function() { return "111"; }}
+> print(o+333)
+> print((o++)+333)
+< 111333
+< 444
+-

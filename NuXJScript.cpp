@@ -2343,7 +2343,15 @@ struct Compiler::Scope {
 };
 				
 struct Compiler::ExpressionResult {
-	enum Type { NONE, PUSHED, CONSTANT, INDEXED, NAMED, PROPERTY };
+	enum Type {
+		NONE				// void
+		, PUSHED			// arbitrary value on stack
+		, PUSHED_PRIMITIVE	// primitive value on stack
+		, CONSTANT			// constant (and primitive) value on stack
+		, INDEXED			// arbitrary value in indexed variable
+		, NAMED				// arbitrary value in named variable
+		, PROPERTY			// arbitrary value in object property
+	};
 	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
 	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
 	Type t;
@@ -2582,8 +2590,9 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, bool preferString) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED: break;
-		case ExpressionResult::NONE: emit(Processor::VOID_OP); toPrimitive = false; break;
-		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); toPrimitive = false; break;
+		case ExpressionResult::PUSHED_PRIMITIVE: return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
+		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
+		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
@@ -2591,13 +2600,16 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	}
 	if (toPrimitive) {
 		emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP);
+		return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
+	} else {
+		return ExpressionResult(ExpressionResult::PUSHED);
 	}
-	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
 Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED:
+		case ExpressionResult::PUSHED_PRIMITIVE:
 		case ExpressionResult::INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY: {
@@ -2643,7 +2655,8 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 
 Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 	switch (xr.t) {
-		case ExpressionResult::PUSHED: emit(Processor::POP_OP); break;
+		case ExpressionResult::PUSHED:
+		case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
 		default: break;
@@ -2908,7 +2921,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			xr = operand(op);
 			switch (xr.t) {
-				case ExpressionResult::PUSHED: emit(Processor::POP_OP); /* fall through */
+				case ExpressionResult::PUSHED:
+				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
@@ -2936,7 +2950,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			xr = operand(op);
 			if (xr.t == ExpressionResult::NAMED) {
 				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
-				xr = ExpressionResult(ExpressionResult::PUSHED);
+				xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 			} else {
 				xr = makeRValue(xr);
 				emit(op.vmOp);
