@@ -2252,67 +2252,68 @@ struct OperatorInfo {
 	Associativity assoc;
 	OperatorType type;
 	Processor::Opcode vmOp;
-	bool toPrimitive; // FIX : almost true everywhere, drop and make exception for '!' ?
+	bool primitiveInput;
+	bool primitiveOutput;
 };
 
 // FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
-	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP, true },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP, true },
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true },
-	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true },
-	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true },
-	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP },
-	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP },
-	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP },
-	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP },
-	{ "typeof", 0, PREFIX_PREC, RIGHT_TO_LEFT, TYPE_OF, Processor::TYPEOF_OP }
+	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP, false, false },
+	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP, true, true },
+	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP, true, true },
+	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true, true },
+	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true, true },
+	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true, true },
+	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP, false, true },
+	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP, false, true },
+	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP, false, true },
+	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP, false, false },
+	{ "typeof", 0, PREFIX_PREC, RIGHT_TO_LEFT, TYPE_OF, Processor::TYPEOF_OP, false, true }
 };
 
 const OperatorInfo POST_OPS[] = {
-	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP },
-	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::EQ_OP },
-	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP },
-	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::USHR_OP, true },
-	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP, true },
-	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHL_OP, true },
-	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::ADD_OP, true },
-	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SUB_OP, true },
-	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MUL_OP, true },
-	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::DIV_OP, true },
-	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MOD_OP, true },
-	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::AND_OP, true },
-	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::XOR_OP, true },
-	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::OR_OP, true },
-	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP, true },
-	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP, true },
-	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true },
-	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true },
-	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true },
-	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP },
-	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP },
-	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true },
-	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true },
-	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true },
-	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP, true },
-	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP, true },
-	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP, true },
-	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true },
-	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true },
-	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP },
-	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::NEQ_OP },
-	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true },
-	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true },
-	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true },
-	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP, true },
-	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP },
-	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP },
-	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP },
-	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP },
-	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP },
-	{ "instanceof", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false },
-	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, true }	// Important: must be last
+	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP, false, true },
+	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::EQ_OP, false, true },
+	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP, false, false },
+	{ ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::USHR_OP, true, true },
+	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHR_OP, true, true },
+	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SHL_OP, true, true },
+	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::ADD_OP, true, true },
+	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::SUB_OP, true, true },
+	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MUL_OP, true, true },
+	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::DIV_OP, true, true },
+	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::MOD_OP, true, true },
+	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::AND_OP, true, true },
+	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::XOR_OP, true, true },
+	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::OR_OP, true, true },
+	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP, true, true },
+	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP, true, true },
+	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true, true },
+	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true, true },
+	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true, true },
+	{ "&&", 0, LOGICAL_AND_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JF_OP, false, false },
+	{ "||", 0, LOGICAL_OR_PREC, LEFT_TO_RIGHT, LOGICAL_AND_OR, Processor::JT_OP, false, false },
+	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true, true },
+	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true, true },
+	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true, true },
+	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP, true, true },
+	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP, true, true },
+	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP, true, true },
+	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true, true },
+	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true, true },
+	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP, false, true },
+	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::NEQ_OP, false, true },
+	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true, true },
+	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true, true },
+	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true, true },
+	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP, true, true },
+	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP, false, false },
+	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP, false, false },
+	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP, false, false },
+	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP, false, false },
+	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP, false, false },
+	{ "instanceof", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false, true },
+	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, false, true }	// Important: must be last
 };
 
 // FIX : sort
@@ -2820,29 +2821,31 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		
 		case UNARY: {
 			discard(xr);
-			xr = makeRValue(operand(op), op.toPrimitive);
+			xr = makeRValue(operand(op), op.primitiveInput);
 			emit(op.vmOp);
 			break;
 		}
 		
 		case BINARY: {
-			makeRValue(xr, op.toPrimitive);
-			xr = makeRValue(operand(op), op.toPrimitive);
+			makeRValue(xr, op.primitiveInput);
+			xr = makeRValue(operand(op), op.primitiveInput);
 			emit(op.vmOp);
 			break;
 		}
 		
 		case ABSTRACT_EQUAL: {
-			makeRValue(xr, false);
-			xr = makeRValue(operand(op), false);
+			assert(!op.primitiveInput);
+			makeRValue(xr, op.primitiveInput);
+			xr = makeRValue(operand(op), op.primitiveInput);
 			emit(Processor::PRE_EQ_OP);
 			emit(op.vmOp);
 			break;
 		}
 
 		case IN_OPERATOR: {
-			makeRValue(xr, true, true);
-			xr = makeRValue(operand(op));
+			assert(!op.primitiveInput);
+			makeRValue(xr, true, true); // left should be primitive, right doesn't have to
+			xr = makeRValue(operand(op), op.primitiveInput);
 			emit(op.vmOp);
 			break;
 		}
@@ -2855,7 +2858,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			if (xr.t == ExpressionResult::PROPERTY) {
 				emit(Processor::REPUSH_2_OP);
 			}
-			makeRValue(xr, true);
+			assert(op.primitiveInput);
+			makeRValue(xr, op.primitiveInput);
 			emit(Processor::PLUS_OP);
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
@@ -2865,19 +2869,21 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case LOGICAL_AND_OR: {
-			xr = makeRValue(xr);
+			assert(!op.primitiveInput);
+			xr = makeRValue(xr, op.primitiveInput);
 			emit(Processor::REPUSH_OP);
 			Int32 point = emitForwardBranch(op.vmOp);
 			emit(Processor::POP_OP);
-			makeRValue(operand(op));
+			makeRValue(operand(op), op.primitiveInput);
 			completeForwardBranch(point);
 			break;
 		}
 		
 		case CONDITIONAL: {
-			xr = makeRValue(xr);
+			assert(!op.primitiveInput);
+			xr = makeRValue(xr, op.primitiveInput);
 			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
-			makeRValue(operand(op));
+			makeRValue(operand(op), op.primitiveInput);
 			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
 			xr = rvalueExpression(op.prec);
@@ -2886,7 +2892,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case PROPERTY_DOT: {
-			xr = makeRValue(xr);
+			assert(!op.primitiveInput);
+			xr = makeRValue(xr, op.primitiveInput);
 			white();
 			const Char* b = identifier(true, true);
 			emitWithConstant(Processor::CONST_OP, Value(String::newHashedString(heap, b, p)));
@@ -2895,17 +2902,24 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 		
 		case FUNCTION_CALL: {
-			Processor::Opcode op = Processor::CALL_OP;
-			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) op = Processor::CALL_EVAL_OP;
-			if (xr.t == ExpressionResult::PROPERTY) op = Processor::CALL_METHOD_OP;
-			else xr = makeRValue(xr);
-			xr = functionCall(op);
+			Processor::Opcode callOp = Processor::CALL_OP;
+			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
+				callOp = Processor::CALL_EVAL_OP;
+			}
+			if (xr.t == ExpressionResult::PROPERTY) {
+				callOp = Processor::CALL_METHOD_OP;
+			} else {
+				assert(!op.primitiveInput);
+				xr = makeRValue(xr, op.primitiveInput);
+			}
+			xr = functionCall(callOp);
 			break;
 		}
 		
 		case NEW_OPERATOR: {
 			discard(xr);
-			makeRValue(operand(op));
+			assert(!op.primitiveInput);
+			makeRValue(operand(op), op.primitiveInput);
 			if (!token("(", true)) {
 				emitWithInt32(Processor::NEW_OP, 0);
 				xr = ExpressionResult(ExpressionResult::PUSHED);
@@ -2939,7 +2953,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			if (xr.t == ExpressionResult::PROPERTY) {
 				emit(Processor::REPUSH_2_OP);
 			}
-			makeRValue(xr, true);
+			assert(op.primitiveInput);
+			makeRValue(xr, op.primitiveInput);
 			emit(op.vmOp);
 			xr = makeAssignment(xr);
 			break;
@@ -2952,7 +2967,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
 				xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 			} else {
-				xr = makeRValue(xr);
+				assert(!op.primitiveInput);
+				xr = makeRValue(xr, op.primitiveInput);
 				emit(op.vmOp);
 			}
 			break;
@@ -2963,19 +2979,20 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				if (xr.t == ExpressionResult::PROPERTY) {
 					emit(Processor::REPUSH_2_OP);
 				}
-				makeRValue(xr, op.toPrimitive);
-				makeRValue(operand(op), op.toPrimitive);
+				makeRValue(xr, op.primitiveInput);
+				makeRValue(operand(op), op.primitiveInput);
 				emit(op.vmOp);
 			} else {
-				makeRValue(operand(op), op.toPrimitive);
+				makeRValue(operand(op), op.primitiveInput);
 			}
 			xr = makeAssignment(xr);
 			break;
 		}
 		
 		case PROPERTY_BRACKETS: {
-			xr = makeRValue(xr);
-			makeRValue(operand(op), true, true); // FIX : convert to string const if const, or actually if we allow Value properties and optimize array[double] we shouldn't
+			assert(!op.primitiveInput);
+			xr = makeRValue(xr, op.primitiveInput);
+			makeRValue(operand(op), true, true); // left doesn't need to be primitive, but right does (and preferred string!)
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
