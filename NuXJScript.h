@@ -996,6 +996,7 @@ class Processor : public GCItem {
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object		// FIX : I suppose this could be two immediate constants, or one 2-element array constant or even a string with a special flags prefix?
+, DELETE_FRAME_AND_RETURN_OP
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
@@ -1151,6 +1152,7 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
 				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
+bool needClosure;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);

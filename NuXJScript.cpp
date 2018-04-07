@@ -2364,7 +2364,8 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
-		, withScopeDepth(0) {
+		, withScopeDepth(0)
+, needClosure(false) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2936,6 +2937,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			Processor::Opcode callOp = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
+needClosure = true;
 			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
@@ -3059,6 +3061,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 		throw;
 	}
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
+needClosure = true;
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
@@ -3554,7 +3557,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				emit(Processor::RETURN_OP);
+				emit(needClosure ? Processor::RETURN_OP : Processor::DELETE_FRAME_AND_RETURN_OP);
 				semicolon();
 				break;
 			}
