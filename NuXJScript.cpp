@@ -3821,15 +3821,23 @@ void Compiler::compile(const String& source) {
 	}
 }
 
-GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA), newList(&managedListB), allocated(0) {
-	std::fill(pools + 0, pools + 1024 / 16, (void*)(0));
+GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
+		, newList(&managedListB), allocated(0) {
+	std::fill(pools + 0, pools + MAX_POOLED_SIZE / 16, (void*)(0));
+}
+
+int GCHeap::calcPoolIndex(const size_t size) {
+	return (0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
+			? static_cast<int>((size + (POOL_SIZE_GRANULARITY - 1)) / POOL_SIZE_GRANULARITY)
+			: -1;
 }
 
 void* GCHeap::allocate(size_t size) {
 	void* block = 0;
-	if (0 < size && size < 1024 - 15) {
-		const int poolIndex = (size + 15) / 16;
-		size = poolIndex * 16;
+	const int poolIndex = calcPoolIndex(size);
+	if (poolIndex >= 0) {
+		size = poolIndex * POOL_SIZE_GRANULARITY;
+		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
 		block = pools[poolIndex];
 		if (block != 0) {
 			pools[poolIndex] = *(static_cast<void**>(block));
@@ -3847,9 +3855,10 @@ void* GCHeap::allocate(size_t size) {
 void GCHeap::deallocate(void *ptr) {
 	size_t* p = reinterpret_cast<size_t*>(ptr) - 1;
 	size_t size = *p;
-	if (0 < size && size < 1024 - 15) {
-		const int poolIndex = (size + 15) / 16;
+	const int poolIndex = calcPoolIndex(size);
+	if (poolIndex >= 0) {
 		*(void **)(p) = pools[poolIndex];
+		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
 		pools[poolIndex] = p;
 	} else {
 		::operator delete(p);

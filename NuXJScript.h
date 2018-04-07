@@ -183,6 +183,8 @@ class GCList : public GCItem {
 				UInt32 count;
 };
 
+const int MAX_POOLED_SIZE = 1024;
+const int POOL_SIZE_GRANULARITY = 16;
 class GCHeap : public Heap {
 	public:		typedef Heap super;
 				GCHeap();
@@ -200,13 +202,14 @@ class GCHeap : public Heap {
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
 
-	protected:	GCList managedListA;
+	protected:	static int calcPoolIndex(size_t size);
+				GCList managedListA;
 				GCList managedListB;
 				GCList rootList;
 				GCList* currentList;
 				GCList* newList;
 				size_t allocated;
-				void* pools[1024 / 16];
+				void* pools[MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY];
 				
 	private:	GCHeap(const GCHeap& other); // N/A
 				GCHeap& operator=(const GCHeap& other); // N/A
