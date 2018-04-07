@@ -672,15 +672,15 @@ Flags String::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 }
 
 // FIX : speed up by skipping when string is really long
-// FNV Hash
+// Modified FNV Hash
 UInt32 String::calcHash() const {
 	if (hash == 0) {
 		UInt32 x = 2166136261U;
 		for (const Char* p = begin(), *e = end(); p < e; ++p) {
-			x *= 16777619;
-			x += *p; // FIX : FNV uses xor, not add, why did I do this? Also FNV is really made for byte processing. Also, http://www.isthe.com/chongo/tech/comp/fnv/ recommends xor'ing before multiplying. Better?
+			x = (x << 3) | (x >> (32 - 3));
+			x = (x + *p) * 16777619;
 		}
-		hash = (x == 0 ? x + 1 : x);
+		hash = (x + (x == 0 ? 1 : 0));
 	}
 	return hash;
 }
