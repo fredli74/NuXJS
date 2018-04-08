@@ -2364,7 +2364,7 @@ struct Compiler::ExpressionResult {
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeDepth(0)
-, needClosure(false) {
+		, canDeleteFrameOnExit(false) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2936,7 +2936,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			Processor::Opcode callOp = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
-needClosure = true;
+				canDeleteFrameOnExit = false;
 			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
@@ -3060,7 +3060,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 		throw;
 	}
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
-needClosure = true;
+	canDeleteFrameOnExit = false;
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
@@ -3556,7 +3556,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				emit(needClosure ? Processor::RETURN_OP : Processor::DELETE_FRAME_AND_RETURN_OP);
+				emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
 				semicolon();
 				break;
 			}
@@ -3746,6 +3746,7 @@ void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
+	canDeleteFrameOnExit = true;
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	changeOutput(&codeDef->code);
 	p = b;
@@ -3781,6 +3782,7 @@ if (!supressStdErr) {
 const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 	assert(functionName != 0);
+	canDeleteFrameOnExit = true;
 	p = b;
 	this->e = e;
 	expectToken("(", true);
