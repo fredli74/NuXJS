@@ -2028,8 +2028,7 @@ bool Processor::privateRun() {
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
-				o = constants[operand()].asObject(); // FIX : .getObject?
-				assert(o != 0);
+				o = constants[operand()].getObject();
 				push(Value(heap.manage(new (&heap) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
@@ -2039,8 +2038,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case ADD_PROPERTY_OP: {
-				o = vsp[-1].asObject();
-				assert(o != 0);
+				o = vsp[-1].getObject();
 				o->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
 				pop(1);
 				break;
@@ -2139,8 +2137,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case NEXT_PROPERTY_OP: {
-				o = vsp[0].asObject(); // FIX : .getObject?
-				assert(o != 0);
+				o = vsp[0].getObject();
 				Int32 offset = operand();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
 				if (name != 0) {

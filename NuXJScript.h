@@ -247,6 +247,7 @@ class Value {
 				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
 				Function* asFunction() const;
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
+				Object* getObject() const { assert(type == OBJECT_TYPE); return var.object; }
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
@@ -1000,8 +1001,8 @@ class Processor : public GCItem {
 					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
-					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object		// FIX : I suppose this could be two immediate constants, or one 2-element array constant or even a string with a special flags prefix?
-, DELETE_FRAME_AND_RETURN_OP
+					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
+					, DELETE_FRAME_AND_RETURN_OP
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
