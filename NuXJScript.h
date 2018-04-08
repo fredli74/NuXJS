@@ -201,8 +201,10 @@ class GCHeap : public Heap {
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
-
+                virtual ~GCHeap();
+    
 	protected:	static int calcPoolIndex(size_t size);
+				void deletePooled();
 				GCList managedListA;
 				GCList managedListB;
 				GCList rootList;
@@ -416,7 +418,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				String(const String& l, const String& r, Heap* heap = 0);
 				explicit String(const std::wstring& s, Heap* heap = 0);
 				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
-// FIX : wasn't compatible with Digital Mars, so I adde const char* constructor again, but do we care?
+// FIX : wasn't compatible with Digital Mars, so I added const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
 				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;

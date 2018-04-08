@@ -2190,7 +2190,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
-		, "RETURN", "RETURN_TO_HOST"
+		, "DELETE_FRAME_AND_RETURN", "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC", "DECLARE"
 		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "PUSH_FRAME", "POP_FRAME"
@@ -3823,7 +3823,7 @@ void Compiler::compile(const String& source) {
 
 GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
 		, newList(&managedListB), allocated(0) {
-	std::fill(pools + 0, pools + MAX_POOLED_SIZE / 16, (void*)(0));
+	std::fill(pools + 0, pools + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
 }
 
 int GCHeap::calcPoolIndex(const size_t size) {
@@ -3872,8 +3872,22 @@ void GCHeap::deallocateArray(void *ptr) { return deallocate(ptr); }
 UInt32 GCHeap::count() const { return currentList->size(); }
 size_t GCHeap::size() const { return allocated; }
 
+void GCHeap::deletePooled() {
+	for (int poolIndex = 0; poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY; ++poolIndex) {
+		void* p = pools[poolIndex];
+		while (p != 0) {
+			void* n = *(void **)(p);
+			::operator delete(p);
+			p = n;
+		}
+		pools[poolIndex] = 0;
+	}
+}
+
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
+	
+	deletePooled(); // release pooled blocks before collecting garbage = only hold on to as much memory as we required since last gc
 
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
 		item->gcMark(*this);
@@ -3900,6 +3914,10 @@ void GCHeap::mark(const GCItem* item) {
 		newList->claim(const_cast<GCItem*>(item));
 		item->gcMark(*this);
 	}
+}
+
+GCHeap::~GCHeap() {
+	deletePooled();
 }
 
 Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4363,242 +4381,247 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		}
 	};
 
-int main(int argc, const char* argv[]) {
-/*std::cout << sizeof(Value) << std::endl;
-std::cout << sizeof(String) << std::endl;
-std::cout << sizeof(ScriptObject) << std::endl;
-std::cout << sizeof(Array) << std::endl;
-std::cout << sizeof(ScriptFunction) << std::endl;*/
-supressStdErr = true;
-	const String LF_STRING("\n");
-	const String PRINT_STRING("print");
-/*std::cerr << "Value size: " << sizeof (Value) << std::endl;
-std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
-std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
-	GCHeap heap;
-	Constants globalConstants(&heap);
-	heap.protect(&globalConstants);
-	CodeDefinition globalCode(&heap, &globalConstants);
-	heap.protect(&globalCode);
-	ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
-	heap.protect(&globalClosure);
-	ScriptFrame globalsFrame(&heap, &globalClosure, 0, 0);
-	heap.protect(&globalsFrame);
-	
-	Engine engine(heap, &globalsFrame);
 
-	PrintFunction printFunction;
-	globalsFrame.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
-	GCFunction gcFunction;
-	const String GC_STRING("gc");
-	globalsFrame.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
-	
-	try {
-		std::wifstream stdlibStream("stdlib.js");
-		String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()), &heap);
-		stdlibStream.close();
-		engine.setupStandardLibrary(source);
-	}
-	catch (const std::exception& x) {
-		std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
-		return 1;
-	}
-	catch (...) {
-		std::cerr << "exception setting up standard lib" << std::endl;
-		return 1;
-	}
-supressStdErr = false;
-	
-	String source(EMPTY_STRING);
-	std::auto_ptr<std::wifstream> inputFileStream;
-	std::wistream* inStream = &std::wcin;
-	bool doTime = false;
-	long gcRate = 256;
-	bool autoGCRate = true;
-	bool pauseBeforeQuit = false;
-	for (int argi = 1; argi < argc; ++argi) {
-		if (strcmp(argv[argi], "-t") == 0) doTime = true;
-		else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
-		else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
-			gcRate = atol(argv[++argi]);
-			autoGCRate = false;
-		}
-		else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
-		else if (inputFileStream.get() == 0) {
-			inputFileStream.reset(new std::wifstream(argv[argi]));
-			inStream = inputFileStream.get();
-			interactive = false;
-		} else {
-			std::cout << "Too many arguments" << std::endl;
-			return 1;
-		}
-	}
-	while (inStream->good()) {
-		bool execute = false;
-		try {
-			std::wstring s;
-			if (interactive) {
-				std::getline(*inStream, s);
-				// FIX : add #undo that drops just the last one
-				if (s == L"#save" || s.substr(0, 6) == L"#save ") {
-					const time_t t = time(0);
-					char fn[257];
-					if (s.size() >= 6) {
-						std::wstring ws = L"tests/";
-						ws += s.substr(6);
-						ws += L".io";
-						strncpy(fn, std::string(ws.begin(), ws.end()).c_str(), 256);
-						fn[256] = 0;
-					} else {
-						strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
-					}
-					std::ofstream saveStream(fn);
-					for (std::vector<std::string>::const_iterator it = ioLines.begin(); it != ioLines.end(); ++it) {
-						saveStream << *it << std::endl;
-					}
-					saveStream.close();
-					ioLines.clear();
-					std::cout << "saved to " << fn << std::endl;
-				} else if (s == L"#purge") {
-					ioLines.clear();
-					std::cout << "purged" << std::endl;
-				} else if (!s.empty()) {
-					String line(s, &heap);
-					if (!source.empty()) source = String(source, LF_STRING, &heap);
-					source = String(source, line, &heap);
-				} else {
-					if (source.size() > 0 && source[0] == '?') {
-						source = String(String(String("print("), String(source.begin() + 1, source.end(), &heap), &heap), String(")"), &heap); // FIX : operator+
-					}
-					if (interactive) {
-						pushIOLines('>', source);
-					}
-					execute = true;
-				}
-			} else {
-				source = String(std::wstring(std::istreambuf_iterator<wchar_t>(*inStream), std::istreambuf_iterator<wchar_t>()), &heap);
-				inStream->get(); // FIX : weird, seems necessary to force !inStream->good
-				execute = true;
-			}
-			
-			if (execute) {
-				Value vstack[1024];
-				Processor::CStackEntry cstack[1024];
-				Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
-				heap.protect(&processor);
-				const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
-				processor.chain(RETURN_TO_HOST_STUB);
-				
-				Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
-				heap.protect(&compiler);
-				try {
-					compiler.compile(source);
-				}
-				catch (const Exception&) {
-					int lineNumber = 1;
-					const Char* stopPoint = compiler.getStopPoint();
-					const Char* p = source.begin();
-					while (p < stopPoint) {
-						assert(p != source.end());
-						if (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 3, *p) != LINE_TERMINATORS + 3) {
-							++lineNumber;
-						}
-						++p;
-					}
-					std::wstring ws;
-					{
-						std::wstringstream ss;
-						ss << std::wstring(L"!!!! Line: ") << lineNumber;
-						ws = ss.str();
-					}
-					std::wcout << ws << std::endl;
-					if (interactive) {
-						pushIOLines('!', String(ws, &heap));
-					}
-					throw;
-				}
-				globalsFrame.updatedCode();
-if (!supressStdErr) {
-	for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
-		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
-	}
+int testMain(int argc, const char* argv[]) {
+    /*std::cout << sizeof(Value) << std::endl;
+     std::cout << sizeof(String) << std::endl;
+     std::cout << sizeof(ScriptObject) << std::endl;
+     std::cout << sizeof(Array) << std::endl;
+     std::cout << sizeof(ScriptFunction) << std::endl;*/
+    supressStdErr = true;
+    const String LF_STRING("\n");
+    const String PRINT_STRING("print");
+    /*std::cerr << "Value size: " << sizeof (Value) << std::endl;
+     std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
+     std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
+    GCHeap heap;
+    Constants globalConstants(&heap);
+    heap.protect(&globalConstants);
+    CodeDefinition globalCode(&heap, &globalConstants);
+    heap.protect(&globalCode);
+    ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
+    heap.protect(&globalClosure);
+    ScriptFrame globalsFrame(&heap, &globalClosure, 0, 0);
+    heap.protect(&globalsFrame);
+    
+    Engine engine(heap, &globalsFrame);
+    
+    PrintFunction printFunction;
+    globalsFrame.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
+    GCFunction gcFunction;
+    const String GC_STRING("gc");
+    globalsFrame.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
+    
+    try {
+        std::wifstream stdlibStream("stdlib.js");
+        String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()), &heap);
+        stdlibStream.close();
+        engine.setupStandardLibrary(source);
+    }
+    catch (const std::exception& x) {
+        std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
+        return 1;
+    }
+    catch (...) {
+        std::cerr << "exception setting up standard lib" << std::endl;
+        return 1;
+    }
+    supressStdErr = false;
+    
+    String source(EMPTY_STRING);
+    std::auto_ptr<std::wifstream> inputFileStream;
+    std::wistream* inStream = &std::wcin;
+    bool doTime = false;
+    long gcRate = 256;
+    bool autoGCRate = true;
+    bool pauseBeforeQuit = false;
+    for (int argi = 1; argi < argc; ++argi) {
+        if (strcmp(argv[argi], "-t") == 0) doTime = true;
+        else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
+        else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
+            gcRate = atol(argv[++argi]);
+            autoGCRate = false;
+        }
+        else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
+        else if (inputFileStream.get() == 0) {
+            inputFileStream.reset(new std::wifstream(argv[argi]));
+            inStream = inputFileStream.get();
+            interactive = false;
+        } else {
+            std::cout << "Too many arguments" << std::endl;
+            return 1;
+        }
+    }
+    while (inStream->good()) {
+        bool execute = false;
+        try {
+            std::wstring s;
+            if (interactive) {
+                std::getline(*inStream, s);
+                // FIX : add #undo that drops just the last one
+                if (s == L"#save" || s.substr(0, 6) == L"#save ") {
+                    const time_t t = time(0);
+                    char fn[257];
+                    if (s.size() >= 6) {
+                        std::wstring ws = L"tests/";
+                        ws += s.substr(6);
+                        ws += L".io";
+                        strncpy(fn, std::string(ws.begin(), ws.end()).c_str(), 256);
+                        fn[256] = 0;
+                    } else {
+                        strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
+                    }
+                    std::ofstream saveStream(fn);
+                    for (std::vector<std::string>::const_iterator it = ioLines.begin(); it != ioLines.end(); ++it) {
+                        saveStream << *it << std::endl;
+                    }
+                    saveStream.close();
+                    ioLines.clear();
+                    std::cout << "saved to " << fn << std::endl;
+                } else if (s == L"#purge") {
+                    ioLines.clear();
+                    std::cout << "purged" << std::endl;
+                } else if (!s.empty()) {
+                    String line(s, &heap);
+                    if (!source.empty()) source = String(source, LF_STRING, &heap);
+                    source = String(source, line, &heap);
+                } else {
+                    if (source.size() > 0 && source[0] == '?') {
+                        source = String(String(String("print("), String(source.begin() + 1, source.end(), &heap), &heap), String(")"), &heap); // FIX : operator+
+                    }
+                    if (interactive) {
+                        pushIOLines('>', source);
+                    }
+                    execute = true;
+                }
+            } else {
+                source = String(std::wstring(std::istreambuf_iterator<wchar_t>(*inStream), std::istreambuf_iterator<wchar_t>()), &heap);
+                inStream->get(); // FIX : weird, seems necessary to force !inStream->good
+                execute = true;
+            }
+            
+            if (execute) {
+                Value vstack[1024];
+                Processor::CStackEntry cstack[1024];
+                Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
+                heap.protect(&processor);
+                const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
+                processor.chain(RETURN_TO_HOST_STUB);
+                
+                Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
+                heap.protect(&compiler);
+                try {
+                    compiler.compile(source);
+                }
+                catch (const Exception&) {
+                    int lineNumber = 1;
+                    const Char* stopPoint = compiler.getStopPoint();
+                    const Char* p = source.begin();
+                    while (p < stopPoint) {
+                        assert(p != source.end());
+                        if (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 3, *p) != LINE_TERMINATORS + 3) {
+                            ++lineNumber;
+                        }
+                        ++p;
+                    }
+                    std::wstring ws;
+                    {
+                        std::wstringstream ss;
+                        ss << std::wstring(L"!!!! Line: ") << lineNumber;
+                        ws = ss.str();
+                    }
+                    std::wcout << ws << std::endl;
+                    if (interactive) {
+                        pushIOLines('!', String(ws, &heap));
+                    }
+                    throw;
+                }
+                globalsFrame.updatedCode();
+                if (!supressStdErr) {
+                    for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
+                        std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
+                    }
+                }
+                processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
+                
+                bool done = false;
+                clock_t start = ::clock();
+                do {
+                    processor.resetTimeOut(gcRate);
+                    done = !processor.run();
+                    {
+                        long beforeSize = static_cast<long>(heap.size());
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());;
+                        if (!supressStdErr) {
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
+                        if (autoGCRate) {
+                            if (beforeSize - nowSize >= 128L * 1024 * 1024) {
+                                gcRate = 256;
+                            } else if (gcRate < 16 * 1024 * 1024) {
+                                gcRate *= 2;
+                            }
+                        }
+                    }
+                    
+                    if (done) {
+                        if (!supressStdErr) {
+                            std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
+                            assert(processor.vsp - vstack + 1 == 0);
+                            Value v = processor.getResult();
+                            std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+                        }
+                        if (doTime) {
+                            clock_t end = ::clock();
+                            const double divisor = (CLOCKS_PER_SEC / 1000.0);
+                            std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
+                        }
+                    }
+                } while (!done);
+                source = EMPTY_STRING;
+            }
+        }
+        catch (const Exception& x) {
+            source = EMPTY_STRING;
+            std::wstring ws = x.getValue().toString(heap)->toStdString();
+            ws = L"!!!! " + ws;
+            std::wcout << ws << std::endl;
+            if (!interactive) {
+                return 1;
+            } else {
+                pushIOLines('!', String(ws, &heap));
+            }
+        }
+        catch (const std::exception& x) {
+            source = EMPTY_STRING;
+            std::cout << x.what() << std::endl;
+            if (!interactive) {
+                return 1;
+            } else {
+                pushIOLines('!', String(x.what()));
+            }
+        }
+        catch (...) {
+            source = EMPTY_STRING;
+            std::cout << "Unknown exception" << std::endl;
+            if (!interactive) {
+                return 1;
+            } else {
+                pushIOLines('!', String("Unknown exception"));
+            }
+        }
+        if (execute && interactive) {
+            pushIOStop();
+        }
+    }
+    if (pauseBeforeQuit) std::wcin.get();
+    return 0;
 }
-					processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
-				
-				bool done = false;
-				clock_t start = ::clock();	
-				do {
-					processor.resetTimeOut(gcRate);
-					done = !processor.run();
-					{
-						long beforeSize = static_cast<long>(heap.size());
-						UInt32 sweptCount = heap.gc();
-						long nowSize = static_cast<long>(heap.size());;
-						if (!supressStdErr) {
-							std::cerr << "\tGC rate: " << gcRate << std::endl;
-							std::cerr << "\tGC swept: " << sweptCount << std::endl;
-							std::cerr << "\tGC kept: " << heap.count() << std::endl;
-							std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
-						}
-						if (autoGCRate) {
-							if (beforeSize - nowSize >= 128L * 1024 * 1024) {
-								gcRate = 256;
-							} else if (gcRate < 16 * 1024 * 1024) {
-								gcRate *= 2;
-							}
-						}
-					}
-				
-					if (done) {
-						if (!supressStdErr) {
-							std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
-							assert(processor.vsp - vstack + 1 == 0);
-							Value v = processor.getResult();
-							std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
-						}
-						if (doTime) {
-							clock_t end = ::clock();
-							const double divisor = (CLOCKS_PER_SEC / 1000.0);
-							std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
-						}
-					}
-				} while (!done);
-				source = EMPTY_STRING;
-			}
-		}
-		catch (const Exception& x) {
-			source = EMPTY_STRING;
-			std::wstring ws = x.getValue().toString(heap)->toStdString();
-			ws = L"!!!! " + ws;
-			std::wcout << ws << std::endl;
-			if (!interactive) {
-				return 1;
-			} else {
-				pushIOLines('!', String(ws, &heap));
-			}
-		}
-		catch (const std::exception& x) {
-			source = EMPTY_STRING;
-			std::cout << x.what() << std::endl;
-			if (!interactive) {
-				return 1;
-			} else {
-				pushIOLines('!', String(x.what()));
-			}
-		}
-		catch (...) {
-			source = EMPTY_STRING;
-			std::cout << "Unknown exception" << std::endl;
-			if (!interactive) {
-				return 1;
-			} else {
-				pushIOLines('!', String("Unknown exception"));
-			}
-		}
-		if (execute && interactive) {
-			pushIOStop();
-		}
-	}
-	if (pauseBeforeQuit) std::wcin.get();
-	return 0;
+
+int main(int argc, const char* argv[]) {
+    return testMain(argc, argv);
 }
