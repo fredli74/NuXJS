@@ -197,6 +197,7 @@ class GCHeap : public Heap {
 				UInt32 count() const;
 				size_t size() const;
 				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
+				void deletePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
 				void mark(const GCItem* item);
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
@@ -204,7 +205,6 @@ class GCHeap : public Heap {
                 virtual ~GCHeap();
     
 	protected:	static int calcPoolIndex(size_t size);
-				void deletePooled();
 				GCList managedListA;
 				GCList managedListB;
 				GCList rootList;

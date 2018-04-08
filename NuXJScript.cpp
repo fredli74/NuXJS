@@ -671,7 +671,6 @@ Flags String::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	return NONEXISTENT;
 }
 
-// FIX : speed up by skipping when string is really long
 // Modified FNV Hash
 UInt32 String::calcHash() const {
 	if (hash == 0) {
@@ -687,7 +686,7 @@ UInt32 String::calcHash() const {
 
 bool String::isEqualTo(const String& o) const {
 	return (this == &o || ( (hash == o.hash || hash == 0 || o.hash == 0)
-		&& size() == o.size() && std::equal(begin(), end(), o.begin())));
+			&& size() == o.size() && std::equal(begin(), end(), o.begin())));
 }
 
 bool String::isLessThan(const String& o) const {
@@ -3887,8 +3886,6 @@ void GCHeap::deletePooled() {
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
 	
-	deletePooled(); // release pooled blocks before collecting garbage = only hold on to as much memory as we required since last gc
-
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
 		item->gcMark(*this);
 	}
