@@ -1763,14 +1763,6 @@ void Processor::chain(const CodeWord* stub) {
 	updateInternals();
 }
 
-void Processor::chain(Function* completion) {
-	// FIX : if we decide that CodeWord is int, we could have this array const
-	static CodeWord chainCallStub[2] = { encodeOp(CALL_OP, 1) };
-	chainCallStub[1] = encodeOp(RETURN_OP, 0);
-	push(Value(completion));
-	chain(chainCallStub);
-}
-
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
 	frame = heap.manage(new (&heap) ScriptFrame(&heap, func, argc, argv));
@@ -3141,8 +3133,10 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						discard(xr);
 						const String* name = String::newHashedString(heap, b, p);
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
-						 // Notice: compilingFor != FOR_EVAL is only for non-strict mode (if we ever support strict-mode in the future)
-						if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
+						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
+						if (name->isEqualTo(ARGUMENTS_STRING)) {
+							canDeleteFrameOnExit = false;
+						} else if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
 								Value index = bucket->getValue();
@@ -3343,6 +3337,10 @@ void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
 	statement(&withScope, &withScope, evalXR);
 	--withScopeDepth;
 	emit(Processor::POP_FRAME_OP);
+}
+
+void Compiler::functionReturn() {
+	emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
 }
 
 /*
@@ -3551,7 +3549,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
+				functionReturn();
 				semicolon();
 				break;
 			}
@@ -3628,7 +3626,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 						error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
 					}
 				}
-				emit(Processor::RETURN_OP);
+				functionReturn();
 				
 				// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
 				
@@ -3744,7 +3742,6 @@ void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
-	canDeleteFrameOnExit = true;
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	changeOutput(&codeDef->code);
 	p = b;
@@ -3757,7 +3754,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 		evalXR = discard(evalXR);
 	}
 	makeRValue(evalXR);
-	emit(Processor::RETURN_OP);
+	functionReturn();
 	assert(outputCode == &codeDef->code);
 	if (!setupCode.empty()) {
 		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());

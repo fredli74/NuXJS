@@ -1025,7 +1025,6 @@ class Processor : public GCItem {
 
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
-				void chain(Function* completion);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Frame* frame, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
@@ -1112,6 +1111,7 @@ class Compiler : public GCItem {
 
 				void completeContinues(const Scope* fromScope, const Scope* untilScope);
 				void completeBreaks(const Scope* scope);
+				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
 				ExpressionResult functionCall(Processor::Opcode op);
