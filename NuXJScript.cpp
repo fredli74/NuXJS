@@ -13,17 +13,6 @@
 #include <vector>
 #include "NuXJScript.h"
 
-static inline CodeWord encodeOp(const Processor::Opcode opcode, const Int32 operand) {
-	assert(0 <= opcode && opcode < 256);
-	assert(-(1 << 23) <= operand && operand < (1 << 23));
-	return (operand << 8) | opcode;
-}
-
-static inline void decodeOp(const CodeWord codeWord, Processor::Opcode& opcode, Int32& operand) {
-	opcode = static_cast<Processor::Opcode>(codeWord & 255);
-	operand = static_cast<Int32>(codeWord) >> 8;
-}
-
 	bool supressStdErr = false; // FIX : drop
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
@@ -1733,6 +1722,17 @@ Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* csta
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0)
 	, catchers(&engine.getHeap()) { }
 
+CodeWord Processor::packInstruction(const Processor::Opcode opcode, const Int32 operand) {
+	assert(0 <= opcode && opcode < 256);
+	assert(-(1 << 23) <= operand && operand < (1 << 23));
+	return (operand << 8) | opcode;
+}
+
+void Processor::unpackInstruction(const CodeWord codeWord, Processor::Opcode& opcode, Int32& operand) {
+	opcode = static_cast<Processor::Opcode>(codeWord & 255);
+	operand = static_cast<Int32>(codeWord) >> 8;
+}
+
 void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
@@ -1828,7 +1828,7 @@ bool Processor::privateRun() {
 		--cyclesLeft;
 		Processor::Opcode opcode;
 		Int32 operand;
-		decodeOp(*ip++, opcode, operand);
+		unpackInstruction(*ip++, opcode, operand);
 		switch (opcode) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
@@ -2195,7 +2195,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	for (UInt32 offset = 0; offset < codeDef.getCodeSize();) {
 		Processor::Opcode opcode;
 		int operand;
-		decodeOp(code[offset], opcode, operand);
+		Processor::unpackInstruction(code[offset], opcode, operand);
 		if (opcode < 0 || opcode >= Processor::OP_COUNT) opcode = Processor::INVALID_OP;
 		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode - Processor::INVALID_OP];
 		++offset;
@@ -2371,7 +2371,7 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode op, Int32 operand) {
-	outputCode->append(encodeOp(op, operand));
+	outputCode->append(Processor::packInstruction(op, operand));
 }
 
 QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
@@ -2392,8 +2392,8 @@ Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 void Compiler::completeForwardBranch(Int32 point) {
 	Processor::Opcode opcode;
 	Int32 operand;
-	decodeOp((*outputCode)[point], opcode, operand);
-	(*outputCode)[point] = encodeOp(opcode, outputCode->size() - point - 1);
+	Processor::unpackInstruction((*outputCode)[point], opcode, operand);
+	(*outputCode)[point] = Processor::packInstruction(opcode, outputCode->size() - point - 1);
 }
 
 Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
@@ -3339,10 +3339,6 @@ void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
 	emit(Processor::POP_FRAME_OP);
 }
 
-void Compiler::functionReturn() {
-	emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
-}
-
 /*
 	'scopeLabelsEnd' points to the end of a range of scopes that are all labelled scopes. This is required
 	because it is legal to give while loops etc mulitple alternative labels to be used with 'continue'.
@@ -3549,7 +3545,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				functionReturn();
+				emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
 				semicolon();
 				break;
 			}
@@ -3626,7 +3622,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 						error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
 					}
 				}
-				functionReturn();
+				emit(Processor::RETURN_OP);
 				
 				// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
 				
@@ -3705,8 +3701,8 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
 					Processor::Opcode opcode;
 					Int32 operand;
-					decodeOp(testsCode[*it], opcode, operand);
-					testsCode[*it] = encodeOp(opcode, operand - (outputCode->size() - startOffset));
+					Processor::unpackInstruction(testsCode[*it], opcode, operand);
+					testsCode[*it] = Processor::packInstruction(opcode, operand - (outputCode->size() - startOffset));
 				}
 				emitMultiple(testsCode.begin(), testsCode.end());
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
@@ -3742,6 +3738,7 @@ void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
+	canDeleteFrameOnExit = (compilingFor == FOR_FUNCTION);
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	changeOutput(&codeDef->code);
 	p = b;
@@ -3754,7 +3751,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 		evalXR = discard(evalXR);
 	}
 	makeRValue(evalXR);
-	functionReturn();
+	emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
 	assert(outputCode == &codeDef->code);
 	if (!setupCode.empty()) {
 		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
@@ -3777,7 +3774,6 @@ if (!supressStdErr) {
 const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 	assert(functionName != 0);
-	canDeleteFrameOnExit = true;
 	p = b;
 	this->e = e;
 	expectToken("(", true);

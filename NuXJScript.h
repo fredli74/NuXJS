@@ -1023,6 +1023,9 @@ class Processor : public GCItem {
 					, OP_COUNT
 				};
 
+				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
+				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
+
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
@@ -1155,7 +1158,7 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
 				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
-				bool canDeleteFrameOnExit;
+				bool canDeleteFrameOnExit; // three reasons we can't delete frame on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with frame
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
