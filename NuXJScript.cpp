@@ -13,6 +13,17 @@
 #include <vector>
 #include "NuXJScript.h"
 
+static inline CodeWord encodeOp(const Processor::Opcode opcode, const Int32 operand) {
+	assert(0 <= opcode && opcode < 256);
+	assert(-(1 << 23) <= operand && operand < (1 << 23));
+	return (operand << 8) | opcode;
+}
+
+static inline void decodeOp(const CodeWord codeWord, Processor::Opcode& opcode, Int32& operand) {
+	opcode = static_cast<Processor::Opcode>(codeWord & 255);
+	operand = static_cast<Int32>(codeWord) >> 8;
+}
+
 	bool supressStdErr = false; // FIX : drop
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
@@ -1725,7 +1736,6 @@ Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* csta
 void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
-Int32 Processor::operand() { Int32 v = *reinterpret_cast<const Int32*>(ip); ip += OPERAND_SIZE; return v; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error(ErrorType errorType, const String* message) {
@@ -1755,9 +1765,8 @@ void Processor::chain(const CodeWord* stub) {
 
 void Processor::chain(Function* completion) {
 	// FIX : if we decide that CodeWord is int, we could have this array const
-	static CodeWord chainCallStub[2 + OPERAND_SIZE] = { CALL_OP };
-	*reinterpret_cast<Int32*>(&chainCallStub[1]) = 1;
-	chainCallStub[1 + OPERAND_SIZE] = RETURN_OP;
+	static CodeWord chainCallStub[2] = { encodeOp(CALL_OP, 1) };
+	chainCallStub[1] = encodeOp(RETURN_OP, 0);
 	push(Value(completion));
 	chain(chainCallStub);
 }
@@ -1825,16 +1834,19 @@ bool Processor::privateRun() {
     Int32 cyclesLeft = clockCyclesLeft;
 	while (cyclesLeft >= 0) {
 		--cyclesLeft;
-		switch (*ip++) {
+		Processor::Opcode opcode;
+		Int32 operand;
+		decodeOp(*ip++, opcode, operand);
+		switch (opcode) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
 			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
-			case CONST_OP:			push(constants[operand()]); break;
-			case READ_INDEXED_OP:	push(indexed[operand()]); break;
-			case WRITE_INDEXED_OP:	indexed[operand()] = vsp[0]; break;
+			case CONST_OP:			push(constants[operand]); break;
+			case READ_INDEXED_OP:	push(indexed[operand]); break;
+			case WRITE_INDEXED_OP:	indexed[operand] = vsp[0]; break;
 			case READ_NAMED_OP:		{
-										const Value& name = constants[operand()];
+										const Value& name = constants[operand];
 										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
 											error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
 													, IS_NOT_DEFINED_STRING, &heap)));
@@ -1842,7 +1854,7 @@ bool Processor::privateRun() {
 									}
 									break;
 									
-			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
@@ -1913,11 +1925,11 @@ bool Processor::privateRun() {
 			case LEQ_OP:	poppush(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
 			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break;
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
-			case JMP_OP:	offset = operand(); ip += offset; break;							
-			case JT_OP:		offset = operand(); ip += (vsp[0].toBool() ? offset : 0); pop(1); break;
-			case JF_OP:		offset = operand(); ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
+			case JMP_OP:	offset = operand; ip += offset; break;
+			case JT_OP:		offset = operand; ip += (vsp[0].toBool() ? offset : 0); pop(1); break;
+			case JF_OP:		offset = operand; ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
 
-			case JSR_OP:	offset = operand();
+			case JSR_OP:	offset = operand;
 							++csp; // FIX : bounds check? or reserve?
 							assert(csp < cstackEnd);
 							csp->returnIP = ip;
@@ -1944,7 +1956,7 @@ bool Processor::privateRun() {
 							return false;
 
 			case CALL_METHOD_OP: { // FIX : share more with the others...
-				Int32 n = operand();
+				Int32 n = operand;
 				Object* thisObject = vsp[-n - 1].toObject(engine, true);
 				if (thisObject == 0) {
 					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
@@ -1963,7 +1975,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
-				Int32 n = operand();
+				Int32 n = operand;
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Function* f = returnPointer->asFunction();
 				if (f == 0) {
@@ -1976,7 +1988,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case CALL_OP: {
-				Int32 n = operand();
+				Int32 n = operand;
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Function* f = returnPointer->asFunction();
 				if (f == 0) {
@@ -1989,7 +2001,7 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_OP: {
-				Int32 n = operand(); // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
+				Int32 n = operand; // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Function* f = returnPointer->asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) { // FIX : sub
@@ -2028,18 +2040,18 @@ bool Processor::privateRun() {
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
-				o = constants[operand()].getObject();
+				o = constants[operand].getObject();
 				push(Value(heap.manage(new (&heap) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case DECLARE_OP: {
-				frame->declareVar(engine, constants[operand()].getString(), vsp[0]);
+				frame->declareVar(engine, constants[operand].getString(), vsp[0]);
 				pop(1);
 				break;
 			}
 			case ADD_PROPERTY_OP: {
 				o = vsp[-1].getObject();
-				o->setOwnProperty(engine, constants[operand()], vsp[0], STANDARD_FLAGS);
+				o->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
 				pop(1);
 				break;
 			}
@@ -2075,7 +2087,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRY_OP: {
-				offset = operand();
+				offset = operand;
 				catchers.append(Catcher(ip + offset, vsp, csp));
 				break;
 			}
@@ -2084,7 +2096,7 @@ bool Processor::privateRun() {
 				++csp;
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
-				frame = csp->frame = heap.manage(new (&heap) CatchFrame(frame, constants[operand()].getString(), vsp[0]));
+				frame = csp->frame = heap.manage(new (&heap) CatchFrame(frame, constants[operand].getString(), vsp[0]));
 				csp->thisObject = csp[-1].thisObject;
 				pop(1);
 				break;
@@ -2114,7 +2126,7 @@ bool Processor::privateRun() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				frame->getOwnProperty(engine, constants[operand()], &v);
+				frame->getOwnProperty(engine, constants[operand], &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
@@ -2138,7 +2150,7 @@ bool Processor::privateRun() {
 			}
 			case NEXT_PROPERTY_OP: {
 				o = vsp[0].getObject();
-				Int32 offset = operand();
+				Int32 offset = operand;
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
 				if (name != 0) {
 					vsp[0] = Value(name);
@@ -2165,13 +2177,6 @@ bool Processor::run() {
 	}
 }
 
-// FIX : use accessCodeInt32
-static Int32 getInt32(const CodeWord* code, UInt32& offset) {
-	Int32 i = *reinterpret_cast<const Int32*>(code + offset);
-	offset += OPERAND_SIZE;
-	return i;
-}
-
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
@@ -2196,7 +2201,9 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const CodeWord* code = codeDef.getCodePointer();
 	const Value* constants = codeDef.getConstantsPointer();
 	for (UInt32 offset = 0; offset < codeDef.getCodeSize();) {
-		Processor::Opcode opcode = static_cast<Processor::Opcode>(code[offset]);
+		Processor::Opcode opcode;
+		int operand;
+		decodeOp(code[offset], opcode, operand);
 		if (opcode < 0 || opcode >= Processor::OP_COUNT) opcode = Processor::INVALID_OP;
 		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode - Processor::INVALID_OP];
 		++offset;
@@ -2206,10 +2213,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
 			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: { Int32 jump = getInt32(code, offset); std::cerr << " @" << (offset + jump); break; }
+			case Processor::NEXT_PROPERTY_OP: { Int32 jump = operand; std::cerr << " @" << (offset + jump); break; }
 			case Processor::READ_INDEXED_OP:
 			case Processor::WRITE_INDEXED_OP: {
-				const Int32 index = getInt32(code, offset);
+				const Int32 index = operand;
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
@@ -2218,15 +2225,15 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::CALL_OP:
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
-			case Processor::NEW_OP: std::cerr << " *" << getInt32(code, offset); break;
+			case Processor::NEW_OP: std::cerr << " *" << operand; break;
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
-			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
+			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
 			case Processor::DECLARE_OP:
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
 			case Processor::ADD_PROPERTY_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[getInt32(code, offset)].toString(heap)->toStdString(); break;
+			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
 			default: break;
 		}
 		std::cerr << std::endl;
@@ -2371,12 +2378,8 @@ void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.manage(new (&heap) Error(errorType, heap.manage(new (&heap) String(message))))));
 }
 
-static Int32& accessCodeInt32(QuickVector<CodeWord>& code, UInt32 offset) {
-	return *reinterpret_cast<Int32*>(&code[offset]);
-}
-
-void Compiler::emit(Processor::Opcode op) {
-	outputCode->append(op);
+void Compiler::emit(Processor::Opcode op, Int32 operand) {
+	outputCode->append(encodeOp(op, operand));
 }
 
 QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
@@ -2389,27 +2392,22 @@ void Compiler::emitMultiple(const CodeWord* begin, const CodeWord* end) {
 	outputCode->insert(outputCode->end(), begin, end);
 }
 
-void Compiler::emitWithInt32(Processor::Opcode op, Int32 i) {
-	emit(op);
-	outputCode->resize(outputCode->size() + OPERAND_SIZE);
-	accessCodeInt32(*outputCode, outputCode->size() - OPERAND_SIZE) = i;
-}
-
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 	emit(op);
-	Int32 point = outputCode->size();
-	outputCode->resize(outputCode->size() + OPERAND_SIZE);
-	return point;
+	return outputCode->size() - 1;
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
-	accessCodeInt32(*outputCode, point) = outputCode->size() - point - OPERAND_SIZE;
+	Processor::Opcode opcode;
+	Int32 operand;
+	decodeOp((*outputCode)[point], opcode, operand);
+	(*outputCode)[point] = encodeOp(opcode, outputCode->size() - point - 1);
 }
 
 Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
 
 void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
-	emitWithInt32(op, point - (outputCode->size() + OPERAND_SIZE + 1));
+	emit(op, point - 1 - outputCode->size());
 }
 
 int Compiler::addConstant(const Value& constant) {
@@ -2425,7 +2423,7 @@ int Compiler::addConstant(const Value& constant) {
 }
 
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
-	emitWithInt32(op, addConstant(constant));
+	emit(op, addConstant(constant));
 }
 
 bool Compiler::isLeadingIdentifierChar(Char c) {
@@ -2594,7 +2592,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::PUSHED_PRIMITIVE: return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
@@ -2623,7 +2621,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 				codeDef->varNames.append(0);
 				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
 			}
-			emitWithInt32(Processor::WRITE_INDEXED_OP, tempLocalIndex);
+			emit(Processor::WRITE_INDEXED_OP, tempLocalIndex);
 			emit(Processor::POP_OP);
 			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
 		}
@@ -2637,7 +2635,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 		Int32 index = xr.v.toInt();
 		if (doReset) {
 			emit(Processor::VOID_OP);
-			emitWithInt32(Processor::WRITE_INDEXED_OP, index);
+			emit(Processor::WRITE_INDEXED_OP, index);
 			emit(Processor::POP_OP);
 		}
 		codeDef->temporaries.append(index);
@@ -2647,7 +2645,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
-		case ExpressionResult::INDEXED: emitWithInt32(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -2696,7 +2694,7 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 		white();
 		++count;
 	}
-	emitWithInt32(op, count);
+	emit(op, count);
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
@@ -2949,7 +2947,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			discard(xr);
 			makeRValue(operand(op), false);
 			if (!token("(", true)) {
-				emitWithInt32(Processor::NEW_OP, 0);
+				emit(Processor::NEW_OP, 0);
 			} else {
 				white();
 				functionCall(Processor::NEW_OP);
@@ -3684,8 +3682,8 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 						rvalueExpression();
 						expectToken(":", true);
 						emit(Processor::X_EQ_OP);
-						emitWithInt32(Processor::JT_OP, outputCodeWas->size() - startOffset - testsCode.size() - OPERAND_SIZE - 1);
-						jumpOffsets.append(testsCode.size() - OPERAND_SIZE);
+						emit(Processor::JT_OP, outputCodeWas->size() - startOffset - testsCode.size() - 1);
+						jumpOffsets.append(testsCode.size() - 1);
 						changeOutput(outputCodeWas);
 					} else if (token("default", false)) {
 						expectToken(":", true);
@@ -3707,7 +3705,10 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 				completeForwardBranch(testsPoint);
 				for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
-					accessCodeInt32(testsCode, *it) -= outputCode->size() - startOffset;
+					Processor::Opcode opcode;
+					Int32 operand;
+					decodeOp(testsCode[*it], opcode, operand);
+					testsCode[*it] = encodeOp(opcode, operand - (outputCode->size() - startOffset));
 				}
 				emitMultiple(testsCode.begin(), testsCode.end());
 				if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);

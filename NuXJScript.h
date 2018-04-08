@@ -14,7 +14,6 @@ typedef unsigned char Byte;
 typedef UInt16 Char;
 typedef Int32 CodeWord; // FIX : int or byte?
 typedef Byte Flags;
-const int OPERAND_SIZE = (sizeof (Int32) / sizeof (CodeWord));
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
@@ -1039,7 +1038,6 @@ class Processor : public GCItem {
 	protected:	void push(const Value& v);
 				void pop(Int32 count = 1);
 				void poppush(const Value& v);
-				Int32 operand();
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
@@ -1096,8 +1094,7 @@ class Compiler : public GCItem {
 				struct Scope;
 
 				void error(ErrorType errorType, const char* message);
-				void emit(Processor::Opcode op);
-				void emitWithInt32(Processor::Opcode op, Int32 i);
+				void emit(Processor::Opcode op, Int32 operand = 0);
 				QuickVector<CodeWord>* changeOutput(QuickVector<CodeWord>* newOutputCode);
 				void emitMultiple(const CodeWord* begin, const CodeWord* end);
 				int addConstant(const Value& constant);
