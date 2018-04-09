@@ -1821,7 +1821,6 @@ bool Processor::privateRun() {
 	assert(csp >= cstackStart);
 	updateInternals();
 	Object* o;
-	Int32 offset;
 	
     Int32 cyclesLeft = clockCyclesLeft;
 	while (cyclesLeft >= 0) {
@@ -1917,17 +1916,18 @@ bool Processor::privateRun() {
 			case LEQ_OP:	poppush(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
 			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break;
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
-			case JMP_OP:	offset = operand; ip += offset; break;
-			case JT_OP:		offset = operand; ip += (vsp[0].toBool() ? offset : 0); pop(1); break;
-			case JF_OP:		offset = operand; ip += (!vsp[0].toBool() ? offset : 0); pop(1); break;
+			case JMP_OP:	ip += operand; break;
+			case JT_OP:		ip += (vsp[0].toBool() ? operand : 0); pop(1); break;
+			case JF_OP:		ip += (!vsp[0].toBool() ? operand : 0); pop(1); break;
+			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += operand; else pop(1); break;
+			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += operand; else pop(1); break;
 
-			case JSR_OP:	offset = operand;
-							++csp; // FIX : bounds check? or reserve?
+			case JSR_OP:	++csp; // FIX : bounds check? or reserve?
 							assert(csp < cstackEnd);
 							csp->returnIP = ip;
 							csp->frame = frame;
 							csp->thisObject = csp[-1].thisObject;
-							ip += offset;
+							ip += operand;
 							break;
 
             case DELETE_FRAME_AND_RETURN_OP: delete frame; // fall through
@@ -2079,8 +2079,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRY_OP: {
-				offset = operand;
-				catchers.append(Catcher(ip + offset, vsp, csp));
+				catchers.append(Catcher(ip + operand, vsp, csp));
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
@@ -2142,12 +2141,11 @@ bool Processor::privateRun() {
 			}
 			case NEXT_PROPERTY_OP: {
 				o = vsp[0].getObject();
-				Int32 offset = operand;
-				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ? 
+				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ?
 				if (name != 0) {
 					vsp[0] = Value(name);
 				} else {
-					ip += offset;
+					ip += operand;
 					pop(1);
 				}
 				break;
@@ -2181,7 +2179,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "PLUS", "MINUS"
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
-		, "JMP", "JSR", "JT", "JF"
+		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
 		, "DELETE_FRAME_AND_RETURN", "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
@@ -2202,6 +2200,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		switch (opcode) {
 			case Processor::JT_OP:
 			case Processor::JF_OP:
+			case Processor::JT_OR_POP_OP:
+			case Processor::JF_OR_POP_OP:
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
 			case Processor::TRY_OP:
@@ -2289,8 +2289,8 @@ const OperatorInfo POST_OPS[] = {
 	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true, true },
 	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true, true },
 	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true, true },
-	{ "&&", 0, LOGICAL_AND_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JF_OP, false, false },
-	{ "||", 0, LOGICAL_OR_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JT_OP, false, false },
+	{ "&&", 0, LOGICAL_AND_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JF_OR_POP_OP, false, false },
+	{ "||", 0, LOGICAL_OR_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JT_OR_POP_OP, false, false },
 	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true, true },
 	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true, true },
 	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true, true },
@@ -2884,9 +2884,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			assert(!op.primitiveInput);
             assert(!op.primitiveOutput);
 			makeRValue(xr, false);
-			emit(Processor::REPUSH_OP);
-			Int32 point = emitForwardBranch(op.vmOp);
-			emit(Processor::POP_OP);
+			const Int32 point = emitForwardBranch(op.vmOp);
 			makeRValue(operand(op), false);
 			completeForwardBranch(point);
             xr = ExpressionResult::PUSHED;

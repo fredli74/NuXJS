@@ -993,6 +993,7 @@ class Processor : public GCItem {
 					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
+					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
 					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
