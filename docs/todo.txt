@@ -219,7 +219,35 @@ Compiler
 	* jump optimizations
 		- another way to deal with it would be to think in the lines of the break scopes... complete forward jumps first at definite end-point, I think this was the way I solved it in ACL
 		- we should at least have two alternative JF and JT, JF_NO_POP, JT_NO_POP that doesn't pop on jump
-		- JF_OR_POP and JT_OR_POP implemented... next step is to do a global pass on all jumps and reduce jump->jump->jump to single jumps
+		- JF_OR_POP and JT_OR_POP implemented... next step is to do a global pass on all jumps and reduce jump->jump->jump to single jumps, rules:
+			.    J** @y
+			  y: JMP @x
+			  => JMP @x
+
+			.    JF_OR_POP @y
+			  y: JF_OR_POP @x
+			  => JF_OR_POP @x
+
+			.    JT_OR_POP @y
+			  y: JT_OR_POP @x
+			  => JT_OR_POP @x
+
+			.    JF_OR_POP @y
+			  y: JF @x
+			  => JF @x
+
+			.    JT_OR_POP @y
+			  y: JT @x
+			  => JT @x
+
+			.    JF_OR_POP @y
+			  y: (JT_OR_POP | JT) @x
+			  => JF @y+1
+
+			.    JT_OR_POP @y
+			  y: (JF_OR_POP | JF) @x
+			  => JT @y+1
+
 
 	* pop void optimization (almost always occurs with a return;)?
 
