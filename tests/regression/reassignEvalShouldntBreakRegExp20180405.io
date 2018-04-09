@@ -6,3 +6,6 @@
 > print(/xyz/.test('xyz'))
 < true
 -
+> print(eval)
+< dead
+-

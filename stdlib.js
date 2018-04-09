@@ -1329,7 +1329,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	if (ignoreCase) {
 		code += "\ts=$regExpCanonicalize(s)\n";
 	}
-	code += "\tvar l=s.length,q"; // FIX : not "use strict"
+	code += "\tvar l=s.length,q";
 	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,q";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
 	code += "];\n})";
@@ -1352,10 +1352,10 @@ function $execRegExp(re, string) {
 	re.lastIndex = 0;
 }
 
-var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' };
-function $evalThere(s) { return eval(s); } // eval without local variables, FIX : why?
-var $regExpCache = { };
-var $regExpPrototype;
+var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, $origEval = eval
+		, $regExpCache = { }, $regExpPrototype;
+// eval without local variables but with access to all internals
+function $evalThere(s) { var customEval = eval; eval = $origEval; try { return eval(s) } finally { eval = customEval } }
 var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
 		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
