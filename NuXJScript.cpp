@@ -1106,7 +1106,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
 		: code(heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap), temporaries(heap)
-		, name(0), selfName(0), source(0) { assert(constants != 0); }
+		, name(0), selfName(0), source(0), smurfStrumpa(false) { assert(constants != 0); }
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
@@ -1542,6 +1542,8 @@ void ScriptFrame::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
+Frame* ScriptFrame::getNamedVariablesFrame() { return (function->getDefinition()->smurfStrumpa ? parentFrame->getNamedVariablesFrame() : this); }
+
 Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
@@ -1720,7 +1722,8 @@ bool WithFrame::deleteProperty(Engine& engine, const Value& key) {
 Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0)
-	, catchers(&engine.getHeap()) { }
+	, catchers(&engine.getHeap()),
+namedFrame(0) { }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
 	assert(0 <= opcode && static_cast<int>(opcode) < 256);
@@ -1751,6 +1754,7 @@ void Processor::updateInternals() {
 		constants = frame->getFunctionDef()->getConstantsPointer();
 		indexed = frame->getIndexedPointer();
 	}
+	namedFrame = (frame == 0 ? 0 : frame->getNamedVariablesFrame());
 }
 
 void Processor::chain(const CodeWord* stub) {
@@ -1838,7 +1842,7 @@ bool Processor::privateRun() {
 			case WRITE_INDEXED_OP:	indexed[operand] = vsp[0]; break;
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand];
-										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
+										if (namedFrame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
 											error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
 													, IS_NOT_DEFINED_STRING, &heap)));
 										}
@@ -3035,6 +3039,8 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
 	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
+func->smurfStrumpa = true;
+codeDef->smurfStrumpa = false;
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {

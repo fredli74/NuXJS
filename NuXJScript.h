@@ -661,6 +661,7 @@ class CodeDefinition : public Object {
 				const String* name;
 				const String* selfName;
 				const String* source;
+bool smurfStrumpa;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(constants);
@@ -693,7 +694,8 @@ class Frame : public Object {
 				virtual const CodeDefinition* getFunctionDef() const = 0;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
-				
+virtual Frame* getNamedVariablesFrame() { return this; }
+
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Frame* parentFrame;
 
@@ -816,6 +818,7 @@ class ScriptFrame : public LazyObject<Frame> {
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
+virtual Frame* getNamedVariablesFrame();
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -1073,6 +1076,7 @@ public: // FIX : not public, just for some asserts now I think
 				Frame* frame;
 				const Value* constants;
 				Value* indexed;
+Frame* namedFrame;
 };
 
 enum Precedence {
