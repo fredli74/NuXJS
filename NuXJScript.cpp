@@ -1722,8 +1722,8 @@ Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* csta
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0)
 	, catchers(&engine.getHeap()) { }
 
-CodeWord Processor::packInstruction(const Processor::Opcode opcode, const Int32 operand) {
-	assert(0 <= opcode && opcode < 256);
+CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
+	assert(0 <= opcode && static_cast<int>(opcode) < 256);
 	assert(-(1 << 23) <= operand && operand < (1 << 23));
 	return (operand << 8) | opcode;
 }
@@ -1826,9 +1826,9 @@ bool Processor::privateRun() {
     Int32 cyclesLeft = clockCyclesLeft;
 	while (cyclesLeft >= 0) {
 		--cyclesLeft;
-		Processor::Opcode opcode;
-		Int32 operand;
-		unpackInstruction(*ip++, opcode, operand);
+		const CodeWord instruction = *ip++;
+		const Opcode opcode = static_cast<Opcode>(instruction & 255);
+		const Int32 operand = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
 			case POP_OP:			pop(1); break;
 			case REPUSH_OP:			push(vsp[0]); break;
@@ -3545,7 +3545,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
+				emit(Processor::DELETE_FRAME_AND_RETURN_OP);
 				semicolon();
 				break;
 			}
@@ -3751,10 +3751,21 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 		evalXR = discard(evalXR);
 	}
 	makeRValue(evalXR);
-	emit(canDeleteFrameOnExit ? Processor::DELETE_FRAME_AND_RETURN_OP : Processor::RETURN_OP);
+	emit(Processor::DELETE_FRAME_AND_RETURN_OP);
 	assert(outputCode == &codeDef->code);
 	if (!setupCode.empty()) {
 		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
+	}
+	if (!canDeleteFrameOnExit) {
+		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
+		// FIX : more compact solution
+			Processor::Opcode opcode;
+			Int32 operand;
+			Processor::unpackInstruction(*p, opcode, operand);
+			if (opcode == Processor::DELETE_FRAME_AND_RETURN_OP) {
+				*p = Processor::packInstruction(Processor::RETURN_OP, operand);
+			}
+		}
 	}
 	codeDef->code.shrink();
 	codeDef->constants->shrink();
@@ -3774,6 +3785,7 @@ if (!supressStdErr) {
 const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 	assert(functionName != 0);
+	canDeleteFrameOnExit = true;
 	p = b;
 	this->e = e;
 	expectToken("(", true);

@@ -12,7 +12,7 @@ typedef int Int32;
 typedef unsigned int UInt32;
 typedef unsigned char Byte;
 typedef UInt16 Char;
-typedef Int32 CodeWord; // FIX : int or byte?
+typedef Int32 CodeWord;
 typedef Byte Flags;
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
