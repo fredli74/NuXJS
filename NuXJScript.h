@@ -976,8 +976,6 @@ class Processor : public GCItem {
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
-					, READ_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: -> value
-					, WRITE_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: value -> value
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
