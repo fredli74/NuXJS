@@ -831,7 +831,7 @@ class ScriptScope : public LazyObject<Scope> {
 
 };
 
-// FIX : if CStackEntry included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
+// FIX : if CallFrame included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent ScriptScope, but has a different
 	codeDef pointer (for constants etc).
@@ -952,19 +952,19 @@ class Processor : public GCItem {
 	public:		typedef GCItem super;
 
 				// FIX : this could be a struct used by a member Processor too instead of separate ip, scope etc...
-				struct CStackEntry {
+				struct CallFrame {
 					const CodeWord* returnIP;
 					Scope* scope;
 					Object* thisObject; // doesn't change during function execution
 				};
 				
-				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
+				// FIX : {ip, vsp, cfp} could be a struct used by Processor too, or.. CallFrame?
 	protected:	struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, CStackEntry* csp, Scope* scope) : ip(ip), csp(csp), vsp(vsp), scope(scope) { }
+					Catcher(const CodeWord* ip, Value* vsp, CallFrame* cfp, Scope* scope) : ip(ip), cfp(cfp), vsp(vsp), scope(scope) { }
 					const CodeWord* ip;
 					Value* vsp;
-					CStackEntry* csp;
+					CallFrame* cfp;
 					Scope* scope;
 				};
 				
@@ -1031,7 +1031,7 @@ class Processor : public GCItem {
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
 				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
 
-	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
+	public:		Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
@@ -1050,8 +1050,8 @@ class Processor : public GCItem {
 				void throwVirtualException(const Value& exception);
 
 				Engine& engine;
-				CStackEntry* const cstackStart;
-				CStackEntry* const cstackEnd;
+				CallFrame* const cstackStart;
+				CallFrame* const cstackEnd;
 				Value* const vstackStart;
 				Value* const vstackEnd;
 
@@ -1059,12 +1059,12 @@ public: // FIX : not public, just for some asserts now I think
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
-				CStackEntry* csp;
+				CallFrame* cfp;
 				Value result;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(vstackStart, vsp + 1);
-					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
+					for (CallFrame* c = cstackStart; c != cfp + 1; ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}

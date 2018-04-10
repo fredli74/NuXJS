@@ -1723,9 +1723,9 @@ bool WithScope::deleteProperty(Engine& engine, const Value& key) {
 
 /* --- Processor --- */
 
-Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
+Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), scope(0), constants(0), indexed(0)
+	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), cfp(cstackStart - 1), scope(0), constants(0), indexed(0)
 	, catchers(&engine.getHeap()) { }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
@@ -1752,7 +1752,7 @@ void Processor::error(ErrorType errorType, const String* message) {
 }
 
 void Processor::updateInternals() {
-	scope = csp->scope;
+	scope = cfp->scope;
 	if (scope != 0) { // FIX : use dummy scope?
 		constants = scope->getFunctionDef()->getConstantsPointer();
 		indexed = scope->getIndexedPointer();
@@ -1760,11 +1760,11 @@ void Processor::updateInternals() {
 }
 
 void Processor::chain(const CodeWord* stub) {
-	++csp; // FIX : overflow check
-	assert(csp < cstackEnd);
-	csp->returnIP = ip;
-	csp->scope = 0;
-	csp->thisObject = 0;
+	++cfp; // FIX : overflow check
+	assert(cfp < cstackEnd);
+	cfp->returnIP = ip;
+	cfp->scope = 0;
+	cfp->thisObject = 0;
 	ip = stub;
 	updateInternals();
 }
@@ -1772,11 +1772,11 @@ void Processor::chain(const CodeWord* stub) {
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
 	scope = heap.manage(new (&heap) ScriptScope(&heap, func, argc, argv));
-	++csp; // FIX : overflow check
-	assert(csp < cstackEnd);
-	csp->returnIP = ip;
-	csp->scope = scope;
-	csp->thisObject = thisObject;
+	++cfp; // FIX : overflow check
+	assert(cfp < cstackEnd);
+	cfp->returnIP = ip;
+	cfp->scope = scope;
+	cfp->thisObject = thisObject;
 	ip = func->getDefinition()->getCodePointer();
 	updateInternals();
 	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
@@ -1784,11 +1784,11 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 
 void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 	this->scope = scope;
-	++csp; // FIX : overflow check
-	assert(csp < cstackEnd);
-	csp->returnIP = this->ip;
-	csp->scope = this->scope;
-	csp->thisObject = thisObject;
+	++cfp; // FIX : overflow check
+	assert(cfp < cstackEnd);
+	cfp->returnIP = this->ip;
+	cfp->scope = this->scope;
+	cfp->thisObject = thisObject;
 	this->ip = ip;
 	assert(ip != 0);
 	updateInternals();
@@ -1798,11 +1798,11 @@ void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobals());
 	GCHeap& heap = engine.getHeap();
 	scope = heap.manage(new (&heap) EvalScope(&heap, f, codeDef));
-	++csp; // FIX : overflow check
-	assert(csp < cstackEnd);
-	csp->returnIP = ip;
-	csp->scope = scope;
-	csp->thisObject = csp[-1].thisObject;
+	++cfp; // FIX : overflow check
+	assert(cfp < cstackEnd);
+	cfp->returnIP = ip;
+	cfp->scope = scope;
+	cfp->thisObject = cfp[-1].thisObject;
 	ip = codeDef->getCodePointer();
 	updateInternals();
 	--vsp;
@@ -1815,8 +1815,8 @@ void Processor::throwVirtualException(const Value& exception) {
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
 	assert(ip != 0);
-	csp = catcher.csp;
-	csp->scope = catcher.scope;
+	cfp = catcher.cfp;
+	cfp->scope = catcher.scope;
 	vsp = catcher.vsp;
 	push(exception);
 	catchers.resize(catchers.size() - 1);
@@ -1825,7 +1825,7 @@ void Processor::throwVirtualException(const Value& exception) {
 
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
-	assert(csp >= cstackStart);
+	assert(cfp >= cstackStart);
 	updateInternals();
 	Object* o;
 	
@@ -1922,11 +1922,11 @@ bool Processor::privateRun() {
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
 
-			case JSR_OP:	++csp; // FIX : bounds check? or reserve?
-							assert(csp < cstackEnd);
-							csp->returnIP = ip;
-							csp->scope = scope;
-							csp->thisObject = csp[-1].thisObject;
+			case JSR_OP:	++cfp; // FIX : bounds check? or reserve?
+							assert(cfp < cstackEnd);
+							cfp->returnIP = ip;
+							cfp->scope = scope;
+							cfp->thisObject = cfp[-1].thisObject;
 							ip += operand;
 							break;
 
@@ -2024,29 +2024,29 @@ bool Processor::privateRun() {
 			}
 
             case DELETE_SCOPE_AND_RETURN_OP: delete scope; // fall through
-			case RETURN_OP:	ip = (csp--)->returnIP;
+			case RETURN_OP:	ip = (cfp--)->returnIP;
 							assert(ip != 0);
-							assert(csp >= cstackStart);							
+							assert(cfp >= cstackStart);
 							updateInternals();
 							break;
 			
 			case DISCARD_RETURN_OP: {
-				--csp;
-				assert(csp >= cstackStart);
+				--cfp;
+				assert(cfp >= cstackStart);
 				break;
 			}
 			
 			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
-							ip = (csp--)->returnIP;
-							assert(csp >= cstackStart - 1);
+							ip = (cfp--)->returnIP;
+							assert(cfp >= cstackStart - 1);
 							result = vsp[0];
 							pop(1);
-							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
+							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if cfp == cstackStart - 1
 							// updateInternals();
                             clockCyclesLeft = cyclesLeft;
 							return false;
 
-			case THIS_OP: push(Value(csp->thisObject)); break;
+			case THIS_OP: push(Value(cfp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand].getObject();
@@ -2076,28 +2076,28 @@ bool Processor::privateRun() {
 				break;
 			}
 			case CATCH_SCOPE_OP: {
-				assert(csp->scope == scope);
-				csp->scope = scope = heap.manage(new (&heap) CatchScope(scope, constants[operand].getString(), vsp[0]));
+				assert(cfp->scope == scope);
+				cfp->scope = scope = heap.manage(new (&heap) CatchScope(scope, constants[operand].getString(), vsp[0]));
 				pop(1);
 				break;
 			}
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
-				assert(csp->scope == scope);
+				assert(cfp->scope == scope);
 				Object* o = vsp[0].toObject(engine, false);
 				if (o == 0) { // FIX : so common!
 					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 					break;
 				}
-				csp->scope = scope = heap.manage(new (&heap) WithScope(scope, o));
+				cfp->scope = scope = heap.manage(new (&heap) WithScope(scope, o));
 				pop(1);
 				break;
 			}
 			case POP_SCOPE_OP: {
-				csp->scope = scope = scope->getParentScope();
+				cfp->scope = scope = scope->getParentScope();
 				break;
 			}
 			case TRY_OP: {
-				catchers.append(Catcher(ip + operand, vsp, csp, scope));
+				catchers.append(Catcher(ip + operand, vsp, cfp, scope));
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
@@ -2249,8 +2249,9 @@ const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
-	GROUP, UNARY, BINARY, IN_OPERATOR, ABSTRACT_EQUAL, ASSIGNMENT, COMPOUND_ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL
-	, FUNCTION_CALL, COMMA, VOID_OPERATOR, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
+	GROUP, UNARY, BINARY, IN_OPERATOR, ABSTRACT_EQUAL, ASSIGNMENT, COMPOUND_ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC
+	, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL, FUNCTION_CALL, COMMA, VOID_OPERATOR
+	, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
@@ -4317,7 +4318,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	{
 		Value vstack[128];
-		Processor::CStackEntry cstack[128];
+		Processor::CallFrame cstack[128];
 		Processor processor(*this, cstack, cstack + 128, vstack, vstack + 128);
 		gcHeap.protect(&processor);
 		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
@@ -4523,7 +4524,7 @@ suppressStdErr = true;
             
             if (execute) {
                 Value vstack[1024];
-                Processor::CStackEntry cstack[1024];
+                Processor::CallFrame cstack[1024];
                 Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
                 heap.protect(&processor);
                 const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
