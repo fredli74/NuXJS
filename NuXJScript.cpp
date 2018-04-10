@@ -154,15 +154,15 @@ struct QuickConstants {
 } QUICK_CONSTANTS;
 
 // FIX : shouldn't need this, used in quick-hash-finders and they should be optimized somehow i think
-static int strncmp(const Char* a, const char* b, UInt32 n) {
-	UInt32 i = 0;
+static int strncmp(const Char* a, const char* b, size_t n) {
+	size_t i = 0;
 	while (i < n && a[i] == b[i] && a[i] != 0 && b[i] != 0) {
 		++i;
 	}
 	return (i == n ? 0 : a[i] - b[i]);
 }
 /* Built with QuickHashMaker.pika */
-static int findStatementToken(int n /* string length */, const Char* s /* string (zero termination not required) */) {
+static int findStatementToken(size_t n /* string length */, const Char* s /* string (zero termination not required) */) {
 	static const char* STRINGS[13] = {
 		"var", "if", "while", "do", "for", "return", "continue", "break", "try", 
 		"throw", "switch", "function", "with"
@@ -178,7 +178,7 @@ static int findStatementToken(int n /* string length */, const Char* s /* string
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 }
 /* Built with QuickHashMaker.pika */
-static int findReservedKeyword(int n /* string length */, const Char* s) {
+static int findReservedKeyword(size_t n /* string length */, const Char* s) {
 	static const char* STRINGS[36] = {
 		"break", "case", "catch", "continue", "debugger", "default", "delete", "do", 
 		"else", "finally", "for", "function", "if", "in", "instanceof", "new", 
@@ -209,7 +209,7 @@ static int findReservedKeyword(int n /* string length */, const Char* s) {
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 /* Built with QuickHashMaker.pika */
-static int findLiteralToken(int n /* string length */, const Char* s /* zero-terminated string */) {
+static int findLiteralToken(size_t n /* string length */, const Char* s /* zero-terminated string */) {
 	static const char* STRINGS[5] = {
 		"null", "false", "true", "function", "this"
 	};
@@ -648,9 +648,9 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 /* --- String --- */
 
 String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
-String::String(const Char* b, const Char* e, Heap* heap) : QArray(e - b, heap), hash(0) { std::copy(b, e, begin()); }
+String::String(const Char* b, const Char* e, Heap* heap) : QArray(static_cast<UInt32>(e - b), heap), hash(0) { std::copy(b, e, begin()); }
 // FIX : needed ? String::String(const String& o) : QArray(o), hash(o.hash) { }
-String::String(const std::wstring& s, Heap* heap) : QArray(s.size(), heap), hash(0) { std::copy(s.begin(), s.end(), begin()); }
+String::String(const std::wstring& s, Heap* heap) : QArray(static_cast<UInt32>(s.size()), heap), hash(0) { std::copy(s.begin(), s.end(), begin()); }
 
 String::String(const String& l, const String& r, Heap* heap) : QArray(l.size() + r.size(), heap), hash(0) {
 	Char* e = std::copy(l.begin(), l.end(), begin());
@@ -1534,8 +1534,8 @@ ScriptScope::ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, cons
 // FIX : this one must GO! Q&D crap
 void ScriptScope::updatedCode() {
 	const CodeDefinition* codeDef = function->getDefinition();
-	const UInt32 oldVarsCount = indexedPointer - indexed.begin();
-	const UInt32 oldArgsCount = indexed.end() - indexedPointer;
+	const UInt32 oldVarsCount = static_cast<UInt32>(indexedPointer - indexed.begin());
+	const UInt32 oldArgsCount = static_cast<UInt32>(indexed.end() - indexedPointer);
 	const UInt32 newVarsCount = codeDef->getVarsCount();
 	const UInt32 newArgsCount = std::max(codeDef->getArgumentsCount(), passedArgumentsCount);
 	assert(newVarsCount >= oldVarsCount);
@@ -1840,26 +1840,6 @@ bool Processor::privateRun() {
 			case CONST_OP:			push(constants[operand]); break;
 			case READ_INDEXED_OP:	push(indexed[operand]); break;
 			case WRITE_INDEXED_OP:	indexed[operand] = vsp[0]; break;
-			case READ_FAR_INDEXED_OP: {
-				int distance = operand >> 16;
-				const int index = static_cast<Int16>(operand);
-				const Scope* f = scope;
-				do {
-					f = f->getParentScope();
-				} while (--distance >= 0);
-				push(f->getIndexedPointer()[index]);
-				break;
-			}
-			case WRITE_FAR_INDEXED_OP:	{
-				int distance = operand >> 16;
-				const int index = static_cast<Int16>(operand);
-				const Scope* f = scope;
-				do {
-					f = f->getParentScope();
-				} while (--distance >= 0);
-				f->getIndexedPointer()[index] = vsp[0];
-				break;
-			}
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand];
 										if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -2199,7 +2179,7 @@ bool Processor::run() {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_FAR_INDEXED", "WRITE_FAR_INDEXED"
+		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED"
 		, "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
 		, "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
@@ -2243,11 +2223,6 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
-				break;
-			}
-			case Processor::READ_FAR_INDEXED_OP:
-			case Processor::WRITE_FAR_INDEXED_OP: {
-				std::wcerr << L" (" << static_cast<int>(static_cast<Int16>(operand)) << L" ^ " << static_cast<int>(operand >> 16) << ")";
 				break;
 			}
 			case Processor::CALL_OP:
@@ -2389,20 +2364,18 @@ struct Compiler::ExpressionResult {
 		, PUSHED_PRIMITIVE	// primitive value on stack
 		, CONSTANT			// constant (and primitive) value on stack
 		, INDEXED			// arbitrary value in indexed variable
-		, FAR_INDEXED		// arbitrary value in a parent scope indexed variable
 		, NAMED				// arbitrary value in named variable
 		, PROPERTY			// arbitrary value in object property
 	};
-	ExpressionResult() : t(NONE), v(Value::UNDEFINED), d(0) { }
-	ExpressionResult(Type type, const Value& value = Value::UNDEFINED, int farDistance = 0) : t(type), v(value), d(farDistance) { }
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
+	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
 	Type t;
 	Value v;
-	int d;
 };
 
-Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler)
+Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		: heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), parentCompiler(parentCompiler)
+		, compilingFor(compileFor)
 		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeCounter(0), catchScopeCounter(0)
 		, canDeleteScopeOnExit(false) {
@@ -2630,7 +2603,6 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::FAR_INDEXED: emit(Processor::READ_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
@@ -2648,7 +2620,6 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE:
 		case ExpressionResult::INDEXED:
-		case ExpressionResult::FAR_INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY: {
 			makeRValue(xr);
@@ -2685,7 +2656,6 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
 		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
-		case ExpressionResult::FAR_INDEXED: emit(Processor::WRITE_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -3006,7 +2976,6 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
-				case ExpressionResult::FAR_INDEXED:
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
 				case ExpressionResult::NAMED: emit(Processor::SCOPE_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
@@ -3084,7 +3053,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
 	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
-	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION, this);
+	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
@@ -3183,24 +3152,15 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteScopeOnExit = false;
-						} else if (compilingFor != FOR_EVAL) {
-							int distance = -1;
-							const Compiler* c = this;
-							do {
-								if (c->withScopeCounter != 0) {
+						} else if (compilingFor != FOR_EVAL && withScopeCounter == 0) {
+							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
+							if (bucket != 0) {
+								Value index = bucket->getValue();
+								if (!index.isUndefined()) {
+									xr = ExpressionResult(ExpressionResult::INDEXED, index);
 									break;
 								}
-								const Table::Bucket* bucket = c->codeDef->nameIndexes.lookup(name);
-								if (bucket != 0) {
-									Value index = bucket->getValue();
-									if (!index.isUndefined()) {
-										xr = ExpressionResult((distance >= 0 ? ExpressionResult::FAR_INDEXED : ExpressionResult::INDEXED), index, distance);
-										break;
-									}
-								}
-								distance += 1 + c->catchScopeCounter;
-								c = c->parentCompiler;
-							} while (c != 0);
+							}
 						}
 						break;
 					}
@@ -4493,14 +4453,14 @@ suppressStdErr = true;
     std::auto_ptr<std::wifstream> inputFileStream;
     std::wistream* inStream = &std::wcin;
     bool doTime = false;
-    long gcRate = 256;
+    int gcRate = 256;
     bool autoGCRate = true;
     bool pauseBeforeQuit = false;
     for (int argi = 1; argi < argc; ++argi) {
         if (strcmp(argv[argi], "-t") == 0) doTime = true;
         else if (strcmp(argv[argi], "-s") == 0) suppressStdErr = true;
         else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
-            gcRate = atol(argv[++argi]);
+            gcRate = atoi(argv[++argi]);
             autoGCRate = false;
         }
         else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;

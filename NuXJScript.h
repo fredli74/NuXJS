@@ -107,8 +107,8 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				void insert(T* p, const T* b, const T* e) {
 					assert(begin() <= p && p <= begin() + count);
 					assert(b <= e);
-					UInt32 o = p - begin();
-					reserve(count + (e - b));
+					const UInt32 o = static_cast<UInt32>(p - begin());
+					reserve(count + static_cast<UInt32>(e - b));
 					p = begin() + o;
 					std::copy(p, end(), p + (e - b));
 					count += (e - b);
@@ -421,7 +421,7 @@ class String : public virtual Object, public QuickArray<Char> {
 				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I added const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s) : QArray(strlen(s)), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s) : QArray(static_cast<UInt32>(strlen(s))), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -1093,7 +1093,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler = 0);
+				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1158,7 +1158,6 @@ class Compiler : public GCItem {
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
-				Compiler* parentCompiler;
 				std::map<Value, Int32> definedConstants; // FIX : drop map dependency, increases code size
 				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
