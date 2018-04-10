@@ -954,7 +954,7 @@ class Processor : public GCItem {
 				// FIX : this could be a struct used by a member Processor too instead of separate ip, scope etc...
 				struct CStackEntry {
 					const CodeWord* returnIP;
-					Scope* scope; // doesn't change during function execution
+					Scope* scope;
 					Object* thisObject; // doesn't change during function execution
 				};
 				
@@ -968,7 +968,7 @@ class Processor : public GCItem {
 					Scope* scope;
 				};
 				
-				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list?
+				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
@@ -1009,7 +1009,7 @@ class Processor : public GCItem {
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
 					, DELETE_SCOPE_AND_RETURN_OP
 					, RETURN_OP
-					, POP_RETURN_OP
+					, DISCARD_RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, SCOPE_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
@@ -1158,13 +1158,15 @@ class Compiler : public GCItem {
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
+				Compiler* parentCompiler;
 				std::map<Value, Int32> definedConstants; // FIX : drop map dependency, increases code size
 				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
-				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
+				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
+				int catchScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
 
 				virtual void gcMark(GCHeap& heap) const {
@@ -1174,7 +1176,6 @@ class Compiler : public GCItem {
 					}
 					super::gcMark(heap);
 				}
-Compiler* parentCompiler;
 };
 
 #endif

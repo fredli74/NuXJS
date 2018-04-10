@@ -2050,7 +2050,7 @@ bool Processor::privateRun() {
 							updateInternals();
 							break;
 			
-			case POP_RETURN_OP: {
+			case DISCARD_RETURN_OP: {
 				--csp;
 				assert(csp >= cstackStart);
 				break;
@@ -2211,7 +2211,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
 		, "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
-		, "DELETE_SCOPE_AND_RETURN", "RETURN", "RETURN_TO_HOST"
+		, "DELETE_SCOPE_AND_RETURN", "RETURN", "DISCARD_RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "SCOPE", "DELETE"
 		, "GEN_FUNC", "DECLARE"
 		, "CATCH_SCOPE", "WITH_SCOPE", "POP_SCOPE"
@@ -2369,7 +2369,7 @@ struct Compiler::SemanticScope {
 		switch (type) {
 			case CATCH_TYPE:
 			case WITH_TYPE: compiler->emit(Processor::POP_SCOPE_OP); break;
-			case FINALLY_TYPE: compiler->emit(Processor::POP_RETURN_OP); break;
+			case FINALLY_TYPE: compiler->emit(Processor::DISCARD_RETURN_OP); break;
 			default: break;
 		}
 	}
@@ -2402,10 +2402,10 @@ struct Compiler::ExpressionResult {
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler)
 		: heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
-		, withScopeDepth(0)
-		, canDeleteScopeOnExit(false)
-, parentCompiler(parentCompiler) {
+		, compilingFor(compileFor), parentCompiler(parentCompiler)
+		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
+		, withScopeCounter(0), catchScopeCounter(0)
+		, canDeleteScopeOnExit(false) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -3183,10 +3183,13 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteScopeOnExit = false;
-						} else if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
+						} else if (compilingFor != FOR_EVAL) {
 							int distance = -1;
 							const Compiler* c = this;
 							do {
+								if (c->withScopeCounter != 0) {
+									break;
+								}
 								const Table::Bucket* bucket = c->codeDef->nameIndexes.lookup(name);
 								if (bucket != 0) {
 									Value index = bucket->getValue();
@@ -3195,8 +3198,8 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 										break;
 									}
 								}
+								distance += 1 + c->catchScopeCounter;
 								c = c->parentCompiler;
-								++distance;
 							} while (c != 0);
 						}
 						break;
@@ -3258,7 +3261,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
-		if (withScopeDepth == 0 && !index.isUndefined()) {
+		if (withScopeCounter == 0 && !index.isUndefined()) {
 			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
 		}
 	}
@@ -3386,10 +3389,12 @@ void Compiler::withStatement(SemanticScope* currentScope, ExpressionResult& eval
 	rvalueExpression();
 	expectToken(")", true);
 	emit(Processor::WITH_SCOPE_OP);
-	++withScopeDepth;
-	SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, currentScope);
-	statement(&withScope, &withScope, evalXR);
-	--withScopeDepth;
+	{
+		++withScopeCounter;
+		SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, currentScope);
+		statement(&withScope, &withScope, evalXR);
+		--withScopeCounter;
+	}
 	emit(Processor::POP_SCOPE_OP);
 }
 
@@ -3576,10 +3581,11 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				if (whiteNoLF()) {
 					optionalExpression(returnXR, LOWEST_PREC);
 				}
-				SemanticScope* s = currentScope;
 				bool safeKept = false;
-				while (s != 0) { // FIX : sub
-					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE || s->type == SemanticScope::WITH_TYPE) {
+				for (SemanticScope* s = currentScope; s != 0; s = s->next) {
+					if (s->type == SemanticScope::CATCH_TYPE
+							|| s->type == SemanticScope::TRY_TYPE
+							|| s->type == SemanticScope::WITH_TYPE) {
 						if (!safeKept) {
 							returnXR = safeKeep(returnXR);
 							safeKept = true;
@@ -3589,7 +3595,6 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
-					s = s->next;
 				}
 				makeRValue(returnXR);
 				if (safeKept) {
@@ -3637,16 +3642,20 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
 					emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 					expectToken(")", true);
-					SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
-					expectToken("{", true); // FIX : sub
-					statementList(&catchScope, evalXR);
-					expectToken("}", false);
-					flushXR(evalXR);
-					emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
-					catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
-					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
-					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
-						completeForwardBranch(*it);
+					{
+						++catchScopeCounter;
+						SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
+						expectToken("{", true); // FIX : sub
+						statementList(&catchScope, evalXR);
+						expectToken("}", false);
+						flushXR(evalXR);
+						emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
+						catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+						catchEndPoint = emitForwardBranch(Processor::JMP_OP);
+						for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
+							completeForwardBranch(*it);
+						}
+						--catchScopeCounter;
 					}
 					if (didExist) {
 						nameIndexes.update(nameIndexes.insert(exceptionVarName), previousLocalIndex);

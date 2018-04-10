@@ -29,3 +29,9 @@
 < 123
 < 456
 -
+> (function() { with({x:"yeah"}) { (function() { print(x) })() } })()
+< yeah
+-
+> (function() { var x = "nope"; with({x:"yeah"}) { (function() { print(x) })() } })()
+< yeah
+-
