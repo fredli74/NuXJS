@@ -4,27 +4,28 @@
 > (function() { var i = 123; try { throw "x" } catch (x) { (function() { print(i) })() } })()
 < 123
 -
-> (function() { var j = 345; (function() { var i = 123; try { throw "x" } catch (x) { (function() { print(i); print(j) })() } })() })()
+> (function() { var j = 456, x = 101112; (function() { var i = 123, y = 131415; try { throw 789 } catch (x) { (function() { print(i); print(j); print(x) })() } })() })()
 < 123
-< 345
+< 456
+< 789
 -
-> (function() { var j = 345; (function() { var i = 123; with ({}) { (function() { print(i); print(j) })() } })() })()
+> (function() { var j = 456; (function() { var i = 123; with ({}) { (function() { print(i); print(j) })() } })() })()
 < 123
-< 345
+< 456
 -
-> (function() { var j = 345; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j) })() } })() })()
+> (function() { var j = 456; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j) })() } })() })()
 < 123
-< 345
+< 456
 -
-> (function() { var j = 345; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j); return })() } })() })()
+> (function() { var j = 456; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j); return })() } })() })()
 < 123
-< 345
+< 456
 -
-> (function() { var j = 345; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j); return; print("no") })() } })() })()
+> (function() { var j = 456; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j); return; print("no") })() } })() })()
 < 123
-< 345
+< 456
 -
-> (function() { var j = 345; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j) })(); return; print("no") } })() })()
+> (function() { var j = 456; (function() { var i = 123; try { return; } finally { (function() { print(i); print(j) })(); return; print("no") } })() })()
 < 123
-< 345
+< 456
 -

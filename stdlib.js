@@ -1538,4 +1538,6 @@ $defineProperties(Object, { dontEnum: true }, {
 	})
 });
 
+if (NaN.toString() !== 'NaN') throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
+
 })

@@ -1,7 +1,7 @@
 #pragma GCC optimize ("no-finite-math-only")
 
 #ifdef __FAST_MATH__
-#error This code requires IEEE compliant floating point handling. Avoid -Ofast / -ffast-math etc, at least for this source file.
+	#error This code requires IEEE compliant floating point handling. Avoid -Ofast / -ffast-math etc, at least for this source file.
 #endif
 
 // FIX: all below
