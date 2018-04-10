@@ -1,7 +1,7 @@
 #!/bin/bash
 
 COMPILER=g++
-# COMPILER=/opt/local/bin/g++-mp-5
+# COMPILER=/opt/local/bin/g++-mp-7
 
 if [ "$1" == "debug" ]; then
 	OPTIONS="-O0 -DDEBUG -g"

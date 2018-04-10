@@ -7,6 +7,7 @@
 #include <string>
 #include <cstring>
 
+typedef short Int16;
 typedef unsigned short UInt16;
 typedef int Int32;
 typedef unsigned int UInt32;
@@ -694,7 +695,8 @@ class Frame : public Object {
 				virtual const CodeDefinition* getFunctionDef() const = 0;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
-				
+				Frame* getParentFrame() const { return parentFrame; }
+	
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Frame* parentFrame;
 
@@ -971,12 +973,11 @@ class Processor : public GCItem {
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
 					, POP_OP										// stack: value ->
-					, REPUSH_OP										// stack: value -> value, value
-					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
-					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+					, READ_FAR_INDEXED_OP							// operand: (frame_distance << 16) | local_index, stack: -> value
+					, WRITE_FAR_INDEXED_OP							// operand: (frame_distance << 16) | local_index, stack: value -> value
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
@@ -995,6 +996,9 @@ class Processor : public GCItem {
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
+					, REPUSH_OP										// stack: value -> value, value
+					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
+					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
 					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
@@ -1010,12 +1014,12 @@ class Processor : public GCItem {
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
 					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
-					, THROW_OP										// stack: value ->
+					, CATCH_FRAME_OP								// operand: const_index for exception variable name
+					, WITH_FRAME_OP									// stack: object ->
+					, POP_FRAME_OP
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
-					, CATCH_FRAME_OP								// operand: const_index for exception variable name
-					, PUSH_FRAME_OP									// stack: object ->
-					, POP_FRAME_OP
+					, THROW_OP										// stack: value ->
 					, IN_OP											// stack: string, object -> boolean
 					, INSTANCE_OF_OP								// stack: object, function -> boolean
 					, TYPEOF_OP										// stack: value -> string
@@ -1088,7 +1092,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
+				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler = 0);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1169,6 +1173,7 @@ class Compiler : public GCItem {
 					}
 					super::gcMark(heap);
 				}
+Compiler* parentCompiler;
 };
 
 #endif

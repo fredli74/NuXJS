@@ -1,3 +1,9 @@
+#pragma GCC optimize ("no-finite-math-only")
+
+#ifdef __FAST_MATH__
+#error This code requires IEEE compliant floating point handling. Avoid -Ofast / -ffast-math etc, at least for this source file.
+#endif
+
 // FIX: all below
 
 #include "assert.h"
@@ -13,7 +19,7 @@
 #include <vector>
 #include "NuXJScript.h"
 
-	bool supressStdErr = false; // FIX : drop
+	bool suppressStdErr = false; // FIX : drop
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
@@ -1830,12 +1836,29 @@ bool Processor::privateRun() {
 		const Int32 operand = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
 			case POP_OP:			pop(1); break;
-			case REPUSH_OP:			push(vsp[0]); break;
-			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
-			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 			case CONST_OP:			push(constants[operand]); break;
 			case READ_INDEXED_OP:	push(indexed[operand]); break;
 			case WRITE_INDEXED_OP:	indexed[operand] = vsp[0]; break;
+			case READ_FAR_INDEXED_OP: {
+				int distance = operand >> 16;
+				const int index = static_cast<Int16>(operand);
+				const Frame* f = frame;
+				while (--distance >= 0) {
+					f = f->getParentFrame();
+				}
+				push(f->getIndexedPointer()[index]);
+				break;
+			}
+			case WRITE_FAR_INDEXED_OP:	{
+				int distance = operand >> 16;
+				const int index = static_cast<Int16>(operand);
+				const Frame* f = frame;
+				while (--distance >= 0) {
+					f = f->getParentFrame();
+				}
+				f->getIndexedPointer()[index] = vsp[0];
+				break;
+			}
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand];
 										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -1917,10 +1940,6 @@ bool Processor::privateRun() {
 			case GT_OP:		poppush(Value(vsp[0].isLessThan(vsp[-1]))); break;
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
-			case JT_OP:		ip += (vsp[0].toBool() ? operand : 0); pop(1); break;
-			case JF_OP:		ip += (!vsp[0].toBool() ? operand : 0); pop(1); break;
-			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += operand; else pop(1); break;
-			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += operand; else pop(1); break;
 
 			case JSR_OP:	++csp; // FIX : bounds check? or reserve?
 							assert(csp < cstackEnd);
@@ -1930,23 +1949,28 @@ bool Processor::privateRun() {
 							ip += operand;
 							break;
 
-            case DELETE_FRAME_AND_RETURN_OP: delete frame; // fall through
-			case RETURN_OP:	ip = (csp--)->returnIP;
-							assert(ip != 0);
-							assert(csp >= cstackStart);							
-							updateInternals();
-							break;
+			case JT_OP:		ip += (vsp[0].toBool() ? operand : 0); pop(1); break;
+			case JF_OP:		ip += (!vsp[0].toBool() ? operand : 0); pop(1); break;
+			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += operand; else pop(1); break;
+			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += operand; else pop(1); break;
 
-			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
-							ip = (csp--)->returnIP;
-							assert(csp >= cstackStart - 1);
-							result = vsp[0];
-							pop(1);
-							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
-							// updateInternals();
-                            clockCyclesLeft = cyclesLeft;
-							return false;
+			case REPUSH_OP:			push(vsp[0]); break;
+			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
+			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 
+			case CALL_OP: {
+				Int32 n = operand;
+				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				Function* f = returnPointer->asFunction();
+				if (f == 0) {
+					error(TYPE_ERROR, heap.manage(new (&heap) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					break;
+				}
+				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+				vsp -= n;
+				break;
+			}
+			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand;
 				Object* thisObject = vsp[-n - 1].toObject(engine, true);
@@ -1966,6 +1990,7 @@ bool Processor::privateRun() {
 				vsp -= n + 1;
 				break;
 			}
+			
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
 				Int32 n = operand;
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
@@ -1979,19 +2004,7 @@ bool Processor::privateRun() {
 				vsp -= n;
 				break;
 			}
-			case CALL_OP: {
-				Int32 n = operand;
-				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Function* f = returnPointer->asFunction();
-				if (f == 0) {
-					error(TYPE_ERROR, heap.manage(new (&heap) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
-				}
-				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-				vsp -= n;
-				break;
-			}
-			
+
 			case NEW_OP: {
 				Int32 n = operand; // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
@@ -2029,6 +2042,23 @@ bool Processor::privateRun() {
 				break;
 			}
 
+            case DELETE_FRAME_AND_RETURN_OP: delete frame; // fall through
+			case RETURN_OP:	ip = (csp--)->returnIP;
+							assert(ip != 0);
+							assert(csp >= cstackStart);							
+							updateInternals();
+							break;
+
+			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
+							ip = (csp--)->returnIP;
+							assert(csp >= cstackStart - 1);
+							result = vsp[0];
+							pop(1);
+							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if csp == cstackStart - 1
+							// updateInternals();
+                            clockCyclesLeft = cyclesLeft;
+							return false;
+
 			case THIS_OP: push(Value(csp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
@@ -2058,7 +2088,16 @@ bool Processor::privateRun() {
 				poppush(Value(o->deleteProperty(engine, vsp[0])));
 				break;
 			}
-			case PUSH_FRAME_OP: { // FIX : why don't we use the value stack for pushing / popping frames only (when it isn't a full call)
+			case CATCH_FRAME_OP: {
+				++csp;
+				assert(csp < cstackEnd);
+				csp->returnIP = 0;
+				frame = csp->frame = heap.manage(new (&heap) CatchFrame(frame, constants[operand].getString(), vsp[0]));
+				csp->thisObject = csp[-1].thisObject;
+				pop(1);
+				break;
+			}
+			case WITH_FRAME_OP: { // FIX : why don't we use the value stack for pushing / popping frames only (when it isn't a full call)
 				++csp;
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
@@ -2083,15 +2122,6 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
-			case CATCH_FRAME_OP: {
-				++csp;
-				assert(csp < cstackEnd);
-				csp->returnIP = 0;
-				frame = csp->frame = heap.manage(new (&heap) CatchFrame(frame, constants[operand].getString(), vsp[0]));
-				csp->thisObject = csp[-1].thisObject;
-				pop(1);
-				break;
-			}
 			case THROW_OP: throwVirtualException(vsp[0]); break;
 			case IN_OP: {
 				o = vsp[0].asObject();
@@ -2170,8 +2200,8 @@ bool Processor::run() {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "REPUSH", "REPUSH_2", "POST_SHUFFLE"
-		, "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
+		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "READ_FAR_INDEXED", "WRITE_FAR_INDEXED"
+		, "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
 		, "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
@@ -2180,11 +2210,13 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
+		, "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
 		, "DELETE_FRAME_AND_RETURN", "RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "FRAME", "DELETE"
 		, "GEN_FUNC", "DECLARE"
-		, "THROW", "TRY", "TRIED", "CATCH_FRAME", "PUSH_FRAME", "POP_FRAME"
+		, "CATCH_FRAME", "WITH_FRAME", "POP_FRAME"
+		, "TRY", "TRIED", "THROW"
 		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
 	};
@@ -2212,6 +2244,11 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
+				break;
+			}
+			case Processor::READ_FAR_INDEXED_OP:
+			case Processor::WRITE_FAR_INDEXED_OP: {
+				std::wcerr << L" (" << static_cast<int>(static_cast<Int16>(operand)) << L" ^ " << static_cast<int>(operand >> 16) << ")";
 				break;
 			}
 			case Processor::CALL_OP:
@@ -2348,19 +2385,23 @@ struct Compiler::ExpressionResult {
 		, PUSHED_PRIMITIVE	// primitive value on stack
 		, CONSTANT			// constant (and primitive) value on stack
 		, INDEXED			// arbitrary value in indexed variable
+		, FAR_INDEXED		// arbitrary value in a parent frame indexed variable
 		, NAMED				// arbitrary value in named variable
 		, PROPERTY			// arbitrary value in object property
 	};
-	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
-	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED), d(0) { }
+	ExpressionResult(Type type, const Value& value = Value::UNDEFINED, int farDistance = 0) : t(type), v(value), d(farDistance) { }
 	Type t;
 	Value v;
+	int d;
 };
 
-Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor) : heap(heap), codeDef(codeDef)
+Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler)
+		: heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeDepth(0)
-		, canDeleteFrameOnExit(false) {
+		, canDeleteFrameOnExit(false)
+, parentCompiler(parentCompiler) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2585,6 +2626,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::FAR_INDEXED: emit(Processor::READ_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
@@ -2602,6 +2644,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE:
 		case ExpressionResult::INDEXED:
+		case ExpressionResult::FAR_INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY: {
 			makeRValue(xr);
@@ -2638,6 +2681,7 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
 		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::FAR_INDEXED: emit(Processor::WRITE_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -2958,6 +3002,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
+				case ExpressionResult::FAR_INDEXED:
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
 				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
@@ -3035,7 +3080,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
 	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
-	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
+	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION, this);
 	heap.protect(&funcCompiler);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
@@ -3135,13 +3180,20 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteFrameOnExit = false;
 						} else if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
-							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
-							if (bucket != 0) {
-								Value index = bucket->getValue();
-								if (!index.isUndefined()) {
-									xr = ExpressionResult(ExpressionResult::INDEXED, index);
+							int distance = 0;
+							const Compiler* c = this;
+							do {
+								const Table::Bucket* bucket = c->codeDef->nameIndexes.lookup(name);
+								if (bucket != 0) {
+									Value index = bucket->getValue();
+									if (!index.isUndefined()) {
+										xr = ExpressionResult((distance > 0 ? ExpressionResult::FAR_INDEXED : ExpressionResult::INDEXED), index, distance);
+										break;
+									}
 								}
-							}
+								c = c->parentCompiler;
+								++distance;
+							} while (c != 0);
 						}
 						break;
 					}
@@ -3329,7 +3381,7 @@ void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
 	expectToken("(", false);
 	rvalueExpression();
 	expectToken(")", true);
-	emit(Processor::PUSH_FRAME_OP);
+	emit(Processor::WITH_FRAME_OP);
 	++withScopeDepth;
 	Scope withScope(&heap, Scope::WITH_TYPE, currentScope);
 	statement(&withScope, &withScope, evalXR);
@@ -3767,7 +3819,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	}
 	codeDef->code.shrink();
 	codeDef->constants->shrink();
-if (!supressStdErr) {
+if (!suppressStdErr) {
 	disassemble(heap, *codeDef);
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants->size() << std::endl;
@@ -4388,7 +4440,7 @@ int testMain(int argc, const char* argv[]) {
      std::cout << sizeof(ScriptObject) << std::endl;
      std::cout << sizeof(Array) << std::endl;
      std::cout << sizeof(ScriptFunction) << std::endl;*/
-    supressStdErr = true;
+suppressStdErr = true;
     const String LF_STRING("\n");
     const String PRINT_STRING("print");
     /*std::cerr << "Value size: " << sizeof (Value) << std::endl;
@@ -4426,7 +4478,7 @@ int testMain(int argc, const char* argv[]) {
         std::cerr << "exception setting up standard lib" << std::endl;
         return 1;
     }
-    supressStdErr = false;
+    suppressStdErr = false;
     
     String source(EMPTY_STRING);
     std::auto_ptr<std::wifstream> inputFileStream;
@@ -4437,7 +4489,7 @@ int testMain(int argc, const char* argv[]) {
     bool pauseBeforeQuit = false;
     for (int argi = 1; argi < argc; ++argi) {
         if (strcmp(argv[argi], "-t") == 0) doTime = true;
-        else if (strcmp(argv[argi], "-s") == 0) supressStdErr = true;
+        else if (strcmp(argv[argi], "-s") == 0) suppressStdErr = true;
         else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
             gcRate = atol(argv[++argi]);
             autoGCRate = false;
@@ -4537,7 +4589,7 @@ int testMain(int argc, const char* argv[]) {
                     throw;
                 }
                 globalsFrame.updatedCode();
-                if (!supressStdErr) {
+                if (!suppressStdErr) {
                     for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
@@ -4553,7 +4605,7 @@ int testMain(int argc, const char* argv[]) {
                         long beforeSize = static_cast<long>(heap.size());
                         UInt32 sweptCount = heap.gc();
                         long nowSize = static_cast<long>(heap.size());;
-                        if (!supressStdErr) {
+                        if (!suppressStdErr) {
                             std::cerr << "\tGC rate: " << gcRate << std::endl;
                             std::cerr << "\tGC swept: " << sweptCount << std::endl;
                             std::cerr << "\tGC kept: " << heap.count() << std::endl;
@@ -4569,7 +4621,7 @@ int testMain(int argc, const char* argv[]) {
                     }
                     
                     if (done) {
-                        if (!supressStdErr) {
+                        if (!suppressStdErr) {
                             std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
                             assert(processor.vsp - vstack + 1 == 0);
                             Value v = processor.getResult();
