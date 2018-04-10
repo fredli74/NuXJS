@@ -961,10 +961,11 @@ class Processor : public GCItem {
 				// FIX : {ip, vsp, csp} could be a struct used by Processor too, or.. CStackEntry?
 	protected:	struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, CStackEntry* csp) : ip(ip), csp(csp), vsp(vsp) { }
+					Catcher(const CodeWord* ip, Value* vsp, CStackEntry* csp, Scope* scope) : ip(ip), csp(csp), vsp(vsp), scope(scope) { }
 					const CodeWord* ip;
 					Value* vsp;
 					CStackEntry* csp;
+					Scope* scope;
 				};
 				
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list?
@@ -1008,6 +1009,7 @@ class Processor : public GCItem {
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
 					, DELETE_SCOPE_AND_RETURN_OP
 					, RETURN_OP
+					, POP_RETURN_OP
 					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP, SCOPE_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean

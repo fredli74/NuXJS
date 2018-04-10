@@ -1816,6 +1816,7 @@ void Processor::throwVirtualException(const Value& exception) {
 	ip = catcher.ip;
 	assert(ip != 0);
 	csp = catcher.csp;
+	csp->scope = catcher.scope;
 	vsp = catcher.vsp;
 	push(exception);
 	catchers.resize(catchers.size() - 1);
@@ -2048,7 +2049,13 @@ bool Processor::privateRun() {
 							assert(csp >= cstackStart);							
 							updateInternals();
 							break;
-
+			
+			case POP_RETURN_OP: {
+				--csp;
+				assert(csp >= cstackStart);
+				break;
+			}
+			
 			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
 							ip = (csp--)->returnIP;
 							assert(csp >= cstackStart - 1);
@@ -2089,36 +2096,28 @@ bool Processor::privateRun() {
 				break;
 			}
 			case CATCH_SCOPE_OP: {
-				++csp;
-				assert(csp < cstackEnd);
-				csp->returnIP = 0;
-				scope = csp->scope = heap.manage(new (&heap) CatchScope(scope, constants[operand].getString(), vsp[0]));
-				csp->thisObject = csp[-1].thisObject;
+				assert(csp->scope == scope);
+				csp->scope = scope = heap.manage(new (&heap) CatchScope(scope, constants[operand].getString(), vsp[0]));
 				pop(1);
 				break;
 			}
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
-				++csp;
-				assert(csp < cstackEnd);
-				csp->returnIP = 0;
+				assert(csp->scope == scope);
 				Object* o = vsp[0].toObject(engine, false);
 				if (o == 0) { // FIX : so common!
 					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 					break;
 				}
-				scope = csp->scope = heap.manage(new (&heap) WithScope(scope, o));
-				csp->thisObject = csp[-1].thisObject;
+				csp->scope = scope = heap.manage(new (&heap) WithScope(scope, o));
 				pop(1);
 				break;
 			}
 			case POP_SCOPE_OP: {
-				--csp;
-				assert(csp >= cstackStart);
-				updateInternals();
+				csp->scope = scope = scope->getParentScope();
 				break;
 			}
 			case TRY_OP: {
-				catchers.append(Catcher(ip + operand, vsp, csp));
+				catchers.append(Catcher(ip + operand, vsp, csp, scope));
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
@@ -2366,8 +2365,13 @@ struct Compiler::SemanticScope {
 	void makeIteratorScopes(SemanticScope* untilScope) {
 		for (SemanticScope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
 	}
-	bool needToPopScope() const {
-		return (type == CATCH_TYPE || type == FINALLY_TYPE || type == WITH_TYPE);
+	void popStuff(Compiler* compiler) const {
+		switch (type) {
+			case CATCH_TYPE:
+			case WITH_TYPE: compiler->emit(Processor::POP_SCOPE_OP); break;
+			case FINALLY_TYPE: compiler->emit(Processor::POP_RETURN_OP); break;
+			default: break;
+		}
 	}
 	Type type;
 	String label; // empty for automatic while, for, case labels
@@ -3441,9 +3445,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				while (s != 0 && !((s->type == SemanticScope::ITERATOR_LABEL_TYPE
 						|| ((isBreak || !label.empty()) && s->type == SemanticScope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
-					if (s->needToPopScope()) {
-						emit(Processor::POP_SCOPE_OP);
-					}
+					s->popStuff(this);
 					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) { // FIX : share with return
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
@@ -3583,9 +3585,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 							safeKept = true;
 						}
 					}
-					if (s->needToPopScope()) {
-						emit(Processor::POP_SCOPE_OP);
-					}
+					s->popStuff(this);
 					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
