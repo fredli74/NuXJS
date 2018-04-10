@@ -624,7 +624,7 @@ class EvalFunction : public Function {
 				}
 };
 
-class Frame;
+class Scope;
 
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
@@ -637,7 +637,7 @@ class Constants : public GCItem, public QuickVector<Value> {
 
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
-	friend class ScriptFrame;
+	friend class ScriptScope;
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
@@ -657,7 +657,7 @@ class CodeDefinition : public Object {
 				Constants* const constants;
 				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == current catch parameter during compile-time only (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
-				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Frame. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
+				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Scope. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
 				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
 				const String* name;
@@ -688,30 +688,29 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 };
 
-// FIX : Frame -> Scope? More ES lingo
-class Frame : public Object {
+class Scope : public Object {
 	public:		typedef Object super;
-				Frame(Frame* parentFrame = 0) : parentFrame(parentFrame) { };
+				Scope(Scope* parentScope = 0) : parentScope(parentScope) { };
 				virtual const CodeDefinition* getFunctionDef() const = 0;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
-				Frame* getParentFrame() const { return parentFrame; }
+				Scope* getParentScope() const { return parentScope; }
 	
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Frame* parentFrame;
+				Scope* parentScope;
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parentFrame);
+					heap.mark(parentScope);
 					super::gcMark(heap);
 				}
 };
 
 class ScriptFunction : public ExtensibleFunction {
-	friend class ScriptFrame;
+	friend class ScriptScope;
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(CodeDefinition* codeDef, Frame* environment);
+				ScriptFunction(CodeDefinition* codeDef, Scope* environment);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -720,7 +719,7 @@ class ScriptFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
 				CodeDefinition* const codeDef;
-				Frame* const environment;
+				Scope* const environment;
 				
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
@@ -781,14 +780,14 @@ class ErrorPrototype : public Error {
 };
 
 class Engine {
-	public:		Engine(GCHeap& heap, Frame* globals); // FIX : globals, in a Frame, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard ScriptObject, there is some performance benefit to having them indexed just like a regular function.
-				// FIX : the only problem with a standard ScriptFrame for globals is that it's got arguments. It shouldn't have arguments.
+	public:		Engine(GCHeap& heap, Scope* globals); // FIX : globals, in a Scope, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard ScriptObject, there is some performance benefit to having them indexed just like a regular function.
+				// FIX : the only problem with a standard ScriptScope for globals is that it's got arguments. It shouldn't have arguments.
 				GCHeap& getHeap() const { return gcHeap; }
-				Frame* getGlobals() const { return globals; }
+				Scope* getGlobals() const { return globals; }
 				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				Frame* const globals;
+				Scope* const globals;
 				
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
@@ -806,12 +805,12 @@ class Engine {
 				double unixEpochTimeDiff;
 };
 
-class ScriptFrame : public LazyObject<Frame> {
+class ScriptScope : public LazyObject<Scope> {
 	friend class Arguments;
 	
-	public:		typedef LazyObject<Frame> super;
+	public:		typedef LazyObject<Scope> super;
 
-				ScriptFrame(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
@@ -834,24 +833,24 @@ class ScriptFrame : public LazyObject<Frame> {
 
 // FIX : if CStackEntry included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
-	This is the direct frame of an eval(), it only bridges all virtuals to the parent ScriptFrame, but has a different
+	This is the direct scope of an eval(), it only bridges all virtuals to the parent ScriptScope, but has a different
 	codeDef pointer (for constants etc).
 	
-	FIX : I think we can use a ScriptFrame now for simplicity, if we just empty codeDef->nameIndexes first.
-	Well, it shouldn't have arguments either. Like the global frame.
+	FIX : I think we can use a ScriptScope now for simplicity, if we just empty codeDef->nameIndexes first.
+	Well, it shouldn't have arguments either. Like the global scope.
 */
-class EvalFrame : public Frame {
-	public:		typedef Frame super;
+class EvalScope : public Scope {
+	public:		typedef Scope super;
 
-				EvalFrame(Heap* heap, Frame* parentFrame, const CodeDefinition* evalCodeDef);
+				EvalScope(Heap* heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
-				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a ScriptFrame instead of EvalFrame. And enterEval would be more similar to calling a function also.
+				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a ScriptScope instead of EvalScope. And enterEval would be more similar to calling a function also.
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(evalCodeDef);
@@ -861,19 +860,19 @@ class EvalFrame : public Frame {
 };
 
 /*
-	The CatchFrame is necessary because within a catch block there is a single extra variable that is local to the
+	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
 	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
 	exit point.
 */
-class CatchFrame : public Frame {
-	public:		typedef Frame super;
+class CatchScope : public Scope {
+	public:		typedef Scope super;
 
-				CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue);
-				virtual const CodeDefinition* getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
+				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+				virtual const CodeDefinition* getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
 
 	protected:	const String* exceptionName;
 				Value exceptionValue;
@@ -885,14 +884,14 @@ class CatchFrame : public Frame {
 				}
 };
 
-class WithFrame : public Frame {
-	public:		typedef Frame super;
-				WithFrame(Frame* parentFrame, Object* withObject);
+class WithScope : public Scope {
+	public:		typedef Scope super;
+				WithScope(Scope* parentScope, Object* withObject);
 				virtual const CodeDefinition* getFunctionDef() const;
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentFrame->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
 
 	protected:	Object* withObject;
 				virtual void gcMark(GCHeap& heap) const {
@@ -904,7 +903,7 @@ class WithFrame : public Frame {
 class Arguments : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 
-				Arguments(Heap* heap, ScriptFrame* frame, UInt32 argumentsCount);
+				Arguments(Heap* heap, ScriptScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
@@ -915,12 +914,12 @@ class Arguments : public LazyObject<Object> {
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Value* findProperty(const Value& key) const;
-				ScriptFrame* const frame;
+				ScriptScope* const scope;
 				UInt32 const argumentsCount;
 				QuickArray<Byte> deletedArguments;
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(frame);
+					heap.mark(scope);
 					super::gcMark(heap);
 				}
 };
@@ -952,10 +951,10 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 class Processor : public GCItem {
 	public:		typedef GCItem super;
 
-				// FIX : this could be a struct used by a member Processor too instead of separate ip, frame etc...
+				// FIX : this could be a struct used by a member Processor too instead of separate ip, scope etc...
 				struct CStackEntry {
 					const CodeWord* returnIP;
-					Frame* frame; // doesn't change during function execution
+					Scope* scope; // doesn't change during function execution
 					Object* thisObject; // doesn't change during function execution
 				};
 				
@@ -976,8 +975,8 @@ class Processor : public GCItem {
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
-					, READ_FAR_INDEXED_OP							// operand: (frame_distance << 16) | local_index, stack: -> value
-					, WRITE_FAR_INDEXED_OP							// operand: (frame_distance << 16) | local_index, stack: value -> value
+					, READ_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: -> value
+					, WRITE_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: value -> value
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, GET_PROPERTY_OP								// stack: object, name -> value
@@ -1007,16 +1006,16 @@ class Processor : public GCItem {
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
-					, DELETE_FRAME_AND_RETURN_OP
+					, DELETE_SCOPE_AND_RETURN_OP
 					, RETURN_OP
 					, RETURN_TO_HOST_OP
-					, THIS_OP, VOID_OP, FRAME_OP					// stack: -> value
+					, THIS_OP, VOID_OP, SCOPE_OP					// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
 					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
-					, CATCH_FRAME_OP								// operand: const_index for exception variable name
-					, WITH_FRAME_OP									// stack: object ->
-					, POP_FRAME_OP
+					, CATCH_SCOPE_OP								// operand: const_index for exception variable name
+					, WITH_SCOPE_OP									// stack: object ->
+					, POP_SCOPE_OP
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
 					, THROW_OP										// stack: value ->
@@ -1035,7 +1034,7 @@ class Processor : public GCItem {
 	public:		Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
-				void chain(const CodeWord* ip, Frame* frame, Object* thisObject); // FIX : turn into enter global code or what?
+				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
 	// FIX :			void call(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void resetTimeOut(Int32 clockCycles);
@@ -1066,7 +1065,7 @@ public: // FIX : not public, just for some asserts now I think
 				virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(vstackStart, vsp + 1);
 					for (CStackEntry* c = cstackStart; c != csp + 1; ++c) {
-						heap.mark(c->frame);
+						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}
 					result.gcMark(heap);
@@ -1075,7 +1074,7 @@ public: // FIX : not public, just for some asserts now I think
 
 				// Copies from call stack. Will be gc marked from there.
 				
-				Frame* frame;
+				Scope* scope;
 				const Value* constants;
 				Value* indexed;
 };
@@ -1099,7 +1098,7 @@ class Compiler : public GCItem {
 				const Char* getStopPoint() const { return p; }
 
 	protected:	struct ExpressionResult;
-				struct Scope;
+				struct SemanticScope;
 
 				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode op, Int32 operand = 0);
@@ -1118,8 +1117,8 @@ class Compiler : public GCItem {
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 
-				void completeContinues(const Scope* fromScope, const Scope* untilScope);
-				void completeBreaks(const Scope* scope);
+				void completeContinues(const SemanticScope* fromScope, const SemanticScope* untilScope);
+				void completeBreaks(const SemanticScope* Semanticscope);
 				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
@@ -1136,13 +1135,13 @@ class Compiler : public GCItem {
 				ExpressionResult varDeclaration();
 				void flushXR(ExpressionResult& evalXR);
 				void varDeclarations();
-				void forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
+				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
-				void forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void functionStatement();
-				void withStatement(Scope* currentScope, ExpressionResult& evalXR);
-				void statement(Scope* firstScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR);
-				void statementList(Scope* firstScope, ExpressionResult& evalXR);
+				void withStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
+				void statement(SemanticScope* firstScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void statementList(SemanticScope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				bool eof() const { return p == e; }
 				void semicolon(bool acceptLF = true);
@@ -1164,7 +1163,7 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
 				int withScopeDepth; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
-				bool canDeleteFrameOnExit; // three reasons we can't delete frame on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with frame
+				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);

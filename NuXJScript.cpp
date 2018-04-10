@@ -1313,7 +1313,7 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(CodeDefinition* codeDef, Frame* environment) : codeDef(codeDef), environment(environment) { }
+ScriptFunction::ScriptFunction(CodeDefinition* codeDef, Scope* environment) : codeDef(codeDef), environment(environment) { }
 Value ScriptFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
 CodeDefinition* ScriptFunction::getDefinition() const { return codeDef; }
 
@@ -1445,8 +1445,8 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 
 /* --- Arguments --- */
 
-Arguments::Arguments(Heap* heap, ScriptFrame* frame, UInt32 argumentsCount)
-		: frame(frame)
+Arguments::Arguments(Heap* heap, ScriptScope* scope, UInt32 argumentsCount)
+		: scope(scope)
 		, argumentsCount(argumentsCount)
 		, deletedArguments(argumentsCount, heap) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
@@ -1464,7 +1464,7 @@ Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPro
 
 Value* Arguments::findProperty(const Value& key) const {
 	UInt32 i;
-	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? frame->getIndexedPointer() + i : 0);
+	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? scope->getIndexedPointer() + i : 0);
 }
 
 Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
@@ -1480,7 +1480,7 @@ Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) cons
 bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	Value* p = findProperty(key);
 	if (p != 0 && (flags & (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG)) != 0) {
-		deletedArguments[p - frame->getIndexedPointer()] = true;
+		deletedArguments[p - scope->getIndexedPointer()] = true;
 		p = 0;
 	}
 	return (p == 0 ? super::setOwnProperty(engine, key, v, flags) : (*p = v, true));
@@ -1488,7 +1488,7 @@ bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v,
 
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 	const Value* p = findProperty(key);
-    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - frame->getIndexedPointer()] = true));
+    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - scope->getIndexedPointer()] = true));
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
@@ -1509,21 +1509,21 @@ Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
 
 void Arguments::constructCompleteObject(Engine& engine) const {
 	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(argumentsCount), DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(engine, Value(&CALLEE_STRING), Value(frame->function), DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(engine, Value(&CALLEE_STRING), Value(scope->function), DONT_ENUM_FLAG);
 }
 
-/* --- ScriptFrame --- */
+/* --- ScriptScope --- */
 
 static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	return codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc);
 }
 
-ScriptFrame::ScriptFrame(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
+ScriptScope::ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: function(function), passedArgumentsCount(argc), indexed(calcIndexedVariablesSize(function, argc), heap) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
-	parentFrame = function->environment;
+	parentScope = function->environment;
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
 	if (codeDef->getArgumentsCount() > argc) {
@@ -1532,7 +1532,7 @@ ScriptFrame::ScriptFrame(Heap* heap, ScriptFunction* function, UInt32 argc, cons
 }
 
 // FIX : this one must GO! Q&D crap
-void ScriptFrame::updatedCode() {
+void ScriptScope::updatedCode() {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const UInt32 oldVarsCount = indexedPointer - indexed.begin();
 	const UInt32 oldArgsCount = indexed.end() - indexedPointer;
@@ -1548,10 +1548,10 @@ void ScriptFrame::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
-Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags ScriptScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
 		name = key.getString();
 		Int32 index;
 		if (codeDef->lookupNameIndex(name, index)) {
@@ -1560,7 +1560,7 @@ Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) co
 			return DONT_DELETE_FLAG | EXISTS_FLAG;
 		}
 	}
-	if (parentFrame == 0) {
+	if (parentScope == 0) {
 		return getCompleteObject(engine)->getOwnProperty(engine, key, v);
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
@@ -1573,13 +1573,13 @@ Flags ScriptFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) co
 		*v = Value(function);
 		return DONT_DELETE_FLAG | READ_ONLY_FLAG;
 	}
-	return parentFrame->getOwnProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
+	return parentScope->getOwnProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
-bool ScriptFrame::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool ScriptScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
 		name = key.getString();
 		Int32 index;
 		if (codeDef->lookupNameIndex(name, index)) {
@@ -1588,7 +1588,7 @@ bool ScriptFrame::setOwnProperty(Engine& engine, const Value& key, const Value& 
 			return true;
 		}
 	}
-	if (parentFrame == 0) {
+	if (parentScope == 0) {
 		return getCompleteObject(engine)->setOwnProperty(engine, key, v, flags);
 	}
 	// FIX : make sub that lookup's the bucket, also use in getProperty
@@ -1603,20 +1603,20 @@ bool ScriptFrame::setOwnProperty(Engine& engine, const Value& key, const Value& 
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentFrame->setOwnProperty(engine, key, v, flags); // FIX : recursion
+	return parentScope->setOwnProperty(engine, key, v, flags); // FIX : recursion
 }
 
-bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
+bool ScriptScope::deleteProperty(Engine& engine, const Value& key) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global frame, cause you can never have variables with numerical names
+	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
 		name = key.getString();
 		Int32 index;
 		if (codeDef->lookupNameIndex(name, index)) {
 			return false;
 		}
 	}
-	if (parentFrame == 0) {
+	if (parentScope == 0) {
 		return getCompleteObject(engine)->deleteProperty(engine, key);
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
@@ -1629,10 +1629,10 @@ bool ScriptFrame::deleteProperty(Engine& engine, const Value& key) {
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentFrame->deleteProperty(engine, key); // FIX : recursion
+	return parentScope->deleteProperty(engine, key); // FIX : recursion
 }
 
-void ScriptFrame::declareVar(Engine& engine, const String* name, const Value& initValue) {
+void ScriptScope::declareVar(Engine& engine, const String* name, const Value& initValue) {
 	Int32 index;
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
@@ -1645,87 +1645,87 @@ void ScriptFrame::declareVar(Engine& engine, const String* name, const Value& in
 	}
 }
 
-void ScriptFrame::constructCompleteObject(Engine& engine) const {
-	if (parentFrame != 0) {
+void ScriptScope::constructCompleteObject(Engine& engine) const {
+	if (parentScope != 0) {
 		GCHeap& heap = engine.getHeap();
 		completeObject->setOwnProperty(engine, Value(&ARGUMENTS_STRING)
-				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<ScriptFrame*>(this), passedArgumentsCount)))
+				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<ScriptScope*>(this), passedArgumentsCount)))
 				, DONT_DELETE_FLAG);
 	}
 }
 
-Enumerator* ScriptFrame::getPropertyEnumerator(Engine& engine) const {
+Enumerator* ScriptScope::getPropertyEnumerator(Engine& engine) const {
 	Enumerator* keyEnumerator = createTableKeyList(engine.getHeap(), function->getDefinition()->nameIndexes);
 	// FIX : add 'manage' and 'new ()' to engine as well, this is so common?
 	return engine.getHeap().manage(new (&engine.getHeap()) JoiningEnumerator(engine, keyEnumerator, getCompleteObject(engine)));
 }
 
-/* --- EvalFrame --- */
+/* --- EvalScope --- */
 
-EvalFrame::EvalFrame(Heap* heap, Frame* parentFrame, const CodeDefinition* evalCodeDef)
-		: super(parentFrame), evalCodeDef(evalCodeDef), indexed(evalCodeDef->getVarsCount(), heap) {
+EvalScope::EvalScope(Heap* heap, Scope* parentScope, const CodeDefinition* evalCodeDef)
+		: super(parentScope), evalCodeDef(evalCodeDef), indexed(evalCodeDef->getVarsCount(), heap) {
 	indexedPointer = indexed.end();
 }
-Flags EvalFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return parentFrame->getOwnProperty(engine, key, v); }
-bool EvalFrame::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentFrame->setOwnProperty(engine, key, v, flags); }
-bool EvalFrame::deleteProperty(Engine& engine, const Value& key) { return parentFrame->deleteProperty(engine, key); }
+Flags EvalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return parentScope->getOwnProperty(engine, key, v); }
+bool EvalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->setOwnProperty(engine, key, v, flags); }
+bool EvalScope::deleteProperty(Engine& engine, const Value& key) { return parentScope->deleteProperty(engine, key); }
 
-/* --- CatchFrame --- */
+/* --- CatchScope --- */
 
-CatchFrame::CatchFrame(Frame* parentFrame, const String* exceptionName, const Value& exceptionValue)
-		: super(parentFrame), exceptionName(exceptionName), exceptionValue(exceptionValue) {
-	indexedPointer = parentFrame->getIndexedPointer();
+CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
+		: super(parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) {
+	indexedPointer = parentScope->getIndexedPointer();
 }
 
-Flags CatchFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags CatchScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	// FIX : always isString here right?
 	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
-	else return parentFrame->getOwnProperty(engine, key, v);
+	else return parentScope->getOwnProperty(engine, key, v);
 }
 
-bool CatchFrame::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool CatchScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	if (key.isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
-	else return parentFrame->setOwnProperty(engine, key, v, flags);
+	else return parentScope->setOwnProperty(engine, key, v, flags);
 }
 
-bool CatchFrame::deleteProperty(Engine& engine, const Value& key) {
+bool CatchScope::deleteProperty(Engine& engine, const Value& key) {
 	if (key.isEqualTo(*exceptionName)) return false;
-	else return parentFrame->deleteProperty(engine, key);
+	else return parentScope->deleteProperty(engine, key);
 }
 
-/* --- WithFrame --- */
+/* --- WithScope --- */
 
-WithFrame::WithFrame(Frame* parentFrame, Object* withObject) : super(parentFrame), withObject(withObject) {
-	indexedPointer = parentFrame->getIndexedPointer();
+WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope), withObject(withObject) {
+	indexedPointer = parentScope->getIndexedPointer();
 }
 
-const CodeDefinition* WithFrame::getFunctionDef() const { return parentFrame->getFunctionDef(); } // FIX : recursion
+const CodeDefinition* WithScope::getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 
-Flags WithFrame::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags WithScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, key, v);
-	return (flags != NONEXISTENT ? flags : parentFrame->getOwnProperty(engine, key, v));
+	return (flags != NONEXISTENT ? flags : parentScope->getOwnProperty(engine, key, v));
 }
 
-bool WithFrame::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool WithScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	Value dummy;
 	// FIX : ok, this is seriously disturbed, climbing up the prototype tree first to check existence, then again to check non-read-only (in setPropertyDeep)
 	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
 	return (findFlags != NONEXISTENT ? withObject->setPropertyDeep(engine, key, v)
-			: parentFrame->setOwnProperty(engine, key, v, flags));
+			: parentScope->setOwnProperty(engine, key, v, flags));
 }
 
-bool WithFrame::deleteProperty(Engine& engine, const Value& key) {
+bool WithScope::deleteProperty(Engine& engine, const Value& key) {
 	Value dummy;
 	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
 	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, key)
-			: parentFrame->deleteProperty(engine, key));
+			: parentScope->deleteProperty(engine, key));
 }
 
 /* --- Processor --- */
 
 Processor::Processor(Engine& engine, CStackEntry* cstackStart, CStackEntry* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), frame(0), constants(0), indexed(0)
+	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), csp(cstackStart - 1), scope(0), constants(0), indexed(0)
 	, catchers(&engine.getHeap()) { }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
@@ -1752,10 +1752,10 @@ void Processor::error(ErrorType errorType, const String* message) {
 }
 
 void Processor::updateInternals() {
-	frame = csp->frame;
-	if (frame != 0) { // FIX : use dummy frame?
-		constants = frame->getFunctionDef()->getConstantsPointer();
-		indexed = frame->getIndexedPointer();
+	scope = csp->scope;
+	if (scope != 0) { // FIX : use dummy scope?
+		constants = scope->getFunctionDef()->getConstantsPointer();
+		indexed = scope->getIndexedPointer();
 	}
 }
 
@@ -1763,7 +1763,7 @@ void Processor::chain(const CodeWord* stub) {
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
-	csp->frame = 0;
+	csp->scope = 0;
 	csp->thisObject = 0;
 	ip = stub;
 	updateInternals();
@@ -1771,23 +1771,23 @@ void Processor::chain(const CodeWord* stub) {
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
-	frame = heap.manage(new (&heap) ScriptFrame(&heap, func, argc, argv));
+	scope = heap.manage(new (&heap) ScriptScope(&heap, func, argc, argv));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
-	csp->frame = frame;
+	csp->scope = scope;
 	csp->thisObject = thisObject;
 	ip = func->getDefinition()->getCodePointer();
 	updateInternals();
 	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
-void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
-	this->frame = frame;
+void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
+	this->scope = scope;
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = this->ip;
-	csp->frame = this->frame;
+	csp->scope = this->scope;
 	csp->thisObject = thisObject;
 	this->ip = ip;
 	assert(ip != 0);
@@ -1795,13 +1795,13 @@ void Processor::chain(const CodeWord* ip, Frame* frame, Object* thisObject) {
 }
 
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
-	Frame* f = (directCall ? frame : engine.getGlobals());
+	Scope* f = (directCall ? scope : engine.getGlobals());
 	GCHeap& heap = engine.getHeap();
-	frame = heap.manage(new (&heap) EvalFrame(&heap, f, codeDef));
+	scope = heap.manage(new (&heap) EvalScope(&heap, f, codeDef));
 	++csp; // FIX : overflow check
 	assert(csp < cstackEnd);
 	csp->returnIP = ip;
-	csp->frame = frame;
+	csp->scope = scope;
 	csp->thisObject = csp[-1].thisObject;
 	ip = codeDef->getCodePointer();
 	updateInternals();
@@ -1842,33 +1842,33 @@ bool Processor::privateRun() {
 			case READ_FAR_INDEXED_OP: {
 				int distance = operand >> 16;
 				const int index = static_cast<Int16>(operand);
-				const Frame* f = frame;
-				while (--distance >= 0) {
-					f = f->getParentFrame();
-				}
+				const Scope* f = scope;
+				do {
+					f = f->getParentScope();
+				} while (--distance >= 0);
 				push(f->getIndexedPointer()[index]);
 				break;
 			}
 			case WRITE_FAR_INDEXED_OP:	{
 				int distance = operand >> 16;
 				const int index = static_cast<Int16>(operand);
-				const Frame* f = frame;
-				while (--distance >= 0) {
-					f = f->getParentFrame();
-				}
+				const Scope* f = scope;
+				do {
+					f = f->getParentScope();
+				} while (--distance >= 0);
 				f->getIndexedPointer()[index] = vsp[0];
 				break;
 			}
 			case READ_NAMED_OP:		{
 										const Value& name = constants[operand];
-										if (frame->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
+										if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
 											error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
 													, IS_NOT_DEFINED_STRING, &heap)));
 										}
 									}
 									break;
 									
-			case WRITE_NAMED_OP:	frame->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_OP:	scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
 									break;
 									
 			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
@@ -1944,7 +1944,7 @@ bool Processor::privateRun() {
 			case JSR_OP:	++csp; // FIX : bounds check? or reserve?
 							assert(csp < cstackEnd);
 							csp->returnIP = ip;
-							csp->frame = frame;
+							csp->scope = scope;
 							csp->thisObject = csp[-1].thisObject;
 							ip += operand;
 							break;
@@ -2042,7 +2042,7 @@ bool Processor::privateRun() {
 				break;
 			}
 
-            case DELETE_FRAME_AND_RETURN_OP: delete frame; // fall through
+            case DELETE_SCOPE_AND_RETURN_OP: delete scope; // fall through
 			case RETURN_OP:	ip = (csp--)->returnIP;
 							assert(ip != 0);
 							assert(csp >= cstackStart);							
@@ -2063,11 +2063,11 @@ bool Processor::privateRun() {
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand].getObject();
-				push(Value(heap.manage(new (&heap) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), frame)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.manage(new (&heap) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case DECLARE_OP: {
-				frame->declareVar(engine, constants[operand].getString(), vsp[0]);
+				scope->declareVar(engine, constants[operand].getString(), vsp[0]);
 				pop(1);
 				break;
 			}
@@ -2078,7 +2078,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			
-			case FRAME_OP: push(Value(frame)); break;
+			case SCOPE_OP: push(Value(scope)); break;
 			case DELETE_OP: {
 				o = vsp[-1].toObject(engine, true);
 				if (o == 0) {
@@ -2088,16 +2088,16 @@ bool Processor::privateRun() {
 				poppush(Value(o->deleteProperty(engine, vsp[0])));
 				break;
 			}
-			case CATCH_FRAME_OP: {
+			case CATCH_SCOPE_OP: {
 				++csp;
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
-				frame = csp->frame = heap.manage(new (&heap) CatchFrame(frame, constants[operand].getString(), vsp[0]));
+				scope = csp->scope = heap.manage(new (&heap) CatchScope(scope, constants[operand].getString(), vsp[0]));
 				csp->thisObject = csp[-1].thisObject;
 				pop(1);
 				break;
 			}
-			case WITH_FRAME_OP: { // FIX : why don't we use the value stack for pushing / popping frames only (when it isn't a full call)
+			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
 				++csp;
 				assert(csp < cstackEnd);
 				csp->returnIP = 0;
@@ -2106,12 +2106,12 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 					break;
 				}
-				frame = csp->frame = heap.manage(new (&heap) WithFrame(frame, o));
+				scope = csp->scope = heap.manage(new (&heap) WithScope(scope, o));
 				csp->thisObject = csp[-1].thisObject;
 				pop(1);
 				break;
 			}
-			case POP_FRAME_OP: {
+			case POP_SCOPE_OP: {
 				--csp;
 				assert(csp >= cstackStart);
 				updateInternals();
@@ -2147,7 +2147,7 @@ bool Processor::privateRun() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				frame->getOwnProperty(engine, constants[operand], &v);
+				scope->getOwnProperty(engine, constants[operand], &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
@@ -2212,10 +2212,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
 		, "REPUSH", "REPUSH_2", "POST_SHUFFLE"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
-		, "DELETE_FRAME_AND_RETURN", "RETURN", "RETURN_TO_HOST"
-		, "THIS", "VOID", "FRAME", "DELETE"
+		, "DELETE_SCOPE_AND_RETURN", "RETURN", "RETURN_TO_HOST"
+		, "THIS", "VOID", "SCOPE", "DELETE"
 		, "GEN_FUNC", "DECLARE"
-		, "CATCH_FRAME", "WITH_FRAME", "POP_FRAME"
+		, "CATCH_SCOPE", "WITH_SCOPE", "POP_SCOPE"
 		, "TRY", "TRIED", "THROW"
 		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
 		, "GET_ENUMERATOR", "NEXT_PROPERTY"
@@ -2257,7 +2257,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::NEW_OP: std::cerr << " *" << operand; break;
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
-			case Processor::CATCH_FRAME_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
+			case Processor::CATCH_SCOPE_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
 			case Processor::DECLARE_OP:
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
@@ -2359,20 +2359,20 @@ enum Statement {
 };
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
-struct Compiler::Scope {
+struct Compiler::SemanticScope {
 	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
-	Scope(Heap* heap, Type type, Scope* next) : breaks(heap), continues(heap), finallys(heap), type(type), next(next) { }
-	Scope(Heap* heap, const String& label, Scope* next) : breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label), next(next) { }
-	void makeIteratorScopes(Scope* untilScope) {
-		for (Scope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
+	SemanticScope(Heap* heap, Type type, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(type), next(next) { }
+	SemanticScope(Heap* heap, const String& label, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label), next(next) { }
+	void makeIteratorScopes(SemanticScope* untilScope) {
+		for (SemanticScope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
 	}
-	bool needToPopFrame() const {
+	bool needToPopScope() const {
 		return (type == CATCH_TYPE || type == FINALLY_TYPE || type == WITH_TYPE);
 	}
 	Type type;
 	String label; // empty for automatic while, for, case labels
-	Scope* next;
-// FIX : feels like a waste with three different vectors here, could we have double Scope entries for continuable and breakable scope types?
+	SemanticScope* next;
+// FIX : feels like a waste with three different vectors here, could we have double SemanticScope entries for continuable and breakable Semanticscope types?
 	QuickVector<Int32> breaks; // source points for break jmp's
 	QuickVector<Int32> continues; // source points for continue jmp's
 	QuickVector<Int32> finallys; // source points for finally jsr's
@@ -2385,7 +2385,7 @@ struct Compiler::ExpressionResult {
 		, PUSHED_PRIMITIVE	// primitive value on stack
 		, CONSTANT			// constant (and primitive) value on stack
 		, INDEXED			// arbitrary value in indexed variable
-		, FAR_INDEXED		// arbitrary value in a parent frame indexed variable
+		, FAR_INDEXED		// arbitrary value in a parent scope indexed variable
 		, NAMED				// arbitrary value in named variable
 		, PROPERTY			// arbitrary value in object property
 	};
@@ -2400,7 +2400,7 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Com
 		: heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor), setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeDepth(0)
-		, canDeleteFrameOnExit(false)
+		, canDeleteScopeOnExit(false)
 , parentCompiler(parentCompiler) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
@@ -2965,7 +2965,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			Processor::Opcode callOp = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
-				canDeleteFrameOnExit = false;
+				canDeleteScopeOnExit = false;
 			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
@@ -3004,7 +3004,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::FAR_INDEXED:
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case ExpressionResult::NAMED: emit(Processor::FRAME_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
+				case ExpressionResult::NAMED: emit(Processor::SCOPE_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
 				default: assert(0);
 			}
@@ -3090,7 +3090,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 		throw;
 	}
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
-	canDeleteFrameOnExit = false;
+	canDeleteScopeOnExit = false;
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
@@ -3178,16 +3178,16 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
-							canDeleteFrameOnExit = false;
+							canDeleteScopeOnExit = false;
 						} else if (compilingFor != FOR_EVAL && withScopeDepth == 0) {
-							int distance = 0;
+							int distance = -1;
 							const Compiler* c = this;
 							do {
 								const Table::Bucket* bucket = c->codeDef->nameIndexes.lookup(name);
 								if (bucket != 0) {
 									Value index = bucket->getValue();
 									if (!index.isUndefined()) {
-										xr = ExpressionResult((distance > 0 ? ExpressionResult::FAR_INDEXED : ExpressionResult::INDEXED), index, distance);
+										xr = ExpressionResult((distance >= 0 ? ExpressionResult::FAR_INDEXED : ExpressionResult::INDEXED), index, distance);
 										break;
 									}
 								}
@@ -3286,21 +3286,21 @@ void Compiler::varDeclarations() {
 	}
 }
 
-void Compiler::completeContinues(const Scope* fromScope, const Scope* untilScope) {
-	for (const Scope* s = fromScope; s != untilScope; s = s->next) {
+void Compiler::completeContinues(const SemanticScope* fromScope, const SemanticScope* untilScope) {
+	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
 		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it) {
 			completeForwardBranch(*it);
 		}
 	}
 }
 
-void Compiler::completeBreaks(const Scope* scope) {
-	for (const Int32* it = scope->breaks.begin(); it != scope->breaks.end(); ++it) {
+void Compiler::completeBreaks(const SemanticScope* Semanticscope) {
+	for (const Int32* it = Semanticscope->breaks.begin(); it != Semanticscope->breaks.end(); ++it) {
 		completeForwardBranch(*it);
 	}
 }
 
-void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
+void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
@@ -3326,7 +3326,7 @@ void Compiler::forInStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, con
 	returnSafeKept(enumXR, true);
 }
 
-void Compiler::forStatement(Scope* emptyLabelScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
+void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	expectToken(";", true);
 	Int32 loopPoint = markBackwardBranch();
 	Int32 exitLoopPoint = INVALID_CODE_POINT;
@@ -3377,16 +3377,16 @@ void Compiler::functionStatement() {
 	changeOutput(outputCodeWas);
 }
 
-void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
+void Compiler::withStatement(SemanticScope* currentScope, ExpressionResult& evalXR) {
 	expectToken("(", false);
 	rvalueExpression();
 	expectToken(")", true);
-	emit(Processor::WITH_FRAME_OP);
+	emit(Processor::WITH_SCOPE_OP);
 	++withScopeDepth;
-	Scope withScope(&heap, Scope::WITH_TYPE, currentScope);
+	SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, currentScope);
 	statement(&withScope, &withScope, evalXR);
 	--withScopeDepth;
-	emit(Processor::POP_FRAME_OP);
+	emit(Processor::POP_SCOPE_OP);
 }
 
 /*
@@ -3394,7 +3394,7 @@ void Compiler::withStatement(Scope* currentScope, ExpressionResult& evalXR) {
 	because it is legal to give while loops etc mulitple alternative labels to be used with 'continue'.
 	(These should all be converted to 'ITERATOR_LABEL_TYPE' upon entry.)
 */
-void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionResult& evalXR) {
+void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	white();
 	
 	if (token("{", false)) {
@@ -3412,12 +3412,12 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 		const Char* q = p;
 		if (p != b && token(":", true) && findReservedKeyword(q - b, b) < 0) {
 			String label(b, q, &heap);
-			for (Scope* s = currentScope; s != 0; s = s->next) {
+			for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 				if (!s->label.empty() && s->label.isEqualTo(label)) {
 					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
-			Scope newLabelScope(&heap, label, currentScope);
+			SemanticScope newLabelScope(&heap, label, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd, evalXR);
 			completeBreaks(&newLabelScope);
 		} else {
@@ -3434,17 +3434,17 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			case CONTINUE_STATEMENT: {
 				flushXR(evalXR);
 				bool isBreak = (statementTokenIndex == BREAK_STATEMENT);
-				Scope* s = currentScope;
+				SemanticScope* s = currentScope;
 				const Char* b = (whiteNoLF() ? identifier(false, false) : p);
 				String label = String(b, p, &heap);
 				// FIX : too complicated!! bone out...
-				while (s != 0 && !((s->type == Scope::ITERATOR_LABEL_TYPE
-						|| ((isBreak || !label.empty()) && s->type == Scope::LABEL_TYPE))
+				while (s != 0 && !((s->type == SemanticScope::ITERATOR_LABEL_TYPE
+						|| ((isBreak || !label.empty()) && s->type == SemanticScope::LABEL_TYPE))
 						&& s->label.isEqualTo(label))) {
-					if (s->needToPopFrame()) {
-						emit(Processor::POP_FRAME_OP);
+					if (s->needToPopScope()) {
+						emit(Processor::POP_SCOPE_OP);
 					}
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) { // FIX : share with return
+					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) { // FIX : share with return
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					s = s->next;
@@ -3453,7 +3453,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					error(SYNTAX_ERROR, !label.empty() ? "Undefined label"
 							: (isBreak ? "Illegal break" : "Illegal continue"));
 				}
-				if (!isBreak && s->type != Scope::ITERATOR_LABEL_TYPE)
+				if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE)
 					error(SYNTAX_ERROR, "Illegal label for continue");
 				(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 				semicolon();
@@ -3491,7 +3491,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				white();
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
-				Scope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+				SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false); // FIX : sub of this
 				rvalueExpression();
@@ -3510,7 +3510,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				white();
 				flushXR(evalXR);
 				Int32 loopPoint = markBackwardBranch();
-				Scope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+				SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				statement(&emptyLabelScope, &emptyLabelScope, evalXR);
 				flushXR(evalXR);
@@ -3528,7 +3528,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			case FOR_STATEMENT: {
 				white();
 				flushXR(evalXR);
-				Scope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+				SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
 				emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 				expectToken("(", false);
 				QuickVector<CodeWord> initCode(&heap);
@@ -3574,19 +3574,19 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (whiteNoLF()) {
 					optionalExpression(returnXR, LOWEST_PREC);
 				}
-				Scope* s = currentScope;
+				SemanticScope* s = currentScope;
 				bool safeKept = false;
 				while (s != 0) { // FIX : sub
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE || s->type == Scope::WITH_TYPE) {
+					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE || s->type == SemanticScope::WITH_TYPE) {
 						if (!safeKept) {
 							returnXR = safeKeep(returnXR);
 							safeKept = true;
 						}
 					}
-					if (s->needToPopFrame()) {
-						emit(Processor::POP_FRAME_OP);
+					if (s->needToPopScope()) {
+						emit(Processor::POP_SCOPE_OP);
 					}
-					if (s->type == Scope::CATCH_TYPE || s->type == Scope::TRY_TYPE) {
+					if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
 						s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 					}
 					s = s->next;
@@ -3595,7 +3595,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				if (safeKept) {
 					returnSafeKept(returnXR, false);
 				}
-				emit(Processor::DELETE_FRAME_AND_RETURN_OP);
+				emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 				semicolon();
 				break;
 			}
@@ -3603,7 +3603,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 			case TRY_STATEMENT: {
 				white();
 				flushXR(evalXR);
-				Scope tryScope(&heap, Scope::TRY_TYPE, currentScope);
+				SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
 				statementList(&tryScope, evalXR);
@@ -3635,14 +3635,14 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 					nameIndexes.update(indexBucket, Value::UNDEFINED); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 					completeForwardBranch(catchPoint);
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
-					emitWithConstant(Processor::CATCH_FRAME_OP, Value(exceptionVarName));
+					emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 					expectToken(")", true);
-					Scope catchScope(&heap, Scope::CATCH_TYPE, currentScope);
+					SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
 					expectToken("{", true); // FIX : sub
 					statementList(&catchScope, evalXR);
 					expectToken("}", false);
 					flushXR(evalXR);
-					emit(Processor::POP_FRAME_OP); // FIX : try to move POP_FRAME to first in FINALLY block, need different JSR then
+					emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
 					catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 					catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 					for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
@@ -3662,7 +3662,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				emit(Processor::TRIED_OP);
 				Int32 rethrowPoint = markBackwardBranch();
 				if (token("finally", true)) {
-					Scope finallyScope(&heap, Scope::FINALLY_TYPE, currentScope);
+					SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentScope);
 					expectToken("{", true); // FIX : sub
 					statementList(&finallyScope, evalXR);
 					expectToken("}", false);
@@ -3712,7 +3712,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 				QuickVector<Int32> jumpOffsets(&heap);
 				Int32 startOffset = outputCode->size();
 				Int32 defaultPoint = INVALID_CODE_POINT;
-				Scope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+				SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
 				bool firstStatement = true;
 				white();
 				while (!token("}", false)) {
@@ -3779,7 +3779,7 @@ void Compiler::statement(Scope* currentScope, Scope* scopeLabelsEnd, ExpressionR
 	}
 }
 
-void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
+void Compiler::statementList(SemanticScope* currentScope, ExpressionResult& evalXR) {
 	const Char* b;
 	do {
 		b = p;
@@ -3788,7 +3788,7 @@ void Compiler::statementList(Scope* currentScope, ExpressionResult& evalXR) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
-	canDeleteFrameOnExit = (compilingFor == FOR_FUNCTION);
+	canDeleteScopeOnExit = (compilingFor == FOR_FUNCTION);
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	changeOutput(&codeDef->code);
 	p = b;
@@ -3801,18 +3801,18 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 		evalXR = discard(evalXR);
 	}
 	makeRValue(evalXR);
-	emit(Processor::DELETE_FRAME_AND_RETURN_OP);
+	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	assert(outputCode == &codeDef->code);
 	if (!setupCode.empty()) {
 		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
 	}
-	if (!canDeleteFrameOnExit) {
+	if (!canDeleteScopeOnExit) {
 		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
 		// FIX : more compact solution
 			Processor::Opcode opcode;
 			Int32 operand;
 			Processor::unpackInstruction(*p, opcode, operand);
-			if (opcode == Processor::DELETE_FRAME_AND_RETURN_OP) {
+			if (opcode == Processor::DELETE_SCOPE_AND_RETURN_OP) {
 				*p = Processor::packInstruction(Processor::RETURN_OP, operand);
 			}
 		}
@@ -3835,7 +3835,7 @@ if (!suppressStdErr) {
 const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 	assert(functionName != 0);
-	canDeleteFrameOnExit = true;
+	canDeleteScopeOnExit = true;
 	p = b;
 	this->e = e;
 	expectToken("(", true);
@@ -4134,7 +4134,7 @@ struct Support {
 					}
 				}
 			}
-			// FIX : we copy all arguments once to args, and then chain will copy them again to a frame object, couldn't we short-cut that somehow?
+			// FIX : we copy all arguments once to args, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
 			return callFunction->call(engine, processor, args.size(), args.begin(), (newThis == 0 ? engine.getGlobals() : newThis));
 		}
@@ -4270,7 +4270,7 @@ static struct {
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, Frame* globals) : gcHeap(heap), globals(globals), objectPrototype(&heap, 0), evalFunction(&heap, false)
+Engine::Engine(GCHeap& heap, Scope* globals) : gcHeap(heap), globals(globals), objectPrototype(&heap, 0), evalFunction(&heap, false)
 		, evalDirectFunction(&heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(&heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
@@ -4453,16 +4453,16 @@ suppressStdErr = true;
     heap.protect(&globalCode);
     ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
     heap.protect(&globalClosure);
-    ScriptFrame globalsFrame(&heap, &globalClosure, 0, 0);
-    heap.protect(&globalsFrame);
+    ScriptScope globalsScope(&heap, &globalClosure, 0, 0);
+    heap.protect(&globalsScope);
     
-    Engine engine(heap, &globalsFrame);
+    Engine engine(heap, &globalsScope);
     
     PrintFunction printFunction;
-    globalsFrame.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
+    globalsScope.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
     GCFunction gcFunction;
     const String GC_STRING("gc");
-    globalsFrame.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
+    globalsScope.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
     
     try {
         std::wifstream stdlibStream("stdlib.js");
@@ -4588,13 +4588,13 @@ suppressStdErr = true;
                     }
                     throw;
                 }
-                globalsFrame.updatedCode();
+                globalsScope.updatedCode();
                 if (!suppressStdErr) {
                     for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
-                processor.chain(globalCode.getCodePointer(), &globalsFrame, &globalsFrame);
+                processor.chain(globalCode.getCodePointer(), &globalsScope, &globalsScope);
                 
                 bool done = false;
                 clock_t start = ::clock();
