@@ -1449,7 +1449,7 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 
 /* --- Arguments --- */
 
-Arguments::Arguments(Heap* heap, ScriptScope* scope, UInt32 argumentsCount)
+Arguments::Arguments(Heap* heap, FunctionScope* scope, UInt32 argumentsCount)
 		: scope(scope)
 		, argumentsCount(argumentsCount)
 		, deletedArguments(argumentsCount, heap) {
@@ -1516,14 +1516,14 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 	completeObject->setOwnProperty(engine, Value(&CALLEE_STRING), Value(scope->function), DONT_ENUM_FLAG);
 }
 
-/* --- ScriptScope --- */
+/* --- FunctionScope --- */
 
 static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	return codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc);
 }
 
-ScriptScope::ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
+FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: function(function), passedArgumentsCount(argc), indexed(calcIndexedVariablesSize(function, argc), heap) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	indexedPointer = indexed.begin() + codeDef->getVarsCount();
@@ -1536,7 +1536,7 @@ ScriptScope::ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, cons
 }
 
 // FIX : this one must GO! Q&D crap
-void ScriptScope::updatedCode() {
+void FunctionScope::updatedCode() {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const UInt32 oldVarsCount = static_cast<UInt32>(indexedPointer - indexed.begin());
 	const UInt32 oldArgsCount = static_cast<UInt32>(indexed.end() - indexedPointer);
@@ -1552,7 +1552,7 @@ void ScriptScope::updatedCode() {
 	indexedPointer = indexed.begin() + newVarsCount;
 }
 
-Flags ScriptScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
@@ -1580,7 +1580,7 @@ Flags ScriptScope::getOwnProperty(Engine& engine, const Value& key, Value* v) co
 	return parentScope->getOwnProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
-bool ScriptScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool FunctionScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
@@ -1610,7 +1610,7 @@ bool ScriptScope::setOwnProperty(Engine& engine, const Value& key, const Value& 
 	return parentScope->setOwnProperty(engine, key, v, flags); // FIX : recursion
 }
 
-bool ScriptScope::deleteProperty(Engine& engine, const Value& key) {
+bool FunctionScope::deleteProperty(Engine& engine, const Value& key) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
@@ -1636,7 +1636,7 @@ bool ScriptScope::deleteProperty(Engine& engine, const Value& key) {
 	return parentScope->deleteProperty(engine, key); // FIX : recursion
 }
 
-void ScriptScope::declareVar(Engine& engine, const String* name, const Value& initValue) {
+void FunctionScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Int32 index;
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
@@ -1645,23 +1645,17 @@ void ScriptScope::declareVar(Engine& engine, const String* name, const Value& in
 		}
 	}
 	if (!initValue.isUndefined()) {
-		setOwnProperty(engine, Value(name), initValue, DONT_DELETE_FLAG);
+		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
-void ScriptScope::constructCompleteObject(Engine& engine) const {
+void FunctionScope::constructCompleteObject(Engine& engine) const {
 	if (parentScope != 0) {
 		GCHeap& heap = engine.getHeap();
 		completeObject->setOwnProperty(engine, Value(&ARGUMENTS_STRING)
-				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<ScriptScope*>(this), passedArgumentsCount)))
+				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<FunctionScope*>(this), passedArgumentsCount)))
 				, DONT_DELETE_FLAG);
 	}
-}
-
-Enumerator* ScriptScope::getPropertyEnumerator(Engine& engine) const {
-	Enumerator* keyEnumerator = createTableKeyList(engine.getHeap(), function->getDefinition()->nameIndexes);
-	// FIX : add 'manage' and 'new ()' to engine as well, this is so common?
-	return engine.getHeap().manage(new (&engine.getHeap()) JoiningEnumerator(engine, keyEnumerator, getCompleteObject(engine)));
 }
 
 /* --- EvalScope --- */
@@ -1676,14 +1670,15 @@ bool EvalScope::deleteProperty(Engine& engine, const Value& key) { return parent
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) { }
+GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) {
+	assert(codeDef->getVarsCount() == 0);
+}
 Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return globalObject->getOwnProperty(engine, key, v); }
 bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return globalObject->setOwnProperty(engine, key, v, flags); }
 bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
-Enumerator* GlobalScope::getPropertyEnumerator(Engine& engine) const { return globalObject->getPropertyEnumerator(engine); }
-void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue) {
+void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	if (!initValue.isUndefined()) {
-		setOwnProperty(engine, Value(name), initValue, DONT_DELETE_FLAG);
+		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
@@ -1792,7 +1787,7 @@ void Processor::chain(const CodeWord* stub) {
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
-	scope = heap.manage(new (&heap) ScriptScope(&heap, func, argc, argv));
+	scope = heap.manage(new (&heap) FunctionScope(&heap, func, argc, argv));
 	++cfp; // FIX : overflow check
 	assert(cfp < cstackEnd);
 	cfp->returnIP = ip;
@@ -1867,9 +1862,9 @@ bool Processor::privateRun() {
 		switch (opcode) {
 			case POP_OP:				pop(1); break;
 			case CONST_OP:				push(constants[operand]); break;
-			case READ_INDEXED_OP:		push(indexed[operand]); break;
-			case WRITE_INDEXED_OP:		indexed[operand] = vsp[0]; break;
-			case WRITE_INDEXED_POP_OP:	indexed[operand] = vsp[0]; pop(1); break;
+			case READ_INDEXED_OP:		assert(indexed != 0); push(indexed[operand]); break;
+			case WRITE_INDEXED_OP:		assert(indexed != 0); indexed[operand] = vsp[0]; break;
+			case WRITE_INDEXED_POP_OP:	assert(indexed != 0); indexed[operand] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
 											const Value& name = constants[operand];
 											if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -2087,7 +2082,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case DECLARE_OP: {
-				scope->declareVar(engine, constants[operand].getString(), vsp[0]);
+				scope->declareVar(engine, constants[operand].getString(), vsp[0], false);
 				pop(1);
 				break;
 			}

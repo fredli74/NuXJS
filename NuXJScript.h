@@ -650,7 +650,7 @@ class Constants : public GCItem, public QuickVector<Value> {
 const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
-	friend class ScriptScope;
+	friend class FunctionScope;
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
@@ -705,8 +705,8 @@ class Scope : public Object {
 	public:		typedef Object super;
 				Scope(Scope* parentScope = 0) : parentScope(parentScope), indexedPointer(0) { };
 				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
-				Value* getIndexedPointer() const { assert(indexedPointer != 0); return indexedPointer; }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) = 0;
+				Value* getIndexedPointer() const { return indexedPointer; }
 				Scope* getParentScope() const { return parentScope; }
 	
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
@@ -724,9 +724,8 @@ class GlobalScope : public Scope {
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
 	protected:	Object* const globalObject;
 				const CodeDefinition* codeDef;
@@ -738,7 +737,7 @@ class GlobalScope : public Scope {
 };
 
 class ScriptFunction : public ExtensibleFunction {
-	friend class ScriptScope;
+	friend class FunctionScope;
 	
 	public:		typedef ExtensibleFunction super;
 				
@@ -838,19 +837,18 @@ class Engine {
 				double unixEpochTimeDiff;
 };
 
-class ScriptScope : public LazyObject<Scope> {
+class FunctionScope : public LazyObject<Scope> {
 	friend class Arguments;
 	
 	public:		typedef LazyObject<Scope> super;
 
-				ScriptScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				void updatedCode();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				ScriptFunction* const function;
@@ -866,10 +864,10 @@ class ScriptScope : public LazyObject<Scope> {
 
 // FIX : if CallFrame included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
-	This is the direct scope of an eval(), it only bridges all virtuals to the parent ScriptScope, but has a different
+	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDef pointer (for constants etc).
 	
-	FIX : I think we can use a ScriptScope now for simplicity, if we just empty codeDef->nameIndexes first.
+	FIX : I think we can use a FunctionScope now for simplicity, if we just empty codeDef->nameIndexes first.
 	Well, it shouldn't have arguments either. Like the global scope.
 */
 class EvalScope : public Scope {
@@ -880,10 +878,10 @@ class EvalScope : public Scope {
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
 
 	protected:	const CodeDefinition* const evalCodeDef;
-				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a ScriptScope instead of EvalScope. And enterEval would be more similar to calling a function also.
+				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionScope instead of EvalScope. And enterEval would be more similar to calling a function also.
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(evalCodeDef);
@@ -905,7 +903,7 @@ class CatchScope : public Scope {
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
 
 	protected:	const String* exceptionName;
 				Value exceptionValue;
@@ -924,7 +922,7 @@ class WithScope : public Scope {
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) { parentScope->declareVar(engine, name, initValue); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
 
 	protected:	Object* withObject;
 				virtual void gcMark(GCHeap& heap) const {
@@ -936,7 +934,7 @@ class WithScope : public Scope {
 class Arguments : public LazyObject<Object> {
 	public:		typedef LazyObject<Object> super;
 
-				Arguments(Heap* heap, ScriptScope* scope, UInt32 argumentsCount);
+				Arguments(Heap* heap, FunctionScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
@@ -947,7 +945,7 @@ class Arguments : public LazyObject<Object> {
 
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				Value* findProperty(const Value& key) const;
-				ScriptScope* const scope;
+				FunctionScope* const scope;
 				UInt32 const argumentsCount;
 				QuickArray<Byte> deletedArguments;
 
