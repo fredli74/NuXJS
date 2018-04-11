@@ -1674,6 +1674,20 @@ Flags EvalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) cons
 bool EvalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->setOwnProperty(engine, key, v, flags); }
 bool EvalScope::deleteProperty(Engine& engine, const Value& key) { return parentScope->deleteProperty(engine, key); }
 
+/* --- GlobalScope --- */
+
+GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) { }
+Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return globalObject->getOwnProperty(engine, key, v); }
+bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return globalObject->setOwnProperty(engine, key, v, flags); }
+bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
+Enumerator* GlobalScope::getPropertyEnumerator(Engine& engine) const { return globalObject->getPropertyEnumerator(engine); }
+void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue) {
+	if (!initValue.isUndefined()) {
+		setOwnProperty(engine, Value(name), initValue, DONT_DELETE_FLAG);
+	}
+}
+
+
 /* --- CatchScope --- */
 
 CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
@@ -1802,7 +1816,7 @@ void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 }
 
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
-	Scope* f = (directCall ? scope : engine.getGlobals());
+	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
 	scope = heap.manage(new (&heap) EvalScope(&heap, f, codeDef));
 	++cfp; // FIX : overflow check
@@ -3187,7 +3201,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteScopeOnExit = false;
-						} else if (compilingFor != FOR_EVAL && withScopeCounter == 0) {
+						} else if (compilingFor == FOR_FUNCTION && withScopeCounter == 0) {
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
 								const Int32 index = bucket->getIndexValue();
@@ -3237,7 +3251,7 @@ void Compiler::flushXR(ExpressionResult& evalXR) {
 // FIX : ok, this is serious mess
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
-	if (compilingFor == FOR_EVAL) {
+	if (compilingFor != FOR_FUNCTION) {
 		QuickVector<CodeWord>* const outputCodeWas = changeOutput(&setupCode);
 		if (!func) {
 			emit(Processor::VOID_OP);
@@ -4109,7 +4123,7 @@ struct Support {
 			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.manage(new (&heap) ScriptFunction(codeDef, engine.getGlobals())));
+			return Value(heap.manage(new (&heap) ScriptFunction(codeDef, engine.getGlobalScope())));
 		}
 		return Value::UNDEFINED;
 	}
@@ -4272,7 +4286,7 @@ static struct {
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, Scope* globals) : gcHeap(heap), globals(globals), objectPrototype(&heap, 0), evalFunction(&heap, false)
+Engine::Engine(GCHeap& heap, GlobalScope* globalScope, Object* globals) : gcHeap(heap), globalScope(globalScope), globals(globals), objectPrototype(&heap, 0), evalFunction(&heap, false)
 		, evalDirectFunction(&heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(&heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
@@ -4456,16 +4470,18 @@ suppressStdErr = true;
     heap.protect(&globalCode);
     ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
     heap.protect(&globalClosure);
-    ScriptScope globalsScope(&heap, &globalClosure, 0, 0);
-    heap.protect(&globalsScope);
-    
-    Engine engine(heap, &globalsScope);
+    ScriptObject globals(&heap, 0);
+    heap.protect(&globals);
+    GlobalScope globalScope(&globals, &globalCode);
+    heap.protect(&globalScope);
+
+    Engine engine(heap, &globalScope, &globals);
     
     PrintFunction printFunction;
-    globalsScope.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
     GCFunction gcFunction;
     const String GC_STRING("gc");
-    globalsScope.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
     
     try {
         std::wifstream stdlibStream("stdlib.js");
@@ -4591,13 +4607,12 @@ suppressStdErr = true;
                     }
                     throw;
                 }
-                globalsScope.updatedCode();
                 if (!suppressStdErr) {
                     for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
-                processor.chain(globalCode.getCodePointer(), &globalsScope, &globalsScope);
+                processor.chain(globalCode.getCodePointer(), &globalScope, &globals);
                 
                 bool done = false;
                 clock_t start = ::clock();

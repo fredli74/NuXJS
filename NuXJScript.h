@@ -703,10 +703,10 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 
 class Scope : public Object {
 	public:		typedef Object super;
-				Scope(Scope* parentScope = 0) : parentScope(parentScope) { };
+				Scope(Scope* parentScope = 0) : parentScope(parentScope), indexedPointer(0) { };
 				virtual const CodeDefinition* getFunctionDef() const = 0;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue) = 0;
-				Value* getIndexedPointer() const { return indexedPointer; }
+				Value* getIndexedPointer() const { assert(indexedPointer != 0); return indexedPointer; }
 				Scope* getParentScope() const { return parentScope; }
 	
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
@@ -714,6 +714,25 @@ class Scope : public Object {
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(parentScope);
+					super::gcMark(heap);
+				}
+};
+
+class GlobalScope : public Scope {
+	public:		typedef Scope super;
+				GlobalScope(Object* globalObject, const CodeDefinition* codeDef);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue);
+	
+	protected:	Object* const globalObject;
+				const CodeDefinition* codeDef;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(globalObject);
+					heap.mark(codeDef);
 					super::gcMark(heap);
 				}
 };
@@ -793,15 +812,16 @@ class ErrorPrototype : public Error {
 };
 
 class Engine {
-	public:		Engine(GCHeap& heap, Scope* globals); // FIX : globals, in a Scope, this is confusing, but it is actually almost accurate... globally scoped code also declare undeletable 'vars', and although we could put them in a standard ScriptObject, there is some performance benefit to having them indexed just like a regular function.
-				// FIX : the only problem with a standard ScriptScope for globals is that it's got arguments. It shouldn't have arguments.
+	public:		Engine(GCHeap& heap, GlobalScope* globalScope, Object* globals);
 				GCHeap& getHeap() const { return gcHeap; }
-				Scope* getGlobals() const { return globals; }
+				Object* getGlobals() const { return globals; }
+				GlobalScope* getGlobalScope() const { return globalScope; }
 				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				Scope* const globals;
-				
+				GlobalScope* const globalScope;
+				Object* const globals;
+	
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
 				FunctionPrototypeFunction functionPrototype;
