@@ -517,6 +517,7 @@ const String* Value::toString(GCHeap& heap) const {
 	}
 }
 
+// FIX : requestExtensible is only used once! do we need it?
 Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 	GCHeap& heap = engine.getHeap();
 	switch (type) {
@@ -1823,6 +1824,14 @@ void Processor::throwVirtualException(const Value& exception) {
 	updateInternals();
 }
 
+Object* Processor::convertToObject(const Value& v, const bool requestExtensible) {
+	Object* const object = v.toObject(engine, requestExtensible);
+	if (object == 0) {
+		error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+	}
+	return object;
+}
+
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
 	assert(cfp >= cstackStart);
@@ -1836,40 +1845,47 @@ bool Processor::privateRun() {
 		const Opcode opcode = static_cast<Opcode>(instruction & 255);
 		const Int32 operand = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
-			case POP_OP:			pop(1); break;
-			case CONST_OP:			push(constants[operand]); break;
-			case READ_INDEXED_OP:	push(indexed[operand]); break;
-			case WRITE_INDEXED_OP:	indexed[operand] = vsp[0]; break;
-			case READ_NAMED_OP:		{
-										const Value& name = constants[operand];
-										if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
-											error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
-													, IS_NOT_DEFINED_STRING, &heap)));
+			case POP_OP:				pop(1); break;
+			case CONST_OP:				push(constants[operand]); break;
+			case READ_INDEXED_OP:		push(indexed[operand]); break;
+			case WRITE_INDEXED_OP:		indexed[operand] = vsp[0]; break;
+			case WRITE_INDEXED_POP_OP:	indexed[operand] = vsp[0]; pop(1); break;
+			case READ_NAMED_OP:			{
+											const Value& name = constants[operand];
+											if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
+												error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
+														, IS_NOT_DEFINED_STRING, &heap)));
+											}
 										}
-									}
-									break;
-									
-			case WRITE_NAMED_OP:	scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
-									break;
-									
-			case GET_PROPERTY_OP:	if ((o = vsp[-1].toObject(engine, false)) == 0) {
-										error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 										break;
-									}
-									if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
-										vsp[-1] = Value::UNDEFINED;
-									}
-									pop(1);
-									break;
+									
+			case WRITE_NAMED_OP:		scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+										break;
+				
+			case WRITE_NAMED_POP_OP:	scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+										pop(1);
+										break;
+
+			case GET_PROPERTY_OP:		if ((o = convertToObject(vsp[-1], false)) != 0) {
+											if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
+												vsp[-1] = Value::UNDEFINED;
+											}
+											pop(1);
+										}
+										break;
 			
-			case SET_PROPERTY_OP:	if ((o = vsp[-2].toObject(engine, false)) == 0) {
-										error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+			case SET_PROPERTY_OP:		if ((o = convertToObject(vsp[-2], false)) != 0) {
+											o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+											vsp[-2] = vsp[0];
+											pop(2);
+										}
 										break;
-									}
-									o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-									vsp[-2] = vsp[0];
-									pop(2);
-									break;
+
+			case SET_PROPERTY_POP_OP:	if ((o = convertToObject(vsp[-2], false)) != 0) {
+											o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+											pop(3);
+										}
+										break;
 
 			case OBJ_TO_NUMBER_OP:
 				if ((o = vsp[0].asObject()) != 0) {
@@ -1954,21 +1970,19 @@ bool Processor::privateRun() {
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Int32 n = operand;
-				Object* thisObject = vsp[-n - 1].toObject(engine, true);
-				if (thisObject == 0) {
-					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
-					break;
+				Object* thisObject = convertToObject(vsp[-n - 1], true);
+				if (thisObject != 0) {
+					Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
+					Value v(Value::UNDEFINED);
+					Function* f;
+					const Value& name = vsp[-n];
+					if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+						error(TYPE_ERROR, heap.manage(new (&heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+						break;
+					}
+					*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+					vsp -= n + 1;
 				}
-				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Value v(Value::UNDEFINED);
-				Function* f;
-				const Value& name = vsp[-n];
-				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
-					error(TYPE_ERROR, heap.manage(new (&heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
-				}
-				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-				vsp -= n + 1;
 				break;
 			}
 			
@@ -2066,12 +2080,9 @@ bool Processor::privateRun() {
 			
 			case SCOPE_OP: push(Value(scope)); break;
 			case DELETE_OP: {
-				o = vsp[-1].toObject(engine, true);
-				if (o == 0) {
-					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
-					break;
+				if ((o = convertToObject(vsp[-1], true)) != 0) {
+					poppush(Value(o->deleteProperty(engine, vsp[0])));
 				}
-				poppush(Value(o->deleteProperty(engine, vsp[0])));
 				break;
 			}
 			case CATCH_SCOPE_OP: {
@@ -2082,13 +2093,10 @@ bool Processor::privateRun() {
 			}
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
 				assert(cfp->scope == scope);
-				Object* o = vsp[0].toObject(engine, false);
-				if (o == 0) { // FIX : so common!
-					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
-					break;
+				if ((o = convertToObject(vsp[0], false)) != 0) {
+					cfp->scope = scope = heap.manage(new (&heap) WithScope(scope, o));
+					pop(1);
 				}
-				cfp->scope = scope = heap.manage(new (&heap) WithScope(scope, o));
-				pop(1);
 				break;
 			}
 			case POP_SCOPE_OP: {
@@ -2130,10 +2138,8 @@ bool Processor::privateRun() {
 				break;
 			}
 			case GET_ENUMERATOR_OP: {
-				o = vsp[0].toObject(engine, false);
 			#if (STRICTLY_ES3)
-				if (o == 0) { // FIX : so common!
-					error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
+				if ((o = convertToObject(vsp[0], false)) == 0) { // FIX : so common!
 					break;
 				}
 			#endif
@@ -2178,9 +2184,9 @@ bool Processor::run() {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED"
-		, "READ_NAMED", "WRITE_NAMED", "GET_PROPERTY", "SET_PROPERTY", "ADD_PROPERTY"
-		, "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
+		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
+		, "READ_NAMED", "WRITE_NAMED", "WRITE_NAMED_POP", "GET_PROPERTY", "SET_PROPERTY", "SET_PROPERTY_POP"
+		, "ADD_PROPERTY", "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
 		, "OR", "XOR", "AND"
 		, "SHL", "SHR", "USHR"
@@ -2217,7 +2223,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::TRY_OP:
 			case Processor::NEXT_PROPERTY_OP: { Int32 jump = operand; std::cerr << " @" << (offset + jump); break; }
 			case Processor::READ_INDEXED_OP:
-			case Processor::WRITE_INDEXED_OP: {
+			case Processor::WRITE_INDEXED_OP:
+			case Processor::WRITE_INDEXED_POP_OP: {
 				const Int32 index = operand;
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
@@ -2234,6 +2241,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::DECLARE_OP:
 			case Processor::READ_NAMED_OP:
 			case Processor::WRITE_NAMED_OP:
+			case Processor::WRITE_NAMED_POP_OP:
 			case Processor::ADD_PROPERTY_OP:
 			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
 			default: break;
@@ -2378,7 +2386,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		, compilingFor(compileFor)
 		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeCounter(0)
-		, canDeleteScopeOnExit(false) {
+		, canDeleteScopeOnExit(false)
+		, lastEmitted(Processor::INVALID_OP) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
 	}
@@ -2389,16 +2398,33 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode op, Int32 operand) {
+	if (op == Processor::POP_OP) {
+		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
+		switch (lastEmitted) {
+			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
+			case Processor::WRITE_NAMED_OP: replacementOpcode = Processor::WRITE_NAMED_POP_OP; break;
+			case Processor::SET_PROPERTY_OP: replacementOpcode = Processor::SET_PROPERTY_POP_OP; break;
+			default: break;
+		}
+		if (replacementOpcode != Processor::INVALID_OP) {
+			Processor::unpackInstruction(outputCode->end()[-1], op, operand);
+			outputCode->resize(outputCode->size() - 1);
+			op = replacementOpcode;
+		}
+	}
 	outputCode->append(Processor::packInstruction(op, operand));
+	lastEmitted = op;
 }
 
 QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
+	lastEmitted = Processor::INVALID_OP;
 	QuickVector<CodeWord>* const outputWas = outputCode;
 	outputCode = newOutputCode;
 	return outputWas;
 }
 
 void Compiler::emitMultiple(const CodeWord* begin, const CodeWord* end) {
+	lastEmitted = Processor::INVALID_OP;
 	outputCode->insert(outputCode->end(), begin, end);
 }
 
@@ -2408,13 +2434,17 @@ Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
+	lastEmitted = Processor::INVALID_OP;
 	Processor::Opcode opcode;
 	Int32 operand;
 	Processor::unpackInstruction((*outputCode)[point], opcode, operand);
 	(*outputCode)[point] = Processor::packInstruction(opcode, outputCode->size() - point - 1);
 }
 
-Int32 Compiler::markBackwardBranch() { return outputCode->size(); }
+Int32 Compiler::markBackwardBranch() {
+	lastEmitted = Processor::INVALID_OP;
+	return outputCode->size();
+}
 
 void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 	emit(op, point - 1 - outputCode->size());

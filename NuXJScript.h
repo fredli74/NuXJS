@@ -976,10 +976,13 @@ class Processor : public GCItem {
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
+					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
 					, GET_PROPERTY_OP								// stack: object, name -> value
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
+					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
@@ -1048,7 +1051,8 @@ class Processor : public GCItem {
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
-
+				Object* convertToObject(const Value& v, bool requestExtensible);
+				
 				Engine& engine;
 				CallFrame* const cstackStart;
 				CallFrame* const cstackEnd;
@@ -1172,6 +1176,7 @@ class Compiler : public GCItem {
 					}
 					super::gcMark(heap);
 				}
+Processor::Opcode lastEmitted;
 };
 
 #endif
