@@ -990,8 +990,6 @@ class Processor : public GCItem {
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
 					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
-					, READ_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: -> value
-					, WRITE_FAR_INDEXED_OP							// operand: (scope_distance << 16) | local_index, stack: value -> value
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
@@ -1110,7 +1108,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler = 0);
+				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1175,7 +1173,6 @@ class Compiler : public GCItem {
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
-				Compiler* parentCompiler;
 				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
@@ -1183,8 +1180,6 @@ class Compiler : public GCItem {
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
-				bool didCallEval;
-				bool prohibitFarAccess;
 				Processor::Opcode lastEmitted;
 
 				virtual void gcMark(GCHeap& heap) const {
