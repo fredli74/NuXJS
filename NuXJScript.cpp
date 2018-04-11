@@ -921,6 +921,13 @@ bool Table::update(Bucket* bucket, const Value& value, Byte flags) {
 	return true;
 }
 
+void Table::update(Bucket* bucket, const Int32 index) {
+	assert(bucket->keyExists());
+	bucket->flags |= EXISTS_FLAG;
+	bucket->type = Value::INDEX_TYPE;
+	bucket->var.index = index;
+}
+
 bool Table::erase(Bucket* bucket) {
 	assert(bucket->keyExists());
 	if (bucket->valueExists()) {
@@ -1118,8 +1125,7 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	if (bucket == 0) {
 		return false;
 	}
-	assert(!bucket->getValue().isUndefined());
-	index = bucket->getValue().toInt();
+	index = bucket->getIndexValue();
 	return true;
 }
 
@@ -1722,6 +1728,9 @@ bool WithScope::deleteProperty(Engine& engine, const Value& key) {
 
 /* --- Processor --- */
 
+const Int32 MIN_OPERAND_VALUE = -(1 << 23);
+const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
+
 Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), cfp(cstackStart - 1), scope(0), constants(0), indexed(0)
@@ -1729,7 +1738,7 @@ Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEn
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
 	assert(0 <= opcode && static_cast<int>(opcode) < 256);
-	assert(-(1 << 23) <= operand && operand < (1 << 23));
+	assert(MIN_OPERAND_VALUE < operand && operand < MAX_OPERAND_VALUE);
 	return (operand << 8) | opcode;
 }
 
@@ -2392,7 +2401,7 @@ void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.manage(new (&heap) Error(errorType, heap.manage(new (&heap) String(message))))));
 }
 
-void Compiler::emit(Processor::Opcode op, Int32 operand) {
+void Compiler::emit(Processor::Opcode op,  Int32 operand) {
 	if (op == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (lastEmitted) {
@@ -2406,6 +2415,9 @@ void Compiler::emit(Processor::Opcode op, Int32 operand) {
 			outputCode->resize(outputCode->size() - 1);
 			op = replacementOpcode;
 		}
+	}
+	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
+		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
 	outputCode->append(Processor::packInstruction(op, operand));
 	lastEmitted = op;
@@ -2451,9 +2463,6 @@ UInt32 Compiler::addConstant(const Value& constant) {
 		if ((*constants)[--index].isStrictlyEqualTo(constant)) {
 			return index;
 		}
-	}
-	if (constants->size() >= MAX_CONSTANTS) { // very hypothetical, but correctness!
-		error(GENERIC_ERROR, "Too many constants in function");
 	}
 	constants->append(constant);
 	return constants->size() - 1;
@@ -3182,9 +3191,9 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						} else if (compilingFor != FOR_EVAL && withScopeCounter == 0) {
 							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
 							if (bucket != 0) {
-								Value index = bucket->getValue();
-								if (!index.isUndefined()) {
-									xr = ExpressionResult(ExpressionResult::INDEXED, index);
+								const Int32 index = bucket->getIndexValue();
+								if (index != CATCH_PARAMETER) {
+									xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 									break;
 								}
 							}
@@ -3238,18 +3247,18 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 		changeOutput(outputCodeWas);
 		return lxr;
 	} else if (!name->isEqualTo(ARGUMENTS_STRING)) {
-		Value index;
+		Int32 index;
 		Table& nameIndexes = codeDef->nameIndexes;
 		Table::Bucket* bucket = nameIndexes.lookup(name);
 		if (bucket != 0) {
-			index = bucket->getValue();
+			index = bucket->getIndexValue();
 		} else {
 			codeDef->varNames.append(name);
-			index = Value(-static_cast<Int32>(codeDef->varNames.size()));
+			index = -static_cast<Int32>(codeDef->varNames.size());
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
-		if (withScopeCounter == 0 && !index.isUndefined()) {
-			lxr = ExpressionResult(ExpressionResult::INDEXED, index);
+		if (withScopeCounter == 0 && index != CATCH_PARAMETER) {
+			lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
 		}
 	}
 	if (func) {
@@ -3614,17 +3623,17 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					white();
 					const Char* b = identifier(true, false);
 					const String* exceptionVarName = String::newHashedString(heap, b, p);
-					Value previousLocalIndex;
+					Int32 previousLocalIndex = 0;
 					Table& nameIndexes = codeDef->nameIndexes;
 					bool didExist = false; // FIX : can use NON_EXISTENT type if we choose to keep it
 					Table::Bucket* indexBucket = nameIndexes.lookup(exceptionVarName);
 					if (indexBucket != 0) {
 						didExist = true;
-						previousLocalIndex = indexBucket->getValue();
+						previousLocalIndex = indexBucket->getIndexValue();
 					} else {
 						indexBucket = nameIndexes.insert(exceptionVarName);
 					}
-					nameIndexes.update(indexBucket, Value::UNDEFINED); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
+					nameIndexes.update(indexBucket, CATCH_PARAMETER); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 					completeForwardBranch(catchPoint);
 					catchPoint = emitForwardBranch(Processor::TRY_OP);
 					emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
@@ -3848,7 +3857,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 		}
 		const Char* b = identifier(true, false);
 		const String* name = String::newHashedString(heap, b, p);
-		nameIndexes.update(nameIndexes.insert(name), Value(static_cast<Int32>(argumentNames.size())));
+		nameIndexes.update(nameIndexes.insert(name), static_cast<Int32>(argumentNames.size()));
 		argumentNames.append(name);
 		white();
 	}

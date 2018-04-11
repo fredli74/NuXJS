@@ -278,6 +278,7 @@ class Value {
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
+					, INDEX_TYPE // Only used internally by name->index tables
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
@@ -287,6 +288,7 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
+					Int32 index;
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }
@@ -352,7 +354,7 @@ class Enumerator : public Object {
 
 class Table {
 				/*
-					The only reason why Bucket doesn't contain the Value class, but rather holds it's own Byte type and
+					The main reason why Bucket doesn't contain the Value class, but rather holds it's own Byte type and
 					Variable union, is memory. This solution makes it possible to squeeze in key flags and a truncated
 					16-bit hash (for even quicker value lookup) in the same space as a Value.
 				*/
@@ -360,7 +362,14 @@ class Table {
 					friend class Table;
 					
 					public:		Bucket() : key(0) { };
-								Value getValue() const { assert(valueExists()); return Value(static_cast<Value::Type>(type), var); }
+								Value getValue() const {
+									assert(valueExists() && type != Value::INDEX_TYPE);
+									return Value(static_cast<Value::Type>(type), var);
+								}
+								Int32 getIndexValue() const {
+									assert(valueExists() && type == Value::INDEX_TYPE);
+									return var.index;
+								}
 								Flags getFlags() const { return flags; }
 								const String* getKey() const { assert(keyExists()); return key; }
 								bool doEnumerate() const { return ((flags & DONT_ENUM_FLAG) == 0); }
@@ -383,10 +392,10 @@ class Table {
 				bool update(Bucket* bucket, const Value& value, Byte flags = 0);	// Update value. Returns false if bucket is marked as read-only.
 				bool erase(Bucket* bucket);											// Deletes bucket. Returns false if bucket is marked as dont-delete.
 				UInt32 getLoadCount() const;										// Returns number of used hash table entries (not necessarily the same as the number of existing buckets!).
+				void update(Bucket* bucket, const Int32 index);						// Update value as an index. Only used by name to index tables as an optimization.
 				void gcMark(GCHeap& heap) const;
 				
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
-				void update(const String* key, const Value& value);
 				Bucket* find(const String* key, UInt32 hash) const;
 				UInt32 rebuild(UInt32 newN);
 				
@@ -626,7 +635,6 @@ class EvalFunction : public Function {
 
 class Scope;
 
-const UInt32 MAX_CONSTANTS = ((1 << 24) - 1);
 // FIX : why is this a seperate item from CodeDef?
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
@@ -637,6 +645,7 @@ class Constants : public GCItem, public QuickVector<Value> {
 				}
 };
 
+const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
 	friend class ScriptScope;
@@ -657,7 +666,7 @@ class CodeDefinition : public Object {
 
 	protected:	QuickVector<CodeWord> code; // FIX : should be array really
 				Constants* const constants;
-				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, type 'undefined' == current catch parameter during compile-time only (don't use fast index binding)
+				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Scope. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
