@@ -278,7 +278,6 @@ class Value {
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
-					, INDEX_TYPE // Only used internally by name->index tables
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
@@ -288,7 +287,6 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
-					Int32 index;
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }
@@ -316,6 +314,7 @@ const Flags EXISTS_FLAG = 1;
 const Flags READ_ONLY_FLAG = 2;
 const Flags DONT_ENUM_FLAG = 4;
 const Flags DONT_DELETE_FLAG = 8;
+const Flags INDEX_TYPE_FLAG = 16;	// internal index type, only used as an optimization for faster name -> index lookup
 const Flags STANDARD_FLAGS = 0;		// use with setOwnProperty()
 const Flags NONEXISTENT = 0;		// use with getOwnProperty() to check for existence, e.g. getOwnProperty(o, k, v) != NONEXISTENT
 
@@ -363,12 +362,12 @@ class Table {
 					
 					public:		Bucket() : key(0) { };
 								Value getValue() const {
-									assert(valueExists() && type != Value::INDEX_TYPE);
+									assert(valueExists() && (flags & INDEX_TYPE_FLAG) == 0);
 									return Value(static_cast<Value::Type>(type), var);
 								}
 								Int32 getIndexValue() const {
-									assert(valueExists() && type == Value::INDEX_TYPE);
-									return var.index;
+									assert(valueExists() && (flags & INDEX_TYPE_FLAG) != 0);
+									return index;
 								}
 								Flags getFlags() const { return flags; }
 								const String* getKey() const { assert(keyExists()); return key; }
@@ -380,7 +379,10 @@ class Table {
 								Byte flags;
 								Byte type;
 								UInt16 hash16;
-								Value::Variable var;
+								union {
+									Value::Variable var;
+									Int32 index;
+								};
 								bool keyExists() const { return key != 0; }
 				};
 				

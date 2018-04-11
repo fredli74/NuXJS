@@ -923,9 +923,8 @@ bool Table::update(Bucket* bucket, const Value& value, Byte flags) {
 
 void Table::update(Bucket* bucket, const Int32 index) {
 	assert(bucket->keyExists());
-	bucket->flags |= EXISTS_FLAG;
-	bucket->type = Value::INDEX_TYPE;
-	bucket->var.index = index;
+	bucket->flags = EXISTS_FLAG | INDEX_TYPE_FLAG;
+	bucket->index = index;
 }
 
 bool Table::erase(Bucket* bucket) {
@@ -944,9 +943,9 @@ void Table::gcMark(GCHeap& heap) const {
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		const Bucket& bucket = buckets[i];
 		if (bucket.keyExists()) {
-			heap.mark(bucket.key); // FIX : Really, doesn't it get cleaned out by rebuild anyhow?
+			heap.mark(bucket.key);
 			if (bucket.valueExists()) {
-				switch (bucket.type) {
+				switch (((bucket.flags & INDEX_TYPE_FLAG) != 0) ? Value::NUMBER_TYPE : bucket.type) {
 					case Value::STRING_TYPE: heap.mark(bucket.var.string); break;
 					case Value::OBJECT_TYPE: heap.mark(bucket.var.object); break;
 					default: break;
