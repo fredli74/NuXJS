@@ -1473,7 +1473,7 @@ Value* Arguments::findProperty(const Value& key) const {
 
 Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const Value* p = findProperty(key);
-	return (p == 0 ? super::getOwnProperty(engine, key, v) : (*v = *p
+	return (p == 0 ? super::getOwnProperty(engine, key, v) : ((void)(*v = *p)
 #if (STRICTLY_ES3)
 			, (STANDARD_FLAGS | DONT_ENUM_FLAG | EXISTS_FLAG)));
 #else
@@ -1487,7 +1487,7 @@ bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v,
 		deletedArguments[p - scope->getIndexedPointer()] = true;
 		p = 0;
 	}
-	return (p == 0 ? super::setOwnProperty(engine, key, v, flags) : (*p = v, true));
+	return (p == 0 ? super::setOwnProperty(engine, key, v, flags) : ((void)(*p = v), true));
 }
 
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
