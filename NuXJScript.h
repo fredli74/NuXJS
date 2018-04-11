@@ -1024,7 +1024,7 @@ class Processor : public GCItem {
 					, TYPEOF_OP										// stack: value -> string
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
-					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string
+					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> enumerator, string (unless exited)
 					, OP_COUNT
 				};
 
@@ -1163,7 +1163,6 @@ class Compiler : public GCItem {
 				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
-				int catchScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
 
 				virtual void gcMark(GCHeap& heap) const {

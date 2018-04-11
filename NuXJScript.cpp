@@ -1089,9 +1089,7 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < lis
 /* --- JoiningEnumerator --- */
 
 JoiningEnumerator::JoiningEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject)
-		: engine(engine)
-		, leftEnumerator(leftEnumerator)
-		, rightObject(rightObject)
+		: engine(engine), leftEnumerator(leftEnumerator), rightObject(rightObject)
 		, rightEnumerator(rightObject->getPropertyEnumerator(engine)) {
 }
 
@@ -1112,7 +1110,9 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
 		: code(heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap), temporaries(heap)
-		, name(0), selfName(0), source(0) { assert(constants != 0); }
+		, name(0), selfName(0), source(0) {
+	assert(constants != 0);
+}
 
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
@@ -2036,15 +2036,14 @@ bool Processor::privateRun() {
 				break;
 			}
 			
-			case RETURN_TO_HOST_OP: // FIX : I don't like this opcode, is it really necessary?
-							ip = (cfp--)->returnIP;
-							assert(cfp >= cstackStart - 1);
-							result = vsp[0];
-							pop(1);
-							// FIX : not necessary now cause we updateInternals at top, should we always? cause updateInterals here will fail if cfp == cstackStart - 1
-							// updateInternals();
-                            clockCyclesLeft = cyclesLeft;
-							return false;
+			case RETURN_TO_HOST_OP: { // FIX : I don't like this opcode, is it really necessary?
+				ip = (cfp--)->returnIP;
+				assert(cfp >= cstackStart - 1);
+				result = vsp[0];
+				pop(1);
+				clockCyclesLeft = cyclesLeft;
+				return false;
+			}
 
 			case THIS_OP: push(Value(cfp->thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
@@ -2152,7 +2151,7 @@ bool Processor::privateRun() {
 				o = vsp[0].getObject();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ?
 				if (name != 0) {
-					vsp[0] = Value(name);
+					push(Value(name));
 				} else {
 					ip += operand;
 					pop(1);
@@ -2335,7 +2334,7 @@ enum Statement {
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 struct Compiler::SemanticScope {
-	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
+	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE, FOR_IN_TYPE };
 	SemanticScope(Heap* heap, Type type, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(type), next(next) { }
 	SemanticScope(Heap* heap, const String& label, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label), next(next) { }
 	void makeIteratorScopes(SemanticScope* untilScope) {
@@ -2346,6 +2345,7 @@ struct Compiler::SemanticScope {
 			case CATCH_TYPE:
 			case WITH_TYPE: compiler->emit(Processor::POP_SCOPE_OP); break;
 			case FINALLY_TYPE: compiler->emit(Processor::DISCARD_RETURN_OP); break;
+			case FOR_IN_TYPE: compiler->emit(Processor::POP_OP); break;
 			default: break;
 		}
 	}
@@ -2378,7 +2378,7 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		: heap(heap), codeDef(codeDef)
 		, compilingFor(compileFor)
 		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
-		, withScopeCounter(0), catchScopeCounter(0)
+		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false) {
 	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
 		definedConstants[(*codeDef->constants)[i]] = i;
@@ -3272,7 +3272,7 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
 	emit(Processor::GET_ENUMERATOR_OP);
-	enumXR = safeKeep(enumXR);
+	if (compilingFor == FOR_EVAL) enumXR = safeKeep(enumXR);
 	expectToken(")", true);
 	Int32 loopPoint = markBackwardBranch();
 	makeRValue(enumXR);
@@ -3285,9 +3285,17 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		returnSafeKept(xr, true);
 	}
 	discard(makeAssignment(iterXR));
-	statement(emptyLabelScope, emptyLabelScope, evalXR);
-	flushXR(evalXR);
-	completeContinues(emptyLabelScope, scopeLabelsEnd);
+	discard(evalXR);
+	if (compilingFor != FOR_EVAL) {
+		SemanticScope forInScope(&heap, SemanticScope::FOR_IN_TYPE, emptyLabelScope);
+		statement(&forInScope, &forInScope, evalXR);
+		flushXR(evalXR);
+		completeContinues(emptyLabelScope, scopeLabelsEnd);
+	} else {
+		statement(emptyLabelScope, emptyLabelScope, evalXR);
+		flushXR(evalXR);
+		completeContinues(emptyLabelScope, scopeLabelsEnd);
+	}
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
 	completeBreaks(emptyLabelScope);
@@ -3604,7 +3612,6 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 					expectToken(")", true);
 					{
-						++catchScopeCounter;
 						SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
 						expectToken("{", true); // FIX : sub
 						statementList(&catchScope, evalXR);
@@ -3616,7 +3623,6 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 						for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
 							completeForwardBranch(*it);
 						}
-						--catchScopeCounter;
 					}
 					if (didExist) {
 						nameIndexes.update(nameIndexes.insert(exceptionVarName), previousLocalIndex);
