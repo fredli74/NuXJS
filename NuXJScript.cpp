@@ -15,8 +15,6 @@
 #include <iostream>
 #include <sstream>
 #include <limits>
-#include <map>
-#include <vector>
 #include "NuXJScript.h"
 
 	bool suppressStdErr = false; // FIX : drop
@@ -564,7 +562,7 @@ bool Value::compareStrictly(const Value& r) const {
 	assert(r.type == type);
 	switch (type) {
 		default: assert(0);
-		case UNDEFINED_TYPE: return true;
+		case UNDEFINED_TYPE:
 		case NULL_TYPE: return true;
 		case BOOLEAN_TYPE: return var.boolean == r.var.boolean;
 		case NUMBER_TYPE: return var.number == r.var.number;
@@ -2388,9 +2386,6 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
 		, lastEmitted(Processor::INVALID_OP) {
-	for (UInt32 i = 0; i < codeDef->constants->size(); ++i) { // FIX : ugly hack to setup the reverse lookup, should share somehow
-		definedConstants[(*codeDef->constants)[i]] = i;
-	}
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
@@ -2450,16 +2445,18 @@ void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
 	emit(op, point - 1 - outputCode->size());
 }
 
-int Compiler::addConstant(const Value& constant) {
-	std::map<Value, Int32>::const_iterator it = definedConstants.find(constant);
-	if (it == definedConstants.end()) {
-		Int32 index = codeDef->constants->size();
-		codeDef->constants->append(constant);
-		definedConstants[constant] = index;
-		return index;
-	} else {
-		return it->second;
+UInt32 Compiler::addConstant(const Value& constant) {
+	Constants* constants = codeDef->constants;
+	for (UInt32 index = constants->size(); index > 0;) {
+		if ((*constants)[--index].isStrictlyEqualTo(constant)) {
+			return index;
+		}
 	}
+	if (constants->size() >= MAX_CONSTANTS) { // very hypothetical, but correctness!
+		error(GENERIC_ERROR, "Too many constants in function");
+	}
+	constants->append(constant);
+	return constants->size() - 1;
 }
 
 void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
@@ -4387,6 +4384,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 
 #include <fstream>
 #include <memory>
+#include <vector>
 
 	bool interactive = true;
 

@@ -251,7 +251,7 @@ class Value {
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
-				bool toArrayIndex(UInt32& index) const;
+				bool toArrayIndex(UInt32& index) const;	// returns false if value is outside valid array index range (0..2^32-1)
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
@@ -376,13 +376,13 @@ class Table {
 				};
 				
 				Table(Heap* heap = 0);
-				UInt32 getLoadCount() const;
-				Bucket* getFirst() const;
-				Bucket* getNext(Bucket* bucket) const;
-				Bucket* lookup(const String* key) const;
-				Bucket* insert(const String* key);
-				bool update(Bucket* bucket, const Value& value, Byte flags = 0);
-				bool erase(Bucket* bucket);
+				Bucket* getFirst() const;											// Returns first bucket with an existing value or 0.
+				Bucket* getNext(Bucket* bucket) const;								// Returns next bucket with an existing value or 0.
+				Bucket* lookup(const String* key) const;							// Return bucket pointer for key or 0.
+				Bucket* insert(const String* key);									// Insert key (if necessary) and return bucket pointer.
+				bool update(Bucket* bucket, const Value& value, Byte flags = 0);	// Update value. Returns false if bucket is marked as read-only.
+				bool erase(Bucket* bucket);											// Deletes bucket. Returns false if bucket is marked as dont-delete.
+				UInt32 getLoadCount() const;										// Returns number of used hash table entries (not necessarily the same as the number of existing buckets!).
 				void gcMark(GCHeap& heap) const;
 				
 	protected:	static UInt32 calcMaxLoad(UInt32 bucketCount);
@@ -390,9 +390,9 @@ class Table {
 				Bucket* find(const String* key, UInt32 hash) const;
 				UInt32 rebuild(UInt32 newN);
 				
-				UInt32 n; ///< Size of member table is two to the power of n.
+				UInt32 n;															// Size of member table is two to the power of n.
 				QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
-				UInt32 loadCount; ///< Count of buckets with defined keys.
+				UInt32 loadCount;													// Count of buckets with defined keys.
 };
 
 /*
@@ -626,6 +626,8 @@ class EvalFunction : public Function {
 
 class Scope;
 
+const UInt32 MAX_CONSTANTS = ((1 << 24) - 1);
+// FIX : why is this a seperate item from CodeDef?
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
 				Constants(Heap* heap) : QuickVector<Value>(heap) { }
@@ -1108,7 +1110,7 @@ class Compiler : public GCItem {
 				void emit(Processor::Opcode op, Int32 operand = 0);
 				QuickVector<CodeWord>* changeOutput(QuickVector<CodeWord>* newOutputCode);
 				void emitMultiple(const CodeWord* begin, const CodeWord* end);
-				int addConstant(const Value& constant);
+				UInt32 addConstant(const Value& constant);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
 				Int32 emitForwardBranch(Processor::Opcode op);
 				void completeForwardBranch(Int32 point);
@@ -1160,7 +1162,6 @@ class Compiler : public GCItem {
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
-				std::map<Value, Int32> definedConstants; // FIX : drop map dependency, increases code size
 				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				const Char* p;
 				const Char* e;
@@ -1168,15 +1169,12 @@ class Compiler : public GCItem {
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
+				Processor::Opcode lastEmitted;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);
-					for (std::map<Value, Int32>::const_iterator it = definedConstants.begin(); it != definedConstants.end(); ++it) {
-						it->first.gcMark(heap);
-					}
 					super::gcMark(heap);
 				}
-Processor::Opcode lastEmitted;
 };
 
 #endif

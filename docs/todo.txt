@@ -153,6 +153,7 @@ Run-time
 
 	* change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 		- not too fond of the int cast in the byte array
+		- 32-bit opcode with 24-bit operand seems pretty solid
 
 	* quicker calls by using a frame stack for functions that do not create closures
 		- problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
@@ -196,9 +197,17 @@ Run-time
 	* arguments and <self name>, couldn't they be indexed variables too instead of accessed through slow READ_NAMED? Either created only when present in code or allocated on demand?
 
 	* "get parent index" opcode, it is very common to access variables one level up (two levels up not so much), and parent frame never changes in a closure so...
+
 		- I did a full implementation of this ("far index" opcodes that contained distance to travel up the scope chain) and concluded that (non-strict) eval (and allowing var declarations inside eval) breaks everything. :( Performance gain seemed to be around 30%(!) otherwise. Here is an example that illustrates the problem: (function a() { var k = 5; (function b() { var i = 0; do { (function c() { print(k); })(); eval("var k = 3"); } while (++i < 2); })() })(). This code has an eval that inserts a k variable in the (b) closure just above the current function (c) but below the k = 5 definition (in a). How the hell should we know of this when we compile the innermost function? Since we do a single pass and compile each function with a separate Compiler instance it is not trivial to go back to all inner functions and fix this afterwards.
 
+		- Actually, for the particular but common case of one level deep closure we could implement opcodes that just go up one level (e.g. read-
+		global-indexed). Anything deeper than that suffers from the problem described above. We would still need a 2nd pass to change all indexed to named if we encounter an eval, but that would only be on the function we are currently compiling.
+
+		- A completely different approach would to be to abort the scope climbing when you encounter a scope that has been used by eval, thus determining this in run-time, and continue the search by name (through code-def lookup) at that point. I guess CPU hit could be negligable if we just set a pointer (climbScope) to 0 whenever direct eval is being executed in a scope. It would improve performance where eval is included in the code but for some reason isn't actually used (`if (false) eval(s)`). But it would prevent further optimizations (not yet tested) like having a constant-time short vector in each scope for scope-chain upwards instead of only a linked-list. (I think it is *extremely* rare that you have closures that are deeper than say 8 levels.)
+
 	* internal int type
+
+		- One complication is we can't always use .type directly then, e.g. for strict comparison.
 
 	* so, it's definitely worth it to "consolidate" / "internalize" all strings so that all identifiers get the same pointer (proven by the chess benchmark). The question is: how do we do this thread agnostic?
 		- there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
@@ -277,6 +286,8 @@ Compiler
 
 	* instead of flushing/discarding results of statements directly, couldn't we keep them until the next statement? i.e. eliminating stuff like "WRITE_INDEXED #-1", "POP", "READ_INDEXED #-1" (except when branch targets of course)
 
+	* I dropped the std::map for defined constants lookup of Value->index (thus getting rid of almost all STL). Now I simply iterate through all constants in the codedef. Is this fast enough?
+	
 GC
 ==
 
