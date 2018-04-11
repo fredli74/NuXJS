@@ -855,6 +855,7 @@ function $regExpCanonicalize(s) {
 	return t;
 }
 
+// FIX : all charCodeAt etc need to be stowed away so that we won't destroy regexp if changing global objects. This is true for all the code in here actually.
 function $compileRegExp(s, ignoreCase, multiline) {
 	function isClass(char, mask) {
 		return ((CC[char] & mask) !== 0);

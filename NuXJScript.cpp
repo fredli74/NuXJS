@@ -1856,6 +1856,26 @@ bool Processor::privateRun() {
 			case READ_INDEXED_OP:		push(indexed[operand]); break;
 			case WRITE_INDEXED_OP:		indexed[operand] = vsp[0]; break;
 			case WRITE_INDEXED_POP_OP:	indexed[operand] = vsp[0]; pop(1); break;
+			case READ_FAR_INDEXED_OP: {
+				int distance = operand >> 16;
+				const int index = static_cast<Int16>(operand);
+				const Scope* f = scope;
+				do {
+					f = f->getParentScope();
+				} while (--distance >= 0);
+				push(f->getIndexedPointer()[index]);
+				break;
+			}
+			case WRITE_FAR_INDEXED_OP:	{
+				int distance = operand >> 16;
+				const int index = static_cast<Int16>(operand);
+				const Scope* f = scope;
+				do {
+					f = f->getParentScope();
+				} while (--distance >= 0);
+				f->getIndexedPointer()[index] = vsp[0];
+				break;
+			}
 			case READ_NAMED_OP:			{
 											const Value& name = constants[operand];
 											if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
@@ -2190,7 +2210,7 @@ bool Processor::run() {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
+		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP", "READ_FAR_INDEXED", "WRITE_FAR_INDEXED"
 		, "READ_NAMED", "WRITE_NAMED", "WRITE_NAMED_POP", "GET_PROPERTY", "SET_PROPERTY", "SET_PROPERTY_POP"
 		, "ADD_PROPERTY", "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
@@ -2235,6 +2255,11 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 				const String* name = codeDef.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
+				break;
+			}
+			case Processor::READ_FAR_INDEXED_OP:
+			case Processor::WRITE_FAR_INDEXED_OP: {
+				std::wcerr << L" (" << static_cast<int>(static_cast<Int16>(operand)) << L" @^" << static_cast<int>(operand >> 16) << ")";
 				break;
 			}
 			case Processor::CALL_OP:
@@ -2378,21 +2403,25 @@ struct Compiler::ExpressionResult {
 		, PUSHED_PRIMITIVE	// primitive value on stack
 		, CONSTANT			// constant (and primitive) value on stack
 		, INDEXED			// arbitrary value in indexed variable
+		, FAR_INDEXED		// arbitrary value in a parent scope indexed variable
 		, NAMED				// arbitrary value in named variable
 		, PROPERTY			// arbitrary value in object property
 	};
-	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
-	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
-	Type t;
-	Value v;
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED), d(0) { }
+	ExpressionResult(Type type, const Value& value = Value::UNDEFINED, int farDistance = 0) : t(type), v(value), d(farDistance) { }
+ 	Type t;
+ 	Value v;
+	int d;
 };
 
-Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
+Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor, Compiler* parentCompiler)
 		: heap(heap), codeDef(codeDef)
-		, compilingFor(compileFor)
+		, compilingFor(compileFor), parentCompiler(parentCompiler)
 		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
+		, didCallEval(false)
+		, prohibitFarAccess(false)
 		, lastEmitted(Processor::INVALID_OP) {
 }
 
@@ -2638,6 +2667,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::FAR_INDEXED: emit(Processor::READ_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		default: assert(0);
@@ -2655,6 +2685,7 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE:
 		case ExpressionResult::INDEXED:
+		case ExpressionResult::FAR_INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY: {
 			makeRValue(xr);
@@ -2691,6 +2722,7 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
 		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::FAR_INDEXED: emit(Processor::WRITE_FAR_INDEXED_OP, static_cast<UInt16>(xr.v.toInt()) | (xr.d << 16)); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -2975,6 +3007,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
 				canDeleteScopeOnExit = false;
+				didCallEval = true;
 			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
@@ -3087,16 +3120,27 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
-	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
-	heap.protect(&funcCompiler);
-	try {
-		p = funcCompiler.compileFunction(p, e, functionName, selfName);
-	}
-	catch (const Exception&) { // FIX : a bit Q & D ish
-		p = funcCompiler.getStopPoint();
-		throw;
-	}
+	CodeDefinition* func = 0;
+	Compiler* parent = this;
+	do {
+		func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
+		Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION, parent);
+		heap.protect(&funcCompiler);
+		const Char* q;
+		try {
+			q = funcCompiler.compileFunction(p, e, functionName, selfName);
+		}
+		catch (const Exception&) { // FIX : a bit Q & D ish
+			p = funcCompiler.getStopPoint();
+			throw;
+		}
+		if (funcCompiler.didCallEval && parent != 0) {
+			parent = 0;
+		} else {
+			p = q;
+			break;
+		}
+	} while (true);
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 	canDeleteScopeOnExit = false;
 }
@@ -3187,15 +3231,24 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteScopeOnExit = false;
-						} else if (compilingFor != FOR_EVAL && withScopeCounter == 0) {
-							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
-							if (bucket != 0) {
-								const Int32 index = bucket->getIndexValue();
-								if (index != CATCH_PARAMETER) {
-									xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
-									break;
+						} else if (compilingFor != FOR_EVAL) {
+							int distance = -1;
+							const Compiler* c = this;
+							do {
+								if (c->withScopeCounter != 0) {
+ 									break;
+ 								}
+								const Table::Bucket* bucket = c->codeDef->nameIndexes.lookup(name);
+								if (bucket != 0) {
+									const Int32 index = bucket->getIndexValue();
+									if (index != CATCH_PARAMETER) {
+										xr = ExpressionResult((distance >= 0 ? ExpressionResult::FAR_INDEXED : ExpressionResult::INDEXED), Value(index), distance);
+										break;
+									}
 								}
-							}
+								distance += 1;// + c->catchScopeCounter;
+								c = c->parentCompiler;
+							} while (c != 0);
 						}
 						break;
 					}
@@ -3791,6 +3844,8 @@ void Compiler::statementList(SemanticScope* currentScope, ExpressionResult& eval
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	canDeleteScopeOnExit = (compilingFor == FOR_FUNCTION);
+	didCallEval = false;
+	
 	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
 	changeOutput(&codeDef->code);
 	p = b;
@@ -3798,7 +3853,10 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	acceptInOperator = true;
 
 	ExpressionResult evalXR;
+	
+	prohibitFarAccess = false;
 	statementList(0, evalXR);
+	
 	if (compilingFor != FOR_EVAL) {
 		evalXR = discard(evalXR);
 	}
