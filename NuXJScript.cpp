@@ -2150,8 +2150,8 @@ bool Processor::privateRun() {
 			case NEXT_PROPERTY_OP: {
 				o = vsp[0].getObject();
 				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ?
-				if (name != 0) {
-					push(Value(name));
+ 				if (name != 0) {
+					vsp[0] = Value(name);
 				} else {
 					ip += operand;
 					pop(1);
@@ -2334,7 +2334,7 @@ enum Statement {
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 struct Compiler::SemanticScope {
-	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE, FOR_IN_TYPE };
+	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
 	SemanticScope(Heap* heap, Type type, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(type), next(next) { }
 	SemanticScope(Heap* heap, const String& label, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label), next(next) { }
 	void makeIteratorScopes(SemanticScope* untilScope) {
@@ -2345,7 +2345,6 @@ struct Compiler::SemanticScope {
 			case CATCH_TYPE:
 			case WITH_TYPE: compiler->emit(Processor::POP_SCOPE_OP); break;
 			case FINALLY_TYPE: compiler->emit(Processor::DISCARD_RETURN_OP); break;
-			case FOR_IN_TYPE: compiler->emit(Processor::POP_OP); break;
 			default: break;
 		}
 	}
@@ -3271,8 +3270,8 @@ void Compiler::completeBreaks(const SemanticScope* Semanticscope) {
 void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 		, const ExpressionResult& iterXR, ExpressionResult& evalXR) {
 	ExpressionResult enumXR(rvalueExpression());
-	emit(Processor::GET_ENUMERATOR_OP);
-	if (compilingFor == FOR_EVAL) enumXR = safeKeep(enumXR);
+ 	emit(Processor::GET_ENUMERATOR_OP);
+	enumXR = safeKeep(enumXR);
 	expectToken(")", true);
 	Int32 loopPoint = markBackwardBranch();
 	makeRValue(enumXR);
@@ -3285,17 +3284,9 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		returnSafeKept(xr, true);
 	}
 	discard(makeAssignment(iterXR));
-	discard(evalXR);
-	if (compilingFor != FOR_EVAL) {
-		SemanticScope forInScope(&heap, SemanticScope::FOR_IN_TYPE, emptyLabelScope);
-		statement(&forInScope, &forInScope, evalXR);
-		flushXR(evalXR);
-		completeContinues(emptyLabelScope, scopeLabelsEnd);
-	} else {
-		statement(emptyLabelScope, emptyLabelScope, evalXR);
-		flushXR(evalXR);
-		completeContinues(emptyLabelScope, scopeLabelsEnd);
-	}
+	statement(emptyLabelScope, emptyLabelScope, evalXR);
+	flushXR(evalXR);
+	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
 	completeBreaks(emptyLabelScope);

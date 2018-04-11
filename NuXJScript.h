@@ -1024,7 +1024,7 @@ class Processor : public GCItem {
 					, TYPEOF_OP										// stack: value -> string
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
-					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> enumerator, string (unless exited)
+					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string
 					, OP_COUNT
 				};
 
