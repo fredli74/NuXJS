@@ -3566,17 +3566,23 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				} else {
-					QuickVector<CodeWord>* const outputCodeWas = changeOutput(&initCode);
-					acceptInOperator = false;
 					ExpressionResult iterXR;
-					bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
-					acceptInOperator = true;
-					changeOutput(outputCodeWas);
-					if (gotExpression && token("in", true)) {
+					bool isForIn = false;
+					{
+						QuickVector<CodeWord>* const outputCodeWas = changeOutput(&initCode);
+						acceptInOperator = false;
+						bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
+						acceptInOperator = true;
+						isForIn = (gotExpression && token("in", true));
+						if (!isForIn) {
+							discard(iterXR);
+						}
+						changeOutput(outputCodeWas);
+					}
+					if (isForIn) {
 						forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR, evalXR);
 					} else {
 						emitMultiple(initCode.begin(), initCode.end());
-						discard(iterXR);
 						forStatement(&emptyLabelScope, scopeLabelsEnd, evalXR);
 					}
 				}
@@ -3615,9 +3621,34 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				break;
 			}
 			
+			/*
+			The production TryStatement : try Block Catch is evaluated as follows:
+			1. Evaluate Block.
+			2. If Result(1).type is not throw, return Result(1).
+			3. Evaluate Catch with parameter Result(1).
+			4. Return Result(3).
+			
+			The production TryStatement : try Block Finally is evaluated as follows:
+			1. Evaluate Block.
+			2. Evaluate Finally.
+			3. If Result(2) .type is normal, return Result(1).
+			4. Return Result(2).
+			
+			The production TryStatement : try Block Catch Finally is evaluated as follows:
+			1. Evaluate Block.
+			2. Let C = Result(1).
+			3. If Result(1).type is not throw, go to step 6.
+			4. Evaluate Catch with parameter Result(1).
+			5. If Result(4).type is not normal, Let C = Result(4).
+			6. Evaluate Finally.
+			7. If Result(6).type is normal, return C.
+			8. Return Result(6).
+			*/
 			case TRY_STATEMENT: {
 				white();
 				flushXR(evalXR);
+				evalXR = safeKeep(evalXR);
+				ExpressionResult safeKeptEvalXR = evalXR;
 				SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentScope);
 				Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 				expectToken("{", true); // FIX : sub for block
@@ -3654,6 +3685,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					expectToken(")", true);
 					{
 						SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
+						evalXR = safeKeptEvalXR;
 						expectToken("{", true); // FIX : sub
 						statementList(&catchScope, evalXR);
 						expectToken("}", false);
@@ -3680,10 +3712,14 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				Int32 rethrowPoint = markBackwardBranch();
 				if (token("finally", true)) {
 					SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentScope);
+					evalXR = safeKeep(evalXR);
+					ExpressionResult finallyXR;
 					expectToken("{", true); // FIX : sub
-					statementList(&finallyScope, evalXR);
+					statementList(&finallyScope, finallyXR);
 					expectToken("}", false);
+					finallyXR = discard(finallyXR);
 					flushXR(evalXR);
+					returnSafeKept(evalXR, true);
 				} else {
 					if (!gotCatch) {
 						error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");

@@ -1050,7 +1050,7 @@ class Processor : public GCItem {
 					, DELETE_OP										// stack: object, name -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
 					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
-					, CATCH_SCOPE_OP								// operand: const_index for exception variable name
+					, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
 					, WITH_SCOPE_OP									// stack: object ->
 					, POP_SCOPE_OP
 					, TRY_OP										// operand: catch_offset
