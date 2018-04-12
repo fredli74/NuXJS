@@ -138,7 +138,7 @@ class GCHeap;
 	
 	In rare circumstances it is ok to not place a GCItem into a heap at all. The item will in this case never be
 	a candidate for garbage collection, but it will also never mark any of its references. In other words, this item
-	must be a terminal leaf that has no further references.
+	must be a terminal leaf that has no further unique references.
 	
 	When a GCItem is destructed (regardless if it is from automatic garbage collection or not) it is removed from the
 	heap it belongs to. This enables heaps to contain a mixture of automatically garbage collected and manually
@@ -201,7 +201,8 @@ class GCHeap : public Heap {
 				void mark(const GCItem* item);
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
-				bool belongs(const GCItem* item) { return (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList); }
+				// FIX : used extremely rarely, keep?
+				bool belongs(const GCItem* item) { return (item != 0 && (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList)); }
                 virtual ~GCHeap();
     
 	protected:	static int calcPoolIndex(size_t size);
@@ -304,7 +305,6 @@ struct Attributes {
 	bool dontDelete;
 };
 
-class Engine;
 class Enumerator;
 class Function;
 class Processor;
@@ -729,9 +729,11 @@ class GlobalScope : public Scope {
 	
 	protected:	Object* const globalObject;
 				const CodeDefinition* codeDef;
+				Value valuez[1000];
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(globalObject);
 					heap.mark(codeDef);
+					heap.markViaReferences(valuez + 0, valuez + 1000);
 					super::gcMark(heap);
 				}
 };
@@ -811,15 +813,16 @@ class ErrorPrototype : public Error {
 };
 
 class Engine {
-	public:		Engine(GCHeap& heap, GlobalScope* globalScope, Object* globals);
+	public:		Engine(GCHeap& heap);
+				void setGlobalObject(GlobalScope* globalScope, Object* globals);
+				void setupStandardLibrary(const String& librarySourceCode);
 				GCHeap& getHeap() const { return gcHeap; }
 				Object* getGlobals() const { return globals; }
 				GlobalScope* getGlobalScope() const { return globalScope; }
-				void setupStandardLibrary(const String& librarySourceCode);
 
 	protected:	GCHeap& gcHeap;
-				GlobalScope* const globalScope;
-				Object* const globals;
+				GlobalScope* globalScope;
+				Object* globals;
 	
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
@@ -878,7 +881,7 @@ class EvalScope : public Scope {
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 
 	protected:	const CodeDefinition* const evalCodeDef;
 				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionScope instead of EvalScope. And enterEval would be more similar to calling a function also.

@@ -1641,7 +1641,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
 		if (props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
-			props.update(props.insert(name), Value::UNDEFINED);
+			props.update(props.insert(name), Value::UNDEFINED, dontDelete ? DONT_DELETE_FLAG : 0);
 		}
 	}
 	if (!initValue.isUndefined()) {
@@ -1663,21 +1663,27 @@ void FunctionScope::constructCompleteObject(Engine& engine) const {
 EvalScope::EvalScope(Heap* heap, Scope* parentScope, const CodeDefinition* evalCodeDef)
 		: super(parentScope), evalCodeDef(evalCodeDef), indexed(evalCodeDef->getVarsCount(), heap) {
 	indexedPointer = indexed.end();
+	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
 }
 Flags EvalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return parentScope->getOwnProperty(engine, key, v); }
 bool EvalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->setOwnProperty(engine, key, v, flags); }
 bool EvalScope::deleteProperty(Engine& engine, const Value& key) { return parentScope->deleteProperty(engine, key); }
+void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, false); }
 
 /* --- GlobalScope --- */
 
 GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) {
 	assert(codeDef->getVarsCount() == 0);
+indexedPointer =valuez+1000;
+std::fill(valuez + 0, indexedPointer, Value::UNDEFINED);
 }
 Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return globalObject->getOwnProperty(engine, key, v); }
 bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return globalObject->setOwnProperty(engine, key, v, flags); }
 bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
 void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
-	if (!initValue.isUndefined()) {
+	Value v;
+	const Flags flags = getOwnProperty(engine, Value(name), &v);
+	if (flags == NONEXISTENT || !initValue.isUndefined()) {
 		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
@@ -2082,7 +2088,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case DECLARE_OP: {
-				scope->declareVar(engine, constants[operand].getString(), vsp[0], false);
+				scope->declareVar(engine, constants[operand].getString(), vsp[0], true);
 				pop(1);
 				break;
 			}
@@ -3689,6 +3695,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				
 				completeForwardBranch(catchPoint);
 				ExpressionResult thrownXR(ExpressionResult::PUSHED);
+				makeRValue(thrownXR);
 				thrownXR = safeKeep(thrownXR);
 				emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
 				makeRValue(thrownXR);
@@ -4281,14 +4288,12 @@ static struct {
 static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap, GlobalScope* globalScope, Object* globals) : gcHeap(heap), globalScope(globalScope), globals(globals), objectPrototype(&heap, 0), evalFunction(&heap, false)
+Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectPrototype(&heap, 0), evalFunction(&heap, false)
 		, evalDirectFunction(&heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(&heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(&heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(&heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
 		, arrayPrototype(&heap), unixEpochTimeDiff(0.0) {
-	assert(heap.belongs(globals));
-
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
 	
 	gcHeap.protect(&objectPrototype);
@@ -4301,9 +4306,6 @@ Engine::Engine(GCHeap& heap, GlobalScope* globalScope, Object* globals) : gcHeap
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = gcHeap.protect(new (&gcHeap) ErrorPrototype(static_cast<ErrorType>(i)));
 	}
-	
-	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(gcHeap.protect(&evalFunction)), DONT_ENUM_FLAG);
-	gcHeap.protect(&evalDirectFunction);
 }
 
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
@@ -4319,6 +4321,9 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
+	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(gcHeap.protect(&evalFunction)), DONT_ENUM_FLAG);
+	gcHeap.protect(&evalDirectFunction);
+	// FIX : why protect?
 	ScriptObject* supportObject = gcHeap.protect(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	// FIX : no new String?
 	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
@@ -4399,6 +4404,13 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 }
 
+void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
+	assert(gcHeap.belongs(globalScope));
+	assert(gcHeap.belongs(globals));
+	this->globalScope = globalScope;
+	this->globals = globals;
+}
+
 #include <fstream>
 #include <memory>
 #include <vector>
@@ -4465,12 +4477,16 @@ suppressStdErr = true;
     heap.protect(&globalCode);
     ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
     heap.protect(&globalClosure);
-    ScriptObject globals(&heap, 0);
+
+    Engine engine(heap);
+
+    ScriptObject globals(&heap, &engine.objectPrototype);
     heap.protect(&globals);
     GlobalScope globalScope(&globals, &globalCode);
     heap.protect(&globalScope);
 
-    Engine engine(heap, &globalScope, &globals);
+	engine.setGlobalObject(&globalScope, &globals);
+
     
     PrintFunction printFunction;
     globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(heap.protect(&printFunction)), DONT_ENUM_FLAG);
