@@ -1149,7 +1149,7 @@ class Compiler : public GCItem {
 				Int32 markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode op, Int32 point);
 
-				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g.used by return statement if there are finally blocks to call first)
+				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
@@ -1176,8 +1176,18 @@ class Compiler : public GCItem {
 				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
 				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void varStatement();
 				void functionStatement();
+				void breakContinueStatement(const bool isBreak, SemanticScope* currentScope, ExpressionResult& evalXR);
+				void ifStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
+				void whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void returnStatement(SemanticScope* currentScope);
 				void withStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
+				void throwStatement();
+				void tryStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
+				void switchStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
 				void statement(SemanticScope* firstScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
 				void statementList(SemanticScope* firstScope, ExpressionResult& evalXR);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
