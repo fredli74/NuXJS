@@ -2351,7 +2351,7 @@ const OperatorInfo POST_OPS[] = {
 	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP, false, false },
 	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP, false, false },
 	{ "instanceof", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false, true },
-	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, false, true }	// Important: must be last
+	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, false, true }
 };
 
 // FIX : sort
@@ -2887,7 +2887,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
             
         case GROUP: {
             discard(xr);
+			const bool didAcceptInOperator = acceptInOperator;
+			acceptInOperator = true;
             xr = operand(op);
+			acceptInOperator = didAcceptInOperator;
             break;
         }
 		
@@ -2919,6 +2922,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		}
 
 		case IN_OPERATOR: {
+			if (!acceptInOperator) {
+				return false;
+			}
 			assert(!op.primitiveInput);
             assert(op.primitiveOutput);
 			makeRValue(xr, true, true); // left should be primitive, right doesn't have to
@@ -2996,7 +3002,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			} else {
 				makeRValue(xr, false);
 			}
+			const bool didAcceptInOperator = acceptInOperator;
+			acceptInOperator = true;
 			functionCall(callOp);
+			acceptInOperator = didAcceptInOperator;
             xr = ExpressionResult::PUSHED;
 			break;
 		}
@@ -3090,7 +3099,10 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 		case PROPERTY_BRACKETS: {
 			assert(!op.primitiveInput);
 			makeRValue(xr, false);
+			const bool didAcceptInOperator = acceptInOperator;
+			acceptInOperator = true;
 			makeRValue(operand(op), true, true); // left doesn't need to be primitive, but right does (and preferred string!)
+			acceptInOperator = didAcceptInOperator;
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
 		}
@@ -3219,7 +3231,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		}
     }
 	const Char* b = p;
-    while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS) - (acceptInOperator ? 0 : 1), POST_OPS)) {
+    while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
 		b = p;
 	}
 	p = b;
@@ -3621,32 +3633,9 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				break;
 			}
 			
-			/*
-			The production TryStatement : try Block Catch is evaluated as follows:
-			1. Evaluate Block.
-			2. If Result(1).type is not throw, return Result(1).
-			3. Evaluate Catch with parameter Result(1).
-			4. Return Result(3).
-			
-			The production TryStatement : try Block Finally is evaluated as follows:
-			1. Evaluate Block.
-			2. Evaluate Finally.
-			3. If Result(2) .type is normal, return Result(1).
-			4. Return Result(2).
-			
-			The production TryStatement : try Block Catch Finally is evaluated as follows:
-			1. Evaluate Block.
-			2. Let C = Result(1).
-			3. If Result(1).type is not throw, go to step 6.
-			4. Evaluate Catch with parameter Result(1).
-			5. If Result(4).type is not normal, Let C = Result(4).
-			6. Evaluate Finally.
-			7. If Result(6).type is normal, return C.
-			8. Return Result(6).
-			*/
 			case TRY_STATEMENT: {
 				white();
-				flushXR(evalXR);
+				flushXR(evalXR);			// we need to flush out (e.g. if its a constant) and safe-keep the eval xr because catch eval xr should continue from this point, not from end of try scope
 				evalXR = safeKeep(evalXR);
 				ExpressionResult safeKeptEvalXR = evalXR;
 				SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentScope);
@@ -3706,8 +3695,9 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 				
 				// Finally
 				
-				for (const Int32* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) // FIX : sub
+				for (const Int32* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) { // FIX : sub
 					completeForwardBranch(*it);
+				}
 				emit(Processor::TRIED_OP);
 				Int32 rethrowPoint = markBackwardBranch();
 				if (token("finally", true)) {
