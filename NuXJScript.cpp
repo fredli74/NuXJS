@@ -2709,7 +2709,13 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED:
-		case ExpressionResult::PUSHED_PRIMITIVE:
+		case ExpressionResult::PUSHED_PRIMITIVE: {
+			emit(Processor::REPUSH_OP, 0);
+			if (evalXROnStack) {
+				emit(Processor::SWAP_OP);
+			}
+			return ExpressionResult(ExpressionResult::SAFEKEPT, Value(safeKeptCounter++));
+		}
 		case ExpressionResult::INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY:
@@ -3629,17 +3635,9 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	if (whiteNoLF()) {
 		optionalExpression(returnXR, LOWEST_PREC);
 	}
+	returnXR = makeRValue(returnXR);
 	int rollbackSafeKeptCounter = safeKeptCounter;
-	bool safeKept = false;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
-		if (s->type == SemanticScope::CATCH_TYPE
-				|| s->type == SemanticScope::TRY_TYPE
-				|| s->type == SemanticScope::WITH_TYPE) {
-			if (!safeKept) {
-				returnXR = safeKeep(returnXR);
-				safeKept = true;
-			}
-		}
 		s->popStuff(this);
 		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
 			const int safeKeptDiff = rollbackSafeKeptCounter - s->safeKeptCounter;
@@ -3650,10 +3648,6 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 		}
 	}
-	if (safeKept) {
-		returnSafeKept(returnXR, false);
-	}
-	returnXR = makeRValue(returnXR);
 	const int safeKeptDiff = rollbackSafeKeptCounter;
 	if (safeKeptDiff > 0) {
 		emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
@@ -3674,16 +3668,24 @@ void Compiler::throwStatement() {
 
 void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalXR) {
 	white();
-	flushXR(evalXR);			// we need to flush out (e.g. if its a constant) and safe-keep the eval xr because catch eval xr should continue from this point, not from end of try scope
-	evalXR = safeKeep(evalXR);
-	ExpressionResult safeKeptEvalXR = evalXR;
+	// we need to flush out (e.g. if its a constant) and safe-keep the eval xr because catch eval xr should continue from this point, not from end of try scope
+	evalXR = makeRValue(evalXR);
+	evalXROnStack = true;
+	++safeKeptCounter;
 	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, currentScope);
+	ExpressionResult tryScopeXR;
+	evalXROnStack = false;
 	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 	expectToken("{", true); // FIX : sub for block
-	statementList(&tryScope, evalXR);
+	statementList(&tryScope, tryScopeXR);
 	expectToken("}", false);
-	flushXR(evalXR);
 	tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+	evalXROnStack = flushXR(tryScopeXR);
+	if (tryScopeXR.onStack()) {
+		emit(Processor::PUSH_BACK_OP, 1);
+	} else {
+		emit(Processor::POP_OP, 1);
+	}
 	Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
 	Int32 catchEndPoint = INVALID_CODE_POINT;
 	
@@ -3713,11 +3715,11 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, currentScope);
-			evalXR = safeKeptEvalXR;
+			//evalXR = tryScopeEntryXR;
 			expectToken("{", true); // FIX : sub
 			statementList(&catchScope, evalXR);
 			expectToken("}", false);
-			flushXR(evalXR);
+			evalXROnStack = flushXR(evalXR);
 			emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -3740,15 +3742,14 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 	emit(Processor::TRIED_OP);
 	Int32 rethrowPoint = markBackwardBranch();
 	if (token("finally", true)) {
+		++safeKeptCounter;
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, currentScope);
-		evalXR = safeKeep(evalXR);
 		ExpressionResult finallyXR;
 		expectToken("{", true); // FIX : sub
 		statementList(&finallyScope, finallyXR);
 		expectToken("}", false);
 		finallyXR = discard(finallyXR);
-		flushXR(evalXR);
-		returnSafeKept(evalXR, true);
+		--safeKeptCounter;
 	} else {
 		if (!gotCatch) {
 			error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
@@ -3770,6 +3771,7 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 	if (catchEndPoint != INVALID_CODE_POINT) {
 		completeForwardBranch(catchEndPoint);
 	}
+	--safeKeptCounter;
 }
 
 void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& evalXR) {
