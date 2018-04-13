@@ -2370,8 +2370,8 @@ enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS
 
 struct Compiler::SemanticScope {
 	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
-	SemanticScope(Heap* heap, Type type, SemanticScope* next)
-			: breaks(heap), continues(heap), finallys(heap), type(type), safeKeptCounter(0), next(next) { }
+	SemanticScope(Heap* heap, Type type, int safeKeptCounter, SemanticScope* next)
+			: breaks(heap), continues(heap), finallys(heap), type(type), safeKeptCounter(safeKeptCounter), next(next) { }
 	SemanticScope(Heap* heap, const String& label, int safeKeptCounter, SemanticScope* next)
 			: breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label)
 			, safeKeptCounter(safeKeptCounter), next(next) { }
@@ -3475,7 +3475,7 @@ void Compiler::withStatement(SemanticScope* currentScope, ExpressionResult& eval
 	emit(Processor::WITH_SCOPE_OP);
 	{
 		++withScopeCounter;
-		SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, currentScope);
+		SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, safeKeptCounter, currentScope);
 		statement(&withScope, &withScope, evalXR);
 		--withScopeCounter;
 	}
@@ -3489,11 +3489,17 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
 	String label = String(b, p, &heap);
 	// FIX : too complicated!! bone out...
+	int rollbackSafeKeptCounter = safeKeptCounter;
 	while (s != 0 && !((s->type == SemanticScope::ITERATOR_LABEL_TYPE
 			|| ((isBreak || !label.empty()) && s->type == SemanticScope::LABEL_TYPE))
 			&& s->label.isEqualTo(label))) {
 		s->popStuff(this);
 		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) { // FIX : share with return
+			const int safeKeptDiff = rollbackSafeKeptCounter - s->safeKeptCounter;
+			if (safeKeptDiff > 0) {
+				emit((evalXROnStack ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
+				rollbackSafeKeptCounter -= safeKeptDiff;
+			}
 			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 		}
 		s = s->next;
@@ -3505,9 +3511,10 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 	if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
 		error(SYNTAX_ERROR, "Illegal label for continue");
 	}
-	const int safeKeptDiff = safeKeptCounter - s->safeKeptCounter;
+	const int safeKeptDiff = rollbackSafeKeptCounter - s->safeKeptCounter;
 	if (safeKeptDiff > 0) {
 		emit((evalXROnStack ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
+		rollbackSafeKeptCounter -= safeKeptDiff;
 	}
 	(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 	semicolon();
@@ -3622,6 +3629,7 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	if (whiteNoLF()) {
 		optionalExpression(returnXR, LOWEST_PREC);
 	}
+	int rollbackSafeKeptCounter = safeKeptCounter;
 	bool safeKept = false;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->type == SemanticScope::CATCH_TYPE
@@ -3634,15 +3642,22 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 		}
 		s->popStuff(this);
 		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
+			const int safeKeptDiff = rollbackSafeKeptCounter - s->safeKeptCounter;
+			if (safeKeptDiff > 0) {
+				emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
+				rollbackSafeKeptCounter -= safeKeptDiff;
+			}
 			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 		}
 	}
-	makeRValue(returnXR);
 	if (safeKept) {
 		returnSafeKept(returnXR, false);
 	}
-	if (safeKeptCounter > 0) {
-		emit(Processor::PUSH_BACK_OP, safeKeptCounter);
+	returnXR = makeRValue(returnXR);
+	const int safeKeptDiff = rollbackSafeKeptCounter;
+	if (safeKeptDiff > 0) {
+		emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
+		rollbackSafeKeptCounter -= safeKeptDiff;
 	}
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	semicolon();
@@ -3662,7 +3677,7 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 	flushXR(evalXR);			// we need to flush out (e.g. if its a constant) and safe-keep the eval xr because catch eval xr should continue from this point, not from end of try scope
 	evalXR = safeKeep(evalXR);
 	ExpressionResult safeKeptEvalXR = evalXR;
-	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentScope);
+	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, currentScope);
 	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
 	expectToken("{", true); // FIX : sub for block
 	statementList(&tryScope, evalXR);
@@ -3697,7 +3712,7 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 		expectToken(")", true);
 		{
-			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentScope);
+			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, currentScope);
 			evalXR = safeKeptEvalXR;
 			expectToken("{", true); // FIX : sub
 			statementList(&catchScope, evalXR);
@@ -3725,7 +3740,7 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 	emit(Processor::TRIED_OP);
 	Int32 rethrowPoint = markBackwardBranch();
 	if (token("finally", true)) {
-		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentScope);
+		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, currentScope);
 		evalXR = safeKeep(evalXR);
 		ExpressionResult finallyXR;
 		expectToken("{", true); // FIX : sub
