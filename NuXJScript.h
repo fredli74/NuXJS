@@ -1007,6 +1007,7 @@ class Processor : public GCItem {
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
 					, POP_OP										// stack: value ->
+					, POP_N_OP										// stack: values... ->
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
@@ -1031,7 +1032,10 @@ class Processor : public GCItem {
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
-					, REPUSH_OP										// stack: value -> value, value
+					, REPUSH_OP										// operand: offset, stack: value -> value, value
+, PUSH_BACK_OP
+, SWAP_OP
+// FIX : can now be done with advanced repush vvvv
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
@@ -1150,6 +1154,8 @@ class Compiler : public GCItem {
 				void emitBackwardBranch(Processor::Opcode op, Int32 point);
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
+Compiler::ExpressionResult newSafeKeep(const ExpressionResult& xr);
+void newReturnSafeKept(const ExpressionResult& xr);
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
@@ -1171,7 +1177,7 @@ class Compiler : public GCItem {
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
-				void flushXR(ExpressionResult& evalXR);
+				bool flushXR(ExpressionResult& evalXR);
 				void varDeclarations();
 				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
 						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
@@ -1217,6 +1223,8 @@ class Compiler : public GCItem {
 					heap.mark(codeDef);
 					super::gcMark(heap);
 				}
+int safeKeptCounter;
+bool evalXROnStack;
 };
 
 #endif

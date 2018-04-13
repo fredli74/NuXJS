@@ -1867,6 +1867,7 @@ bool Processor::privateRun() {
 		const Int32 operand = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
 			case POP_OP:				pop(1); break;
+			case POP_N_OP:				pop(operand); break;
 			case CONST_OP:				push(constants[operand]); break;
 			case READ_INDEXED_OP:		assert(indexed != 0); push(indexed[operand]); break;
 			case WRITE_INDEXED_OP:		assert(indexed != 0); indexed[operand] = vsp[0]; break;
@@ -1972,7 +1973,9 @@ bool Processor::privateRun() {
 			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += operand; else pop(1); break;
 			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += operand; else pop(1); break;
 
-			case REPUSH_OP:			push(vsp[0]); break;
+			case REPUSH_OP:			assert(operand <= 0); push(vsp[operand]); break;
+			case PUSH_BACK_OP:		assert(operand >= 0); vsp[-operand] = vsp[0]; pop(operand); break;
+			case SWAP_OP:			std::swap(vsp[-1], vsp[0]); break;
 			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 
@@ -2205,7 +2208,7 @@ bool Processor::run() {
 static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const char* OP_STRINGS[] = {
 		"!!! INVALID !!!"
-		, "POP", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
+		, "POP", "POP_N", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
 		, "READ_NAMED", "WRITE_NAMED", "WRITE_NAMED_POP", "GET_PROPERTY", "SET_PROPERTY", "SET_PROPERTY_POP"
 		, "ADD_PROPERTY", "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
 		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
@@ -2215,7 +2218,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		, "BIT_NOT", "NOT"
 		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
 		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
-		, "REPUSH", "REPUSH_2", "POST_SHUFFLE"
+		, "REPUSH", "PUSH_BACK", "SWAP", "REPUSH_2", "POST_SHUFFLE"
 		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
 		, "DELETE_SCOPE_AND_RETURN", "RETURN", "DISCARD_RETURN", "RETURN_TO_HOST"
 		, "THIS", "VOID", "SCOPE", "DELETE"
@@ -2255,7 +2258,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::CALL_OP:
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
-			case Processor::NEW_OP: std::cerr << " *" << operand; break;
+			case Processor::NEW_OP:
+			case Processor::POP_N_OP:
+			case Processor::PUSH_BACK_OP: std::cerr << " *" << operand; break;
+			case Processor::REPUSH_OP: std::cerr << " " << operand; break;
 			case Processor::CONST_OP:
 			case Processor::GEN_FUNC_OP:
 			case Processor::CATCH_SCOPE_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
@@ -2364,10 +2370,15 @@ enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS
 
 struct Compiler::SemanticScope {
 	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
-	SemanticScope(Heap* heap, Type type, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(type), next(next) { }
-	SemanticScope(Heap* heap, const String& label, SemanticScope* next) : breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label), next(next) { }
+	SemanticScope(Heap* heap, Type type, SemanticScope* next)
+			: breaks(heap), continues(heap), finallys(heap), type(type), safeKeptCounter(0), next(next) { }
+	SemanticScope(Heap* heap, const String& label, int safeKeptCounter, SemanticScope* next)
+			: breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label)
+			, safeKeptCounter(safeKeptCounter), next(next) { }
 	void makeIteratorScopes(SemanticScope* untilScope) {
-		for (SemanticScope* s = this; s != untilScope; s = s->next) s->type = ITERATOR_LABEL_TYPE;
+		for (SemanticScope* s = this; s != untilScope; s = s->next) {
+			s->type = ITERATOR_LABEL_TYPE;
+		}
 	}
 	void popStuff(Compiler* compiler) const {
 		switch (type) {
@@ -2378,8 +2389,9 @@ struct Compiler::SemanticScope {
 		}
 	}
 	Type type;
-	String label; // empty for automatic while, for, case labels
-	SemanticScope* next;
+	const String label; // empty for automatic while, for, case labels
+	SemanticScope* const next;
+	const int safeKeptCounter;
 // FIX : feels like a waste with three different vectors here, could we have double SemanticScope entries for continuable and breakable Semanticscope types?
 	QuickVector<Int32> breaks; // source points for break jmp's
 	QuickVector<Int32> continues; // source points for continue jmp's
@@ -2395,9 +2407,11 @@ struct Compiler::ExpressionResult {
 		, INDEXED			// arbitrary value in indexed variable
 		, NAMED				// arbitrary value in named variable
 		, PROPERTY			// arbitrary value in object property
+		, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
 	};
 	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
 	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
+	bool onStack() const { return t == PUSHED || t == PUSHED_PRIMITIVE; };
 	Type t;
 	Value v;
 };
@@ -2408,7 +2422,9 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
-		, lastEmitted(Processor::INVALID_OP) {
+		, lastEmitted(Processor::INVALID_OP)
+, safeKeptCounter(0)
+, evalXROnStack(false) {
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
@@ -2655,6 +2671,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
+		case ExpressionResult::SAFEKEPT: emit(Processor::REPUSH_OP, -safeKeptCounter + xr.v.toInt() + (evalXROnStack ? 0 : 1)); break;
 		default: assert(0);
 	}
 	if (toPrimitive) {
@@ -2689,6 +2706,38 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	}
 }
 
+Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr) {
+	switch (xr.t) {
+		case ExpressionResult::PUSHED:
+		case ExpressionResult::PUSHED_PRIMITIVE:
+		case ExpressionResult::INDEXED:
+		case ExpressionResult::NAMED:
+		case ExpressionResult::PROPERTY:
+		case ExpressionResult::SAFEKEPT: {
+			makeRValue(xr);
+			if (evalXROnStack) {
+				emit(Processor::SWAP_OP);
+			}
+			return ExpressionResult(ExpressionResult::SAFEKEPT, Value(safeKeptCounter++));
+		}
+		default: return xr;
+	}
+}
+
+void Compiler::newReturnSafeKept(const ExpressionResult& xr) {
+	if (xr.t == ExpressionResult::SAFEKEPT) {
+		assert(xr.v.toInt() == safeKeptCounter - 1);
+		assert(safeKeptCounter >= 0);
+		--safeKeptCounter;
+		if (evalXROnStack) {
+			emit(Processor::PUSH_BACK_OP, 1);
+		} else {
+			emit(Processor::POP_OP, 1);
+		}
+	}
+}
+
+
 // FIX : why don't we make a special expression result type for safe kept value and put this one in discard / makeRValue ?
 void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
 	if (xr.t == ExpressionResult::INDEXED) {
@@ -2708,6 +2757,7 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
+		case ExpressionResult::SAFEKEPT: assert(0); break;
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -2718,6 +2768,7 @@ Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 		case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
+		case ExpressionResult::SAFEKEPT: assert(0); break;
 		default: break;
 	}
 	return ExpressionResult(ExpressionResult::NONE);
@@ -3255,9 +3306,12 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 	flushXR is required before any conditional branching and before branch targets to produce the result on the
 	vstack in case it has not already been pushed (in other words if it is not an rvalue, e.g. a constant).
 */
-void Compiler::flushXR(ExpressionResult& evalXR) {
+bool Compiler::flushXR(ExpressionResult& evalXR) {
 	if (compilingFor == FOR_EVAL) {
 		evalXR = makeRValue(evalXR);
+		return true;
+	} else {
+		return false;
 	}
 }
 
@@ -3430,7 +3484,7 @@ void Compiler::withStatement(SemanticScope* currentScope, ExpressionResult& eval
 
 // keep as one or separate?
 void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* currentScope, ExpressionResult& evalXR) {
-	flushXR(evalXR);
+	evalXROnStack = flushXR(evalXR);
 	SemanticScope* s = currentScope;
 	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
 	String label = String(b, p, &heap);
@@ -3448,8 +3502,13 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 		error(SYNTAX_ERROR, !label.empty() ? "Undefined label"
 				: (isBreak ? "Illegal break" : "Illegal continue"));
 	}
-	if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE)
+	if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
 		error(SYNTAX_ERROR, "Illegal label for continue");
+	}
+	const int safeKeptDiff = safeKeptCounter - s->safeKeptCounter;
+	if (safeKeptDiff > 0) {
+		emit((evalXROnStack ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
+	}
 	(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 	semicolon();
 }
@@ -3457,7 +3516,7 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR) {
 	white();
 	flushXR(evalXR);
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", false);
 	QuickVector<CodeWord> initCode(&heap);
@@ -3523,7 +3582,7 @@ void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeL
 	white();
 	flushXR(evalXR);
 	Int32 loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", false); // FIX : sub of this
 	rvalueExpression();
@@ -3541,7 +3600,7 @@ void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scop
 	white();
 	flushXR(evalXR);
 	const Int32 loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	statement(&emptyLabelScope, &emptyLabelScope, evalXR);
 	flushXR(evalXR);
@@ -3581,6 +3640,9 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	makeRValue(returnXR);
 	if (safeKept) {
 		returnSafeKept(returnXR, false);
+	}
+	if (safeKeptCounter > 0) {
+		emit(Processor::PUSH_BACK_OP, safeKeptCounter);
 	}
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	semicolon();
@@ -3697,9 +3759,9 @@ void Compiler::tryStatement(SemanticScope* currentScope, ExpressionResult& evalX
 
 void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& evalXR) {
 	white();
-	flushXR(evalXR);
+	evalXROnStack = flushXR(evalXR);
 	expectToken("(", true);
-	ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
+	ExpressionResult controlXR(newSafeKeep(expression(LOWEST_PREC)));
 	expectToken(")", true);
 	expectToken("{", true);
 	Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
@@ -3707,7 +3769,7 @@ void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& ev
 	QuickVector<Int32> jumpOffsets(&heap);
 	Int32 startOffset = outputCode->size();
 	Int32 defaultPoint = INVALID_CODE_POINT;
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentScope);
+	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	bool firstStatement = true;
 	white();
 	while (!token("}", false)) {
@@ -3715,7 +3777,7 @@ void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& ev
 			error(SYNTAX_ERROR, "Expected '}'");
 		}
 		else if (token("case", false)) {
-			flushXR(evalXR);
+			evalXROnStack = flushXR(evalXR);
 			QuickVector<CodeWord>* const outputCodeWas = changeOutput(&testsCode);
 			makeRValue(controlXR);
 			rvalueExpression();
@@ -3727,20 +3789,23 @@ void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& ev
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
-			flushXR(evalXR);
+			evalXROnStack = flushXR(evalXR);
 			defaultPoint = markBackwardBranch();
 		} else if (firstStatement) {
 			error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
 		} else {
 			const Char* b = p;
 			statement(&emptyLabelScope, &emptyLabelScope, evalXR);
-			if (b == p) error(SYNTAX_ERROR, "Expected '}'");
+			evalXROnStack = evalXR.onStack();
+			if (b == p) {
+				error(SYNTAX_ERROR, "Expected '}'");
+			}
 		}
 		firstStatement = false;
 		white();
 	}
 	
-	flushXR(evalXR);
+	evalXROnStack = flushXR(evalXR);
 	Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
 	completeForwardBranch(testsPoint);
 	for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
@@ -3750,10 +3815,12 @@ void Compiler::switchStatement(SemanticScope* currentScope, ExpressionResult& ev
 		testsCode[*it] = Processor::packInstruction(opcode, operand - (outputCode->size() - startOffset));
 	}
 	emitMultiple(testsCode.begin(), testsCode.end());
-	if (defaultPoint != INVALID_CODE_POINT) emitBackwardBranch(Processor::JMP_OP, defaultPoint);
+	if (defaultPoint != INVALID_CODE_POINT) {
+		emitBackwardBranch(Processor::JMP_OP, defaultPoint);
+	}
 	completeForwardBranch(donePoint);
 	completeBreaks(&emptyLabelScope);
-	returnSafeKept(controlXR, true);
+	newReturnSafeKept(controlXR);
 }
 
 /*
@@ -3784,7 +3851,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
-			SemanticScope newLabelScope(&heap, label, currentScope);
+			SemanticScope newLabelScope(&heap, label, safeKeptCounter, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd, evalXR);
 			completeBreaks(&newLabelScope);
 		} else {
