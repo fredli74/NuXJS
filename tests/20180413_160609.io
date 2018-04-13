@@ -41,11 +41,11 @@
 < 77
 -
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;break out } finally { 13 } }'))
-< 13
+< 77
 -
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;break out } finally { print("fin") } }'))
 < fin
-< undefined
+< 77
 -
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;break out } finally { print("fin");break out } }'))
 < fin

@@ -10,25 +10,31 @@
 < 5
 -
 > print(eval("out: {try { } finally {5} }"))
-< 5
+< undefined
 -
 > print(eval("out: {5;try {3 } finally {} }"))
 < 3
 -
 > print(eval("out: {5;try {3 } finally {8} }"))
-< 8
+< 3
 -
 > print(eval("out: {try {break out } finally {} }"))
 < undefined
 -
 > print(eval("out: {try {break out } finally {8} }"))
-< 8
+< undefined
 -
 > print(eval("out: {try {break out } finally {x+x} }"))
-< 16
+< undefined
+-
+> print(eval("out: { 55; try {break out } finally {8} }"))
+< 55
+-
+> print(eval("out: { 55; try {break out } finally {x+x} }"))
+< 55
 -
 > print(eval("out: {try {y+y;break out } finally {x+x} }"))
-< 16
+< 246
 -
 > print(eval("out: {try {y+y } finally {x+x; break out} }"))
 < 16
