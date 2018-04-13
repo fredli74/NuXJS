@@ -1139,7 +1139,24 @@ class Compiler : public GCItem {
 				void compile(const String& source);
 				const Char* getStopPoint() const { return p; }
 
-	protected:	struct ExpressionResult;
+	protected:	struct ExpressionResult {
+					enum Type {
+						NONE				// void
+						, PUSHED			// arbitrary value on stack
+						, PUSHED_PRIMITIVE	// primitive value on stack
+						, CONSTANT			// constant (and primitive) value on stack
+						, INDEXED			// arbitrary value in indexed variable
+						, NAMED				// arbitrary value in named variable
+						, PROPERTY			// arbitrary value in object property
+						, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
+					};
+					ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
+					ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
+					bool onStack() const { return t == PUSHED || t == PUSHED_PRIMITIVE; };
+					Type t;
+					Value v;
+				};
+
 				struct SemanticScope;
 
 				void error(ErrorType errorType, const char* message);
@@ -1177,25 +1194,25 @@ void newReturnSafeKept(const ExpressionResult& xr);
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
-				bool flushXR(ExpressionResult& evalXR);
+				bool flushXR();
 				void varDeclarations();
 				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
-						, const ExpressionResult& iterXR, ExpressionResult& evalXR);
-				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
-				void forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+						, const ExpressionResult& iterXR);
+				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd);
+				void forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
 				void varStatement();
 				void functionStatement();
-				void breakContinueStatement(const bool isBreak, SemanticScope* currentScope, ExpressionResult& evalXR);
-				void ifStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
-				void whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
-				void doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
+				void breakContinueStatement(const bool isBreak, SemanticScope* currentScope);
+				void ifStatement(SemanticScope* currentScope);
+				void whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
+				void doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
 				void returnStatement(SemanticScope* currentScope);
-				void withStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
+				void withStatement(SemanticScope* currentScope);
 				void throwStatement();
-				void tryStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
-				void switchStatement(SemanticScope* currentScope, ExpressionResult& evalXR);
-				void statement(SemanticScope* firstScope, SemanticScope* scopeLabelsEnd, ExpressionResult& evalXR);
-				void statementList(SemanticScope* firstScope, ExpressionResult& evalXR);
+				void tryStatement(SemanticScope* currentScope);
+				void switchStatement(SemanticScope* currentScope);
+				void statement(SemanticScope* firstScope, SemanticScope* scopeLabelsEnd);
+				void statementList(SemanticScope* firstScope);
 				bool token(const char* t, bool eatLeadingWhite); // FIX : not all of these, and name!
 				bool eof() const { return p == e; }
 				void semicolon(bool acceptLF = true);
@@ -1224,7 +1241,7 @@ void newReturnSafeKept(const ExpressionResult& xr);
 					super::gcMark(heap);
 				}
 int safeKeptCounter;
-bool evalXROnStack;
+ExpressionResult evalXR;
 };
 
 #endif
