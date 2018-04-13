@@ -1001,8 +1001,8 @@ class Processor : public GCItem {
 					CallFrame* cfp;
 					Scope* scope;
 				};
-				
-				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
+		// FIX : public
+public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!

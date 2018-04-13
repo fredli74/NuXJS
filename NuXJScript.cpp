@@ -2692,9 +2692,6 @@ Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr) {
  		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE: {
 			emit(Processor::REPUSH_OP, 0);
-			if (evalXR.onStack()) {
-				emit(Processor::SWAP_OP);
-			}
 			return ExpressionResult(ExpressionResult::SAFEKEPT, Value(safeKeptCounter++));
 		}
 		case ExpressionResult::INDEXED:
@@ -3662,15 +3659,15 @@ void Compiler::throwStatement() {
 void Compiler::tryStatement(SemanticScope* currentScope) {
 	white();
 	flushXR();			// we need to flush out (e.g. if its a constant) and safe-keep the eval xr because catch eval xr should continue from this point, not from end of try scope
-	++safeKeptCounter;
-	emit(Processor::REPUSH_OP, 0);
+	ExpressionResult tryEntryXR = evalXR;
 	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, currentScope);
 	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
+	ExpressionResult safeKeptXR = newSafeKeep(evalXR);
 	expectToken("{", true); // FIX : sub for block
 	statementList(&tryScope);
 	expectToken("}", false);
 	flushXR();
-	emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), 1);
+	newReturnSafeKept(safeKeptXR);
 	tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 	Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
 	Int32 catchEndPoint = INVALID_CODE_POINT;
@@ -3696,8 +3693,8 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 		nameIndexes.update(indexBucket, CATCH_PARAMETER); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 		completeForwardBranch(catchPoint);
-		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
+		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, currentScope);
@@ -3729,11 +3726,11 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	if (token("finally", true)) {
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, currentScope);
 		ExpressionResult evalXRCopy = evalXR;
-		evalXR = ExpressionResult();
+		evalXR = tryEntryXR;
 		expectToken("{", true); // FIX : sub
 		statementList(&finallyScope);
 		expectToken("}", false);
-		evalXR = discard(evalXR);
+		flushXR();
 		evalXR = evalXRCopy;
 	} else {
 		if (!gotCatch) {
@@ -3748,12 +3745,12 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	ExpressionResult thrownXR(ExpressionResult::PUSHED);
 	makeRValue(thrownXR);
 	thrownXR = safeKeep(thrownXR);
+	discard(tryEntryXR);
 	emitBackwardBranch(Processor::JSR_OP, rethrowPoint);
 	makeRValue(thrownXR);
 	returnSafeKept(thrownXR, true);
 	emit(Processor::THROW_OP);
 	completeForwardBranch(tryEndPoint);
-	--safeKeptCounter;
 	if (catchEndPoint != INVALID_CODE_POINT) {
 		completeForwardBranch(catchEndPoint);
 	}
@@ -4741,6 +4738,7 @@ suppressStdErr = true;
                             assert(processor.vsp - vstack + 1 == 0);
                             Value v = processor.getResult();
                             std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+                            assert(processor.catchers.empty());
                         }
                         if (doTime) {
                             clock_t end = ::clock();
