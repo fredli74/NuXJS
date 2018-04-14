@@ -157,7 +157,7 @@ class GCItem {
 				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
-				GCHeap* gcGetHeap() const;
+				GCHeap* _gcGetHeap() const; // FIX : used?
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 	
@@ -174,7 +174,7 @@ class GCItem {
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
 	public:		GCList(GCHeap& heap);
-				GCHeap& getHeap() const;
+				GCHeap& _getHeap() const; // FIX : used?
 				UInt32 size() const;
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
@@ -666,7 +666,7 @@ class CodeDefinition : public Object {
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 
-	protected:	QuickVector<CodeWord> code; // FIX : should be array really
+	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				// FIX : bloated with all built-in quickvector counts here? vvv
@@ -1170,11 +1170,17 @@ class Compiler : public GCItem {
 				};
 
 				struct SemanticScope;
+	
+				struct CodeSection {
+					CodeSection(Heap* heap) : code(heap), lastEmitted(Processor::INVALID_OP) { }
+					QuickVector<CodeWord> code;
+					Processor::Opcode lastEmitted;
+				};
 
 				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode op, Int32 operand = 0);
-				QuickVector<CodeWord>* changeOutput(QuickVector<CodeWord>* newOutputCode);
-				void emitMultiple(const CodeWord* begin, const CodeWord* end);
+				CodeSection* changeSection(CodeSection* newOutputSection);
+				void insertSection(const CodeSection& section);
 				UInt32 addConstant(const Value& constant);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
 				Int32 emitForwardBranch(Processor::Opcode op);
@@ -1208,8 +1214,8 @@ void newReturnSafeKept(const ExpressionResult& xr);
 				ExpressionResult varDeclaration();
 				bool flushXR();
 				void varDeclarations();
-				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
-						, const ExpressionResult& iterXR);
+				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd
+						, const CodeSection& iterationSection, const ExpressionResult& iterationXR);
 				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd);
 				void forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
 				void varStatement();
@@ -1239,14 +1245,14 @@ void newReturnSafeKept(const ExpressionResult& xr);
 				GCHeap& heap; // FIX : necessary?
 				CodeDefinition* const codeDef;
 				const Target compilingFor;
-				QuickVector<CodeWord> setupCode; // function declarations (and vars in eval code), inserted at top of function when finalizing
+				CodeSection setupSection; // function declarations (and vars in eval code), inserted at top of function when finalizing
+				CodeSection mainSection;
 				const Char* p;
 				const Char* e;
-				QuickVector<CodeWord>* outputCode; // FIX : these three are bad, they are set and reset in blocks, which is what we normally use the C++ stack for really, e.g. create a new local compiler with the change... or a separate Compiler Context object
+				CodeSection* currentSection;
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
-				Processor::Opcode lastEmitted;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDef);

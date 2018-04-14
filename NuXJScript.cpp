@@ -779,7 +779,7 @@ void GCItem::operator delete(void* ptr, Heap* heap) {
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
 GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
-GCHeap* GCItem::gcGetHeap() const { return _gcList == 0 ? (GCHeap*)(0) : &_gcList->getHeap(); }
+GCHeap* GCItem::_gcGetHeap() const { return _gcList == 0 ? (GCHeap*)(0) : &_gcList->_getHeap(); }
 void GCItem::gcMark(GCHeap& heap) const { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
@@ -787,7 +787,7 @@ GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 GCList::GCList(GCHeap& heap) : heap(heap), count(0) { }
 
-GCHeap& GCList::getHeap() const { return heap; }
+GCHeap& GCList::_getHeap() const { return heap; }
 
 UInt32 GCList::size() const { return count; }
 
@@ -1114,7 +1114,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 /* --- CodeDef --- */
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
-		: code(heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap), temporaries(heap)
+		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap), temporaries(heap)
 		, name(0), selfName(0), source(0) {
 	assert(constants != 0);
 }
@@ -2571,12 +2571,17 @@ struct Compiler::SemanticScope {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
-		: heap(heap), codeDef(codeDef)
+		: heap(heap)
+		, codeDef(codeDef)
 		, compilingFor(compileFor)
-		, setupCode(&heap), outputCode(&codeDef->code), acceptInOperator(true)
+		, setupSection(&heap)
+		, mainSection(&heap)
+		, p(0)
+		, e(0)
+		, currentSection(0)
+		, acceptInOperator(true)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
-		, lastEmitted(Processor::INVALID_OP)
 , safeKeptCounter(0)
 , stackDepth(0) {
 }
@@ -2588,57 +2593,55 @@ void Compiler::error(ErrorType errorType, const char* message) {
 void Compiler::emit(Processor::Opcode op,  Int32 operand) {
 	if (op == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
-		switch (lastEmitted) {
+		switch (currentSection->lastEmitted) {
 			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
 			case Processor::WRITE_NAMED_OP: replacementOpcode = Processor::WRITE_NAMED_POP_OP; break;
 			case Processor::SET_PROPERTY_OP: replacementOpcode = Processor::SET_PROPERTY_POP_OP; break;
 			default: break;
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
-			Processor::unpackInstruction(outputCode->end()[-1], op, operand);
-			outputCode->resize(outputCode->size() - 1);
+			Processor::unpackInstruction(currentSection->code.end()[-1], op, operand);
+			currentSection->code.resize(currentSection->code.size() - 1);
 			op = replacementOpcode;
 		}
 	}
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
 		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
-	outputCode->append(Processor::packInstruction(op, operand));
-	lastEmitted = op;
+	currentSection->code.append(Processor::packInstruction(op, operand));
+	currentSection->lastEmitted = op;
 }
 
-QuickVector<CodeWord>* Compiler::changeOutput(QuickVector<CodeWord>* const newOutputCode) {
-	lastEmitted = Processor::INVALID_OP;
-	QuickVector<CodeWord>* const outputWas = outputCode;
-	outputCode = newOutputCode;
-	return outputWas;
+Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
+	std::swap(newOutputSection, currentSection);
+	return newOutputSection;
 }
 
-void Compiler::emitMultiple(const CodeWord* begin, const CodeWord* end) {
-	lastEmitted = Processor::INVALID_OP;
-	outputCode->insert(outputCode->end(), begin, end);
+void Compiler::insertSection(const CodeSection& section) {
+	currentSection->lastEmitted = Processor::INVALID_OP;
+	currentSection->code.insert(currentSection->code.end(), section.code.begin(), section.code.end());
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
 	emit(op);
-	return outputCode->size() - 1;
+	return currentSection->code.size() - 1;
 }
 
 void Compiler::completeForwardBranch(Int32 point) {
-	lastEmitted = Processor::INVALID_OP;
+	currentSection->lastEmitted = Processor::INVALID_OP;
 	Processor::Opcode opcode;
 	Int32 operand;
-	Processor::unpackInstruction((*outputCode)[point], opcode, operand);
-	(*outputCode)[point] = Processor::packInstruction(opcode, outputCode->size() - point - 1);
+	Processor::unpackInstruction(currentSection->code[point], opcode, operand);
+	currentSection->code[point] = Processor::packInstruction(opcode, currentSection->code.size() - point - 1);
 }
 
 Int32 Compiler::markBackwardBranch() {
-	lastEmitted = Processor::INVALID_OP;
-	return outputCode->size();
+	currentSection->lastEmitted = Processor::INVALID_OP;
+	return currentSection->code.size();
 }
 
 void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
-	emit(op, point - 1 - outputCode->size());
+	emit(op, point - 1 - currentSection->code.size());
 }
 
 UInt32 Compiler::addConstant(const Value& constant) {
@@ -3482,12 +3485,12 @@ bool Compiler::flushXR() {
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
 	if (compilingFor != FOR_FUNCTION) {
-		QuickVector<CodeWord>* const outputCodeWas = changeOutput(&setupCode);
+		CodeSection* previousSection = changeSection(&setupSection);
 		if (!func) {
 			emit(Processor::VOID_OP);
 		}
 		emitWithConstant(Processor::DECLARE_OP, Value(name));
-		changeOutput(outputCodeWas);
+		changeSection(previousSection);
 		return lxr;
 	} else if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Int32 index;
@@ -3546,8 +3549,8 @@ void Compiler::completeBreaks(const SemanticScope* Semanticscope) {
 	}
 }
 
-void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd, const QuickVector<CodeWord>& iterCode
-		, const ExpressionResult& iterXR) {
+void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd
+		, const CodeSection& iterationSection, const ExpressionResult& iterationXR) {
 	ExpressionResult enumXR(rvalueExpression());
  	emit(Processor::GET_ENUMERATOR_OP);
 	enumXR = safeKeep(enumXR);
@@ -3556,13 +3559,13 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 	makeRValue(enumXR);
 	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
 	ExpressionResult xr(ExpressionResult::PUSHED);
-	if (!iterCode.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
+	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
 		xr = safeKeep(xr);
-		emitMultiple(iterCode.begin(), iterCode.end());
+		insertSection(iterationSection);
 		makeRValue(xr);
 		returnSafeKept(xr, true);
 	}
-	discard(makeAssignment(iterXR));
+	discard(makeAssignment(iterationXR));
 	statement(emptyLabelScope, emptyLabelScope);
 	flushXR();
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
@@ -3582,20 +3585,21 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
-	QuickVector<CodeWord> incCode(&heap);
+	CodeSection incrementSection(&heap);
 	{
-		QuickVector<CodeWord>* const outputCodeWas = changeOutput(&incCode);
+		assert(currentSection == &mainSection);
+		changeSection(&incrementSection);
 		ExpressionResult incXR;
 		if (optionalExpression(incXR, LOWEST_PREC)) {
 			discard(incXR);
 		}
 		expectToken(")", true);
-		changeOutput(outputCodeWas);
+		changeSection(&mainSection);
 	}
 	statement(emptyLabelScope, emptyLabelScope);
 	flushXR();
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
-	emitMultiple(incCode.begin(), incCode.end());
+	insertSection(incrementSection);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	if (exitLoopPoint != INVALID_CODE_POINT) {
 		completeForwardBranch(exitLoopPoint);
@@ -3624,10 +3628,11 @@ void Compiler::functionStatement() {
 	white();
 	const Char* b = identifier(true, false);
 	const String* name = String::newHashedString(heap, b, p);
-	QuickVector<CodeWord>* const outputCodeWas = changeOutput(&setupCode);
+	assert(currentSection == &mainSection);
+	changeSection(&setupSection);
 	functionDefinition(name);
 	declareIdentifier(name, true);
-	changeOutput(outputCodeWas);
+	changeSection(&mainSection);
 }
 
 void Compiler::withStatement(SemanticScope* currentScope) {
@@ -3689,14 +3694,14 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", false);
-	QuickVector<CodeWord> initCode(&heap);
+	CodeSection initSection(&heap);
 	if (token("var", true)) {
 		white();
 		acceptInOperator = false;
-		ExpressionResult iterXR = varDeclaration();
+		ExpressionResult iterationXR = varDeclaration();
 		acceptInOperator = true;
 		if (token("in", true)) {
-			forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterationXR);
 		} else {
 			if (token(",", true)) {
 				white();
@@ -3710,7 +3715,8 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 		ExpressionResult iterXR;
 		bool isForIn = false;
 		{
-			QuickVector<CodeWord>* const outputCodeWas = changeOutput(&initCode);
+			assert(currentSection == &mainSection);
+			changeSection(&initSection);
 			acceptInOperator = false;
 			bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 			acceptInOperator = true;
@@ -3718,12 +3724,12 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 			if (!isForIn) {
 				discard(iterXR);
 			}
-			changeOutput(outputCodeWas);
+			changeSection(&mainSection);
 		}
 		if (isForIn) {
-			forInStatement(&emptyLabelScope, scopeLabelsEnd, initCode, iterXR);
+			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterXR);
 		} else {
-			emitMultiple(initCode.begin(), initCode.end());
+			insertSection(initSection);
 			forStatement(&emptyLabelScope, scopeLabelsEnd);
 		}
 	}
@@ -3992,9 +3998,9 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	expectToken(")", true);
 	expectToken("{", true);
 	Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
-	QuickVector<CodeWord> testsCode(&heap);
+	CodeSection testsSection(&heap);
 	QuickVector<Int32> jumpOffsets(&heap);
-	Int32 startOffset = outputCode->size();
+	Int32 startOffset = mainSection.code.size();
 	Int32 defaultPoint = INVALID_CODE_POINT;
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	bool firstStatement = true;
@@ -4005,14 +4011,16 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		}
 		else if (token("case", false)) {
 			flushXR();
-			QuickVector<CodeWord>* const outputCodeWas = changeOutput(&testsCode);
+			assert(currentSection == &mainSection);
+			changeSection(&testsSection);
+			// FIX : markBackwardBranch()
 			makeRValue(controlXR);
 			rvalueExpression();
 			expectToken(":", true);
 			emit(Processor::X_EQ_OP);
-			emit(Processor::JT_OP, outputCodeWas->size() - startOffset - testsCode.size() - 1);
-			jumpOffsets.append(testsCode.size() - 1);
-			changeOutput(outputCodeWas);
+			emit(Processor::JT_OP, mainSection.code.size() - startOffset - testsSection.code.size() - 1);
+			jumpOffsets.append(testsSection.code.size() - 1);
+			changeSection(&mainSection);
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
@@ -4037,10 +4045,10 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
 		Processor::Opcode opcode;
 		Int32 operand;
-		Processor::unpackInstruction(testsCode[*it], opcode, operand);
-		testsCode[*it] = Processor::packInstruction(opcode, operand - (outputCode->size() - startOffset));
+		Processor::unpackInstruction(testsSection.code[*it], opcode, operand);
+		testsSection.code[*it] = Processor::packInstruction(opcode, operand - (mainSection.code.size() - startOffset));
 	}
-	emitMultiple(testsCode.begin(), testsCode.end());
+	insertSection(testsSection);
 	if (defaultPoint != INVALID_CODE_POINT) {
 		emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 	}
@@ -4119,8 +4127,7 @@ void Compiler::statementList(SemanticScope* currentScope) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	canDeleteScopeOnExit = (compilingFor == FOR_FUNCTION);
-	codeDef->code.resize(0); // FIX : what is the rule, one or many compiles?
-	changeOutput(&codeDef->code);
+	changeSection(&mainSection);
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
@@ -4131,10 +4138,10 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	}
 	makeRValue(evalXR);
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
-	assert(outputCode == &codeDef->code);
-	if (!setupCode.empty()) {
-		outputCode->insert(outputCode->begin(), setupCode.begin(), setupCode.end());
-	}
+	assert(currentSection == &mainSection);
+	codeDef->code.resize(setupSection.code.size() + mainSection.code.size());
+	std::copy(setupSection.code.begin(), setupSection.code.end(), codeDef->code.begin());
+	std::copy(mainSection.code.begin(), mainSection.code.end(), codeDef->code.begin() + setupSection.code.size());
 	if (!canDeleteScopeOnExit) {
 		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
 		// FIX : more compact solution
@@ -4146,7 +4153,6 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 			}
 		}
 	}
-	codeDef->code.shrink();
 	codeDef->constants->shrink();
 if (!suppressStdErr) {
 	disassemble(heap, *codeDef);
