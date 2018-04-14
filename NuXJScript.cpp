@@ -1745,6 +1745,102 @@ bool WithScope::deleteProperty(Engine& engine, const Value& key) {
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
 const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
 
+const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
+	{ POP_OP                     , "POP"                     , -1     , false },
+	{ POP_N_OP                   , "POP_N"                   , 0      , true  },
+	{ CONST_OP                   , "CONST"                   , +1     , false },
+	{ READ_INDEXED_OP            , "READ_INDEXED"            , +1     , false },
+	{ WRITE_INDEXED_OP           , "WRITE_INDEXED"           , 0      , false },
+	{ WRITE_INDEXED_POP_OP       , "WRITE_INDEXED_POP"       , -1     , false },
+	{ READ_NAMED_OP              , "READ_NAMED"              , 1      , false },
+	{ WRITE_NAMED_OP             , "WRITE_NAMED"             , 0      , false },
+	{ WRITE_NAMED_POP_OP         , "WRITE_NAMED_POP"         , -1     , false },
+	{ GET_PROPERTY_OP            , "GET_PROPERTY"            , -1     , false },
+	{ SET_PROPERTY_OP            , "SET_PROPERTY"            , -2     , false },
+	{ SET_PROPERTY_POP_OP        , "SET_PROPERTY_POP"        , -3     , false },
+	{ ADD_PROPERTY_OP            , "ADD_PROPERTY"            , -1     , false },
+	{ OBJ_TO_NUMBER_OP           , "OBJ_TO_NUMBER"           , 0      , false },
+	{ OBJ_TO_STRING_OP           , "OBJ_TO_STRING"           , 0      , false },
+	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , false },
+	{ INC_OP                     , "INC"                     , 0      , false },
+	{ DEC_OP                     , "DEC"                     , 0      , false },
+	{ ADD_OP                     , "ADD"                     , -1     , false },
+	{ SUB_OP                     , "SUB"                     , -1     , false },
+	{ MUL_OP                     , "MUL"                     , -1     , false },
+	{ DIV_OP                     , "DIV"                     , -1     , false },
+	{ MOD_OP                     , "MOD"                     , -1     , false },
+	{ OR_OP                      , "OR"                      , -1     , false },
+	{ XOR_OP                     , "XOR"                     , -1     , false },
+	{ AND_OP                     , "AND"                     , -1     , false },
+	{ SHL_OP                     , "SHL"                     , -1     , false },
+	{ SHR_OP                     , "SHR"                     , -1     , false },
+	{ USHR_OP                    , "USHR"                    , -1     , false },
+	{ PLUS_OP                    , "PLUS"                    , 0      , false },
+	{ MINUS_OP                   , "MINUS"                   , 0      , false },
+	{ INV_OP                     , "INV"                     , 0      , false },
+	{ NOT_OP                     , "NOT"                     , 0      , false },
+	{ X_EQ_OP                    , "X_EQ"                    , -1     , false },
+	{ X_NEQ_OP                   , "X_NEQ"                   , -1     , false },
+	{ EQ_OP                      , "EQ"                      , -1     , false },
+	{ NEQ_OP                     , "NEQ"                     , -1     , false },
+	{ LT_OP                      , "LT"                      , -1     , false },
+	{ LEQ_OP                     , "LEQ"                     , -1     , false },
+	{ GT_OP                      , "GT"                      , -1     , false },
+	{ GEQ_OP                     , "GEQ"                     , -1     , false },
+	{ JMP_OP                     , "JMP"                     , 0      , false },
+	{ JSR_OP                     , "JSR"                     , 0      , false },
+	{ JT_OP                      , "JT"                      , -1     , false },
+	{ JF_OP                      , "JF"                      , -1     , false },
+	{ JT_OR_POP_OP               , "JT_OR_POP"               , -1     , false },
+	{ JF_OR_POP_OP               , "JF_OR_POP"               , -1     , false },
+	{ REPUSH_OP                  , "REPUSH"                  , 1      , false },
+	{ PUSH_BACK_OP               , "PUSH_BACK"               , 0      , true  },
+	{ SWAP_OP                    , "SWAP"                    , 0      , false },
+	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , false },
+	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , false },
+	{ CALL_OP                    , "CALL"                    , 0      , true  },
+	{ CALL_METHOD_OP             , "CALL_METHOD"             , -1     , true  },
+	{ CALL_EVAL_OP               , "CALL_EVAL"               , 0      , true  },
+	{ NEW_OP                     , "NEW"                     , +1     , true  },
+	{ NEW_RESULT_OP              , "NEW_RESULT"              , -1     , false },
+	{ NEW_OBJECT_OP              , "NEW_OBJECT"              , +1     , false },
+	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , false },
+	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , false },
+	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , 0      , false },
+	{ RETURN_OP                  , "RETURN"                  , 0      , false },
+	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , false },
+	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , false },
+	{ THIS_OP                    , "THIS"                    , +1     , false },
+	{ VOID_OP                    , "VOID"                    , +1     , false },
+	{ SCOPE_OP                   , "SCOPE"                   , +1     , false },
+	{ DELETE_OP                  , "DELETE"                  , -1     , false },
+	{ GEN_FUNC_OP                , "GEN_FUNC"                , +1     , false },
+	{ DECLARE_OP                 , "DECLARE"                 , -1     , false },
+	{ CATCH_SCOPE_OP             , "CATCH_SCOPE"             , -1     , false },
+	{ WITH_SCOPE_OP              , "WITH_SCOPE"              , -1     , false },
+	{ POP_SCOPE_OP               , "POP_SCOPE"               , 0      , false },
+	{ TRY_OP                     , "TRY"                     , 0      , false },
+	{ TRIED_OP                   , "TRIED"                   , 0      , false },
+	{ THROW_OP                   , "THROW"                   , -1     , false },
+	{ IN_OP                      , "IN"                      , -1     , false },
+	{ INSTANCE_OF_OP             , "INSTANCE_OF"             , -1     , false },
+	{ TYPEOF_OP                  , "TYPEOF"                  , 0      , false },
+	{ TYPEOF_NAMED_OP            , "TYPEOF_NAMED"            , 1      , false },
+	{ GET_ENUMERATOR_OP          , "GET_ENUMERATOR"          , 0      , false },
+	{ NEXT_PROPERTY_OP           , "NEXT_PROPERTY"           , 0      , false },
+};
+
+const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
+	assert(0 <= opcode && opcode < OP_COUNT);
+	assert(opcodeInfo[opcode].opcode == opcode); // source code check
+	return opcodeInfo[opcode];
+}
+
+int Processor::getInstructionStackUse(const Opcode opcode, const Int32 operand) {
+	const OpcodeInfo& info = getOpcodeInfo(opcode);
+	return info.stackUse + (info.alsoCountOperand ? -operand : 0);
+}
+
 Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
 	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), cfp(cstackStart - 1), scope(0), constants(0), indexed(0)
@@ -1759,6 +1855,10 @@ CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
 void Processor::unpackInstruction(const CodeWord codeWord, Processor::Opcode& opcode, Int32& operand) {
 	opcode = static_cast<Processor::Opcode>(codeWord & 255);
 	operand = static_cast<Int32>(codeWord) >> 8;
+}
+
+std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord codeWord) {
+	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
 void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
@@ -2205,38 +2305,37 @@ bool Processor::run() {
 	}
 }
 
-static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
-	const char* OP_STRINGS[] = {
-		"!!! INVALID !!!"
-		, "POP", "POP_N", "CONST", "READ_INDEXED", "WRITE_INDEXED", "WRITE_INDEXED_POP"
-		, "READ_NAMED", "WRITE_NAMED", "WRITE_NAMED_POP", "GET_PROPERTY", "SET_PROPERTY", "SET_PROPERTY_POP"
-		, "ADD_PROPERTY", "OBJ_TO_NUMBER", "OBJ_TO_STRING", "PRE_EQ"
-		, "INC", "DEC", "ADD", "SUB", "MUL", "DIV", "MOD"
-		, "OR", "XOR", "AND"
-		, "SHL", "SHR", "USHR"
-		, "PLUS", "MINUS"
-		, "BIT_NOT", "NOT"
-		, "STRICTLY_EQ", "STRICTLY_NEQ", "EQ", "NEQ", "LT", "LEQ", "GT", "GEQ"
-		, "JMP", "JSR", "JT", "JF", "JT_OR_POP", "JF_OR_POP"
-		, "REPUSH", "PUSH_BACK", "SWAP", "REPUSH_2", "POST_SHUFFLE"
-		, "CALL", "CALL_METHOD", "CALL_EVAL", "NEW", "NEW_RESULT", "NEW_OBJ", "NEW_ARRAY", "NEW_REG_EXP"
-		, "DELETE_SCOPE_AND_RETURN", "RETURN", "DISCARD_RETURN", "RETURN_TO_HOST"
-		, "THIS", "VOID", "SCOPE", "DELETE"
-		, "GEN_FUNC", "DECLARE"
-		, "CATCH_SCOPE", "WITH_SCOPE", "POP_SCOPE"
-		, "TRY", "TRIED", "THROW"
-		, "IN", "INSTANCE_OF", "TYPEOF", "TYPEOF_NAMED"
-		, "GET_ENUMERATOR", "NEXT_PROPERTY"
-	};
+const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
+
+static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& stackDepths, int offset, int currentStackDepth) {
 	const CodeWord* code = codeDef.getCodePointer();
-	const Value* constants = codeDef.getConstantsPointer();
-	for (UInt32 offset = 0; offset < codeDef.getCodeSize();) {
+	const UInt32 codeSize = codeDef.getCodeSize();
+
+	int errors = 0;
+	for (; offset < codeSize; ++offset) {
+		if (stackDepths[offset] != UNKNOWN_STACK_DEPTH) {
+			if (stackDepths[offset] != currentStackDepth) {
+				std::cerr << "Conflicting stack depth @" << offset << ": " << currentStackDepth << " & " << stackDepths[offset] << std::endl;
+				++errors;
+			}
+			return errors;
+		}
+
 		Processor::Opcode opcode;
 		int operand;
 		Processor::unpackInstruction(code[offset], opcode, operand);
-		if (opcode < 0 || opcode >= Processor::OP_COUNT) opcode = Processor::INVALID_OP;
-		std::cerr << "\t" << offset << ':' << OP_STRINGS[opcode - Processor::INVALID_OP];
-		++offset;
+		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
+			std::cerr << "Invalid opcode " << static_cast<int>(opcode) << "@" << offset << std::endl;
+			++errors;
+		}
+		stackDepths[offset] = currentStackDepth;
+
+		const int thisStackUse = Processor::getInstructionStackUse(opcode, operand);
+		currentStackDepth += thisStackUse;
+		if (currentStackDepth < 0) {
+			std::cerr << "Negative stack depth @" << offset << std::endl;
+			++errors;
+		}
 		switch (opcode) {
 			case Processor::JT_OP:
 			case Processor::JF_OP:
@@ -2245,7 +2344,78 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::JMP_OP:
 			case Processor::JSR_OP:
 			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: { Int32 jump = operand; std::cerr << " @" << (offset + jump); break; }
+			case Processor::NEXT_PROPERTY_OP: {
+				const Int32 targetOffset = offset + 1 + operand;
+				if (targetOffset < 0 && targetOffset >= codeSize) {
+					std::cerr << "Invalid target @" << targetOffset << " @" << offset << std::endl;
+					++errors;
+					break;
+				}
+				const int targetStackDepth = currentStackDepth + ((opcode == Processor::JT_OR_POP_OP || opcode == Processor::JF_OR_POP_OP || opcode == Processor::TRY_OP) ? 1 : 0) + (opcode == Processor::NEXT_PROPERTY_OP ? -1 : 0);
+				errors += recursiveStackCheck(codeDef, stackDepths, targetOffset, targetStackDepth);
+				if (opcode == Processor::JMP_OP) {
+					return errors;
+				}
+				break;
+			}
+			case Processor::RETURN_TO_HOST_OP:
+			case Processor::DELETE_SCOPE_AND_RETURN_OP: {
+				if (currentStackDepth != 1) {
+					std::cerr << "Invalid return stack depth @" << offset << ": " << currentStackDepth << std::endl;
+				}
+				return errors;
+			}
+			case Processor::RETURN_OP: // fix: check all returns from jsr end with the same stack pointer as entry (keep track with extra parameter that only updates with JSR)
+			case Processor::THROW_OP: {
+				return errors;
+			}
+	
+			default: break;
+		}
+	}
+
+	return errors;
+}
+
+static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
+	const CodeWord* code = codeDef.getCodePointer();
+	const Value* constants = codeDef.getConstantsPointer();
+	const UInt32 codeSize = codeDef.getCodeSize();
+	
+	QuickArray<int> stackDepths(codeSize);
+	const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
+	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
+	
+	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
+	
+	for (UInt32 offset = 0; offset < codeSize; ++offset) {
+		Processor::Opcode opcode;
+		int operand;
+		Processor::unpackInstruction(code[offset], opcode, operand);
+		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
+			break;
+		}
+
+		if (stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
+			std::cerr << "?";
+		} else {
+			std::cerr << stackDepths[offset];
+		}
+		std::cerr << "\t" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
+		
+		switch (opcode) {
+			case Processor::JT_OP:
+			case Processor::JF_OP:
+			case Processor::JT_OR_POP_OP:
+			case Processor::JF_OR_POP_OP:
+			case Processor::JMP_OP:
+			case Processor::JSR_OP:
+			case Processor::TRY_OP:
+			case Processor::NEXT_PROPERTY_OP: {
+				const Int32 target = offset + 1 + operand;
+				std::cerr << " @" << target;
+				break;
+			}
 			case Processor::READ_INDEXED_OP:
 			case Processor::WRITE_INDEXED_OP:
 			case Processor::WRITE_INDEXED_POP_OP: {
@@ -2275,6 +2445,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		}
 		std::cerr << std::endl;
 	}
+	
+	assert(errors == 0);
 }
 
 /* --- Compiler --- */
@@ -2405,7 +2577,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
 		, lastEmitted(Processor::INVALID_OP)
-, safeKeptCounter(0) {
+, safeKeptCounter(0)
+, stackDepth(0) {
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
@@ -2695,7 +2868,7 @@ Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr, boo
 			if (copy) {
 				emit(Processor::REPUSH_OP, 0);
 			}
-			if (evalXR.onStack()) {
+			if (evalXR.onStack() && !copy) {
 				emit(Processor::SWAP_OP);
 			}
 			return ExpressionResult(ExpressionResult::SAFEKEPT, Value(safeKeptCounter++));
@@ -3658,6 +3831,7 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::throwStatement() {
+	evalXR = discard(evalXR);
 	if (!whiteNoLF()) {
 		error(SYNTAX_ERROR, "Illegal newline after throw");
 	}
@@ -3777,17 +3951,18 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	emit(Processor::TRIED_OP);
 	Int32 finallyRethrowPoint = markBackwardBranch();
 	if (token("finally", true)) {
-// FIX : this turns into a lot of unnecssary push/pops in eval mode
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
-		evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
-		ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
+		if (compilingFor == FOR_EVAL) { // fix : some kind of util for this?
+			++safeKeptCounter;
+		}
+		evalXR = ExpressionResult::NONE;
 		expectToken("{", true); // FIX : sub
 		statementList(&finallyScope);
 		expectToken("}", false);
 		evalXR = discard(evalXR);
-		evalXR = rollback;
-		flushXR(); // FOR_EVAL
-		newReturnSafeKept(rollback);
+		if (compilingFor == FOR_EVAL) {
+			--safeKeptCounter;
+		}
 	} else {
 		if (!gotCatch) {
 			error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
@@ -3975,6 +4150,15 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	codeDef->constants->shrink();
 if (!suppressStdErr) {
 	disassemble(heap, *codeDef);
+	int stackDepth = 0;
+	int maxStackDepth = 0;
+	for (int i = 0; i < codeDef->code.size(); ++i) {
+		const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(codeDef->code[i]);
+		stackDepth += Processor::getInstructionStackUse(instruction.first, instruction.second);
+		maxStackDepth = std::max(maxStackDepth, stackDepth);
+	}
+	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
+	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants->size() << std::endl;
 /* FIX :	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
@@ -3982,6 +4166,12 @@ if (!suppressStdErr) {
 	}*/
 	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
+} else {
+	QuickArray<int> stackDepths(codeDef->getCodeSize());
+	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
+	
+	int errors = recursiveStackCheck(*codeDef, stackDepths, 0, 0);
+	assert(errors == 0);
 }
 	return p;
 }

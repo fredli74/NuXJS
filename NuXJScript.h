@@ -1001,7 +1001,7 @@ class Processor : public GCItem {
 					CallFrame* cfp;
 					Scope* scope;
 				};
-		// FIX : public
+			// FIX : public
 public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 	public:		enum Opcode {	// FIX : sort
@@ -1027,8 +1027,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
 					, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
 					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
-					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: value -> boolean
-					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: value -> boolean
+					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
+					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
@@ -1040,7 +1040,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
-					, CALL_EVAL_OP									// operand: n, stack: object, name, n * args -> return_value // special eval call is required because of need to differentiate direct or indirect call to eval
+					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
 					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
 					, NEW_OBJECT_OP									// stack: -> object
@@ -1065,12 +1065,22 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, TYPEOF_OP										// stack: value -> string
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
-					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string
+					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
 					, OP_COUNT
 				};
 
+				struct OpcodeInfo {
+					Opcode opcode;
+					const char* mnemonic;
+					int stackUse;
+					bool alsoCountOperand;
+				};
+	
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
 				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
+				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
+				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
+				static int getInstructionStackUse(const Opcode opcode, const Int32 operand);
 
 	public:		Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
@@ -1096,6 +1106,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				CallFrame* const cstackEnd;
 				Value* const vstackStart;
 				Value* const vstackEnd;
+
+				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
 				Int32 clockCyclesLeft;
@@ -1241,6 +1253,7 @@ void newReturnSafeKept(const ExpressionResult& xr);
 					super::gcMark(heap);
 				}
 int safeKeptCounter;
+int stackDepth;
 ExpressionResult evalXR;
 };
 
