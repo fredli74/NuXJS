@@ -34,8 +34,8 @@
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;break out } }'))
 < 77
 -
-> print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } }'))
-< !!!! 99
+> try { eval('out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } }') } catch (x) { print("thrown:"+x) }
+< thrown:99
 -
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;break out } finally { } }'))
 < 77
@@ -51,9 +51,9 @@
 < fin
 < undefined
 -
-> print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin"); } }'))
+> try { eval('out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin"); } }') } catch (x) { print("thrown:"+x) }
 < fin
-< !!!! 99
+< thrown:99
 -
 > print(eval('out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin");break out } }'))
 < fin
@@ -95,8 +95,8 @@
 > print((function() { out:{5;try { 55;throw 25 } catch (x) { 77;break out } } })())
 < undefined
 -
-> print((function() { out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } } })())
-< !!!! 99
+> try { (function() { out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } } })() } catch (x) { print("thrown:"+x) }
+< thrown:99
 -
 > print((function() { out:{5;try { 55;throw 25 } catch (x) { 77;break out } finally { } } })())
 < undefined
@@ -112,9 +112,9 @@
 < fin
 < undefined
 -
-> print((function() { out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin"); } } })())
+> try { (function() { out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin"); } } })() } catch (x) { print("thrown:"+x) }
 < fin
-< !!!! 99
+< thrown:99
 -
 > print((function() { out:{5;try { 55;throw 25 } catch (x) { 77;throw 99 } finally { print("fin");break out } } })())
 < fin

@@ -2369,7 +2369,7 @@ enum Statement {
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 struct Compiler::SemanticScope {
-	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
+	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, TRY_CATCH_FINALLY_TYPE, WITH_TYPE };
 	SemanticScope(Heap* heap, Type type, int safeKeptCounter, SemanticScope* next)
 			: breaks(heap), continues(heap), finallys(heap), type(type), safeKeptCounter(safeKeptCounter), next(next) { }
 	SemanticScope(Heap* heap, const String& label, int safeKeptCounter, SemanticScope* next)
@@ -2687,11 +2687,17 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	}
 }
 
-Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr) {
+Compiler::ExpressionResult Compiler::newSafeKeep(const ExpressionResult& xr, bool copy) {
+// FIX : makeRValue of everything if copy?
 	switch (xr.t) {
  		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE: {
-			emit(Processor::REPUSH_OP, 0);
+			if (copy) {
+				emit(Processor::REPUSH_OP, 0);
+			}
+			if (evalXR.onStack()) {
+				emit(Processor::SWAP_OP);
+			}
 			return ExpressionResult(ExpressionResult::SAFEKEPT, Value(safeKeptCounter++));
 		}
 		case ExpressionResult::INDEXED:
@@ -3618,13 +3624,28 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	int rollbackSafeKeptCounter = safeKeptCounter;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		s->popStuff(this);
+		/*
+			This is *really* tricky. When inside try/catch/finally block we have inserted an extra space holder on the
+			stack for the return value. This is so all finally's are always called with identical stack pointer. It
+			would be different whether we returned or not otherwise. This is so that finallys in turn can break / return
+			(and abort any previous return) with correct stack popping.
+			
+			However, since we need to push back the return value (to this extra space) before calling finally() we
+			manipulate the rollbackSafeKeptCounter to pop one value more before calling finally and one less for the
+			entire try/catch/finally block for balance. This should *not* be done for break / continue of course.
+		*/
 		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
+			++rollbackSafeKeptCounter;
 			const int safeKeptDiff = rollbackSafeKeptCounter - s->safeKeptCounter;
 			if (safeKeptDiff > 0) {
 				emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), safeKeptDiff);
 				rollbackSafeKeptCounter -= safeKeptDiff;
 			}
 			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
+		} else if (s->type == SemanticScope::FINALLY_TYPE) {
+			++rollbackSafeKeptCounter;
+		} else if (s->type == SemanticScope::TRY_CATCH_FINALLY_TYPE) {
+			--rollbackSafeKeptCounter;
 		}
 	}
 	const int safeKeptDiff = rollbackSafeKeptCounter;
@@ -3656,7 +3677,7 @@ void Compiler::throwStatement() {
  
 							// spaceHolder					// (evalXR)
 	try {
-							// spaceHolder					// safeKeptRollback (evalXR)
+							// spaceHolder					// rollback (evalXR)
 		<statements>
 							// spaceHolder					// (evalXR)
 		finally()
@@ -3678,23 +3699,27 @@ void Compiler::throwStatement() {
 	}
 							// spaceHolder					// (evalXR)
 	finally {
-							// spaceHolder					// safeKeptRollback (evalXR)
+							// spaceHolder					// rollback (evalXR)
 		<statements>
-							// spaceHolder					// safeKeptRollback
+							// spaceHolder					// rollback
 	}
 							//								// (evalXR)
 */
 void Compiler::tryStatement(SemanticScope* currentScope) {
 	white();
-	evalXR = makeRValue(evalXR);
-	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, currentScope);
+	flushXR(); // FOR_EVAL
+	SemanticScope tryCatchFinallyScope(&heap, SemanticScope::TRY_CATCH_FINALLY_TYPE, safeKeptCounter, currentScope);
+// FIX : push void instead of PUSH 0
+	ExpressionResult spaceHolder = (compilingFor != FOR_EVAL ? newSafeKeep(ExpressionResult::PUSHED, true) : ExpressionResult::NONE);
+	
+	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
-	ExpressionResult safeKeptRollback = newSafeKeep(evalXR);
+	ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
 	expectToken("{", true); // FIX : sub for block
 	statementList(&tryScope);
 	expectToken("}", false);
-	flushXR();
-	newReturnSafeKept(safeKeptRollback);
+	flushXR(); // FOR_EVAL
+	newReturnSafeKept(rollback); // FOR_EVAL
 	tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 	Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
 	Int32 catchEndPoint = INVALID_CODE_POINT;
@@ -3724,12 +3749,12 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		expectToken(")", true);
 		{
-			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, currentScope);
+			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 			evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
 			expectToken("{", true); // FIX : sub
 			statementList(&catchScope);
 			expectToken("}", false);
-			flushXR();
+			flushXR(); // FOR_EVAL
 			emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -3752,15 +3777,17 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	emit(Processor::TRIED_OP);
 	Int32 finallyRethrowPoint = markBackwardBranch();
 	if (token("finally", true)) {
-		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, currentScope);
+// FIX : this turns into a lot of unnecssary push/pops in eval mode
+		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 		evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
-		ExpressionResult safeKeptRollback = newSafeKeep(evalXR);
+		ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
 		expectToken("{", true); // FIX : sub
 		statementList(&finallyScope);
 		expectToken("}", false);
 		evalXR = discard(evalXR);
-		makeRValue(safeKeptRollback);
-		newReturnSafeKept(safeKeptRollback);
+		evalXR = rollback;
+		flushXR(); // FOR_EVAL
+		newReturnSafeKept(rollback);
 	} else {
 		if (!gotCatch) {
 			error(SYNTAX_ERROR, "Expected 'catch' or 'finally'");
@@ -3779,13 +3806,14 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		completeForwardBranch(catchEndPoint);
 	}
 	evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
+	newReturnSafeKept(spaceHolder); // NO_EVAL
 }
 
 void Compiler::switchStatement(SemanticScope* currentScope) {
 	white();
 	flushXR();
 	expectToken("(", true);
-	ExpressionResult controlXR(newSafeKeep(expression(LOWEST_PREC)));
+	ExpressionResult controlXR(newSafeKeep(expression(LOWEST_PREC), false));
 	expectToken(")", true);
 	expectToken("{", true);
 	Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
