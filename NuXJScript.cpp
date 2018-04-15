@@ -1744,99 +1744,94 @@ const Int32 MIN_OPERAND_VALUE = -(1 << 23);
 const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
 
 const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
-	{ POP_OP                     , "POP"                     , -1     , false },
-	{ POP_N_OP                   , "POP_N"                   , 0      , true  },
-	{ CONST_OP                   , "CONST"                   , +1     , false },
-	{ READ_INDEXED_OP            , "READ_INDEXED"            , +1     , false },
-	{ WRITE_INDEXED_OP           , "WRITE_INDEXED"           , 0      , false },
-	{ WRITE_INDEXED_POP_OP       , "WRITE_INDEXED_POP"       , -1     , false },
-	{ READ_NAMED_OP              , "READ_NAMED"              , 1      , false },
-	{ WRITE_NAMED_OP             , "WRITE_NAMED"             , 0      , false },
-	{ WRITE_NAMED_POP_OP         , "WRITE_NAMED_POP"         , -1     , false },
-	{ GET_PROPERTY_OP            , "GET_PROPERTY"            , -1     , false },
-	{ SET_PROPERTY_OP            , "SET_PROPERTY"            , -2     , false },
-	{ SET_PROPERTY_POP_OP        , "SET_PROPERTY_POP"        , -3     , false },
-	{ ADD_PROPERTY_OP            , "ADD_PROPERTY"            , -1     , false },
-	{ OBJ_TO_NUMBER_OP           , "OBJ_TO_NUMBER"           , 0      , false },
-	{ OBJ_TO_STRING_OP           , "OBJ_TO_STRING"           , 0      , false },
-	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , false },
-	{ INC_OP                     , "INC"                     , 0      , false },
-	{ DEC_OP                     , "DEC"                     , 0      , false },
-	{ ADD_OP                     , "ADD"                     , -1     , false },
-	{ SUB_OP                     , "SUB"                     , -1     , false },
-	{ MUL_OP                     , "MUL"                     , -1     , false },
-	{ DIV_OP                     , "DIV"                     , -1     , false },
-	{ MOD_OP                     , "MOD"                     , -1     , false },
-	{ OR_OP                      , "OR"                      , -1     , false },
-	{ XOR_OP                     , "XOR"                     , -1     , false },
-	{ AND_OP                     , "AND"                     , -1     , false },
-	{ SHL_OP                     , "SHL"                     , -1     , false },
-	{ SHR_OP                     , "SHR"                     , -1     , false },
-	{ USHR_OP                    , "USHR"                    , -1     , false },
-	{ PLUS_OP                    , "PLUS"                    , 0      , false },
-	{ MINUS_OP                   , "MINUS"                   , 0      , false },
-	{ INV_OP                     , "INV"                     , 0      , false },
-	{ NOT_OP                     , "NOT"                     , 0      , false },
-	{ X_EQ_OP                    , "X_EQ"                    , -1     , false },
-	{ X_NEQ_OP                   , "X_NEQ"                   , -1     , false },
-	{ EQ_OP                      , "EQ"                      , -1     , false },
-	{ NEQ_OP                     , "NEQ"                     , -1     , false },
-	{ LT_OP                      , "LT"                      , -1     , false },
-	{ LEQ_OP                     , "LEQ"                     , -1     , false },
-	{ GT_OP                      , "GT"                      , -1     , false },
-	{ GEQ_OP                     , "GEQ"                     , -1     , false },
-	{ JMP_OP                     , "JMP"                     , 0      , false },
-	{ JSR_OP                     , "JSR"                     , 0      , false },
-	{ JT_OP                      , "JT"                      , -1     , false },
-	{ JF_OP                      , "JF"                      , -1     , false },
-	{ JT_OR_POP_OP               , "JT_OR_POP"               , -1     , false },
-	{ JF_OR_POP_OP               , "JF_OR_POP"               , -1     , false },
-	{ REPUSH_OP                  , "REPUSH"                  , 1      , false },
-	{ PUSH_BACK_OP               , "PUSH_BACK"               , 0      , true  },
-	{ SWAP_OP                    , "SWAP"                    , 0      , false },
-	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , false },
-	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , false },
-	{ CALL_OP                    , "CALL"                    , 0      , true  },
-	{ CALL_METHOD_OP             , "CALL_METHOD"             , -1     , true  },
-	{ CALL_EVAL_OP               , "CALL_EVAL"               , 0      , true  },
-	{ NEW_OP                     , "NEW"                     , +1     , true  },
-	{ NEW_RESULT_OP              , "NEW_RESULT"              , -1     , false },
-	{ NEW_OBJECT_OP              , "NEW_OBJECT"              , +1     , false },
-	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , false },
-	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , false },
-	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , 0      , false },
-	{ RETURN_OP                  , "RETURN"                  , 0      , false },
-	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , false },
-	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , false },
-	{ THIS_OP                    , "THIS"                    , +1     , false },
-	{ VOID_OP                    , "VOID"                    , +1     , false },
-	{ SCOPE_OP                   , "SCOPE"                   , +1     , false },
-	{ DELETE_OP                  , "DELETE"                  , -1     , false },
-	{ GEN_FUNC_OP                , "GEN_FUNC"                , +1     , false },
-	{ DECLARE_OP                 , "DECLARE"                 , -1     , false },
-	{ CATCH_SCOPE_OP             , "CATCH_SCOPE"             , -1     , false },
-	{ WITH_SCOPE_OP              , "WITH_SCOPE"              , -1     , false },
-	{ POP_SCOPE_OP               , "POP_SCOPE"               , 0      , false },
-	{ TRY_OP                     , "TRY"                     , 0      , false },
-	{ TRIED_OP                   , "TRIED"                   , 0      , false },
-	{ THROW_OP                   , "THROW"                   , -1     , false },
-	{ IN_OP                      , "IN"                      , -1     , false },
-	{ INSTANCE_OF_OP             , "INSTANCE_OF"             , -1     , false },
-	{ TYPEOF_OP                  , "TYPEOF"                  , 0      , false },
-	{ TYPEOF_NAMED_OP            , "TYPEOF_NAMED"            , 1      , false },
-	{ GET_ENUMERATOR_OP          , "GET_ENUMERATOR"          , 0      , false },
-	{ NEXT_PROPERTY_OP           , "NEXT_PROPERTY"           , 0      , false },
+	{ POP_OP                     , "POP"                     , -1     , 0 },
+	{ POP_N_OP                   , "POP_N"                   , 0      , OpcodeInfo::POP_OPERAND },
+	{ CONST_OP                   , "CONST"                   , +1     , 0 },
+	{ READ_INDEXED_OP            , "READ_INDEXED"            , +1     , 0 },
+	{ WRITE_INDEXED_OP           , "WRITE_INDEXED"           , 0      , 0 },
+	{ WRITE_INDEXED_POP_OP       , "WRITE_INDEXED_POP"       , -1     , 0 },
+	{ READ_NAMED_OP              , "READ_NAMED"              , 1      , 0 },
+	{ WRITE_NAMED_OP             , "WRITE_NAMED"             , 0      , 0 },
+	{ WRITE_NAMED_POP_OP         , "WRITE_NAMED_POP"         , -1     , 0 },
+	{ GET_PROPERTY_OP            , "GET_PROPERTY"            , -1     , 0 },
+	{ SET_PROPERTY_OP            , "SET_PROPERTY"            , -2     , 0 },
+	{ SET_PROPERTY_POP_OP        , "SET_PROPERTY_POP"        , -3     , 0 },
+	{ ADD_PROPERTY_OP            , "ADD_PROPERTY"            , -1     , 0 },
+	{ OBJ_TO_NUMBER_OP           , "OBJ_TO_NUMBER"           , 0      , 0 },
+	{ OBJ_TO_STRING_OP           , "OBJ_TO_STRING"           , 0      , 0 },
+	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , 0 },
+	{ INC_OP                     , "INC"                     , 0      , 0 },
+	{ DEC_OP                     , "DEC"                     , 0      , 0 },
+	{ ADD_OP                     , "ADD"                     , -1     , 0 },
+	{ SUB_OP                     , "SUB"                     , -1     , 0 },
+	{ MUL_OP                     , "MUL"                     , -1     , 0 },
+	{ DIV_OP                     , "DIV"                     , -1     , 0 },
+	{ MOD_OP                     , "MOD"                     , -1     , 0 },
+	{ OR_OP                      , "OR"                      , -1     , 0 },
+	{ XOR_OP                     , "XOR"                     , -1     , 0 },
+	{ AND_OP                     , "AND"                     , -1     , 0 },
+	{ SHL_OP                     , "SHL"                     , -1     , 0 },
+	{ SHR_OP                     , "SHR"                     , -1     , 0 },
+	{ USHR_OP                    , "USHR"                    , -1     , 0 },
+	{ PLUS_OP                    , "PLUS"                    , 0      , 0 },
+	{ MINUS_OP                   , "MINUS"                   , 0      , 0 },
+	{ INV_OP                     , "INV"                     , 0      , 0 },
+	{ NOT_OP                     , "NOT"                     , 0      , 0 },
+	{ X_EQ_OP                    , "X_EQ"                    , -1     , 0 },
+	{ X_NEQ_OP                   , "X_NEQ"                   , -1     , 0 },
+	{ EQ_OP                      , "EQ"                      , -1     , 0 },
+	{ NEQ_OP                     , "NEQ"                     , -1     , 0 },
+	{ LT_OP                      , "LT"                      , -1     , 0 },
+	{ LEQ_OP                     , "LEQ"                     , -1     , 0 },
+	{ GT_OP                      , "GT"                      , -1     , 0 },
+	{ GEQ_OP                     , "GEQ"                     , -1     , 0 },
+	{ JMP_OP                     , "JMP"                     , 0      , OpcodeInfo::TERMINAL },
+	{ JSR_OP                     , "JSR"                     , 0      , 0 },
+	{ JT_OP                      , "JT"                      , -1     , 0 },
+	{ JF_OP                      , "JF"                      , -1     , 0 },
+	{ JT_OR_POP_OP               , "JT_OR_POP"               , -1     , OpcodeInfo::NO_POP_ON_BRANCH },
+	{ JF_OR_POP_OP               , "JF_OR_POP"               , -1     , OpcodeInfo::NO_POP_ON_BRANCH },
+	{ REPUSH_OP                  , "REPUSH"                  , 1      , 0 },
+	{ PUSH_BACK_OP               , "PUSH_BACK"               , 0      , OpcodeInfo::POP_OPERAND },
+	{ SWAP_OP                    , "SWAP"                    , 0      , 0 },
+	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , 0 },
+	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , 0 },
+	{ CALL_OP                    , "CALL"                    , 0      , OpcodeInfo::POP_OPERAND },
+	{ CALL_METHOD_OP             , "CALL_METHOD"             , -1     , OpcodeInfo::POP_OPERAND },
+	{ CALL_EVAL_OP               , "CALL_EVAL"               , 0      , OpcodeInfo::POP_OPERAND },
+	{ NEW_OP                     , "NEW"                     , +1     , OpcodeInfo::POP_OPERAND },
+	{ NEW_RESULT_OP              , "NEW_RESULT"              , -1     , 0 },
+	{ NEW_OBJECT_OP              , "NEW_OBJECT"              , +1     , 0 },
+	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , 0 },
+	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , 0 },
+	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , 0      , OpcodeInfo::TERMINAL },
+	{ RETURN_OP                  , "RETURN"                  , 0      , OpcodeInfo::TERMINAL },
+	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , 0 },
+	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , OpcodeInfo::TERMINAL },
+	{ THIS_OP                    , "THIS"                    , +1     , 0 },
+	{ VOID_OP                    , "VOID"                    , +1     , 0 },
+	{ SCOPE_OP                   , "SCOPE"                   , +1     , 0 },
+	{ DELETE_OP                  , "DELETE"                  , -1     , 0 },
+	{ GEN_FUNC_OP                , "GEN_FUNC"                , +1     , 0 },
+	{ DECLARE_OP                 , "DECLARE"                 , -1     , 0 },
+	{ CATCH_SCOPE_OP             , "CATCH_SCOPE"             , -1     , 0 },
+	{ WITH_SCOPE_OP              , "WITH_SCOPE"              , -1     , 0 },
+	{ POP_SCOPE_OP               , "POP_SCOPE"               , 0      , 0 },
+	{ TRY_OP                     , "TRY"                     , 0      , OpcodeInfo::NO_POP_ON_BRANCH },
+	{ TRIED_OP                   , "TRIED"                   , 0      , 0 },
+	{ THROW_OP                   , "THROW"                   , -1     , OpcodeInfo::TERMINAL },
+	{ IN_OP                      , "IN"                      , -1     , 0 },
+	{ INSTANCE_OF_OP             , "INSTANCE_OF"             , -1     , 0 },
+	{ TYPEOF_OP                  , "TYPEOF"                  , 0      , 0 },
+	{ TYPEOF_NAMED_OP            , "TYPEOF_NAMED"            , 1      , 0 },
+	{ GET_ENUMERATOR_OP          , "GET_ENUMERATOR"          , 0      , 0 },
+	{ NEXT_PROPERTY_OP           , "NEXT_PROPERTY"           , 0      , OpcodeInfo::POP_ON_BRANCH },
 };
 
 const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	assert(0 <= opcode && opcode < OP_COUNT);
 	assert(opcodeInfo[opcode].opcode == opcode); // source code check
 	return opcodeInfo[opcode];
-}
-
-int Processor::getInstructionStackUse(const Opcode opcode, const Int32 operand) {
-	const OpcodeInfo& info = getOpcodeInfo(opcode);
-	return info.stackUse + (info.alsoCountOperand ? -operand : 0);
 }
 
 Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
@@ -2325,8 +2320,14 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 			++errors;
 		}
 		stackDepths[offset] = currentStackDepth;
-
-		const int thisStackUse = Processor::getInstructionStackUse(opcode, operand);
+#if (VERIFY_STACK_LOGIC)
+	if (stackDepths[offset] != codeDef.stackDepths[offset]) {
+		std::cerr << "Invalid compile-time stack depth @" << offset << " (" << codeDef.stackDepths[offset] << " vs " << stackDepths[offset] << ")" << std::endl;
+		++errors;
+	}
+#endif
+		const Processor::OpcodeInfo& info = Processor::getOpcodeInfo(opcode);
+		const int thisStackUse = info.stackUse + (((info.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 		currentStackDepth += thisStackUse;
 		if (currentStackDepth < 0) {
 			std::cerr << "Negative stack depth @" << offset << std::endl;
@@ -2347,7 +2348,8 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 					++errors;
 					break;
 				}
-				const int targetStackDepth = currentStackDepth + ((opcode == Processor::JT_OR_POP_OP || opcode == Processor::JF_OR_POP_OP || opcode == Processor::TRY_OP) ? 1 : 0) + (opcode == Processor::NEXT_PROPERTY_OP ? -1 : 0);
+				const int targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
+						+ (((info.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0);
 				errors += recursiveStackCheck(codeDef, stackDepths, targetOffset, targetStackDepth);
 				if (opcode == Processor::JMP_OP) {
 					return errors;
@@ -2383,7 +2385,6 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	
 	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
 	
-	int runningStackDepth = 0;
 	for (UInt32 offset = 0; offset < codeSize; ++offset) {
 		Processor::Opcode opcode;
 		int operand;
@@ -2399,11 +2400,14 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		}
 		std::cerr << "\t";
 #if (VERIFY_STACK_LOGIC)
-		std::cerr << codeDef.stackDepths[offset];
+		if (codeDef.stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
+			std::cerr << "?";
+		} else {
+			std::cerr << codeDef.stackDepths[offset];
+		}
 		std::cerr << "\t";
 #endif
-		std::cerr << runningStackDepth;
-		std::cerr << "\t@" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
+		std::cerr << "@" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
 		
 		switch (opcode) {
 			case Processor::JT_OP:
@@ -2446,7 +2450,6 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			default: break;
 		}
 		std::cerr << std::endl;
-		runningStackDepth += Processor::getInstructionStackUse(opcode, operand);
 	}
 	
 	assert(errors == 0);
@@ -2575,8 +2578,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		: heap(heap)
 		, codeDef(codeDef)
 		, compilingFor(compileFor)
-		, setupSection(&heap)
-		, mainSection(&heap)
+		, setupSection(&heap, 0)
+		, mainSection(&heap, 0)
 		, p(0)
 		, e(0)
 		, currentSection(0)
@@ -2590,12 +2593,17 @@ void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.manage(new (&heap) Error(errorType, heap.manage(new (&heap) String(message))))));
 }
 
-void Compiler::emit(Processor::Opcode op,  Int32 operand) {
+void Compiler::emit(Processor::Opcode opcode,  Int32 operand) {
 #if (VERIFY_STACK_LOGIC)
 	currentSection->stackDepths.append(currentSection->stackDepth);
 #endif
-	currentSection->stackDepth += Processor::getInstructionStackUse(op, operand);
-	if (op == Processor::POP_OP) {
+	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
+	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
+		currentSection->stackDepth = UNKNOWN_STACK_DEPTH;
+	} else if (currentSection->stackDepth != UNKNOWN_STACK_DEPTH) {
+		currentSection->stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
+	}
+	if (opcode == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (currentSection->lastEmitted) {
 			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
@@ -2604,19 +2612,20 @@ void Compiler::emit(Processor::Opcode op,  Int32 operand) {
 			default: break;
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
-			Processor::unpackInstruction(currentSection->code.end()[-1], op, operand);
+			Processor::unpackInstruction(currentSection->code.end()[-1], opcode, operand);
 			currentSection->code.resize(currentSection->code.size() - 1); // FIX : pop method in vector?
 #if (VERIFY_STACK_LOGIC)
 	currentSection->stackDepths.resize(currentSection->stackDepths.size() - 1);
 #endif
-			op = replacementOpcode;
+			opcode = replacementOpcode;
 		}
 	}
+	
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
 		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
-	currentSection->code.append(Processor::packInstruction(op, operand));
-	currentSection->lastEmitted = op;
+	currentSection->code.append(Processor::packInstruction(opcode, operand));
+	currentSection->lastEmitted = opcode;
 }
 
 Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
@@ -2625,34 +2634,47 @@ Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
 }
 
 void Compiler::insertSection(const CodeSection& section) {
+	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || section.initialStackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	currentSection->code.insert(currentSection->code.end(), section.code.begin(), section.code.end());
 #if (VERIFY_STACK_LOGIC)
 	currentSection->stackDepths.insert(currentSection->stackDepths.end(), section.stackDepths.begin(), section.stackDepths.end());
 #endif
+	currentSection->stackDepth = section.stackDepth;
 }
 
-Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode op) {
-	emit(op);
-	return BranchPoint(currentSection->code.size() - 1, currentSection->stackDepth);
+Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
+// FIX : share code somehow
+	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
+	const Int32 operand = 0;
+	const int targetStackDepth = (currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? UNKNOWN_STACK_DEPTH
+			: currentSection->stackDepth
+			+ opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0)
+			+ (((opcodeInfo.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
+			+ (((opcodeInfo.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0));
+	emit(opcode);
+	return BranchPoint(currentSection->code.size() - 1, targetStackDepth);
 }
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
-	assert(point.stackDepth != UNKNOWN_STACK_DEPTH);
+//	assert(point.stackDepth != UNKNOWN_STACK_DEPTH);
+//	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
-	Processor::Opcode opcode;
-	Int32 operand;
-	Processor::unpackInstruction(currentSection->code[point.codeOffset], opcode, operand);
-	currentSection->code[point.codeOffset] = Processor::packInstruction(opcode, currentSection->code.size() - point.codeOffset - 1);
+	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
+		currentSection->stackDepth = point.stackDepth;
+	}
+	const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
+	currentSection->code[point.codeOffset] = Processor::packInstruction(instruction.first, currentSection->code.size() - point.codeOffset - 1);
 }
 
 Compiler::BranchPoint Compiler::markBackwardBranch() {
+//	assert(currentSection->stackDepth != UNKNOWN_STACK_DEPTH);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	return BranchPoint(currentSection->code.size());
 }
 
-void Compiler::emitBackwardBranch(Processor::Opcode op, const BranchPoint& point) {
-	emit(op, point.codeOffset - 1 - currentSection->code.size());
+void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point) {
+	emit(opcode, point.codeOffset - 1 - currentSection->code.size());
 }
 
 UInt32 Compiler::addConstant(const Value& constant) {
@@ -2666,8 +2688,8 @@ UInt32 Compiler::addConstant(const Value& constant) {
 	return constants->size() - 1;
 }
 
-void Compiler::emitWithConstant(Processor::Opcode op, const Value& constant) {
-	emit(op, addConstant(constant));
+void Compiler::emitWithConstant(Processor::Opcode opcode, const Value& constant) {
+	emit(opcode, addConstant(constant));
 }
 
 bool Compiler::isLeadingIdentifierChar(Char c) {
@@ -2965,7 +2987,7 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 	return rr;
 }
 
-Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
+Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode opcode) {
 	Int32 count = 0;
 	white();
 	while (!token(")", false)) {
@@ -2982,7 +3004,7 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode op) {
 		white();
 		++count;
 	}
-	emit(op, count);
+	emit(opcode, count);
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
@@ -3596,7 +3618,7 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
-	CodeSection incrementSection(&heap);
+	CodeSection incrementSection(&heap, currentSection->stackDepth);
 	{
 		CodeSection* previousSection = changeSection(&incrementSection);
 		ExpressionResult incXR;
@@ -3703,7 +3725,7 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", false);
-	CodeSection initSection(&heap);
+	CodeSection initSection(&heap, currentSection->stackDepth);
 	if (token("var", true)) {
 		white();
 		acceptInOperator = false;
@@ -3900,21 +3922,25 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 // FIX : push void instead of PUSH 0
 	ExpressionResult spaceHolder = (compilingFor != FOR_EVAL ? newSafeKeep(ExpressionResult::PUSHED, true) : ExpressionResult::NONE);
 	
-	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
-	BranchPoint catchPoint = emitForwardBranch(Processor::TRY_OP);
-	Int32 stackDepthAtCatchPoint = currentSection->stackDepth;
-	ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
-	expectToken("{", true); // FIX : sub for block
-	statementList(&tryScope);
-	expectToken("}", false);
-	flushXR(); // FOR_EVAL
-	newReturnSafeKept(rollback); // FOR_EVAL
-	tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+	QuickVector<BranchPoint> allFinallys;
+	BranchPoint catchPoint;
+	{
+		SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
+		catchPoint = emitForwardBranch(Processor::TRY_OP);
+		ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
+		expectToken("{", true); // FIX : sub for block
+		statementList(&tryScope);
+		expectToken("}", false);
+		flushXR(); // FOR_EVAL
+		newReturnSafeKept(rollback); // FOR_EVAL
+		tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+		allFinallys.insert(allFinallys.end(), tryScope.finallys.begin(), tryScope.finallys.end());
+	}
 	const BranchPoint tryEndPoint = emitForwardBranch(Processor::JMP_OP);
-	BranchPoint catchEndPoint;
-	
+
 	// Catcher
 	
+	BranchPoint catchEndPoint;
 	bool gotCatch = false;
 	if (token("catch", true)) {
 		gotCatch = true;
@@ -3934,10 +3960,8 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 		nameIndexes.update(indexBucket, CATCH_PARAMETER); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 		completeForwardBranch(catchPoint);
-		currentSection->stackDepth = stackDepthAtCatchPoint + 1;
 		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
-		stackDepthAtCatchPoint = currentSection->stackDepth;
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, &tryCatchFinallyScope);
@@ -3949,9 +3973,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 			emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
-			for (const BranchPoint* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
-				completeForwardBranch(*it);
-			}
+			allFinallys.insert(allFinallys.end(), catchScope.finallys.begin(), catchScope.finallys.end());
 		}
 		if (didExist) {
 			nameIndexes.update(nameIndexes.insert(exceptionVarName), previousLocalIndex);
@@ -3960,13 +3982,20 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 	}
 	
+	// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
+	
+	completeForwardBranch(catchPoint);
+	emit(Processor::PUSH_BACK_OP, 1);
+	BranchPoint finallyRethrowPoint = emitForwardBranch(Processor::JSR_OP);
+	emit(Processor::THROW_OP);
+
 	// Finally
 	
-	for (const BranchPoint* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) { // FIX : sub
+	for (const BranchPoint* it = allFinallys.begin(); it != allFinallys.end(); ++it) { // FIX : sub
 		completeForwardBranch(*it);
 	}
 	emit(Processor::TRIED_OP);
-	const BranchPoint finallyRethrowPoint = markBackwardBranch();
+	completeForwardBranch(finallyRethrowPoint);
 	if (token("finally", true)) {
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 		if (compilingFor == FOR_EVAL) { // fix : some kind of util for this?
@@ -3987,12 +4016,6 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	}
 	emit(Processor::RETURN_OP);
 	
-	// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
-	
-	completeForwardBranch(catchPoint);
-	emit(Processor::PUSH_BACK_OP, 1);
-	emitBackwardBranch(Processor::JSR_OP, finallyRethrowPoint);
-	emit(Processor::THROW_OP);
 	completeForwardBranch(tryEndPoint);
 	if (catchEndPoint.isValid()) {
 		completeForwardBranch(catchEndPoint);
@@ -4012,8 +4035,9 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	ExpressionResult controlXR(newSafeKeep(expression(LOWEST_PREC), false));
 	expectToken(")", true);
 	expectToken("{", true);
+	const Int32 testsSectionEntryStackDepth = currentSection->stackDepth;
 	const BranchPoint testsPoint = emitForwardBranch(Processor::JMP_OP);
-	CodeSection testsSection(&heap, currentSection->stackDepth);
+	CodeSection testsSection(&heap, testsSectionEntryStackDepth);
 	QuickVector<Int32> jumpOffsets(&heap);
 	BranchPoint defaultPoint;
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
@@ -4034,6 +4058,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			emitBackwardBranch(Processor::JT_OP, casePoint);
 			jumpOffsets.append(testsSection.code.size() - 1);
 			changeSection(previousSection);
+			currentSection->stackDepth = testsSection.stackDepth;
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint.isValid()) {
@@ -4041,6 +4066,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			}
 			flushXR();
 			defaultPoint = markBackwardBranch();
+			currentSection->stackDepth = testsSectionEntryStackDepth;
 		} else if (firstStatement) {
 			error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
 		} else {
@@ -4064,6 +4090,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		testsSection.code[*it] = Processor::packInstruction(opcode, operand - mainSection.code.size());
 	}
 	insertSection(testsSection);
+	assert(currentSection->stackDepth == testsSectionEntryStackDepth); // since we assume this in the default case code
 	if (defaultPoint.isValid()) {
 		emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 	}

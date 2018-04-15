@@ -16,7 +16,7 @@ typedef unsigned int UInt32;
 typedef unsigned char Byte;
 typedef UInt16 Char;
 typedef Int32 CodeWord;
-typedef Byte Flags;
+typedef Byte Flags; // FIX : turn into enum
 
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
@@ -312,7 +312,7 @@ class Function;
 class Processor;
 class ScriptObject;
 
-const Flags EXISTS_FLAG = 1;
+const Flags EXISTS_FLAG = 1; // FIX : turn these into enum, that's ok
 const Flags READ_ONLY_FLAG = 2;
 const Flags DONT_ENUM_FLAG = 4;
 const Flags DONT_DELETE_FLAG = 8;
@@ -393,7 +393,7 @@ class Table {
 				Bucket* getNext(Bucket* bucket) const;								// Returns next bucket with an existing value or 0.
 				Bucket* lookup(const String* key) const;							// Return bucket pointer for key or 0.
 				Bucket* insert(const String* key);									// Insert key (if necessary) and return bucket pointer.
-				bool update(Bucket* bucket, const Value& value, Byte flags = 0);	// Update value. Returns false if bucket is marked as read-only.
+				bool update(Bucket* bucket, const Value& value, Flags flags = 0);	// Update value. Returns false if bucket is marked as read-only.
 				bool erase(Bucket* bucket);											// Deletes bucket. Returns false if bucket is marked as dont-delete.
 				UInt32 getLoadCount() const;										// Returns number of used hash table entries (not necessarily the same as the number of existing buckets!).
 				void update(Bucket* bucket, const Int32 index);						// Update value as an index. Only used by name to index tables as an optimization.
@@ -1074,19 +1074,19 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
 					, OP_COUNT
 				};
-
+	
 				struct OpcodeInfo {
+					enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
 					Opcode opcode;
 					const char* mnemonic;
 					int stackUse;
-					bool alsoCountOperand;
+					int flags;
 				};
 	
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
 				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
 				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord); // FIX : which?
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
-				static int getInstructionStackUse(const Opcode opcode, const Int32 operand);
 
 	public:		Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd);
 				void chain(const CodeWord* stub);
@@ -1179,8 +1179,8 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(Heap* heap, int initialStackDepth = 0)
-							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(initialStackDepth)
+					CodeSection(Heap* heap, int initialStackDepth)
+							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth), stackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(heap)
 #endif
@@ -1190,6 +1190,7 @@ class Compiler : public GCItem {
 	QuickVector<int> stackDepths;
 #endif
 					Processor::Opcode lastEmitted;
+					const int initialStackDepth;
 					int stackDepth;
 				};
 	
@@ -1201,15 +1202,15 @@ class Compiler : public GCItem {
 				};
 
 				void error(ErrorType errorType, const char* message);
-				void emit(Processor::Opcode op, Int32 operand = 0);
+				void emit(Processor::Opcode opcode, Int32 operand = 0);
 				CodeSection* changeSection(CodeSection* newOutputSection);
 				void insertSection(const CodeSection& section);
 				UInt32 addConstant(const Value& constant);
-				void emitWithConstant(Processor::Opcode op, const Value& constant);
-				BranchPoint emitForwardBranch(Processor::Opcode op);
+				void emitWithConstant(Processor::Opcode opcode, const Value& constant);
+				BranchPoint emitForwardBranch(Processor::Opcode opcode);
 				void completeForwardBranch(const BranchPoint& point);
 				BranchPoint markBackwardBranch();
-				void emitBackwardBranch(Processor::Opcode op, const BranchPoint& point);
+				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 Compiler::ExpressionResult newSafeKeep(const ExpressionResult& xr, bool copy);
@@ -1224,7 +1225,7 @@ void newReturnSafeKept(const ExpressionResult& xr);
 				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
-				ExpressionResult functionCall(Processor::Opcode op);
+				ExpressionResult functionCall(Processor::Opcode opcode);
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
