@@ -2594,6 +2594,9 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode opcode,  Int32 operand) {
+	if (currentSection->stackDepth == UNKNOWN_STACK_DEPTH) {	// unknown stack depth = dead code
+		return;
+	}
 #if (VERIFY_STACK_LOGIC)
 	currentSection->stackDepths.append(currentSection->stackDepth);
 #endif
@@ -2657,8 +2660,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 }
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
-//	assert(point.stackDepth != UNKNOWN_STACK_DEPTH);
-//	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
+	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
 		currentSection->stackDepth = point.stackDepth;
@@ -2668,7 +2670,6 @@ void Compiler::completeForwardBranch(const BranchPoint& point) {
 }
 
 Compiler::BranchPoint Compiler::markBackwardBranch() {
-//	assert(currentSection->stackDepth != UNKNOWN_STACK_DEPTH);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	return BranchPoint(currentSection->code.size());
 }
