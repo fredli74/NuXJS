@@ -1261,7 +1261,6 @@ void newReturnSafeKept(const ExpressionResult& xr);
 					super::gcMark(heap);
 				}
 int safeKeptCounter;
-int stackDepth;
 ExpressionResult evalXR;
 };
 

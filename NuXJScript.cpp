@@ -2388,6 +2388,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	
 	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
 	
+	int runningStackDepth = 0;
 	for (UInt32 offset = 0; offset < codeSize; ++offset) {
 		Processor::Opcode opcode;
 		int operand;
@@ -2401,6 +2402,8 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		} else {
 			std::cerr << stackDepths[offset];
 		}
+		std::cerr << "\t";
+		std::cerr << runningStackDepth;
 		std::cerr << "\t@" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
 		
 		switch (opcode) {
@@ -2444,6 +2447,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			default: break;
 		}
 		std::cerr << std::endl;
+		runningStackDepth += Processor::getInstructionStackUse(opcode, operand);
 	}
 	
 	assert(errors == 0);
@@ -2582,8 +2586,7 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
 		, acceptInOperator(true)
 		, withScopeCounter(0)
 		, canDeleteScopeOnExit(false)
-, safeKeptCounter(0)
-, stackDepth(0) {
+, safeKeptCounter(0) {
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
@@ -2591,7 +2594,7 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode op,  Int32 operand) {
-	stackDepth += Processor::getInstructionStackUse(op, operand);
+	currentSection->stackDepth += Processor::getInstructionStackUse(op, operand);
 	if (op == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (currentSection->lastEmitted) {
@@ -3892,6 +3895,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	
 	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
+	Int32 stackDepthAtCatchPoint = currentSection->stackDepth;
 	ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
 	expectToken("{", true); // FIX : sub for block
 	statementList(&tryScope);
@@ -3923,8 +3927,10 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 		nameIndexes.update(indexBucket, CATCH_PARAMETER); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 		completeForwardBranch(catchPoint);
+		currentSection->stackDepth = stackDepthAtCatchPoint + 1;
 		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
+		stackDepthAtCatchPoint = currentSection->stackDepth;
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, safeKeptCounter, &tryCatchFinallyScope);
@@ -3977,6 +3983,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
 	
 	completeForwardBranch(catchPoint);
+	currentSection->stackDepth = stackDepthAtCatchPoint + 1;
 	emit(Processor::PUSH_BACK_OP, 1);
 	emitBackwardBranch(Processor::JSR_OP, finallyRethrowPoint);
 	emit(Processor::THROW_OP);
@@ -4157,15 +4164,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	codeDef->constants->shrink();
 if (!suppressStdErr) {
 	disassemble(heap, *codeDef);
-	int stackDepth = 0;
-	int maxStackDepth = 0;
-	for (int i = 0; i < codeDef->code.size(); ++i) {
-		const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(codeDef->code[i]);
-		stackDepth += Processor::getInstructionStackUse(instruction.first, instruction.second);
-		maxStackDepth = std::max(maxStackDepth, stackDepth);
-	}
+	int stackDepth = mainSection.stackDepth;
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
-	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
+//	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
 	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDef->constants->size() << std::endl;
 /* FIX :	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
