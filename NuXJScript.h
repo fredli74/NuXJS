@@ -1078,7 +1078,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 	
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
 				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
-				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
+				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord); // FIX : which?
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 				static int getInstructionStackUse(const Opcode opcode, const Int32 operand);
 
@@ -1172,9 +1172,11 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(Heap* heap) : code(heap), lastEmitted(Processor::INVALID_OP) { }
+					CodeSection(Heap* heap)
+							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(0) { }
 					QuickVector<CodeWord> code;
 					Processor::Opcode lastEmitted;
+					int stackDepth;
 				};
 
 				void error(ErrorType errorType, const char* message);

@@ -2346,8 +2346,8 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 			case Processor::TRY_OP:
 			case Processor::NEXT_PROPERTY_OP: {
 				const Int32 targetOffset = offset + 1 + operand;
-				if (targetOffset < 0 && targetOffset >= codeSize) {
-					std::cerr << "Invalid target @" << targetOffset << " @" << offset << std::endl;
+				if (targetOffset < 0 || targetOffset >= codeSize) {
+					std::cerr << "Invalid target @" << offset << ": @" << targetOffset << std::endl;
 					++errors;
 					break;
 				}
@@ -2401,7 +2401,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		} else {
 			std::cerr << stackDepths[offset];
 		}
-		std::cerr << "\t" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
+		std::cerr << "\t@" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
 		
 		switch (opcode) {
 			case Processor::JT_OP:
@@ -2591,6 +2591,7 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode op,  Int32 operand) {
+	stackDepth += Processor::getInstructionStackUse(op, operand);
 	if (op == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (currentSection->lastEmitted) {
@@ -3587,14 +3588,13 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 	expectToken(";", true);
 	CodeSection incrementSection(&heap);
 	{
-		assert(currentSection == &mainSection);
-		changeSection(&incrementSection);
+		CodeSection* previousSection = changeSection(&incrementSection);
 		ExpressionResult incXR;
 		if (optionalExpression(incXR, LOWEST_PREC)) {
 			discard(incXR);
 		}
 		expectToken(")", true);
-		changeSection(&mainSection);
+		changeSection(previousSection);
 	}
 	statement(emptyLabelScope, emptyLabelScope);
 	flushXR();
@@ -3628,11 +3628,10 @@ void Compiler::functionStatement() {
 	white();
 	const Char* b = identifier(true, false);
 	const String* name = String::newHashedString(heap, b, p);
-	assert(currentSection == &mainSection);
-	changeSection(&setupSection);
+	CodeSection* previousSection = changeSection(&setupSection);
 	functionDefinition(name);
 	declareIdentifier(name, true);
-	changeSection(&mainSection);
+	changeSection(previousSection);
 }
 
 void Compiler::withStatement(SemanticScope* currentScope) {
@@ -3715,8 +3714,7 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 		ExpressionResult iterXR;
 		bool isForIn = false;
 		{
-			assert(currentSection == &mainSection);
-			changeSection(&initSection);
+			CodeSection* previousSection = changeSection(&initSection);
 			acceptInOperator = false;
 			bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
 			acceptInOperator = true;
@@ -3724,7 +3722,7 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 			if (!isForIn) {
 				discard(iterXR);
 			}
-			changeSection(&mainSection);
+			changeSection(previousSection);
 		}
 		if (isForIn) {
 			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterXR);
@@ -3990,6 +3988,10 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	newReturnSafeKept(spaceHolder); // NO_EVAL
 }
 
+/*
+	Switch statement places the test block *after* the cases block. This is to simplify forward branches (breaks etc) as
+	they would be marked at incorrect addresses otherwise.
+*/
 void Compiler::switchStatement(SemanticScope* currentScope) {
 	white();
 	flushXR();
@@ -4011,16 +4013,15 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		}
 		else if (token("case", false)) {
 			flushXR();
-			assert(currentSection == &mainSection);
-			changeSection(&testsSection);
-			// FIX : markBackwardBranch()
+			const Int32 casesPoint = markBackwardBranch();
+			CodeSection* previousSection = changeSection(&testsSection);
 			makeRValue(controlXR);
 			rvalueExpression();
 			expectToken(":", true);
 			emit(Processor::X_EQ_OP);
-			emit(Processor::JT_OP, mainSection.code.size() - startOffset - testsSection.code.size() - 1);
+			emitBackwardBranch(Processor::JT_OP, casesPoint);
 			jumpOffsets.append(testsSection.code.size() - 1);
-			changeSection(&mainSection);
+			changeSection(previousSection);
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
@@ -4046,7 +4047,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		Processor::Opcode opcode;
 		Int32 operand;
 		Processor::unpackInstruction(testsSection.code[*it], opcode, operand);
-		testsSection.code[*it] = Processor::packInstruction(opcode, operand - (mainSection.code.size() - startOffset));
+		testsSection.code[*it] = Processor::packInstruction(opcode, operand - mainSection.code.size());
 	}
 	insertSection(testsSection);
 	if (defaultPoint != INVALID_CODE_POINT) {
