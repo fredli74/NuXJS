@@ -219,8 +219,6 @@ static int findLiteralToken(size_t n /* string length */, const Char* s /* zero-
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
 };
 
-// FIX : should first argument be a changable reference or not? we use that convention a lot in the compiler, but not here
-
 static const Char* parseHex(const Char* p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p) {
 		i = (i << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
@@ -4009,7 +4007,6 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
 	CodeSection testsSection(&heap);
 	QuickVector<Int32> jumpOffsets(&heap);
-	Int32 startOffset = mainSection.code.size();
 	Int32 defaultPoint = INVALID_CODE_POINT;
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	bool firstStatement = true;

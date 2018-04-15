@@ -7,6 +7,8 @@
 #include <string>
 #include <cstring>
 
+#define VERIFY_STACK_LOGIC 1
+
 typedef short Int16;
 typedef unsigned short UInt16;
 typedef int Int32;
@@ -687,6 +689,10 @@ class CodeDefinition : public Object {
 					heap.mark(source);
 					super::gcMark(heap);
 				}
+
+#if (VERIFY_STACK_LOGIC)
+	public: QuickVector<int> stackDepths;
+#endif
 };
 
 class ExtensibleFunction : public LazyObject<Function> {
@@ -1175,6 +1181,9 @@ class Compiler : public GCItem {
 					CodeSection(Heap* heap)
 							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(0) { }
 					QuickVector<CodeWord> code;
+#if (VERIFY_STACK_LOGIC)
+	QuickVector<int> stackDepths;
+#endif
 					Processor::Opcode lastEmitted;
 					int stackDepth;
 				};
