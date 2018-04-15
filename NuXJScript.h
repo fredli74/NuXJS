@@ -1179,7 +1179,11 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(Heap* heap)
-							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(0) { }
+							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(0)
+#if (VERIFY_STACK_LOGIC)
+	, stackDepths(heap)
+#endif
+							 { }
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
 	QuickVector<int> stackDepths;

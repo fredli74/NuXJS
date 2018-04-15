@@ -2401,6 +2401,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			std::cerr << stackDepths[offset];
 		}
 		std::cerr << "\t";
+#if (VERIFY_STACK_LOGIC)
+		std::cerr << codeDef.stackDepths[offset];
+		std::cerr << "\t";
+#endif
 		std::cerr << runningStackDepth;
 		std::cerr << "\t@" << offset << ':' << Processor::getOpcodeInfo(opcode).mnemonic;
 		
@@ -2603,13 +2607,19 @@ void Compiler::emit(Processor::Opcode op,  Int32 operand) {
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
 			Processor::unpackInstruction(currentSection->code.end()[-1], op, operand);
-			currentSection->code.resize(currentSection->code.size() - 1);
+			currentSection->code.resize(currentSection->code.size() - 1); // FIX : pop method in vector?
+#if (VERIFY_STACK_LOGIC)
+	currentSection->stackDepths.resize(currentSection->stackDepths.size() - 1);
+#endif
 			op = replacementOpcode;
 		}
 	}
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
 		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
+#if (VERIFY_STACK_LOGIC)
+	currentSection->stackDepths.append(currentSection->stackDepth);
+#endif
 	currentSection->code.append(Processor::packInstruction(op, operand));
 	currentSection->lastEmitted = op;
 }
@@ -2622,6 +2632,9 @@ Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
 void Compiler::insertSection(const CodeSection& section) {
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	currentSection->code.insert(currentSection->code.end(), section.code.begin(), section.code.end());
+#if (VERIFY_STACK_LOGIC)
+	currentSection->stackDepths.insert(currentSection->stackDepths.end(), section.stackDepths.begin(), section.stackDepths.end());
+#endif
 }
 
 Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
@@ -4147,6 +4160,13 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	codeDef->code.resize(setupSection.code.size() + mainSection.code.size());
 	std::copy(setupSection.code.begin(), setupSection.code.end(), codeDef->code.begin());
 	std::copy(mainSection.code.begin(), mainSection.code.end(), codeDef->code.begin() + setupSection.code.size());
+#if (VERIFY_STACK_LOGIC)
+	assert(setupSection.stackDepths.size() == setupSection.code.size());
+	assert(mainSection.stackDepths.size() == mainSection.code.size());
+	codeDef->stackDepths.resize(setupSection.stackDepths.size() + mainSection.stackDepths.size());
+	std::copy(setupSection.stackDepths.begin(), setupSection.stackDepths.end(), codeDef->stackDepths.begin());
+	std::copy(mainSection.stackDepths.begin(), mainSection.stackDepths.end(), codeDef->stackDepths.begin() + setupSection.stackDepths.size());
+#endif
 	if (!canDeleteScopeOnExit) {
 		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
 		// FIX : more compact solution
