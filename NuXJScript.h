@@ -1145,6 +1145,7 @@ enum Precedence {
 	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
+const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
@@ -1178,8 +1179,8 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(Heap* heap)
-							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(0)
+					CodeSection(Heap* heap, int initialStackDepth = 0)
+							: code(heap), lastEmitted(Processor::INVALID_OP), stackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(heap)
 #endif
@@ -1191,6 +1192,13 @@ class Compiler : public GCItem {
 					Processor::Opcode lastEmitted;
 					int stackDepth;
 				};
+	
+				struct BranchPoint {
+					BranchPoint(Int32 codeOffset = -1, Int32 stackDepth = UNKNOWN_STACK_DEPTH) : codeOffset(codeOffset), stackDepth(stackDepth) { }
+					bool isValid() const { return codeOffset != -1; };
+					Int32 codeOffset;
+					Int32 stackDepth;
+				};
 
 				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode op, Int32 operand = 0);
@@ -1198,10 +1206,10 @@ class Compiler : public GCItem {
 				void insertSection(const CodeSection& section);
 				UInt32 addConstant(const Value& constant);
 				void emitWithConstant(Processor::Opcode op, const Value& constant);
-				Int32 emitForwardBranch(Processor::Opcode op);
-				void completeForwardBranch(Int32 point);
-				Int32 markBackwardBranch();
-				void emitBackwardBranch(Processor::Opcode op, Int32 point);
+				BranchPoint emitForwardBranch(Processor::Opcode op);
+				void completeForwardBranch(const BranchPoint& point);
+				BranchPoint markBackwardBranch();
+				void emitBackwardBranch(Processor::Opcode op, const BranchPoint& point);
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 Compiler::ExpressionResult newSafeKeep(const ExpressionResult& xr, bool copy);

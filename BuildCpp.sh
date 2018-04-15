@@ -1,7 +1,7 @@
 #!/bin/bash
 
 COMPILER=g++
-# COMPILER=/opt/local/bin/g++-mp-7
+# COMPILER=g++-4.9
 
 if [ "$1" == "debug" ]; then
 	OPTIONS="-O0 -DDEBUG -g"
@@ -32,7 +32,7 @@ if [ $# -lt 2 ]; then
 fi
 
 echo Compiling $1...
-$COMPILER -pipe $OPTIONS $MODEL -Wno-trigraphs -Wreturn-type -Wunused-variable -fmessage-length=0 -fstrict-aliasing -fvisibility=hidden -fvisibility-inlines-hidden -fno-threadsafe-statics -o $@ >/var/tmp/buildlog.txt 2>&1
+$COMPILER -pipe $OPTIONS $MODEL -Wno-trigraphs -Wreturn-type -Wunused-variable -fmessage-length=0 -fstrict-aliasing -fvisibility=hidden -fvisibility-inlines-hidden -fno-threadsafe-statics -std="c++98" -ansi -o $@ >/var/tmp/buildlog.txt 2>&1
 if [ $? -ne 0 ]; then
 	cat /var/tmp/buildlog.txt
 	echo Compilation of $1 failed

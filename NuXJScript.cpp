@@ -53,7 +53,7 @@ static double modulo(double x, double y) { return (!_finite(y) && !_isnan(y) && 
 static double modulo(double x, double y) { return fmod(x, y); }
 // FIX : if c++11 use std::isnan and std::isfinite
 static bool isNaN(double d) { return d != d; }
-static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); };
+static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); }
 #endif
 
 static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
@@ -205,7 +205,7 @@ static int findReservedKeyword(size_t n /* string length */, const Char* s) {
 	if (n < 2 || n > 10) return -1;
 	int stringIndex = QUICK_HASH_TABLE[(((s[1] + s[0]) << 3) - n) & 255];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
+}
 /* Built with QuickHashMaker.pika */
 static int findLiteralToken(size_t n /* string length */, const Char* s /* zero-terminated string */) {
 	static const char* STRINGS[5] = {
@@ -217,7 +217,7 @@ static int findLiteralToken(size_t n /* string length */, const Char* s /* zero-
 	if (n < 4 || n > 8) return -1;
 	int stringIndex = QUICK_HASH_TABLE[((n ^ s[3])) & 7];
 	return (stringIndex >= 0 && strncmp(s, STRINGS[stringIndex], n) == 0 && STRINGS[stringIndex][n] == 0) ? stringIndex : -1;
-};
+}
 
 static const Char* parseHex(const Char* p, const Char* e, UInt32& i) {
 	for (i = 0; p != e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p) {
@@ -1133,7 +1133,7 @@ const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 const String* Function::toString(GCHeap& heap) const { return &NATIVE_FUNCTION_STRING; }
 Value Function::getInternalValue(GCHeap& heap) const { return Value(&NATIVE_FUNCTION_STRING); }
-Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; };
+Object* Function::getPrototype(Engine& engine) const { return &engine.functionPrototype; }
 
 Value Function::construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return call(engine, processor, argc, argv, thisObject);
@@ -2303,8 +2303,6 @@ bool Processor::run() {
 	}
 }
 
-const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
-
 static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& stackDepths, int offset, int currentStackDepth) {
 	const CodeWord* code = codeDef.getCodePointer();
 	const UInt32 codeSize = codeDef.getCodeSize();
@@ -2381,7 +2379,6 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	const UInt32 codeSize = codeDef.getCodeSize();
 	
 	QuickArray<int> stackDepths(codeSize);
-	const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
 	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
@@ -2456,8 +2453,6 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 }
 
 /* --- Compiler --- */
-
-const int INVALID_CODE_POINT = -1;
 
 // FIX : sort
 enum OperatorType {
@@ -2571,9 +2566,9 @@ struct Compiler::SemanticScope {
 	SemanticScope* const next;
 	const int safeKeptCounter;
 // FIX : feels like a waste with three different vectors here, could we have double SemanticScope entries for continuable and breakable Semanticscope types?
-	QuickVector<Int32> breaks; // source points for break jmp's
-	QuickVector<Int32> continues; // source points for continue jmp's
-	QuickVector<Int32> finallys; // source points for finally jsr's
+	QuickVector<BranchPoint> breaks; // source points for break jmp's
+	QuickVector<BranchPoint> continues; // source points for continue jmp's
+	QuickVector<BranchPoint> finallys; // source points for finally jsr's
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
@@ -2596,6 +2591,9 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode op,  Int32 operand) {
+#if (VERIFY_STACK_LOGIC)
+	currentSection->stackDepths.append(currentSection->stackDepth);
+#endif
 	currentSection->stackDepth += Processor::getInstructionStackUse(op, operand);
 	if (op == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
@@ -2617,9 +2615,6 @@ void Compiler::emit(Processor::Opcode op,  Int32 operand) {
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
 		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
-#if (VERIFY_STACK_LOGIC)
-	currentSection->stackDepths.append(currentSection->stackDepth);
-#endif
 	currentSection->code.append(Processor::packInstruction(op, operand));
 	currentSection->lastEmitted = op;
 }
@@ -2637,26 +2632,27 @@ void Compiler::insertSection(const CodeSection& section) {
 #endif
 }
 
-Int32 Compiler::emitForwardBranch(Processor::Opcode op) {
+Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode op) {
 	emit(op);
-	return currentSection->code.size() - 1;
+	return BranchPoint(currentSection->code.size() - 1, currentSection->stackDepth);
 }
 
-void Compiler::completeForwardBranch(Int32 point) {
+void Compiler::completeForwardBranch(const BranchPoint& point) {
+	assert(point.stackDepth != UNKNOWN_STACK_DEPTH);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	Processor::Opcode opcode;
 	Int32 operand;
-	Processor::unpackInstruction(currentSection->code[point], opcode, operand);
-	currentSection->code[point] = Processor::packInstruction(opcode, currentSection->code.size() - point - 1);
+	Processor::unpackInstruction(currentSection->code[point.codeOffset], opcode, operand);
+	currentSection->code[point.codeOffset] = Processor::packInstruction(opcode, currentSection->code.size() - point.codeOffset - 1);
 }
 
-Int32 Compiler::markBackwardBranch() {
+Compiler::BranchPoint Compiler::markBackwardBranch() {
 	currentSection->lastEmitted = Processor::INVALID_OP;
-	return currentSection->code.size();
+	return BranchPoint(currentSection->code.size());
 }
 
-void Compiler::emitBackwardBranch(Processor::Opcode op, Int32 point) {
-	emit(op, point - 1 - currentSection->code.size());
+void Compiler::emitBackwardBranch(Processor::Opcode op, const BranchPoint& point) {
+	emit(op, point.codeOffset - 1 - currentSection->code.size());
 }
 
 UInt32 Compiler::addConstant(const Value& constant) {
@@ -3190,7 +3186,7 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			assert(!op.primitiveInput);
             assert(!op.primitiveOutput);
 			makeRValue(xr, false);
-			const Int32 point = emitForwardBranch(op.vmOp);
+			const BranchPoint point = emitForwardBranch(op.vmOp);
 			makeRValue(operand(op), false);
 			completeForwardBranch(point);
             xr = ExpressionResult::PUSHED;
@@ -3201,9 +3197,9 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			assert(!op.primitiveInput);
             assert(!op.primitiveOutput);
 			makeRValue(xr, false);
-			Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
+			const BranchPoint falsePoint = emitForwardBranch(Processor::JF_OP);
 			makeRValue(operand(op), false);
-			Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+			const BranchPoint endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
 			rvalueExpression(op.prec);
 			completeForwardBranch(endPoint);
@@ -3552,14 +3548,14 @@ void Compiler::varDeclarations() {
 
 void Compiler::completeContinues(const SemanticScope* fromScope, const SemanticScope* untilScope) {
 	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
-		for (const Int32* it = s->continues.begin(); it != s->continues.end(); ++it) {
+		for (const BranchPoint* it = s->continues.begin(); it != s->continues.end(); ++it) {
 			completeForwardBranch(*it);
 		}
 	}
 }
 
 void Compiler::completeBreaks(const SemanticScope* Semanticscope) {
-	for (const Int32* it = Semanticscope->breaks.begin(); it != Semanticscope->breaks.end(); ++it) {
+	for (const BranchPoint* it = Semanticscope->breaks.begin(); it != Semanticscope->breaks.end(); ++it) {
 		completeForwardBranch(*it);
 	}
 }
@@ -3570,9 +3566,9 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
  	emit(Processor::GET_ENUMERATOR_OP);
 	enumXR = safeKeep(enumXR);
 	expectToken(")", true);
-	Int32 loopPoint = markBackwardBranch();
+	const BranchPoint loopPoint = markBackwardBranch();
 	makeRValue(enumXR);
-	Int32 exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
+	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
 	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
 		xr = safeKeep(xr);
@@ -3592,8 +3588,8 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 
 void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd) {
 	expectToken(";", true);
-	Int32 loopPoint = markBackwardBranch();
-	Int32 exitLoopPoint = INVALID_CODE_POINT;
+	const BranchPoint loopPoint = markBackwardBranch();
+	BranchPoint exitLoopPoint;
 	ExpressionResult testXR;
 	if (optionalExpression(testXR, LOWEST_PREC)) {
 		makeRValue(testXR);
@@ -3615,7 +3611,7 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 	completeContinues(emptyLabelScope, scopeLabelsEnd);
 	insertSection(incrementSection);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
-	if (exitLoopPoint != INVALID_CODE_POINT) {
+	if (exitLoopPoint.isValid()) {
 		completeForwardBranch(exitLoopPoint);
 	}
 	completeBreaks(emptyLabelScope);
@@ -3753,10 +3749,10 @@ void Compiler::ifStatement(SemanticScope* currentScope) {
 	expectToken("(", false);
 	rvalueExpression();
 	expectToken(")", true);
-	Int32 falsePoint = emitForwardBranch(Processor::JF_OP);
+	const BranchPoint falsePoint = emitForwardBranch(Processor::JF_OP);
 	statement(currentScope, currentScope);
 	if (token("else", true)) {
-		Int32 endPoint = emitForwardBranch(Processor::JMP_OP);
+		const BranchPoint endPoint = emitForwardBranch(Processor::JMP_OP);
 		completeForwardBranch(falsePoint);
 		statement(currentScope, currentScope);
 		completeForwardBranch(endPoint);
@@ -3769,13 +3765,13 @@ void Compiler::ifStatement(SemanticScope* currentScope) {
 void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	white();
 	flushXR();
-	Int32 loopPoint = markBackwardBranch();
+	const BranchPoint loopPoint = markBackwardBranch();
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", false); // FIX : sub of this
 	rvalueExpression();
 	expectToken(")", true);
-	Int32 exitLoopPoint = emitForwardBranch(Processor::JF_OP);
+	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	statement(&emptyLabelScope, &emptyLabelScope);
 	flushXR();
 	completeContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -3787,7 +3783,7 @@ void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeL
 void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	white();
 	flushXR();
-	const Int32 loopPoint = markBackwardBranch();
+	const BranchPoint loopPoint = markBackwardBranch();
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	statement(&emptyLabelScope, &emptyLabelScope);
@@ -3905,7 +3901,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	ExpressionResult spaceHolder = (compilingFor != FOR_EVAL ? newSafeKeep(ExpressionResult::PUSHED, true) : ExpressionResult::NONE);
 	
 	SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
-	Int32 catchPoint = emitForwardBranch(Processor::TRY_OP);
+	BranchPoint catchPoint = emitForwardBranch(Processor::TRY_OP);
 	Int32 stackDepthAtCatchPoint = currentSection->stackDepth;
 	ExpressionResult rollback = (compilingFor == FOR_EVAL ? newSafeKeep(evalXR, true) : ExpressionResult::NONE);
 	expectToken("{", true); // FIX : sub for block
@@ -3914,8 +3910,8 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	flushXR(); // FOR_EVAL
 	newReturnSafeKept(rollback); // FOR_EVAL
 	tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
-	Int32 tryEndPoint = emitForwardBranch(Processor::JMP_OP);
-	Int32 catchEndPoint = INVALID_CODE_POINT;
+	const BranchPoint tryEndPoint = emitForwardBranch(Processor::JMP_OP);
+	BranchPoint catchEndPoint;
 	
 	// Catcher
 	
@@ -3953,7 +3949,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 			emit(Processor::POP_SCOPE_OP); // FIX : try to move POP_SCOPE to first in FINALLY block, need different JSR then
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
-			for (const Int32* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
+			for (const BranchPoint* it = catchScope.finallys.begin(); it != catchScope.finallys.end(); ++it) { // FIX : sub
 				completeForwardBranch(*it);
 			}
 		}
@@ -3966,11 +3962,11 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	
 	// Finally
 	
-	for (const Int32* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) { // FIX : sub
+	for (const BranchPoint* it = tryScope.finallys.begin(); it != tryScope.finallys.end(); ++it) { // FIX : sub
 		completeForwardBranch(*it);
 	}
 	emit(Processor::TRIED_OP);
-	Int32 finallyRethrowPoint = markBackwardBranch();
+	const BranchPoint finallyRethrowPoint = markBackwardBranch();
 	if (token("finally", true)) {
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, safeKeptCounter, &tryCatchFinallyScope);
 		if (compilingFor == FOR_EVAL) { // fix : some kind of util for this?
@@ -3994,12 +3990,11 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
 	
 	completeForwardBranch(catchPoint);
-	currentSection->stackDepth = stackDepthAtCatchPoint + 1;
 	emit(Processor::PUSH_BACK_OP, 1);
 	emitBackwardBranch(Processor::JSR_OP, finallyRethrowPoint);
 	emit(Processor::THROW_OP);
 	completeForwardBranch(tryEndPoint);
-	if (catchEndPoint != INVALID_CODE_POINT) {
+	if (catchEndPoint.isValid()) {
 		completeForwardBranch(catchEndPoint);
 	}
 	evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
@@ -4017,10 +4012,10 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	ExpressionResult controlXR(newSafeKeep(expression(LOWEST_PREC), false));
 	expectToken(")", true);
 	expectToken("{", true);
-	Int32 testsPoint = emitForwardBranch(Processor::JMP_OP);
-	CodeSection testsSection(&heap);
+	const BranchPoint testsPoint = emitForwardBranch(Processor::JMP_OP);
+	CodeSection testsSection(&heap, currentSection->stackDepth);
 	QuickVector<Int32> jumpOffsets(&heap);
-	Int32 defaultPoint = INVALID_CODE_POINT;
+	BranchPoint defaultPoint;
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, safeKeptCounter, currentScope);
 	bool firstStatement = true;
 	white();
@@ -4030,18 +4025,20 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		}
 		else if (token("case", false)) {
 			flushXR();
-			const Int32 casesPoint = markBackwardBranch();
+			const BranchPoint casePoint = markBackwardBranch();
 			CodeSection* previousSection = changeSection(&testsSection);
 			makeRValue(controlXR);
 			rvalueExpression();
 			expectToken(":", true);
 			emit(Processor::X_EQ_OP);
-			emitBackwardBranch(Processor::JT_OP, casesPoint);
+			emitBackwardBranch(Processor::JT_OP, casePoint);
 			jumpOffsets.append(testsSection.code.size() - 1);
 			changeSection(previousSection);
 		} else if (token("default", false)) {
 			expectToken(":", true);
-			if (defaultPoint != INVALID_CODE_POINT) error(SYNTAX_ERROR, "More than one 'default:'");
+			if (defaultPoint.isValid()) {
+				error(SYNTAX_ERROR, "More than one 'default:'");
+			}
 			flushXR();
 			defaultPoint = markBackwardBranch();
 		} else if (firstStatement) {
@@ -4058,7 +4055,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	}
 	
 	flushXR();
-	Int32 donePoint = emitForwardBranch(Processor::JMP_OP);
+	const BranchPoint donePoint = emitForwardBranch(Processor::JMP_OP);
 	completeForwardBranch(testsPoint);
 	for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
 		Processor::Opcode opcode;
@@ -4067,7 +4064,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		testsSection.code[*it] = Processor::packInstruction(opcode, operand - mainSection.code.size());
 	}
 	insertSection(testsSection);
-	if (defaultPoint != INVALID_CODE_POINT) {
+	if (defaultPoint.isValid()) {
 		emitBackwardBranch(Processor::JMP_OP, defaultPoint);
 	}
 	completeForwardBranch(donePoint);
