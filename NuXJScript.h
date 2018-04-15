@@ -112,7 +112,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					const UInt32 o = static_cast<UInt32>(p - begin());
 					reserve(count + static_cast<UInt32>(e - b));
 					p = begin() + o;
-					std::copy(p, end(), p + (e - b));
+					std::copy(p, end(), p + (e - b)); // FIX : NOT RIGHT RIGHT? SHOULD COPY BACKWARDS (we don't use insert other than to append apparently)
 					count += (e - b);
 					std::copy(b, e, p);
 				}
