@@ -2546,7 +2546,7 @@ enum Statement {
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
 struct Compiler::SemanticScope {
-	enum Type { LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, TRY_CATCH_FINALLY_TYPE, WITH_TYPE };
+	enum Type { ROOT_TYPE, LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
 	SemanticScope(Heap* heap, Type type, int stackDepth, SemanticScope* next)
 			: breaks(heap), continues(heap), finallys(heap), type(type), stackDepth(stackDepth), next(next) { }
 	SemanticScope(Heap* heap, const String& label, int stackDepth, SemanticScope* next)
@@ -2557,14 +2557,37 @@ struct Compiler::SemanticScope {
 			s->type = ITERATOR_LABEL_TYPE;
 		}
 	}
-	void popStuff(Compiler* compiler) const {
+	
+	int popStack(Compiler& compiler, int currentDepth, Processor::Opcode popOpcode) {
+		const int stackDistance = currentDepth - stackDepth;
+		if (stackDistance > 0) {
+			compiler.emit(popOpcode, stackDistance);
+			currentDepth -= stackDistance;
+		}
+		return currentDepth;
+	}
+	
+	int rollback(Compiler& compiler, int rollbackStackDepth, Processor::Opcode popOpcode) {
 		switch (type) {
 			case CATCH_TYPE:
-			case WITH_TYPE: compiler->emit(Processor::POP_SCOPE_OP); break;
-			case FINALLY_TYPE: compiler->emit(Processor::DISCARD_RETURN_OP); break;
+			case WITH_TYPE: compiler.emit(Processor::POP_SCOPE_OP); break;
+			case FINALLY_TYPE: compiler.emit(Processor::DISCARD_RETURN_OP); break;
 			default: break;
 		}
+		switch (type) {
+			case TRY_TYPE:
+			case CATCH_TYPE:
+			case ROOT_TYPE: rollbackStackDepth = popStack(compiler, rollbackStackDepth, popOpcode); break;
+			default: break;
+		}
+		switch (type) {
+			case TRY_TYPE:
+			case CATCH_TYPE: finallys.append(compiler.emitForwardBranch(Processor::JSR_OP)); break;
+			default: break;
+		}
+		return rollbackStackDepth;
 	}
+	
 	Type type;
 	const String label; // empty for automatic while, for, case labels
 	SemanticScope* const next;
@@ -2593,61 +2616,64 @@ void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.manage(new (&heap) Error(errorType, heap.manage(new (&heap) String(message))))));
 }
 
-void Compiler::emit(Processor::Opcode opcode,  Int32 operand) {
-/* FIX :	if (inDeadCode) {	// unknown stack depth = dead code
+void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
+	if (inDeadCode) {	// unknown stack depth = dead code
 		return;
-	}*/
+	}
 #if (VERIFY_STACK_LOGIC)
-	currentSection->stackDepths.append(currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH : currentSection->stackDepth);
+	stackDepths.append(inDeadCode ? UNKNOWN_STACK_DEPTH : stackDepth);
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
-	currentSection->stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
-// FIX		assert(currentSection->stackDepth >= 0);
+	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
+// FIX		assert(stackDepth >= 0);
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
-		currentSection->inDeadCode = true;
+		inDeadCode = true;
 	}
 	if (opcode == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
-		switch (currentSection->lastEmitted) {
+		switch (lastEmitted) {
 			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
 			case Processor::WRITE_NAMED_OP: replacementOpcode = Processor::WRITE_NAMED_POP_OP; break;
 			case Processor::SET_PROPERTY_OP: replacementOpcode = Processor::SET_PROPERTY_POP_OP; break;
 			default: break;
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
-			Processor::unpackInstruction(currentSection->code.end()[-1], opcode, operand);
-			currentSection->code.resize(currentSection->code.size() - 1); // FIX : pop method in vector?
+			Processor::unpackInstruction(code.end()[-1], opcode, operand);
+			code.resize(code.size() - 1); // FIX : pop method in vector?
 #if (VERIFY_STACK_LOGIC)
-	currentSection->stackDepths.resize(currentSection->stackDepths.size() - 1);
+	stackDepths.resize(stackDepths.size() - 1);
 #endif
 			opcode = replacementOpcode;
 		}
 	}
 	
+	code.append(Processor::packInstruction(opcode, operand));
+	lastEmitted = opcode;
+}
+
+void Compiler::CodeSection::insertSection(const CodeSection& section) {
+	const int stackAdjust = stackDepth - section.initialStackDepth;
+// FIX :	assert(stackDepth == UNKNOWN_STACK_DEPTH || section.initialStackDepth == stackDepth);
+	lastEmitted = Processor::INVALID_OP;
+	code.insert(code.end(), section.code.begin(), section.code.end());
+#if (VERIFY_STACK_LOGIC)
+	for (int i = 0; i < section.stackDepths.size(); ++i) {
+		stackDepths.append(section.stackDepths[i] + stackAdjust);
+	}
+#endif
+	stackDepth = section.stackDepth + stackAdjust;
+}
+
+void Compiler::emit(Processor::Opcode opcode, Int32 operand) {
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
 		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
-	currentSection->code.append(Processor::packInstruction(opcode, operand));
-	currentSection->lastEmitted = opcode;
+	currentSection->emit(opcode, operand);
 }
 
 Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
 	std::swap(newOutputSection, currentSection);
 	return newOutputSection;
-}
-
-// FIX : drop stack adjust?
-void Compiler::insertSection(const CodeSection& section) {
-	const int stackAdjust = currentSection->stackDepth - section.initialStackDepth;
-// FIX :	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || section.initialStackDepth == currentSection->stackDepth);
-	currentSection->lastEmitted = Processor::INVALID_OP;
-	currentSection->code.insert(currentSection->code.end(), section.code.begin(), section.code.end());
-#if (VERIFY_STACK_LOGIC)
-	for (int i = 0; i < section.stackDepths.size(); ++i) {
-		currentSection->stackDepths.append(section.stackDepths[i] + stackAdjust);
-	}
-#endif
-	currentSection->stackDepth = section.stackDepth + stackAdjust;
 }
 
 Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
@@ -2665,6 +2691,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
 // FIX:	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
+// FIX :			assert(currentSection->inDeadCode || it->stackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
 		currentSection->inDeadCode = false;
@@ -2672,6 +2699,12 @@ void Compiler::completeForwardBranch(const BranchPoint& point) {
 	}
 	const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
 	currentSection->code[point.codeOffset] = Processor::packInstruction(instruction.first, currentSection->code.size() - point.codeOffset - 1);
+}
+
+void Compiler::completeForwardBranches(const BranchPoint* begin, const BranchPoint* end) {
+	for (const BranchPoint* it = begin; it != end; ++it) {
+		completeForwardBranch(*it);
+	}
 }
 
 Compiler::BranchPoint Compiler::markBackwardBranch() {
@@ -3465,20 +3498,6 @@ Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 	return makeRValue(expression(precedence));
 }
 
-/*
-	Normally statements discard expression results, but when compiling for eval, statements should return results.
-	flushXR is required before any conditional branching and before branch targets to produce the result on the
-	vstack in case it has not already been pushed (in other words if it is not an rvalue, e.g. a constant).
-*/
-bool Compiler::flushXR() {
-	if (compilingFor == FOR_EVAL) {
-		evalXR = makeRValue(evalXR);
-		return true;
-	} else {
-		return false;
-	}
-}
-
 // FIX : ok, this is serious mess
 Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool func) {
 	ExpressionResult lxr(ExpressionResult::NAMED, Value(name));
@@ -3536,28 +3555,19 @@ void Compiler::varDeclarations() {
 void Compiler::completeIteratorContinues(const SemanticScope* fromScope, const SemanticScope* untilScope) {
 	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
 		assert(s->type == SemanticScope::ITERATOR_LABEL_TYPE);
-		for (const BranchPoint* it = s->continues.begin(); it != s->continues.end(); ++it) {
-			assert(currentSection->inDeadCode || it->stackDepth == currentSection->stackDepth);
-			completeForwardBranch(*it);
-		}
+		completeForwardBranches(s->continues.begin(), s->continues.end());
 	}
 }
 
 void Compiler::completeIteratorBreaks(const SemanticScope* fromScope, const SemanticScope* untilScope) {
 	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
 		assert(s->type == SemanticScope::ITERATOR_LABEL_TYPE);
-		for (const BranchPoint* it = s->breaks.begin(); it != s->breaks.end(); ++it) {
-//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
-			completeForwardBranch(*it);
-		}
+		completeForwardBranches(s->breaks.begin(), s->breaks.end());
 	}
 }
 
 void Compiler::completeBreaks(const SemanticScope* ofScope) {
-	for (const BranchPoint* it = ofScope->breaks.begin(); it != ofScope->breaks.end(); ++it) {
-//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
-		completeForwardBranch(*it);
-	}
+	completeForwardBranches(ofScope->breaks.begin(), ofScope->breaks.end());
 }
 
 void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd
@@ -3575,7 +3585,7 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of safe keeping here
 		xr = safeKeep(xr);
-		insertSection(iterationSection);
+		currentSection->insertSection(iterationSection);
 		makeRValue(xr);
 	}
 	discard(makeAssignment(iterationXR));
@@ -3610,7 +3620,7 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 	}
 	statement(emptyLabelScope, emptyLabelScope);
 	completeIteratorContinues(emptyLabelScope, scopeLabelsEnd);
-	insertSection(incrementSection);
+	currentSection->insertSection(incrementSection);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	if (exitLoopPoint.isValid()) {
 		completeForwardBranch(exitLoopPoint);
@@ -3662,47 +3672,45 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 	emit(Processor::POP_SCOPE_OP);
 }
 
-// keep as one or separate?
-void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* currentScope) {
+void Compiler::breakStatement(SemanticScope* currentScope) {
 	assert(compilingFor != FOR_EVAL || evalXR.onStack());
 
-	SemanticScope* s = currentScope;
-	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
-	String label = String(b, p, &heap);
-	// FIX : have a top-level semantic scope, no need for null scope
+	const Processor::Opcode popOpcode = (compilingFor == FOR_EVAL ? Processor::PUSH_BACK_OP : Processor::POP_N_OP);
+	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap);
 	int rollbackStackDepth = currentSection->stackDepth;
-	// FIX : too complicated!! bone out...
-	while (s != 0 && !((s->type == SemanticScope::ITERATOR_LABEL_TYPE
-			|| ((isBreak || !label.empty()) && s->type == SemanticScope::LABEL_TYPE))
-			&& s->label.isEqualTo(label))) {
-		s->popStuff(this);
-		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) { // FIX : share with return
-			assert(s->stackDepth > 0);
-			const int stackDistance = rollbackStackDepth - s->stackDepth;
-			if (stackDistance > 0) {
-				assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
-				emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-				rollbackStackDepth -= stackDistance;
-			}
-			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
+	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
+		if (s->label.isEqualTo(label)
+				&& (s->type == SemanticScope::ITERATOR_LABEL_TYPE || s->type == SemanticScope::LABEL_TYPE)) {
+			s->popStack(*this, rollbackStackDepth, popOpcode);
+			s->breaks.append(emitForwardBranch(Processor::JMP_OP));
+			semicolon();
+			return;
 		}
-		s = s->next;
+		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, popOpcode);
 	}
-	if (s == 0) {
-		error(SYNTAX_ERROR, !label.empty() ? "Undefined label"
-				: (isBreak ? "Illegal break" : "Illegal continue"));
+	error(SYNTAX_ERROR, !label.empty() ? "Undefined label" : "Illegal break");
+}
+
+void Compiler::continueStatement(SemanticScope* currentScope) {
+	assert(compilingFor != FOR_EVAL || evalXR.onStack());
+
+	const Processor::Opcode popOpcode = (compilingFor == FOR_EVAL ? Processor::PUSH_BACK_OP : Processor::POP_N_OP);
+	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap);
+	int rollbackStackDepth = currentSection->stackDepth;
+	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
+		if (s->label.isEqualTo(label) && (s->type == SemanticScope::ITERATOR_LABEL_TYPE
+				|| (s->type == SemanticScope::LABEL_TYPE && !label.empty()))) {
+			if (s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
+				error(SYNTAX_ERROR, "Illegal label for continue");
+			}
+			s->popStack(*this, rollbackStackDepth, popOpcode);
+			s->continues.append(emitForwardBranch(Processor::JMP_OP));
+			semicolon();
+			return;
+		}
+		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, popOpcode);
 	}
-	if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
-		error(SYNTAX_ERROR, "Illegal label for continue");
-	}
-	const int stackDistance = rollbackStackDepth - s->stackDepth;
-	if (stackDistance > 0) {
-		assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
-		emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-		rollbackStackDepth -= stackDistance;
-	}
-	(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
-	semicolon();
+	error(SYNTAX_ERROR, !label.empty() ? "Undefined label" : "Illegal continue");
 }
 
 void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
@@ -3746,7 +3754,7 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 		if (isForIn) {
 			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterationXR);
 		} else {
-			insertSection(initSection);
+			currentSection->insertSection(initSection);
 			forStatement(&emptyLabelScope, scopeLabelsEnd);
 		}
 	}
@@ -3817,37 +3825,9 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	}
 	returnXR = makeRValue(returnXR);
 
-	int rollbackStackDepth = currentSection->stackDepth - 1;
+	int rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
-		s->popStuff(this);
-		/*
-			This is *really* tricky. When inside try/catch/finally block we have inserted an extra space holder on the
-			stack for the return value. This is so all finally's are always called with identical stack pointer. It
-			would be different whether we returned or not otherwise. This is so that finallys in turn can break / return
-			(and abort any previous return) with correct stack popping.
-			
-			However, since we need to push back the return value (to this extra space) before calling finally() we
-			manipulate the rollbackStackDepth to pop one value more before calling finally and one less for the
-			entire try/catch/finally block for balance. This should *not* be done for break / continue of course.
-		*/
-		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) {
-			++rollbackStackDepth;
-			const int stackDistance = rollbackStackDepth - s->stackDepth;
-			if (stackDistance > 0) {
-				emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-				rollbackStackDepth -= stackDistance;
-			}
-			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
-		} else if (s->type == SemanticScope::FINALLY_TYPE) {
-			++rollbackStackDepth;
-		} else if (s->type == SemanticScope::TRY_CATCH_FINALLY_TYPE) {
-			--rollbackStackDepth;
-		}
-	}
-	const int stackDistance = rollbackStackDepth;
-	if (stackDistance > 0) {
-		emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-		rollbackStackDepth -= stackDistance;
+		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, Processor::PUSH_BACK_OP);
 	}
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	semicolon();
@@ -3905,7 +3885,6 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	assert(compilingFor != FOR_EVAL || evalXR.onStack());
 
 	white();
-	SemanticScope tryCatchFinallyScope(&heap, SemanticScope::TRY_CATCH_FINALLY_TYPE, currentSection->stackDepth, currentScope);
 	if (compilingFor != FOR_EVAL) { // space holder for return value so that we can break out of finallys (with the same stack pop count) regardless if try scope returns a value or not
 		emit(Processor::VOID_OP, 0);
 	}
@@ -3913,7 +3892,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	QuickVector<BranchPoint> allFinallys;
 	BranchPoint catchPoint;
 	{
-		SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentSection->stackDepth, &tryCatchFinallyScope);
+		SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentSection->stackDepth, currentScope);
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		if (compilingFor == FOR_EVAL) { // Eval result from try scope should be rolled back in case of a throw
 			emit(Processor::REPUSH_OP, 0);
@@ -3955,7 +3934,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		expectToken(")", true);
 		{
-			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, &tryCatchFinallyScope);
+			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
 			evalXR = (compilingFor == FOR_EVAL ? ExpressionResult::PUSHED : ExpressionResult::NONE);
 			expectToken("{", true); // FIX : sub
 			statementList(&catchScope);
@@ -3981,13 +3960,11 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 
 	// Finally
 	
-	for (const BranchPoint* it = allFinallys.begin(); it != allFinallys.end(); ++it) { // FIX : sub
-		completeForwardBranch(*it);
-	}
+	completeForwardBranches(allFinallys.begin(), allFinallys.end());
 	emit(Processor::TRIED_OP);
 	completeForwardBranch(finallyRethrowPoint);
 	if (token("finally", true)) {
-		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentSection->stackDepth, &tryCatchFinallyScope);
+		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentSection->stackDepth, currentScope);
 		ExpressionResult safeKept;
 		evalXR = ExpressionResult::NONE;
 		if (compilingFor == FOR_EVAL) { // fix :
@@ -4084,7 +4061,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		Processor::unpackInstruction(testsSection.code[*it], opcode, operand);
 		testsSection.code[*it] = Processor::packInstruction(opcode, operand - mainSection.code.size());
 	}
-	insertSection(testsSection);
+	currentSection->insertSection(testsSection);
 	assert(currentSection->stackDepth == testsSectionEntryStackDepth); // since we assume this in the default case code
 	if (defaultPoint.isValid()) {
 		emitBackwardBranch(Processor::JMP_OP, defaultPoint);
@@ -4137,8 +4114,8 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 		}
 	} else {
 		switch (static_cast<Statement>(statementTokenIndex)) {
-			case BREAK_STATEMENT:
-			case CONTINUE_STATEMENT: breakContinueStatement(statementTokenIndex == BREAK_STATEMENT, currentScope); break;
+			case BREAK_STATEMENT: breakStatement(currentScope); break;
+			case CONTINUE_STATEMENT: continueStatement(currentScope); break;
 			case VAR_STATEMENT: varStatement(); break;
 			case IF_STATEMENT: ifStatement(currentScope); break;
 			case WHILE_STATEMENT: whileStatement(currentScope, scopeLabelsEnd); break;
@@ -4177,8 +4154,11 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	this->e = e;
 	acceptInOperator = true;
 	
-	flushXR();
-	statementList(0);
+	if (compilingFor == FOR_EVAL) {
+		evalXR = makeRValue(evalXR);
+	}
+	SemanticScope rootScope(&heap, SemanticScope::ROOT_TYPE, 1, 0);
+	statementList(&rootScope);
 	evalXR = makeRValue(evalXR);
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	assert(currentSection == &mainSection);

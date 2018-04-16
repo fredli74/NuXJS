@@ -1179,11 +1179,14 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(Heap* heap, int initialStackDepth)
-							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth), stackDepth(initialStackDepth), inDeadCode(false)
+							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
+							, stackDepth(initialStackDepth), inDeadCode(false)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(heap)
 #endif
 							 { }
+					void emit(Processor::Opcode opcode, Int32 operand);
+					void insertSection(const CodeSection& section);
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
 	QuickVector<int> stackDepths;
@@ -1195,7 +1198,8 @@ class Compiler : public GCItem {
 				};
 	
 				struct BranchPoint {
-					BranchPoint(Int32 codeOffset = -1, int stackDepth = UNKNOWN_STACK_DEPTH) : codeOffset(codeOffset), stackDepth(stackDepth) { }
+					BranchPoint(Int32 codeOffset = -1, int stackDepth = UNKNOWN_STACK_DEPTH)
+							: codeOffset(codeOffset), stackDepth(stackDepth) { }
 					bool isValid() const { return codeOffset != -1; };
 					Int32 codeOffset;
 					int stackDepth;
@@ -1209,6 +1213,7 @@ class Compiler : public GCItem {
 				void emitWithConstant(Processor::Opcode opcode, const Value& constant);
 				BranchPoint emitForwardBranch(Processor::Opcode opcode);
 				void completeForwardBranch(const BranchPoint& point);
+				void completeForwardBranches(const BranchPoint* begin, const BranchPoint* end);
 				BranchPoint markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 	
@@ -1235,7 +1240,6 @@ class Compiler : public GCItem {
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
-				bool flushXR();
 				void varDeclarations();
 				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd
 						, const CodeSection& iterationSection, const ExpressionResult& iterationXR);
@@ -1243,7 +1247,8 @@ class Compiler : public GCItem {
 				void forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
 				void varStatement();
 				void functionStatement();
-				void breakContinueStatement(const bool isBreak, SemanticScope* currentScope);
+				void breakStatement(SemanticScope* currentScope);
+				void continueStatement(SemanticScope* currentScope);
 				void ifStatement(SemanticScope* currentScope);
 				void whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
 				void doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd);
