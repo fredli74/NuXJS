@@ -529,7 +529,7 @@ class WrapperObject : public ScriptObject {
 				}
 };
 
-// FIX : a lot like a LazyObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
+// FIX : a lot like a LazyScriptObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
 				StringWrapper(Heap* heap, const String* string, Object* prototype);
@@ -550,18 +550,18 @@ class StringWrapper : public ScriptObject {
 };
 
 /*
-	LazyObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
+	LazyScriptObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
 	
 	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
-	2) Memory: until the user accesses or adds properties, LazyObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
+	2) Memory: until the user accesses or adds properties, LazyScriptObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
 	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
 		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
 
 	This class is a template so this concept can be used with different super classes.
 */
-template<class SUPER> class LazyObject : public SUPER {
+template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
-				LazyObject();
+				LazyScriptObject();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
@@ -577,8 +577,8 @@ template<class SUPER> class LazyObject : public SUPER {
 				}
 };
 
-class Array : public LazyObject<Object> {
-	public:		typedef LazyObject<Object> super;
+class Array : public LazyScriptObject<Object> {
+	public:		typedef LazyScriptObject<Object> super;
 	
 				Array(Heap* heap);
 				virtual const String* getClassName() const;
@@ -670,9 +670,8 @@ class CodeDefinition : public Object {
 
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
-				Table nameIndexes; // < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
-				// FIX : bloated with all built-in quickvector counts here? vvv
-				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Scope. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
+				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
+				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
 				QuickVector<const String*> argumentNames;
 				const String* name;
 				const String* selfName;
@@ -694,8 +693,8 @@ class CodeDefinition : public Object {
 #endif
 };
 
-class ExtensibleFunction : public LazyObject<Function> {
-	public:		typedef LazyObject<Function> super;
+class ExtensibleFunction : public LazyScriptObject<Function> {
+	public:		typedef LazyScriptObject<Function> super;
 	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
 };
 
@@ -734,11 +733,9 @@ class GlobalScope : public Scope {
 	
 	protected:	Object* const globalObject;
 				const CodeDefinition* codeDef;
-				Value valuez[1000];
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(globalObject);
 					heap.mark(codeDef);
-					heap.markViaReferences(valuez + 0, valuez + 1000);
 					super::gcMark(heap);
 				}
 };
@@ -788,8 +785,8 @@ enum ErrorType {
 	GENERIC_ERROR, EVAL_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, URI_ERROR, ERROR_TYPE_COUNT
 };
 
-class Error : public LazyObject<Object> {
-	public:		typedef LazyObject<Object> super;
+class Error : public LazyScriptObject<Object> {
+	public:		typedef LazyScriptObject<Object> super;
 				Error(ErrorType type, const String* message = 0);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -845,14 +842,13 @@ class Engine {
 				double unixEpochTimeDiff;
 };
 
-class FunctionScope : public LazyObject<Scope> {
+class FunctionScope : public LazyScriptObject<Scope> {
 	friend class Arguments;
 	
-	public:		typedef LazyObject<Scope> super;
+	public:		typedef LazyScriptObject<Scope> super;
 
 				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
-				void updatedCode();
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
@@ -870,18 +866,14 @@ class FunctionScope : public LazyObject<Scope> {
 
 };
 
-// FIX : if CallFrame included a codeDef pointer, we wouldn't need this class at all, really worth contemplating. It is really a STUPID class, passing all virtuals on to parent, just setting a different codeDef really.
 /*
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDef pointer (for constants etc).
-	
-	FIX : I think we can use a FunctionScope now for simplicity, if we just empty codeDef->nameIndexes first.
-	Well, it shouldn't have arguments either. Like the global scope.
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
 
-				EvalScope(Heap* heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
+				EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -889,11 +881,9 @@ class EvalScope : public Scope {
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 
 	protected:	const CodeDefinition* const evalCodeDef;
-				QuickArray<Value> indexed; // For temporaries (safe-kept) only. FIX : now this array is the size of varNames.size(), but I think the compiler should skip making nameIndexes when compiling for eval so this array would only be temporaries only. Then we could probably just use a FunctionScope instead of EvalScope. And enterEval would be more similar to calling a function also.
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(evalCodeDef);
-					heap.markViaReferences(indexed.begin(), indexed.end());
 					super::gcMark(heap);
 				}
 };
@@ -939,8 +929,8 @@ class WithScope : public Scope {
 				}
 };
 
-class Arguments : public LazyObject<Object> {
-	public:		typedef LazyObject<Object> super;
+class Arguments : public LazyScriptObject<Object> {
+	public:		typedef LazyScriptObject<Object> super;
 
 				Arguments(Heap* heap, FunctionScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
@@ -1089,7 +1079,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(CodeDefinition* codeDef, bool directCall);
-	// FIX :			void call(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }

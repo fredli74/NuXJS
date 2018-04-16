@@ -715,22 +715,13 @@ Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	return heap.manage(new (&heap) RangeEnumerator(heap, 0, size()));
 }
 
-// FIX : just a test, solve thread-safe or drop!
-static Table _strings;
-
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
 	if (b == e) {
 		return &EMPTY_STRING;
 	}
 	String* s = heap.manage(new (&heap) String(b, e, &heap));
 	s->calcHash();
-	Table::Bucket* bucket = _strings.insert(s);
-	if (bucket->valueExists()) {
-		return bucket->getValue().getString();
-	} else {
-		_strings.update(bucket, Value(heap.protect(s)));
-		return s;
-	}
+	return s;
 }
 
 const String* String::fromInt(GCHeap& heap, Int32 i) {
@@ -1272,27 +1263,27 @@ Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
 			: heap.manage(new (&heap) JoiningEnumerator(engine, rangeEnumerator, completeObject)));
 }
 
-/* --- LazyObject --- */
+/* --- LazyScriptObject --- */
 
-template<class SUPER> LazyObject<SUPER>::LazyObject() : completeObject(0) { }
+template<class SUPER> LazyScriptObject<SUPER>::LazyScriptObject() : completeObject(0) { }
 
-template<class SUPER> Flags LazyObject<SUPER>::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+template<class SUPER> Flags LazyScriptObject<SUPER>::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	return getCompleteObject(engine)->getOwnProperty(engine, key, v);
 }
 
-template<class SUPER> bool LazyObject<SUPER>::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+template<class SUPER> bool LazyScriptObject<SUPER>::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	return getCompleteObject(engine)->setOwnProperty(engine, key, v, flags);
 }
 
-template<class SUPER> bool LazyObject<SUPER>::deleteProperty(Engine& engine, const Value& key) {
+template<class SUPER> bool LazyScriptObject<SUPER>::deleteProperty(Engine& engine, const Value& key) {
 	return getCompleteObject(engine)->deleteProperty(engine, key);
 }
 
-template<class SUPER> Enumerator* LazyObject<SUPER>::getPropertyEnumerator(Engine& engine) const {
+template<class SUPER> Enumerator* LazyScriptObject<SUPER>::getPropertyEnumerator(Engine& engine) const {
 	return getCompleteObject(engine)->getPropertyEnumerator(engine);
 }
 
-template<class SUPER> ScriptObject* LazyObject<SUPER>::getCompleteObject(Engine& engine) const {
+template<class SUPER> ScriptObject* LazyScriptObject<SUPER>::getCompleteObject(Engine& engine) const {
 	if (completeObject == 0) {
 		GCHeap& heap = engine.getHeap();
 		completeObject = heap.manage(new (&heap) ScriptObject(&heap, SUPER::getPrototype(engine)));
@@ -1534,23 +1525,6 @@ FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, 
 	}
 }
 
-// FIX : this one must GO! Q&D crap
-void FunctionScope::updatedCode() {
-	const CodeDefinition* codeDef = function->getDefinition();
-	const UInt32 oldVarsCount = static_cast<UInt32>(indexedPointer - indexed.begin());
-	const UInt32 oldArgsCount = static_cast<UInt32>(indexed.end() - indexedPointer);
-	const UInt32 newVarsCount = codeDef->getVarsCount();
-	const UInt32 newArgsCount = std::max(codeDef->getArgumentsCount(), passedArgumentsCount);
-	assert(newVarsCount >= oldVarsCount);
-	assert(newArgsCount >= oldArgsCount);
-	QuickArray<Value> newIndexed(newVarsCount + newArgsCount, indexed.getHeap());
-	std::fill(newIndexed.begin(), newIndexed.begin() + (newVarsCount - oldVarsCount), Value::UNDEFINED);
-	std::copy(indexed.begin(), indexed.end(), newIndexed.begin() + (newVarsCount - oldVarsCount));
-	std::fill(newIndexed.end() - (newArgsCount - oldArgsCount), newIndexed.end(), Value::UNDEFINED);
-	indexed.swap(newIndexed);
-	indexedPointer = indexed.begin() + newVarsCount;
-}
-
 Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
@@ -1659,10 +1633,10 @@ void FunctionScope::constructCompleteObject(Engine& engine) const {
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Heap* heap, Scope* parentScope, const CodeDefinition* evalCodeDef)
-		: super(parentScope), evalCodeDef(evalCodeDef), indexed(evalCodeDef->getVarsCount(), heap) {
-	indexedPointer = indexed.end();
-	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
+EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef)
+		: super(parentScope), evalCodeDef(evalCodeDef) {
+	assert(evalCodeDef->getVarsCount() == 0);
+	indexedPointer = 0;
 }
 Flags EvalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return parentScope->getOwnProperty(engine, key, v); }
 bool EvalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->setOwnProperty(engine, key, v, flags); }
@@ -1673,8 +1647,7 @@ void EvalScope::declareVar(Engine& engine, const String* name, const Value& init
 
 GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) {
 	assert(codeDef->getVarsCount() == 0);
-indexedPointer =valuez+1000;
-std::fill(valuez + 0, indexedPointer, Value::UNDEFINED);
+	indexedPointer = 0;
 }
 Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return globalObject->getOwnProperty(engine, key, v); }
 bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return globalObject->setOwnProperty(engine, key, v, flags); }
@@ -1686,7 +1659,6 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
-
 
 /* --- CatchScope --- */
 
@@ -1908,7 +1880,7 @@ void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
-	scope = heap.manage(new (&heap) EvalScope(&heap, f, codeDef));
+	scope = heap.manage(new (&heap) EvalScope(f, codeDef));
 	++cfp; // FIX : overflow check
 	assert(cfp < cstackEnd);
 	cfp->returnIP = ip;
