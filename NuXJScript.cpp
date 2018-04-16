@@ -4169,6 +4169,8 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	(These should all be converted to 'ITERATOR_LABEL_TYPE' upon entry.)
 */
 void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
+// FIX :	assert(compilingFor != FOR_EVAL || evalXR.onStack());
+	
 	white();
 	
 	if (token("{", false)) {
@@ -4191,7 +4193,6 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
-			flushXR();
 			SemanticScope newLabelScope(&heap, label, safeKeptCounter, currentSection->stackDepth, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd);
 			completeBreaks(&newLabelScope);
@@ -4899,6 +4900,34 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 
 
 int testMain(int argc, const char* argv[]) {
+    String source(EMPTY_STRING);
+    std::auto_ptr<std::wifstream> inputFileStream;
+    std::wistream* inStream = &std::wcin;
+    bool doTime = false;
+    int gcRate = 256;
+    bool autoGCRate = true;
+    bool pauseBeforeQuit = false;
+	bool doSuppressStdErr = false;
+	bool loadStdLib = true;
+    for (int argi = 1; argi < argc; ++argi) {
+        if (strcmp(argv[argi], "-t") == 0) doTime = true;
+        else if (strcmp(argv[argi], "-s") == 0) doSuppressStdErr = true;
+        else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
+            gcRate = atoi(argv[++argi]);
+            autoGCRate = false;
+        }
+        else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
+        else if (strcmp(argv[argi], "-n") == 0) loadStdLib = false;
+        else if (inputFileStream.get() == 0) {
+            inputFileStream.reset(new std::wifstream(argv[argi]));
+            inStream = inputFileStream.get();
+            interactive = false;
+        } else {
+            std::cout << "Too many arguments" << std::endl;
+            return 1;
+        }
+    }
+
     /*std::cout << sizeof(Value) << std::endl;
      std::cout << sizeof(String) << std::endl;
      std::cout << sizeof(ScriptObject) << std::endl;
@@ -4933,47 +4962,25 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(engine, Value(&GC_STRING), Value(heap.protect(&gcFunction)), DONT_ENUM_FLAG);
+	
+	if (loadStdLib) {
+		try {
+			std::wifstream stdlibStream("stdlib.js");
+			String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()), &heap);
+			stdlibStream.close();
+			engine.setupStandardLibrary(source);
+		}
+		catch (const std::exception& x) {
+			std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
+			return 1;
+		}
+		catch (...) {
+			std::cerr << "exception setting up standard lib" << std::endl;
+			return 1;
+		}
+	}
+    suppressStdErr = doSuppressStdErr;
     
-    try {
-        std::wifstream stdlibStream("stdlib.js");
-        String source = String(std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>()), &heap);
-        stdlibStream.close();
-        engine.setupStandardLibrary(source);
-    }
-    catch (const std::exception& x) {
-        std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
-        return 1;
-    }
-    catch (...) {
-        std::cerr << "exception setting up standard lib" << std::endl;
-        return 1;
-    }
-    suppressStdErr = false;
-    
-    String source(EMPTY_STRING);
-    std::auto_ptr<std::wifstream> inputFileStream;
-    std::wistream* inStream = &std::wcin;
-    bool doTime = false;
-    int gcRate = 256;
-    bool autoGCRate = true;
-    bool pauseBeforeQuit = false;
-    for (int argi = 1; argi < argc; ++argi) {
-        if (strcmp(argv[argi], "-t") == 0) doTime = true;
-        else if (strcmp(argv[argi], "-s") == 0) suppressStdErr = true;
-        else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
-            gcRate = atoi(argv[++argi]);
-            autoGCRate = false;
-        }
-        else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
-        else if (inputFileStream.get() == 0) {
-            inputFileStream.reset(new std::wifstream(argv[argi]));
-            inStream = inputFileStream.get();
-            interactive = false;
-        } else {
-            std::cout << "Too many arguments" << std::endl;
-            return 1;
-        }
-    }
     while (inStream->good()) {
         bool execute = false;
         try {
