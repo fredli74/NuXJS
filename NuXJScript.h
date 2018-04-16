@@ -1286,7 +1286,6 @@ class Compiler : public GCItem {
 					heap.mark(codeDef);
 					super::gcMark(heap);
 				}
-ExpressionResult evalXR;
 };
 
 #endif
