@@ -2878,30 +2878,17 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	}
 }
 
-Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr, bool copy) {
+Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 	assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
 	switch (xr.t) {
- 		case ExpressionResult::PUSHED:
-		case ExpressionResult::PUSHED_PRIMITIVE: {
-			if (copy) {
-				emit(Processor::REPUSH_OP, 0);
-			}
-			if (evalXR.onStack() && !copy) {
-				emit(Processor::SWAP_OP);
-				assert(currentSection->stackDepth >= 2);
-				return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? 0 : currentSection->stackDepth - 2));
-			}
-			assert(currentSection->stackDepth >= 1);
-			return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? 0 : currentSection->stackDepth - 1));
-		}
- 		case ExpressionResult::NONE: if (!copy) break;
 		case ExpressionResult::INDEXED:
 		case ExpressionResult::NAMED:
 		case ExpressionResult::PROPERTY:
-		case ExpressionResult::ON_STACK: {
-			makeRValue(xr);
-			if (evalXR.onStack()) {
-				emit(Processor::SWAP_OP);
+		case ExpressionResult::ON_STACK: makeRValue(xr); /* fall through */
+ 		case ExpressionResult::PUSHED:
+		case ExpressionResult::PUSHED_PRIMITIVE: {
+			if (compilingFor == FOR_EVAL) {
+				emit(Processor::SWAP_OP);				// evaluation result should be up front always
 				assert(currentSection->stackDepth >= 2);
 				return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? 0 : currentSection->stackDepth - 2));
 			}
@@ -3577,7 +3564,7 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		, const CodeSection& iterationSection, const ExpressionResult& iterationXR) {
 	ExpressionResult enumXR(rvalueExpression());
  	emit(Processor::GET_ENUMERATOR_OP);
-	enumXR = safeKeep(enumXR, false);
+	enumXR = safeKeep(enumXR);
 	expectToken(")", true);
 	for (SemanticScope* s = emptyLabelScope; s != scopeLabelsEnd; s = s->next) {	// we must change stack depth of all labels that point to this scope, otherwise we'll pop the enumerator on continue
 		s->stackDepth = currentSection->stackDepth;
@@ -3586,8 +3573,8 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 	makeRValue(enumXR);
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
 	ExpressionResult xr(ExpressionResult::PUSHED);
-	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
-		xr = safeKeep(xr, false);
+	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of safe keeping here
+		xr = safeKeep(xr);
 		insertSection(iterationSection);
 		makeRValue(xr);
 	}
@@ -4045,7 +4032,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 
 	white();
 	expectToken("(", true);
-	ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC), false));
+	ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
 	expectToken(")", true);
 	expectToken("{", true);
 	const Int32 testsSectionEntryStackDepth = currentSection->stackDepth;
@@ -4150,6 +4137,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 			}
 		} else {
 			p = b;
+			assert((compilingFor == FOR_EVAL) == evalXR.onStack());
 			optionalExpression(evalXR, LOWEST_PREC);
 			semicolon();
 		}

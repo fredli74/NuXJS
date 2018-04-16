@@ -1211,7 +1211,7 @@ class Compiler : public GCItem {
 				BranchPoint markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 	
-				ExpressionResult safeKeep(const ExpressionResult& xr, bool copy); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
+				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
