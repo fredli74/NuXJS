@@ -1168,6 +1168,7 @@ class Compiler : public GCItem {
 						, NAMED				// arbitrary value in named variable
 						, PROPERTY			// arbitrary value in object property
 						, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
+					, ON_STACK
 					};
 					ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
 					ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
@@ -1213,8 +1214,10 @@ class Compiler : public GCItem {
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 
 				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
-Compiler::ExpressionResult newSafeKeep(const ExpressionResult& xr, bool copy);
+ExpressionResult newSafeKeep(const ExpressionResult& xr, bool copy);
 void newReturnSafeKept(const ExpressionResult& xr);
+ExpressionResult safeKeep3(const ExpressionResult& xr, bool copy); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
+void returnSafeKept3(const ExpressionResult& xr);
 				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
