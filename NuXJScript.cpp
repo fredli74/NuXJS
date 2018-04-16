@@ -1113,7 +1113,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 /* --- CodeDef --- */
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
-		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap), temporaries(heap)
+		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap)
 		, name(0), selfName(0), source(0) {
 	assert(constants != 0);
 }
@@ -2408,7 +2408,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		}
 		std::cerr << "\t";
 #endif
-		std::cerr << "@" << std::setw(3) << std::right << offset << " : " << Processor::getOpcodeInfo(opcode).mnemonic;
+		std::cerr << "@" << offset << ":\t" << Processor::getOpcodeInfo(opcode).mnemonic;
 		
 		switch (opcode) {
 			case Processor::JT_OP:
@@ -2568,7 +2568,7 @@ struct Compiler::SemanticScope {
 	Type type;
 	const String label; // empty for automatic while, for, case labels
 	SemanticScope* const next;
-	const int stackDepth;
+	int stackDepth;
 // FIX : feels like a waste with three different vectors here, could we have double SemanticScope entries for continuable and breakable Semanticscope types?
 	QuickVector<BranchPoint> breaks; // source points for break jmp's
 	QuickVector<BranchPoint> continues; // source points for continue jmp's
@@ -2637,14 +2637,18 @@ Compiler::CodeSection* Compiler::changeSection(CodeSection* newOutputSection) {
 	return newOutputSection;
 }
 
+// FIX : drop stack adjust?
 void Compiler::insertSection(const CodeSection& section) {
+	const int stackAdjust = currentSection->stackDepth - section.initialStackDepth;
 // FIX :	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || section.initialStackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	currentSection->code.insert(currentSection->code.end(), section.code.begin(), section.code.end());
 #if (VERIFY_STACK_LOGIC)
-	currentSection->stackDepths.insert(currentSection->stackDepths.end(), section.stackDepths.begin(), section.stackDepths.end());
+	for (int i = 0; i < section.stackDepths.size(); ++i) {
+		currentSection->stackDepths.append(section.stackDepths[i] + stackAdjust);
+	}
 #endif
-	currentSection->stackDepth = section.stackDepth;
+	currentSection->stackDepth = section.stackDepth + stackAdjust;
 }
 
 Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
@@ -2874,32 +2878,8 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	}
 }
 
-Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
-	switch (xr.t) {
-		case ExpressionResult::PUSHED:
-		case ExpressionResult::PUSHED_PRIMITIVE:
-		case ExpressionResult::INDEXED:
-		case ExpressionResult::NAMED:
-		case ExpressionResult::PROPERTY: {
-			makeRValue(xr);
-			Int32 tempLocalIndex;
-			if (!codeDef->temporaries.empty()) {
-				tempLocalIndex = codeDef->temporaries[codeDef->temporaries.size() - 1];
-				codeDef->temporaries.resize(codeDef->temporaries.size() - 1);
-			} else {
-				codeDef->varNames.append(0);
-				tempLocalIndex = -static_cast<Int32>(codeDef->varNames.size());
-			}
-			emit(Processor::WRITE_INDEXED_OP, tempLocalIndex);
-			emit(Processor::POP_OP);
-			return ExpressionResult(ExpressionResult::INDEXED, Value(tempLocalIndex));
-		}
-		default: return xr;
-	}
-}
-
-Compiler::ExpressionResult Compiler::safeKeep3(const ExpressionResult& xr, bool copy) {
-// FIX : makeRValue of everything if copy?
+Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr, bool copy) {
+	assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
 	switch (xr.t) {
  		case ExpressionResult::PUSHED:
 		case ExpressionResult::PUSHED_PRIMITIVE: {
@@ -2933,29 +2913,18 @@ Compiler::ExpressionResult Compiler::safeKeep3(const ExpressionResult& xr, bool 
 	return xr;
 }
 
-void Compiler::returnSafeKept3(const ExpressionResult& xr) {
+void Compiler::returnSafeKept(const ExpressionResult& xr) {
+	assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
 	if (xr.t == ExpressionResult::ON_STACK) {
-		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1 || xr.v.toInt() == currentSection->stackDepth - 2);
+		// assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1 || xr.v.toInt() == currentSection->stackDepth - 2);
 		if (evalXR.onStack()) {
-			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 2);
+//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 2);
 			emit(Processor::PUSH_BACK_OP, 1);
 		} else {
-			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1);
+//		std::cout << xr.v.toInt() << std::endl;
+	//		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1);
 			emit(Processor::POP_OP, 1);
 		}
-	}
-}
-
-// FIX : why don't we make a special expression result type for safe kept value and put this one in discard / makeRValue ?
-void Compiler::returnSafeKept(const ExpressionResult& xr, bool doReset) {
-	if (xr.t == ExpressionResult::INDEXED) {
-		Int32 index = xr.v.toInt();
-		if (doReset) {
-			emit(Processor::VOID_OP);
-			emit(Processor::WRITE_INDEXED_OP, index);
-			emit(Processor::POP_OP);
-		}
-		codeDef->temporaries.append(index);
 	}
 }
 
@@ -3577,16 +3546,29 @@ void Compiler::varDeclarations() {
 	}
 }
 
-void Compiler::completeContinues(const SemanticScope* fromScope, const SemanticScope* untilScope) {
+void Compiler::completeIteratorContinues(const SemanticScope* fromScope, const SemanticScope* untilScope) {
 	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
+		assert(s->type == SemanticScope::ITERATOR_LABEL_TYPE);
 		for (const BranchPoint* it = s->continues.begin(); it != s->continues.end(); ++it) {
+			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
 			completeForwardBranch(*it);
 		}
 	}
 }
 
-void Compiler::completeBreaks(const SemanticScope* Semanticscope) {
-	for (const BranchPoint* it = Semanticscope->breaks.begin(); it != Semanticscope->breaks.end(); ++it) {
+void Compiler::completeIteratorBreaks(const SemanticScope* fromScope, const SemanticScope* untilScope) {
+	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
+		assert(s->type == SemanticScope::ITERATOR_LABEL_TYPE);
+		for (const BranchPoint* it = s->breaks.begin(); it != s->breaks.end(); ++it) {
+//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
+			completeForwardBranch(*it);
+		}
+	}
+}
+
+void Compiler::completeBreaks(const SemanticScope* ofScope) {
+	for (const BranchPoint* it = ofScope->breaks.begin(); it != ofScope->breaks.end(); ++it) {
+//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
 		completeForwardBranch(*it);
 	}
 }
@@ -3595,25 +3577,28 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		, const CodeSection& iterationSection, const ExpressionResult& iterationXR) {
 	ExpressionResult enumXR(rvalueExpression());
  	emit(Processor::GET_ENUMERATOR_OP);
-	enumXR = safeKeep(enumXR);
+	enumXR = safeKeep(enumXR, false);
 	expectToken(")", true);
+	for (SemanticScope* s = emptyLabelScope; s != scopeLabelsEnd; s = s->next) {	// we must change stack depth of all labels that point to this scope, otherwise we'll pop the enumerator on continue
+		s->stackDepth = currentSection->stackDepth;
+	}
 	const BranchPoint loopPoint = markBackwardBranch();
 	makeRValue(enumXR);
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
 	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of saving away here
-		xr = safeKeep(xr);
+		xr = safeKeep(xr, false);
 		insertSection(iterationSection);
 		makeRValue(xr);
-		returnSafeKept(xr, true);
 	}
 	discard(makeAssignment(iterationXR));
+	returnSafeKept(xr);
 	statement(emptyLabelScope, emptyLabelScope);
-	completeContinues(emptyLabelScope, scopeLabelsEnd);
+	completeIteratorContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
-	completeBreaks(emptyLabelScope);
-	returnSafeKept(enumXR, true);
+	completeIteratorBreaks(emptyLabelScope, scopeLabelsEnd);
+	returnSafeKept(enumXR);
 }
 
 void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd) {
@@ -3637,13 +3622,13 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 		changeSection(previousSection);
 	}
 	statement(emptyLabelScope, emptyLabelScope);
-	completeContinues(emptyLabelScope, scopeLabelsEnd);
+	completeIteratorContinues(emptyLabelScope, scopeLabelsEnd);
 	insertSection(incrementSection);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	if (exitLoopPoint.isValid()) {
 		completeForwardBranch(exitLoopPoint);
 	}
-	completeBreaks(emptyLabelScope);
+	completeIteratorBreaks(emptyLabelScope, scopeLabelsEnd);
 }
 
 void Compiler::semicolon(bool acceptLF) {
@@ -3697,9 +3682,9 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 	SemanticScope* s = currentScope;
 	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
 	String label = String(b, p, &heap);
-	// FIX : too complicated!! bone out...
 	// FIX : have a top-level semantic scope, no need for null scope
 	int rollbackStackDepth = currentSection->stackDepth;
+	// FIX : too complicated!! bone out...
 	while (s != 0 && !((s->type == SemanticScope::ITERATOR_LABEL_TYPE
 			|| ((isBreak || !label.empty()) && s->type == SemanticScope::LABEL_TYPE))
 			&& s->label.isEqualTo(label))) {
@@ -3710,6 +3695,7 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 				assert(s->stackDepth > 0);
 				const int stackDistance = rollbackStackDepth - s->stackDepth;
 				if (stackDistance > 0) {
+					assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
 					emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
 					rollbackStackDepth -= stackDistance;
 				}
@@ -3729,6 +3715,7 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 		assert(s->stackDepth != UNKNOWN_STACK_DEPTH);
 		const int stackDistance = rollbackStackDepth - s->stackDepth;
 		if (stackDistance > 0) {
+			assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
 			emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
 			rollbackStackDepth -= stackDistance;
 		}
@@ -3762,21 +3749,21 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 			forStatement(&emptyLabelScope, scopeLabelsEnd);
 		}
 	} else {
-		ExpressionResult iterXR;
+		ExpressionResult iterationXR;
 		bool isForIn = false;
 		{
 			CodeSection* previousSection = changeSection(&initSection);
 			acceptInOperator = false;
-			bool gotExpression = optionalExpression(iterXR, LOWEST_PREC);
+			bool gotExpression = optionalExpression(iterationXR, LOWEST_PREC);
 			acceptInOperator = true;
 			isForIn = (gotExpression && token("in", true));
 			if (!isForIn) {
-				discard(iterXR);
+				discard(iterationXR);
 			}
 			changeSection(previousSection);
 		}
 		if (isForIn) {
-			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterXR);
+			forInStatement(&emptyLabelScope, scopeLabelsEnd, initSection, iterationXR);
 		} else {
 			insertSection(initSection);
 			forStatement(&emptyLabelScope, scopeLabelsEnd);
@@ -3815,10 +3802,10 @@ void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeL
 	expectToken(")", true);
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	statement(&emptyLabelScope, &emptyLabelScope);
-	completeContinues(&emptyLabelScope, scopeLabelsEnd);
+	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
 	completeForwardBranch(exitLoopPoint);
-	completeBreaks(&emptyLabelScope);
+	completeIteratorBreaks(&emptyLabelScope, scopeLabelsEnd);
 }
 
 void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
@@ -3829,14 +3816,14 @@ void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scop
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	statement(&emptyLabelScope, &emptyLabelScope);
-	completeContinues(&emptyLabelScope, scopeLabelsEnd);
+	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
 	expectToken("while", true);
 	expectToken("(", true);
 	rvalueExpression();
 	expectToken(")", true);
 	emitBackwardBranch(Processor::JT_OP, loopPoint);
 	semicolon();
-	completeBreaks(&emptyLabelScope);
+	completeIteratorBreaks(&emptyLabelScope, scopeLabelsEnd);
 }
 
 void Compiler::returnStatement(SemanticScope* currentScope) {
@@ -4058,7 +4045,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 
 	white();
 	expectToken("(", true);
-	ExpressionResult controlXR(safeKeep3(expression(LOWEST_PREC), false));
+	ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC), false));
 	expectToken(")", true);
 	expectToken("{", true);
 	const Int32 testsSectionEntryStackDepth = currentSection->stackDepth;
@@ -4123,7 +4110,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	}
 	completeForwardBranch(donePoint);
 	completeBreaks(&emptyLabelScope);
-	returnSafeKept3(controlXR);
+	returnSafeKept(controlXR);
 }
 
 /*
@@ -4158,7 +4145,9 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 			}
 			SemanticScope newLabelScope(&heap, label, currentSection->stackDepth, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd);
-			completeBreaks(&newLabelScope);
+			if (newLabelScope.type != SemanticScope::ITERATOR_LABEL_TYPE) {
+				completeBreaks(&newLabelScope);
+			}
 		} else {
 			p = b;
 			optionalExpression(evalXR, LOWEST_PREC);

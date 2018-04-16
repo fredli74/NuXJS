@@ -674,7 +674,6 @@ class CodeDefinition : public Object {
 				// FIX : bloated with all built-in quickvector counts here? vvv
 				QuickVector<const String*> varNames; // Notice that this list is reversed in relation to indexes in the "indexed" array in Scope. A zero means temporary "safe-kept" variable. "vars" and "arguments" are only used for disassembler and merging eval vars right now.
 				QuickVector<const String*> argumentNames;
-				QuickVector<Int32> temporaries; // available temporary variable indexes (pushed when returning) // FIX : why is this kept here in CodeDefinition, do we ever need it again after compiling?
 				const String* name;
 				const String* selfName;
 				const String* source;
@@ -1195,10 +1194,10 @@ class Compiler : public GCItem {
 				};
 	
 				struct BranchPoint {
-					BranchPoint(Int32 codeOffset = -1, Int32 stackDepth = UNKNOWN_STACK_DEPTH) : codeOffset(codeOffset), stackDepth(stackDepth) { }
+					BranchPoint(Int32 codeOffset = -1, int stackDepth = UNKNOWN_STACK_DEPTH) : codeOffset(codeOffset), stackDepth(stackDepth) { }
 					bool isValid() const { return codeOffset != -1; };
 					Int32 codeOffset;
-					Int32 stackDepth;
+					int stackDepth;
 				};
 
 				void error(ErrorType errorType, const char* message);
@@ -1211,17 +1210,16 @@ class Compiler : public GCItem {
 				void completeForwardBranch(const BranchPoint& point);
 				BranchPoint markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
-
-				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
-ExpressionResult safeKeep3(const ExpressionResult& xr, bool copy); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
-void returnSafeKept3(const ExpressionResult& xr);
-				void returnSafeKept(const ExpressionResult& xr, bool doReset); // if doReset == true then reset the local variable used for safe-keeping (to UNDEFINED)
+	
+				ExpressionResult safeKeep(const ExpressionResult& xr, bool copy); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
+				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 
-				void completeContinues(const SemanticScope* fromScope, const SemanticScope* untilScope);
-				void completeBreaks(const SemanticScope* Semanticscope);
+				void completeIteratorContinues(const SemanticScope* fromScope, const SemanticScope* untilScope);
+				void completeIteratorBreaks(const SemanticScope* fromScope, const SemanticScope* untilScope);
+				void completeBreaks(const SemanticScope* ofScope);
 				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
