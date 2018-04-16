@@ -1805,8 +1805,8 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ NEW_OBJECT_OP              , "NEW_OBJECT"              , +1     , 0 },
 	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , 0 },
 	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , 0 },
-	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , 0      , OpcodeInfo::TERMINAL },
-	{ RETURN_OP                  , "RETURN"                  , 0      , OpcodeInfo::TERMINAL },
+	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , -1     , OpcodeInfo::TERMINAL },
+	{ RETURN_OP                  , "RETURN"                  , -1     , OpcodeInfo::TERMINAL },
 	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , 0 },
 	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , OpcodeInfo::TERMINAL },
 	{ THIS_OP                    , "THIS"                    , +1     , 0 },
@@ -2359,7 +2359,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 			}
 			case Processor::RETURN_TO_HOST_OP:
 			case Processor::DELETE_SCOPE_AND_RETURN_OP: {
-				if (currentStackDepth != 1) {
+				if (currentStackDepth != 0) {
 					std::cerr << "Invalid return stack depth @" << offset << ": " << currentStackDepth << std::endl;
 				}
 				return errors;
@@ -2594,18 +2594,17 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::emit(Processor::Opcode opcode,  Int32 operand) {
-	if (currentSection->stackDepth == UNKNOWN_STACK_DEPTH) {	// unknown stack depth = dead code
+/* FIX :	if (inDeadCode) {	// unknown stack depth = dead code
 		return;
-	}
+	}*/
 #if (VERIFY_STACK_LOGIC)
-	currentSection->stackDepths.append(currentSection->stackDepth);
+	currentSection->stackDepths.append(currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH : currentSection->stackDepth);
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
-	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
-		currentSection->stackDepth = UNKNOWN_STACK_DEPTH;
-	} else if (currentSection->stackDepth != UNKNOWN_STACK_DEPTH) {
-		currentSection->stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
+	currentSection->stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 // FIX		assert(currentSection->stackDepth >= 0);
+	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
+		currentSection->inDeadCode = true;
 	}
 	if (opcode == Processor::POP_OP) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
@@ -2655,7 +2654,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 // FIX : share code somehow
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	const Int32 operand = 0;
-	const int targetStackDepth = (currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? UNKNOWN_STACK_DEPTH
+	const int targetStackDepth = (currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH
 			: currentSection->stackDepth
 			+ opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0)
 			+ (((opcodeInfo.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
@@ -2668,6 +2667,7 @@ void Compiler::completeForwardBranch(const BranchPoint& point) {
 // FIX:	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
+		currentSection->inDeadCode = false;
 		currentSection->stackDepth = point.stackDepth;
 	}
 	const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
@@ -2890,10 +2890,10 @@ Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
 			if (compilingFor == FOR_EVAL) {
 				emit(Processor::SWAP_OP);				// evaluation result should be up front always
 				assert(currentSection->stackDepth >= 2);
-				return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? 0 : currentSection->stackDepth - 2));
+				return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth - 2));
 			}
 			assert(currentSection->stackDepth >= 1);
-			return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth == UNKNOWN_STACK_DEPTH ? 0 : currentSection->stackDepth - 1));
+			return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth - 1));
 		}
 		default: break;
 	}
@@ -3537,7 +3537,7 @@ void Compiler::completeIteratorContinues(const SemanticScope* fromScope, const S
 	for (const SemanticScope* s = fromScope; s != untilScope; s = s->next) {
 		assert(s->type == SemanticScope::ITERATOR_LABEL_TYPE);
 		for (const BranchPoint* it = s->continues.begin(); it != s->continues.end(); ++it) {
-			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || it->stackDepth == currentSection->stackDepth);
+			assert(currentSection->inDeadCode || it->stackDepth == currentSection->stackDepth);
 			completeForwardBranch(*it);
 		}
 	}
@@ -3677,15 +3677,12 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 			&& s->label.isEqualTo(label))) {
 		s->popStuff(this);
 		if (s->type == SemanticScope::CATCH_TYPE || s->type == SemanticScope::TRY_TYPE) { // FIX : share with return
-			if (rollbackStackDepth != UNKNOWN_STACK_DEPTH) { // FIX : don't, have a separate deadCode flag instead and let stackDepth be >= 0 always
-				assert(s->stackDepth != UNKNOWN_STACK_DEPTH);
-				assert(s->stackDepth > 0);
-				const int stackDistance = rollbackStackDepth - s->stackDepth;
-				if (stackDistance > 0) {
-					assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
-					emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-					rollbackStackDepth -= stackDistance;
-				}
+			assert(s->stackDepth > 0);
+			const int stackDistance = rollbackStackDepth - s->stackDepth;
+			if (stackDistance > 0) {
+				assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
+				emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
+				rollbackStackDepth -= stackDistance;
 			}
 			s->finallys.append(emitForwardBranch(Processor::JSR_OP));
 		}
@@ -3698,14 +3695,11 @@ void Compiler::breakContinueStatement(const bool isBreak, SemanticScope* current
 	if (!isBreak && s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
 		error(SYNTAX_ERROR, "Illegal label for continue");
 	}
-	if (rollbackStackDepth != UNKNOWN_STACK_DEPTH) { // FIX : don't, have a separate deadCode flag instead and let stackDepth be >= 0 always
-		assert(s->stackDepth != UNKNOWN_STACK_DEPTH);
-		const int stackDistance = rollbackStackDepth - s->stackDepth;
-		if (stackDistance > 0) {
-			assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
-			emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-			rollbackStackDepth -= stackDistance;
-		}
+	const int stackDistance = rollbackStackDepth - s->stackDepth;
+	if (stackDistance > 0) {
+		assert((compilingFor == FOR_EVAL) == (evalXR.onStack()));
+		emit((evalXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
+		rollbackStackDepth -= stackDistance;
 	}
 	(isBreak ? s->breaks : s->continues).append(emitForwardBranch(Processor::JMP_OP));
 	semicolon();
@@ -3850,12 +3844,10 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 			--rollbackStackDepth;
 		}
 	}
-	if (rollbackStackDepth != UNKNOWN_STACK_DEPTH) { // FIX : don't, have a separate deadCode flag instead and let stackDepth be >= 0 always
-		const int stackDistance = rollbackStackDepth;
-		if (stackDistance > 0) {
-			emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
-			rollbackStackDepth -= stackDistance;
-		}
+	const int stackDistance = rollbackStackDepth;
+	if (stackDistance > 0) {
+		emit((returnXR.onStack() ? Processor::PUSH_BACK_OP : Processor::POP_N_OP), stackDistance);
+		rollbackStackDepth -= stackDistance;
 	}
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 	semicolon();
@@ -4060,6 +4052,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			jumpOffsets.append(testsSection.code.size() - 1);
 			changeSection(previousSection);
 			currentSection->stackDepth = testsSection.stackDepth;
+			currentSection->inDeadCode = false;
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint.isValid()) {
@@ -4068,6 +4061,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			assert(compilingFor != FOR_EVAL || evalXR.onStack());
 			defaultPoint = markBackwardBranch();
 			currentSection->stackDepth = testsSectionEntryStackDepth;
+			currentSection->inDeadCode = false;
 		} else if (firstStatement) {
 			error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
 		} else {

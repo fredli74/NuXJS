@@ -1179,7 +1179,7 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(Heap* heap, int initialStackDepth)
-							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth), stackDepth(initialStackDepth)
+							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth), stackDepth(initialStackDepth), inDeadCode(false)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(heap)
 #endif
@@ -1191,6 +1191,7 @@ class Compiler : public GCItem {
 					Processor::Opcode lastEmitted;
 					const int initialStackDepth;
 					int stackDepth;
+					bool inDeadCode;
 				};
 	
 				struct BranchPoint {
