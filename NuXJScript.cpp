@@ -2900,7 +2900,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
-		case ExpressionResult::ON_STACK: emit(Processor::REPUSH_OP, xr.v.toInt() - currentSection->stackDepth + 1); break;
+		case ExpressionResult::SAFEKEPT: emit(Processor::REPUSH_OP, xr.v.toInt() - currentSection->stackDepth + 1); break;
 		default: assert(0);
 	}
 	if (toPrimitive) {
@@ -2911,38 +2911,24 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	}
 }
 
-Compiler::ExpressionResult Compiler::safeKeep(const ExpressionResult& xr) {
-	switch (xr.t) {
-		case ExpressionResult::INDEXED:
-		case ExpressionResult::NAMED:
-		case ExpressionResult::PROPERTY:
-		case ExpressionResult::ON_STACK: makeRValue(xr); /* fall through */
- 		case ExpressionResult::PUSHED:
-		case ExpressionResult::PUSHED_PRIMITIVE: {
-			if (compilingFor == FOR_EVAL) {
-				emit(Processor::SWAP_OP);				// evaluation result should be up front always
-				assert(currentSection->stackDepth >= 2);
-				return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth - 2));
-			}
-			assert(currentSection->stackDepth >= 1);
-			return ExpressionResult(ExpressionResult::ON_STACK, Value(currentSection->stackDepth - 1));
-		}
-		default: break;
+Compiler::ExpressionResult Compiler::safeKeep() {
+	int stackOffset = 1;
+	if (compilingFor == FOR_EVAL) {
+		emit(Processor::SWAP_OP);				// evaluation result should be up front always
+		stackOffset = 2;
 	}
-	return xr;
+	assert(currentSection->stackDepth >= stackOffset);
+	return ExpressionResult(ExpressionResult::SAFEKEPT, Value(currentSection->stackDepth - stackOffset));
 }
 
 void Compiler::returnSafeKept(const ExpressionResult& xr) {
-	if (xr.t == ExpressionResult::ON_STACK) {
-		// assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1 || xr.v.toInt() == currentSection->stackDepth - 2);
-		if (compilingFor == FOR_EVAL) {
-//			assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 2);
-			emit(Processor::PUSH_BACK_OP, 1);
-		} else {
-//		std::cout << xr.v.toInt() << std::endl;
-	//		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1);
-			emit(Processor::POP_OP, 1);
-		}
+	assert(xr.t == ExpressionResult::SAFEKEPT);
+	if (compilingFor == FOR_EVAL) {
+		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 2);
+		emit(Processor::PUSH_BACK_OP, 1);
+	} else {
+		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1);
+		emit(Processor::POP_OP, 1);
 	}
 }
 
@@ -2952,7 +2938,6 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
-		case ExpressionResult::ON_STACK: assert(0); break;
 	}
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
@@ -2963,7 +2948,6 @@ Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 		case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
-		case ExpressionResult::ON_STACK: assert(0); break;
 		default: break;
 	}
 	return ExpressionResult(ExpressionResult::NONE);
@@ -3049,7 +3033,7 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 	Int32 index = 0;
 	Int32 lastAddedIndex = 0;
 	while (!token("]", true)) {
-		Compiler::ExpressionResult xr;
+		ExpressionResult xr;
 		if (optionalExpression(xr, COMMA_PREC)) {
 			makeRValue(xr);
 			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(index));
@@ -3099,40 +3083,39 @@ Compiler::ExpressionResult Compiler::objectInitialiser() { // FIX : share stuff 
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
-// FIX : split into pre and post operators anyhow, all pre discards xr now
-bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList) {
-	const Char* b = p;
+int Compiler::parseOperator(Precedence precedence, int opCount, const OperatorInfo* opList) {
     white();
 	if (eof()) {
-		return false;
+		return -1;
 	}
-	// FIX : use a quick hash solution
 	int i = 0;
 	while (i < opCount && !token(opList[i].token, false)) {
 		++i;
 	}
-	if (i >= opCount) return false;
+	if (i >= opCount) {
+		return -1;
+	}
 	const OperatorInfo& op = opList[i];
 	if (precedence < op.prec + (op.assoc == RIGHT_TO_LEFT ? 0 : 1)) {
-		p = b;
+		return -1;
+	}
+	return i;
+}
+
+bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
+	const int opIndex = parseOperator(precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS);
+	if (opIndex < 0) {
 		return false;
 	}
-	// FIX : sort
+	xr = discard(xr);
+	const OperatorInfo& op = PRE_OPS[opIndex];
 	switch (op.type) {
-        case COMMA: {
-            discard(xr);
-            xr = makeRValue(operand(op));
-            break;
-        }
-            
         case VOID_OPERATOR: {
-            discard(xr);
             xr = discard(operand(op));
             break;
         }
-            
+		
         case GROUP: {
-            discard(xr);
 			const bool didAcceptInOperator = acceptInOperator;
 			acceptInOperator = true;
             xr = operand(op);
@@ -3141,13 +3124,90 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
         }
 		
 		case UNARY: {
-			discard(xr);
 			makeRValue(operand(op), op.primitiveInput);
 			emit(op.vmOp);
             xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
 			break;
 		}
+
+		case NEW_OPERATOR: {
+			makeRValue(operand(op), false);
+			if (!token("(", true)) {
+				emit(Processor::NEW_OP, 0);
+			} else {
+				white();
+				functionCall(Processor::NEW_OP);
+			}
+			emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
+            assert(!op.primitiveOutput);
+            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
+			break;
+		}
 		
+		case DELETE_OPERATOR: {
+            assert(!op.primitiveInput);
+            assert(op.primitiveOutput);
+			xr = operand(op);
+			switch (xr.t) {
+				case ExpressionResult::PUSHED:
+				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
+				case ExpressionResult::NONE:
+				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
+				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case ExpressionResult::NAMED: emit(Processor::SCOPE_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
+				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
+				default: assert(0);
+			}
+			break;
+		}
+		
+		case PRE_INC_DEC: {
+            assert(op.primitiveInput);
+            assert(op.primitiveOutput);
+			xr = operand(op);
+			if (xr.t == ExpressionResult::PROPERTY) {
+				emit(Processor::REPUSH_2_OP);
+			}
+			makeRValue(xr, true);
+			emit(op.vmOp);
+			makeAssignment(xr);
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
+			break;
+		}
+		
+		case TYPE_OF: {
+            assert(!op.primitiveInput);
+            assert(op.primitiveOutput);
+			xr = operand(op);
+			if (xr.t == ExpressionResult::NAMED) {
+				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
+			} else {
+				makeRValue(xr, false);
+				emit(op.vmOp);
+			}
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
+			break;
+		}
+		
+		default: assert(0);
+	}
+	return true;
+}
+
+bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
+	const Char* b = p;
+	const int opIndex = parseOperator(precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS);
+	if (opIndex < 0) {
+		return false;
+	}
+	const OperatorInfo& op = POST_OPS[opIndex];
+	switch (op.type) {
+        case COMMA: {
+            xr = discard(xr);
+            xr = makeRValue(operand(op));
+            break;
+        }
+            
 		case BINARY: {
 			makeRValue(xr, op.primitiveInput);
 			makeRValue(operand(op), op.primitiveInput);
@@ -3256,69 +3316,6 @@ bool Compiler::operate(ExpressionResult& xr, Precedence precedence, int opCount,
 			break;
 		}
 		
-		case NEW_OPERATOR: {
-			discard(xr);
-			makeRValue(operand(op), false);
-			if (!token("(", true)) {
-				emit(Processor::NEW_OP, 0);
-			} else {
-				white();
-				functionCall(Processor::NEW_OP);
-			}
-			emit(Processor::NEW_RESULT_OP); // FIX : make a chain for script constructors and require returning object for native constructors instead?
-            assert(!op.primitiveOutput);
-            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
-			break;
-		}
-		
-		case DELETE_OPERATOR: {
-            assert(!op.primitiveInput);
-            assert(op.primitiveOutput);
-			discard(xr);
-			xr = operand(op);
-			switch (xr.t) {
-				case ExpressionResult::PUSHED:
-				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
-				case ExpressionResult::NONE:
-				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
-				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case ExpressionResult::NAMED: emit(Processor::SCOPE_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
-				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
-				default: assert(0);
-			}
-			break;
-		}
-		
-		case PRE_INC_DEC: {
-            assert(op.primitiveInput);
-            assert(op.primitiveOutput);
-			discard(xr);
-			xr = operand(op);
-			if (xr.t == ExpressionResult::PROPERTY) {
-				emit(Processor::REPUSH_2_OP);
-			}
-			makeRValue(xr, true);
-			emit(op.vmOp);
-			makeAssignment(xr);
-            xr = ExpressionResult::PUSHED_PRIMITIVE;
-			break;
-		}
-		
-		case TYPE_OF: {
-            assert(!op.primitiveInput);
-            assert(op.primitiveOutput);
-			discard(xr);
-			xr = operand(op);
-			if (xr.t == ExpressionResult::NAMED) {
-				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
-			} else {
-				makeRValue(xr, false);
-				emit(op.vmOp);
-			}
-            xr = ExpressionResult::PUSHED_PRIMITIVE;
-			break;
-		}
-		
         case ASSIGNMENT: {
             assert(!op.primitiveInput);
             assert(!op.primitiveOutput);
@@ -3375,7 +3372,7 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 }
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
-	if (!operate(xr, precedence, sizeof (PRE_OPS) / sizeof (*PRE_OPS), PRE_OPS)) {
+	if (!preOperate(xr, precedence)) {
 		if (eof()) {
 			return false;
 		}
@@ -3383,7 +3380,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		token();
 		int i = findLiteralToken(p - b, &*b);
 		if (i >= 0) {
-			discard(xr);
+			xr = discard(xr);
 			switch (static_cast<Literal>(i)) {
 				case NULL_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value::NUL); break;
 				case FALSE_LITERAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
@@ -3408,20 +3405,20 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 			assert(!eof());
 			Value v = stringOrNumberConstant();
 			if (p != b) {
-				discard(xr);
+				xr = discard(xr);
 				xr = ExpressionResult(ExpressionResult::CONSTANT, v);
 			} else {
 				switch (*p) {
 					case '{': {
 						++p;
-						discard(xr);
+						xr = discard(xr);
 						xr = objectInitialiser();
 						break;
 					}
 					
 					case '[': {
 						++p;
-						discard(xr);
+						xr = discard(xr);
 						xr = arrayInitialiser();
 						break;
 					}
@@ -3435,7 +3432,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (p == e || *p != '/') {
 							error(SYNTAX_ERROR, "Unterminated regular expression");
 						} else {
-							discard(xr);
+							xr = discard(xr);
 							const String* regExpSource = String::newHashedString(heap, b + 1, p);
 							emitWithConstant(Processor::CONST_OP, Value(regExpSource));
 							++p;
@@ -3454,7 +3451,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (p == b) {
 							return false;
 						}
-						discard(xr);
+						xr = discard(xr);
 						const String* name = String::newHashedString(heap, b, p);
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
@@ -3477,7 +3474,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 		}
     }
 	const Char* b = p;
-    while (operate(xr, precedence, sizeof (POST_OPS) / sizeof (*POST_OPS), POST_OPS)) {
+    while (postOperate(xr, precedence)) {
 		b = p;
 	}
 	p = b;
@@ -3494,6 +3491,12 @@ Compiler::ExpressionResult Compiler::expression(Precedence precedence) {
 
 Compiler::ExpressionResult Compiler::rvalueExpression(Precedence precedence) {
 	return makeRValue(expression(precedence));
+}
+
+void Compiler::rvalueGroup() {
+	expectToken("(", true);
+	rvalueExpression();
+	expectToken(")", true);
 }
 
 // FIX : ok, this is serious mess
@@ -3572,7 +3575,7 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 		, const CodeSection& iterationSection, const ExpressionResult& iterationXR) {
 	ExpressionResult enumXR(rvalueExpression());
  	emit(Processor::GET_ENUMERATOR_OP);
-	enumXR = safeKeep(enumXR);
+	enumXR = safeKeep();
 	expectToken(")", true);
 	for (SemanticScope* s = emptyLabelScope; s != scopeLabelsEnd; s = s->next) {	// we must change stack depth of all labels that point to this scope, otherwise we'll pop the enumerator on continue
 		s->stackDepth = currentSection->stackDepth;
@@ -3582,12 +3585,14 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::NEXT_PROPERTY_OP);
 	ExpressionResult xr(ExpressionResult::PUSHED);
 	if (!iterationSection.code.empty()) { // This is probably extremely rare (left hand side being anything but a directly assignable variable), so I don't mind the extra code of safe keeping here
-		xr = safeKeep(xr);
+		xr = safeKeep();
 		currentSection->insertSection(iterationSection);
 		makeRValue(xr);
+		discard(makeAssignment(iterationXR));
+		returnSafeKept(xr);
+	} else {
+		discard(makeAssignment(iterationXR));
 	}
-	discard(makeAssignment(iterationXR));
-	returnSafeKept(xr);
 	statement(emptyLabelScope, emptyLabelScope);
 	completeIteratorContinues(emptyLabelScope, scopeLabelsEnd);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
@@ -3654,10 +3659,7 @@ void Compiler::functionStatement() {
 }
 
 void Compiler::withStatement(SemanticScope* currentScope) {
-	white();
-	expectToken("(", false);
-	rvalueExpression();
-	expectToken(")", true);
+	rvalueGroup();
 	emit(Processor::WITH_SCOPE_OP);
 	{
 		++withScopeCounter;
@@ -3706,10 +3708,9 @@ void Compiler::continueStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
-	white();
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-	expectToken("(", false);
+	expectToken("(", true);
 	CodeSection initSection(&heap, currentSection->stackDepth);
 	if (token("var", true)) {
 		white();
@@ -3751,10 +3752,7 @@ void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* s
 }
 
 void Compiler::ifStatement(SemanticScope* currentScope) {
-	white();
-	expectToken("(", false);
-	rvalueExpression();
-	expectToken(")", true);
+	rvalueGroup();
 	const BranchPoint falsePoint = emitForwardBranch(Processor::JF_OP);
 	statement(currentScope, currentScope);
 	if (token("else", true)) {
@@ -3768,13 +3766,10 @@ void Compiler::ifStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
-	white();
 	const BranchPoint loopPoint = markBackwardBranch();
 	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
-	expectToken("(", false); // FIX : sub of this
-	rvalueExpression();
-	expectToken(")", true);
+	rvalueGroup();
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	statement(&emptyLabelScope, &emptyLabelScope);
 	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -3791,9 +3786,7 @@ void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scop
 	statement(&emptyLabelScope, &emptyLabelScope);
 	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
 	expectToken("while", true);
-	expectToken("(", true);
-	rvalueExpression();
-	expectToken(")", true);
+	rvalueGroup();
 	emitBackwardBranch(Processor::JT_OP, loopPoint);
 	semicolon();
 	completeIteratorBreaks(&emptyLabelScope, scopeLabelsEnd);
@@ -3824,6 +3817,12 @@ void Compiler::throwStatement() {
 	rvalueExpression();
 	emit(Processor::THROW_OP);
 	semicolon();
+}
+
+void Compiler::block(SemanticScope* scope) {
+	expectToken("{", true);
+	statementList(scope);
+	expectToken("}", false);
 }
 
 /*
@@ -3879,9 +3878,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		if (compilingFor == FOR_EVAL) { // Eval result from try scope should be rolled back in case of a throw
 			emit(Processor::REPUSH_OP, 0);
 		}
-		expectToken("{", true); // FIX : sub for block
-		statementList(&tryScope);
-		expectToken("}", false);
+		block(&tryScope);
 		if (compilingFor == FOR_EVAL) {
 			emit(Processor::PUSH_BACK_OP, 1);
 		}
@@ -3917,9 +3914,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
-			expectToken("{", true); // FIX : sub
-			statementList(&catchScope);
-			expectToken("}", false);
+			block(&catchScope);
 			emit(Processor::POP_SCOPE_OP);
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -3950,9 +3945,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		if (compilingFor == FOR_EVAL) {
 			emit(Processor::VOID_OP);
 		}
-		expectToken("{", true); // FIX : sub
-		statementList(&finallyScope);
-		expectToken("}", false);
+		block(&finallyScope);
 		if (compilingFor == FOR_EVAL) {
 			emit(Processor::POP_OP);
 		}
@@ -3977,10 +3970,8 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	they would be marked at incorrect addresses otherwise.
 */
 void Compiler::switchStatement(SemanticScope* currentScope) {
-	white();
-	expectToken("(", true);
-	ExpressionResult controlXR(safeKeep(expression(LOWEST_PREC)));
-	expectToken(")", true);
+	rvalueGroup();
+	ExpressionResult controlXR(safeKeep());
 	expectToken("{", true);
 	const Int32 testsSectionEntryStackDepth = currentSection->stackDepth;
 	const BranchPoint testsPoint = emitForwardBranch(Processor::JMP_OP);

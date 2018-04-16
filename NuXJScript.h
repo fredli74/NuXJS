@@ -1144,7 +1144,7 @@ enum Precedence {
 	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
-const int UNKNOWN_STACK_DEPTH = -0x7FFFFFFF;
+const int UNKNOWN_STACK_DEPTH = -0x80000000;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
@@ -1166,7 +1166,7 @@ class Compiler : public GCItem {
 						, INDEXED			// arbitrary value in indexed variable
 						, NAMED				// arbitrary value in named variable
 						, PROPERTY			// arbitrary value in object property
-						, ON_STACK			// further up the value stack (value = position relative to safe-kept-counter)
+						, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
 					};
 					ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
 					ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
@@ -1217,7 +1217,7 @@ class Compiler : public GCItem {
 				BranchPoint markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 	
-				ExpressionResult safeKeep(const ExpressionResult& xr); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
+				ExpressionResult safeKeep(); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
@@ -1233,14 +1233,18 @@ class Compiler : public GCItem {
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
-				bool operate(ExpressionResult& xr, Precedence precedence, int opCount, const OperatorInfo* opList);
+				int parseOperator(Precedence precedence, int opCount, const OperatorInfo* opList);
+				bool preOperate(ExpressionResult& xr, Precedence precedence);
+				bool postOperate(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult expression(Precedence precedence);
 				ExpressionResult rvalueExpression(Precedence precedence = LOWEST_PREC);
+				void rvalueGroup();
 				void functionDefinition(const String* functionName, const String* selfName = 0); // selfName is only for named function expressions
 				bool optionalExpression(ExpressionResult& xr, Precedence precedence);
 				ExpressionResult declareIdentifier(const String* name, bool func);
 				ExpressionResult varDeclaration();
 				void varDeclarations();
+				void block(SemanticScope* scope);
 				void forInStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd
 						, const CodeSection& iterationSection, const ExpressionResult& iterationXR);
 				void forStatement(SemanticScope* emptyLabelScope, SemanticScope* scopeLabelsEnd);
