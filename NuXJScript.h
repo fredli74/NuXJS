@@ -1081,8 +1081,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				};
 	
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
-				static void unpackInstruction(const CodeWord codeWord, Opcode& opcode, Int32& operand);
-				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord); // FIX : which?
+				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd);

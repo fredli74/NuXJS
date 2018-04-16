@@ -1846,11 +1846,6 @@ CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
 	return (operand << 8) | opcode;
 }
 
-void Processor::unpackInstruction(const CodeWord codeWord, Processor::Opcode& opcode, Int32& operand) {
-	opcode = static_cast<Processor::Opcode>(codeWord & 255);
-	operand = static_cast<Int32>(codeWord) >> 8;
-}
-
 std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord codeWord) {
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
@@ -2312,9 +2307,9 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 			return errors;
 		}
 
-		Processor::Opcode opcode;
-		int operand;
-		Processor::unpackInstruction(code[offset], opcode, operand);
+		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(code[offset]);
+		const Processor::Opcode opcode = pair.first;
+		const Int32 operand = pair.second;
 		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
 			std::cerr << "Invalid opcode " << static_cast<int>(opcode) << "@" << offset << std::endl;
 			++errors;
@@ -2386,9 +2381,9 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
 	
 	for (UInt32 offset = 0; offset < codeSize; ++offset) {
-		Processor::Opcode opcode;
-		int operand;
-		Processor::unpackInstruction(code[offset], opcode, operand);
+		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(code[offset]);
+		const Processor::Opcode opcode = pair.first;
+		const Int32 operand = pair.second;
 		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
 			break;
 		}
@@ -2591,7 +2586,6 @@ struct Compiler::SemanticScope {
 	const String label; // empty for automatic while, for, case labels
 	SemanticScope* const next;
 	int stackDepth;
-// FIX : feels like a waste with three different vectors here, could we have double SemanticScope entries for continuable and breakable Semanticscope types?
 	QuickVector<BranchPoint> breaks; // source points for break jmp's
 	QuickVector<BranchPoint> continues; // source points for continue jmp's
 	QuickVector<BranchPoint> finallys; // source points for finally jsr's
@@ -2624,7 +2618,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
-// FIX		assert(stackDepth >= 0);
+	assert(stackDepth >= 0);
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
 		inDeadCode = true;
 	}
@@ -2637,22 +2631,22 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 			default: break;
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
-			Processor::unpackInstruction(code.end()[-1], opcode, operand);
+			const Int32 oldOperand = Processor::unpackInstruction(code.end()[-1]).second;
 			code.resize(code.size() - 1); // FIX : pop method in vector?
 #if (VERIFY_STACK_LOGIC)
 	stackDepths.resize(stackDepths.size() - 1);
 #endif
-			opcode = replacementOpcode;
+			code.append(Processor::packInstruction(replacementOpcode, oldOperand));
+			lastEmitted = replacementOpcode;
+			return;
 		}
 	}
-	
 	code.append(Processor::packInstruction(opcode, operand));
 	lastEmitted = opcode;
 }
 
 void Compiler::CodeSection::insertSection(const CodeSection& section) {
 	const int stackAdjust = stackDepth - section.initialStackDepth;
-// FIX :	assert(stackDepth == UNKNOWN_STACK_DEPTH || section.initialStackDepth == stackDepth);
 	lastEmitted = Processor::INVALID_OP;
 	code.insert(code.end(), section.code.begin(), section.code.end());
 #if (VERIFY_STACK_LOGIC)
@@ -2689,8 +2683,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 }
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
-// FIX:	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
-// FIX :			assert(currentSection->inDeadCode || it->stackDepth == currentSection->stackDepth);
+	assert(currentSection->inDeadCode || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
 	currentSection->lastEmitted = Processor::INVALID_OP;
 	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
 		currentSection->inDeadCode = false;
@@ -3923,7 +3916,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 	}
 	
-	// Re-thrower (FIX : could actually be eliminated if we only have catch and no finally)
+	// Re-thrower (could actually be eliminated if we only have catch and no finally, but we don't know yet)
 	
 	completeForwardBranch(catchPoint);
 	emit(Processor::PUSH_BACK_OP, 1);
@@ -3937,8 +3930,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	completeForwardBranch(finallyRethrowPoint);
 	if (token("finally", true)) {
 		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentSection->stackDepth, currentScope);
-		ExpressionResult safeKept;
-		if (compilingFor == FOR_EVAL) {
+		if (compilingFor == FOR_EVAL) {	// Ecmascript dictates that finally block should never change completion value.
 			emit(Processor::VOID_OP);
 		}
 		block(&finallyScope);
@@ -4017,10 +4009,8 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	const BranchPoint donePoint = emitForwardBranch(Processor::JMP_OP);
 	completeForwardBranch(testsPoint);
 	for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
-		Processor::Opcode opcode;
-		Int32 operand;
-		Processor::unpackInstruction(testsSection.code[*it], opcode, operand);
-		testsSection.code[*it] = Processor::packInstruction(opcode, operand - mainSection.code.size());
+		const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(testsSection.code[*it]);
+		testsSection.code[*it] = Processor::packInstruction(instruction.first, instruction.second - mainSection.code.size());
 	}
 	currentSection->insertSection(testsSection);
 	assert(currentSection->stackDepth == testsSectionEntryStackDepth); // since we assume this in the default case code
@@ -4112,12 +4102,12 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	this->e = e;
 	acceptInOperator = true;
 	
-	if (compilingFor == FOR_EVAL) {
+	if (compilingFor == FOR_EVAL) {	// Eval mode needs statement completion value on top of stack
 		emit(Processor::VOID_OP);
 	}
 	SemanticScope rootScope(&heap, SemanticScope::ROOT_TYPE, 1, 0);
 	statementList(&rootScope);
-	if (compilingFor != FOR_EVAL) {
+	if (compilingFor != FOR_EVAL) {	// Non-eval mode should return void value
 		emit(Processor::VOID_OP);
 	}
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
@@ -4135,12 +4125,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 #endif
 	if (!canDeleteScopeOnExit) {
 		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
-		// FIX : more compact solution
-			Processor::Opcode opcode;
-			Int32 operand;
-			Processor::unpackInstruction(*p, opcode, operand);
-			if (opcode == Processor::DELETE_SCOPE_AND_RETURN_OP) {
-				*p = Processor::packInstruction(Processor::RETURN_OP, operand);
+			const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(*p);
+			if (instruction.first == Processor::DELETE_SCOPE_AND_RETURN_OP) {
+				*p = Processor::packInstruction(Processor::RETURN_OP, instruction.second);
 			}
 		}
 	}
