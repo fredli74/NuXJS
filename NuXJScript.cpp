@@ -1744,9 +1744,8 @@ bool WithScope::deleteProperty(Engine& engine, const Value& key) {
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
 const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
 
+// This list must be in enum order
 const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
-	{ POP_OP                     , "POP"                     , -1     , 0 },
-	{ POP_N_OP                   , "POP_N"                   , 0      , OpcodeInfo::POP_OPERAND },
 	{ CONST_OP                   , "CONST"                   , +1     , 0 },
 	{ READ_INDEXED_OP            , "READ_INDEXED"            , +1     , 0 },
 	{ WRITE_INDEXED_OP           , "WRITE_INDEXED"           , 0      , 0 },
@@ -1792,8 +1791,9 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ JF_OP                      , "JF"                      , -1     , 0 },
 	{ JT_OR_POP_OP               , "JT_OR_POP"               , -1     , OpcodeInfo::NO_POP_ON_BRANCH },
 	{ JF_OR_POP_OP               , "JF_OR_POP"               , -1     , OpcodeInfo::NO_POP_ON_BRANCH },
-	{ REPUSH_OP                  , "REPUSH"                  , 1      , 0 },
+	{ POP_OP                     , "POP"                     , 0      , OpcodeInfo::POP_OPERAND },
 	{ PUSH_BACK_OP               , "PUSH_BACK"               , 0      , OpcodeInfo::POP_OPERAND },
+	{ REPUSH_OP                  , "REPUSH"                  , 1      , 0 },
 	{ SWAP_OP                    , "SWAP"                    , 0      , 0 },
 	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , 0 },
 	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , 0 },
@@ -1960,8 +1960,6 @@ bool Processor::privateRun() {
 		const Opcode opcode = static_cast<Opcode>(instruction & 255);
 		const Int32 operand = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
-			case POP_OP:				pop(1); break;
-			case POP_N_OP:				pop(operand); break;
 			case CONST_OP:				push(constants[operand]); break;
 			case READ_INDEXED_OP:		assert(indexed != 0); push(indexed[operand]); break;
 			case WRITE_INDEXED_OP:		assert(indexed != 0); indexed[operand] = vsp[0]; break;
@@ -2067,8 +2065,9 @@ bool Processor::privateRun() {
 			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += operand; else pop(1); break;
 			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += operand; else pop(1); break;
 
-			case REPUSH_OP:			assert(operand <= 0); push(vsp[operand]); break;
+			case POP_OP:			assert(operand >= 0); pop(operand); break;
 			case PUSH_BACK_OP:		assert(operand >= 0); vsp[-operand] = vsp[0]; pop(operand); break;
+			case REPUSH_OP:			assert(operand <= 0); push(vsp[operand]); break;
 			case SWAP_OP:			std::swap(vsp[-1], vsp[0]); break;
 			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
@@ -2436,7 +2435,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::CALL_METHOD_OP:
 			case Processor::CALL_EVAL_OP:
 			case Processor::NEW_OP:
-			case Processor::POP_N_OP:
+			case Processor::POP_OP:
 			case Processor::PUSH_BACK_OP: std::cerr << " *" << operand; break;
 			case Processor::REPUSH_OP: std::cerr << " " << operand; break;
 			case Processor::CONST_OP:
@@ -2629,7 +2628,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
 		inDeadCode = true;
 	}
-	if (opcode == Processor::POP_OP) {
+	if (opcode == Processor::POP_OP && operand == 1) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (lastEmitted) {
 			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
@@ -2911,6 +2910,10 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 	}
 }
 
+Processor::Opcode Compiler::evalPopOpcode() const {
+	return compilingFor == FOR_EVAL ? Processor::PUSH_BACK_OP : Processor::POP_OP;
+}
+
 Compiler::ExpressionResult Compiler::safeKeep() {
 	int stackOffset = 1;
 	if (compilingFor == FOR_EVAL) {
@@ -2923,13 +2926,8 @@ Compiler::ExpressionResult Compiler::safeKeep() {
 
 void Compiler::returnSafeKept(const ExpressionResult& xr) {
 	assert(xr.t == ExpressionResult::SAFEKEPT);
-	if (compilingFor == FOR_EVAL) {
-		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 2);
-		emit(Processor::PUSH_BACK_OP, 1);
-	} else {
-		assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - 1);
-		emit(Processor::POP_OP, 1);
-	}
+	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
+	emit(evalPopOpcode(), 1);
 }
 
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
@@ -2945,9 +2943,9 @@ Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) 
 Compiler::ExpressionResult Compiler::discard(const ExpressionResult& xr) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED:
-		case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); break;
-		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP); break;
-		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP); break;
+		case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP, 1); break;
+		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); emit(Processor::POP_OP, 1); break;
+		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); emit(Processor::POP_OP, 1); break;
 		default: break;
 	}
 	return ExpressionResult(ExpressionResult::NONE);
@@ -3150,7 +3148,7 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 			xr = operand(op);
 			switch (xr.t) {
 				case ExpressionResult::PUSHED:
-				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP); /* fall through */
+				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP, 1); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
@@ -3255,7 +3253,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			emit(xr.t == ExpressionResult::PROPERTY ? Processor::POST_SHUFFLE_OP : Processor::REPUSH_OP);
 			emit(op.vmOp);
 			makeAssignment(xr);
-			emit(Processor::POP_OP);
+			emit(Processor::POP_OP, 1);
             xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
@@ -3527,7 +3525,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 	}
 	if (func) {
 		makeAssignment(lxr);
-		emit(Processor::POP_OP);
+		emit(Processor::POP_OP, 1);
 	}
 	return lxr;
 }
@@ -3538,7 +3536,7 @@ Compiler::ExpressionResult Compiler::varDeclaration() {
 	if (token("=", true)) {
 		rvalueExpression(COMMA_PREC);
 		makeAssignment(lxr);
-		emit(Processor::POP_OP);
+		emit(Processor::POP_OP, 1);
 	}
 	return lxr;
 }
@@ -3671,24 +3669,22 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::breakStatement(SemanticScope* currentScope) {
-	const Processor::Opcode popOpcode = (compilingFor == FOR_EVAL ? Processor::PUSH_BACK_OP : Processor::POP_N_OP);
 	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap);
 	int rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->label.isEqualTo(label)
 				&& (s->type == SemanticScope::ITERATOR_LABEL_TYPE || s->type == SemanticScope::LABEL_TYPE)) {
-			s->popStack(*this, rollbackStackDepth, popOpcode);
+			s->popStack(*this, rollbackStackDepth, evalPopOpcode());
 			s->breaks.append(emitForwardBranch(Processor::JMP_OP));
 			semicolon();
 			return;
 		}
-		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, popOpcode);
+		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, evalPopOpcode());
 	}
 	error(SYNTAX_ERROR, !label.empty() ? "Undefined label" : "Illegal break");
 }
 
 void Compiler::continueStatement(SemanticScope* currentScope) {
-	const Processor::Opcode popOpcode = (compilingFor == FOR_EVAL ? Processor::PUSH_BACK_OP : Processor::POP_N_OP);
 	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap);
 	int rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
@@ -3697,12 +3693,12 @@ void Compiler::continueStatement(SemanticScope* currentScope) {
 			if (s->type != SemanticScope::ITERATOR_LABEL_TYPE) {
 				error(SYNTAX_ERROR, "Illegal label for continue");
 			}
-			s->popStack(*this, rollbackStackDepth, popOpcode);
+			s->popStack(*this, rollbackStackDepth, evalPopOpcode());
 			s->continues.append(emitForwardBranch(Processor::JMP_OP));
 			semicolon();
 			return;
 		}
-		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, popOpcode);
+		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, evalPopOpcode());
 	}
 	error(SYNTAX_ERROR, !label.empty() ? "Undefined label" : "Illegal continue");
 }
@@ -3947,7 +3943,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 		block(&finallyScope);
 		if (compilingFor == FOR_EVAL) {
-			emit(Processor::POP_OP);
+			emit(Processor::POP_OP, 1);
 		}
 	} else {
 		if (!gotCatch) {
@@ -3961,7 +3957,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		completeForwardBranch(catchEndPoint);
 	}
 	if (compilingFor != FOR_EVAL) { // pop return space holder
-		emit(Processor::POP_OP);
+		emit(Processor::POP_OP, 1);
 	}
 }
 

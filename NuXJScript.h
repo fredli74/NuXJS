@@ -1011,8 +1011,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
-					, POP_OP										// stack: value ->
-					, POP_N_OP										// stack: values... ->
 					, CONST_OP										// operand: const_index, stack: -> constant
 					, READ_INDEXED_OP								// operand: local_index, stack: -> value
 					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
@@ -1037,10 +1035,10 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, JMP_OP, JSR_OP								// operand: offset
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
-					, REPUSH_OP										// operand: offset, stack: value -> value, value
-, PUSH_BACK_OP
-, SWAP_OP
-// FIX : can now be done with advanced repush vvvv
+					, POP_OP										// operand: count, stack: ... ->
+					, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
+					, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
+					, SWAP_OP
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
@@ -1217,6 +1215,7 @@ class Compiler : public GCItem {
 				BranchPoint markBackwardBranch();
 				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 	
+				Processor::Opcode evalPopOpcode() const;
 				ExpressionResult safeKeep(); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
