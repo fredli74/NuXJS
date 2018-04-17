@@ -1649,9 +1649,9 @@ bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& 
 bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
 void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
-	const Flags flags = getOwnProperty(engine, Value(name), &v);
+	const Flags flags = globalObject->getOwnProperty(engine, Value(name), &v);
 	if (flags == NONEXISTENT || !initValue.isUndefined()) {
-		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
+		globalObject->setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
