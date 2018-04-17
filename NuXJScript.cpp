@@ -852,7 +852,7 @@ Flags Object::getPropertyDeep(Engine& engine, const Value& key, Value* v) const 
 
 bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
 	Value dummy;
-	if (!key.isNumber() && getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
+	if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
 		const Object* o = this;
 		while ((o = o->getPrototype(engine)) != 0) {
 			if ((o->getOwnProperty(engine, key, &dummy) & READ_ONLY_FLAG) != 0) {
@@ -1624,9 +1624,10 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 	Int32 index;
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getDynamicVars(engine)->accessProperties();
-		if (props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
+		Table::Bucket* bucket = props.insert(name);
+		if (!bucket->valueExists()) {
 			bloomSet |= name->createBloomCode();
-			props.update(props.insert(name), Value::UNDEFINED, dontDelete ? DONT_DELETE_FLAG : 0);
+			props.update(bucket, Value::UNDEFINED, dontDelete ? DONT_DELETE_FLAG : 0);
 		}
 	}
 	if (!initValue.isUndefined()) {
@@ -4600,6 +4601,7 @@ Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectP
 	}
 }
 
+// FIX : make this optional by including default toNumberFunction etc that throws (or should they return something?)
 void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	{	// time() is not guaranteed to return utc time, so we perform some conversions to find the actual implementation
 		struct tm refTM;
