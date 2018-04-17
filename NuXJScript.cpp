@@ -1101,7 +1101,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 	return name;
 }
 
-/* --- CodeDef --- */
+/* --- CodeDefinition --- */
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
 		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap)
@@ -1307,12 +1307,14 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(CodeDefinition* codeDef, Scope* environment) : codeDef(codeDef), environment(environment) { }
+ScriptFunction::ScriptFunction(CodeDefinition* codeDefinition, Scope* closure)
+		: codeDefinition(codeDefinition), closure(closure) {
+}
 Value ScriptFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
-CodeDefinition* ScriptFunction::getDefinition() const { return codeDef; }
+CodeDefinition* ScriptFunction::getDefinition() const { return codeDefinition; }
 
 const String* ScriptFunction::toString(GCHeap& heap) const {
-	const String* s = codeDef->getSource();
+	const String* s = codeDefinition->getSource();
 	return (s != 0 ? s : Object::toString(heap));
 }
 
@@ -1324,11 +1326,11 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, UInt32 argc, co
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject, false);
 #if (STRICTLY_ES3)
-	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
+	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDefinition->getName()), DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDefinition->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
 #else
-	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDef->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDef->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDefinition->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDefinition->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
 #endif
 }
 
@@ -1508,44 +1510,50 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 /* --- Scope --- */
 
-Flags Scope::readVar(Engine& engine, const String* name, Value* v) const { return NONEXISTENT; }
-bool Scope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { return false; }
-bool Scope::deleteVar(Engine& engine, const String* name) { return false; }
-
 /* --- FunctionScope --- */
 
 static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
-	const CodeDefinition* codeDef = function->getDefinition();
-	return codeDef->getVarsCount() + std::max(codeDef->getArgumentsCount(), argc);
+	const CodeDefinition* codeDefinition = function->getDefinition();
+	return codeDefinition->getVarsCount() + std::max(codeDefinition->getArgumentsCount(), argc);
 }
 
 FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
-		: function(function), passedArgumentsCount(argc), indexed(calcIndexedVariablesSize(function, argc), heap) {
-	const CodeDefinition* codeDef = function->getDefinition();
-	indexedPointer = indexed.begin() + codeDef->getVarsCount();
-	parentScope = function->environment;
+		: super(function->closure, function->codeDefinition)
+		, function(function), passedArgumentsCount(argc)
+		, indexed(calcIndexedVariablesSize(function, argc), heap), dynamicVars(0) {
+	indexedPointer = indexed.begin() + codeDefinition->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
-	if (codeDef->getArgumentsCount() > argc) {
+	if (codeDefinition->getArgumentsCount() > argc) {
 		std::fill(e, indexed.end(), Value::UNDEFINED);
 	}
 }
 
+ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
+	if (dynamicVars == 0) {
+		GCHeap& heap = engine.getHeap();
+		dynamicVars = heap.manage(new (&heap) ScriptObject(&heap, 0));
+		dynamicVars->setOwnProperty(engine, Value(&ARGUMENTS_STRING)
+				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<FunctionScope*>(this), passedArgumentsCount)))
+				, DONT_DELETE_FLAG);
+	}
+	return dynamicVars;
+}
+
 Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const {
-	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
-	if (codeDef->lookupNameIndex(name, index)) {
+	if (codeDefinition->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		*v = indexedPointer[index];
 		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	}
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Flags flags = super::getOwnProperty(engine, Value(name), v);
+	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+		Flags flags = getDynamicVars(engine)->getOwnProperty(engine, Value(name), v);
 		if (flags != NONEXISTENT) {
 			return flags;
 		}
 	}
-	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
 		*v = Value(function);
 		return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 	}
@@ -1553,45 +1561,40 @@ Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const
 }
 
 bool FunctionScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
-	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
-	if (codeDef->lookupNameIndex(name, index)) {
+	if (codeDefinition->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 		indexedPointer[index] = v;
 		return true;
 	}
 	// FIX : make sub that lookup's the bucket, also use in getProperty
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Table& props = getCompleteObject(engine)->accessProperties();
+	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+		Table& props = getDynamicVars(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			props.update(bucket, v);
 			return true;
 		}
 	}
-	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
 		return false;
 	}
 	return parentScope->writeVar(engine, name, v, flags); // FIX : recursion
 }
 
 bool FunctionScope::deleteVar(Engine& engine, const String* name) {
-	const CodeDefinition* codeDef = function->getDefinition();
 	Int32 index;
-	if (codeDef->lookupNameIndex(name, index)) {
+	if (codeDefinition->lookupNameIndex(name, index)) {
 		return false;
 	}
-	if (parentScope == 0) {
-		return getCompleteObject(engine)->deleteProperty(engine, Value(name));
-	}
-	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Table& props = getCompleteObject(engine)->accessProperties();
+	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+		Table& props = getDynamicVars(engine)->accessProperties();
 		Table::Bucket* bucket = props.lookup(name);
 		if (bucket != 0) {
 			return props.erase(bucket);
 		}
 	}
-	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
+	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
 		return false;
 	}
 	return parentScope->deleteVar(engine, name); // FIX : recursion
@@ -1600,7 +1603,7 @@ bool FunctionScope::deleteVar(Engine& engine, const String* name) {
 void FunctionScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Int32 index;
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
-		Table& props = getCompleteObject(engine)->accessProperties();
+		Table& props = getDynamicVars(engine)->accessProperties();
 		if (props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
 			props.update(props.insert(name), Value::UNDEFINED, dontDelete ? DONT_DELETE_FLAG : 0);
 		}
@@ -1610,31 +1613,21 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 	}
 }
 
-void FunctionScope::constructCompleteObject(Engine& engine) const {
-	if (parentScope != 0) {
-		GCHeap& heap = engine.getHeap();
-		completeObject->setOwnProperty(engine, Value(&ARGUMENTS_STRING)
-				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<FunctionScope*>(this), passedArgumentsCount)))
-				, DONT_DELETE_FLAG);
-	}
-}
-
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : super(parentScope), evalCodeDef(evalCodeDef) {
-	assert(evalCodeDef->getVarsCount() == 0);
-	indexedPointer = 0;
+EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : super(parentScope, evalCodeDef) {
+	assert(codeDefinition->getVarsCount() == 0);
 }
-Flags EvalScope::readVar(Engine& engine, const String* name, Value* v) const { return parentScope->readVar(engine, name, v); }
-bool EvalScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { return parentScope->writeVar(engine, name, v, flags); }
-bool EvalScope::deleteVar(Engine& engine, const String* name) { return parentScope->deleteVar(engine, name); }
-void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, false); }
+
+void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
+	parentScope->declareVar(engine, name, initValue, false);
+}
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : super(0), globalObject(globalObject), codeDef(codeDef) {
-	assert(codeDef->getVarsCount() == 0);
-	indexedPointer = 0;
+GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDefinition)
+		: super(0, codeDefinition), globalObject(globalObject) {
+	assert(codeDefinition->getVarsCount() == 0);
 }
 Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
 	return globalObject->getPropertyDeep(engine, Value(name), v);
@@ -1655,7 +1648,8 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 /* --- CatchScope --- */
 
 CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) {
+		: super(parentScope, parentScope->getCodeDefinition()), exceptionName(exceptionName)
+		, exceptionValue(exceptionValue) {
 	indexedPointer = parentScope->getIndexedPointer();
 }
 
@@ -1676,11 +1670,10 @@ bool CatchScope::deleteVar(Engine& engine, const String* name) {
 
 /* --- WithScope --- */
 
-WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope), withObject(withObject) {
+WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope, parentScope->getCodeDefinition())
+		, withObject(withObject) {
 	indexedPointer = parentScope->getIndexedPointer();
 }
-
-const CodeDefinition* WithScope::getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 
 Flags WithScope::readVar(Engine& engine, const String* name, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, Value(name), v);
@@ -1828,7 +1821,7 @@ void Processor::error(ErrorType errorType, const String* message) {
 void Processor::updateInternals() {
 	scope = cfp->scope;
 	if (scope != 0) { // FIX : use dummy scope?
-		constants = scope->getFunctionDef()->getConstantsPointer();
+		constants = scope->getCodeDefinition()->getConstantsPointer();
 		indexed = scope->getIndexedPointer();
 	}
 }
@@ -1868,16 +1861,16 @@ void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 	updateInternals();
 }
 
-void Processor::enterEval(CodeDefinition* codeDef, bool directCall) {
+void Processor::enterEval(CodeDefinition* codeDefinition, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
-	scope = heap.manage(new (&heap) EvalScope(f, codeDef));
+	scope = heap.manage(new (&heap) EvalScope(f, codeDefinition));
 	++cfp; // FIX : overflow check
 	assert(cfp < cstackEnd);
 	cfp->returnIP = ip;
 	cfp->scope = scope;
 	cfp->thisObject = cfp[-1].thisObject;
-	ip = codeDef->getCodePointer();
+	ip = codeDefinition->getCodePointer();
 	updateInternals();
 	--vsp;
 }
@@ -2259,9 +2252,9 @@ bool Processor::run() {
 	}
 }
 
-static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& stackDepths, int offset, int currentStackDepth) {
-	const CodeWord* code = codeDef.getCodePointer();
-	const UInt32 codeSize = codeDef.getCodeSize();
+static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<int>& stackDepths, int offset, int currentStackDepth) {
+	const CodeWord* code = codeDefinition.getCodePointer();
+	const UInt32 codeSize = codeDefinition.getCodeSize();
 
 	int errors = 0;
 	for (; offset < codeSize; ++offset) {
@@ -2282,8 +2275,8 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 		}
 		stackDepths[offset] = currentStackDepth;
 #if (VERIFY_STACK_LOGIC)
-	if (stackDepths[offset] != codeDef.stackDepths[offset]) {
-		std::cerr << "Invalid compile-time stack depth @" << offset << " (" << codeDef.stackDepths[offset] << " vs " << stackDepths[offset] << ")" << std::endl;
+	if (stackDepths[offset] != codeDefinition.stackDepths[offset]) {
+		std::cerr << "Invalid compile-time stack depth @" << offset << " (" << codeDefinition.stackDepths[offset] << " vs " << stackDepths[offset] << ")" << std::endl;
 		++errors;
 	}
 #endif
@@ -2311,7 +2304,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 				}
 				const int targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
 						+ (((info.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0);
-				errors += recursiveStackCheck(codeDef, stackDepths, targetOffset, targetStackDepth);
+				errors += recursiveStackCheck(codeDefinition, stackDepths, targetOffset, targetStackDepth);
 				if (opcode == Processor::JMP_OP) {
 					return errors;
 				}
@@ -2336,15 +2329,15 @@ static int recursiveStackCheck(const CodeDefinition& codeDef, QuickArray<int>& s
 	return errors;
 }
 
-static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
-	const CodeWord* code = codeDef.getCodePointer();
-	const Value* constants = codeDef.getConstantsPointer();
-	const UInt32 codeSize = codeDef.getCodeSize();
+static void disassemble(GCHeap& heap, const CodeDefinition& codeDefinition) {
+	const CodeWord* code = codeDefinition.getCodePointer();
+	const Value* constants = codeDefinition.getConstantsPointer();
+	const UInt32 codeSize = codeDefinition.getCodeSize();
 	
 	QuickArray<int> stackDepths(codeSize);
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
-	int errors = recursiveStackCheck(codeDef, stackDepths, 0, 0);
+	int errors = recursiveStackCheck(codeDefinition, stackDepths, 0, 0);
 	
 	for (UInt32 offset = 0; offset < codeSize; ++offset) {
 		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(code[offset]);
@@ -2361,10 +2354,10 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 		}
 		std::cerr << "\t";
 #if (VERIFY_STACK_LOGIC)
-		if (codeDef.stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
+		if (codeDefinition.stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
 			std::cerr << "?";
 		} else {
-			std::cerr << codeDef.stackDepths[offset];
+			std::cerr << codeDefinition.stackDepths[offset];
 		}
 		std::cerr << "\t";
 #endif
@@ -2387,7 +2380,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::WRITE_INDEXED_OP:
 			case Processor::WRITE_INDEXED_POP_OP: {
 				const Int32 index = operand;
-				const String* name = codeDef.getIndexedName(index);
+				const String* name = codeDefinition.getIndexedName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
 				break;
@@ -2558,9 +2551,9 @@ struct Compiler::SemanticScope {
 	QuickVector<BranchPoint> finallys; // source points for finally jsr's
 };
 
-Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor)
+Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileFor)
 		: heap(heap)
-		, codeDef(codeDef)
+		, codeDefinition(codeDefinition)
 		, compilingFor(compileFor)
 		, setupSection(&heap, 0)
 		, mainSection(&heap, 0)
@@ -2676,7 +2669,7 @@ void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& p
 }
 
 UInt32 Compiler::addConstant(const Value& constant) {
-	Constants* constants = codeDef->constants;
+	Constants* constants = codeDefinition->constants;
 	for (UInt32 index = constants->size(); index > 0;) {
 		if ((*constants)[--index].isStrictlyEqualTo(constant)) {
 			return index;
@@ -3315,7 +3308,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDef->constants));
+	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDefinition->constants));
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {
@@ -3416,7 +3409,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						if (name->isEqualTo(ARGUMENTS_STRING)) {
 							canDeleteScopeOnExit = false;
 						} else if (compilingFor == FOR_FUNCTION && withScopeCounter == 0) {
-							const Table::Bucket* bucket = codeDef->nameIndexes.lookup(name);
+							const Table::Bucket* bucket = codeDefinition->nameIndexes.lookup(name);
 							if (bucket != 0) {
 								const Int32 index = bucket->getIndexValue();
 								if (index != CATCH_PARAMETER) {
@@ -3470,13 +3463,13 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 		return lxr;
 	} else if (!name->isEqualTo(ARGUMENTS_STRING)) {
 		Int32 index;
-		Table& nameIndexes = codeDef->nameIndexes;
+		Table& nameIndexes = codeDefinition->nameIndexes;
 		Table::Bucket* bucket = nameIndexes.lookup(name);
 		if (bucket != 0) {
 			index = bucket->getIndexValue();
 		} else {
-			codeDef->varNames.append(name);
-			index = -static_cast<Int32>(codeDef->varNames.size());
+			codeDefinition->varNames.append(name);
+			index = -static_cast<Int32>(codeDefinition->varNames.size());
 			nameIndexes.update(nameIndexes.insert(name), index);
 		}
 		if (withScopeCounter == 0 && index != CATCH_PARAMETER) {
@@ -3854,7 +3847,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		const Char* b = identifier(true, false);
 		const String* exceptionVarName = String::newHashedString(heap, b, p);
 		Int32 previousLocalIndex = 0;
-		Table& nameIndexes = codeDef->nameIndexes;
+		Table& nameIndexes = codeDefinition->nameIndexes;
 		bool didExist = false; // FIX : can use NON_EXISTENT type if we choose to keep it
 		Table::Bucket* indexBucket = nameIndexes.lookup(exceptionVarName);
 		if (indexBucket != 0) {
@@ -3995,6 +3988,8 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	(These should all be converted to 'ITERATOR_LABEL_TYPE' upon entry.)
 */
 void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
+	assert(currentSection == &mainSection); // statements must produce into main-section because of breaks etc...
+	
 	white();
 	
 	if (token("{", false)) {
@@ -4080,42 +4075,42 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
 
 	assert(currentSection == &mainSection);
-	codeDef->code.resize(setupSection.code.size() + mainSection.code.size());
-	std::copy(setupSection.code.begin(), setupSection.code.end(), codeDef->code.begin());
-	std::copy(mainSection.code.begin(), mainSection.code.end(), codeDef->code.begin() + setupSection.code.size());
+	codeDefinition->code.resize(setupSection.code.size() + mainSection.code.size());
+	std::copy(setupSection.code.begin(), setupSection.code.end(), codeDefinition->code.begin());
+	std::copy(mainSection.code.begin(), mainSection.code.end(), codeDefinition->code.begin() + setupSection.code.size());
 #if (VERIFY_STACK_LOGIC)
 	assert(setupSection.stackDepths.size() == setupSection.code.size());
 	assert(mainSection.stackDepths.size() == mainSection.code.size());
-	codeDef->stackDepths.resize(setupSection.stackDepths.size() + mainSection.stackDepths.size());
-	std::copy(setupSection.stackDepths.begin(), setupSection.stackDepths.end(), codeDef->stackDepths.begin());
-	std::copy(mainSection.stackDepths.begin(), mainSection.stackDepths.end(), codeDef->stackDepths.begin() + setupSection.stackDepths.size());
+	codeDefinition->stackDepths.resize(setupSection.stackDepths.size() + mainSection.stackDepths.size());
+	std::copy(setupSection.stackDepths.begin(), setupSection.stackDepths.end(), codeDefinition->stackDepths.begin());
+	std::copy(mainSection.stackDepths.begin(), mainSection.stackDepths.end(), codeDefinition->stackDepths.begin() + setupSection.stackDepths.size());
 #endif
 	if (!canDeleteScopeOnExit) {
-		for (CodeWord* p = codeDef->code.begin(), *e = codeDef->code.end(); p != e; ++p) {
+		for (CodeWord* p = codeDefinition->code.begin(), *e = codeDefinition->code.end(); p != e; ++p) {
 			const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(*p);
 			if (instruction.first == Processor::DELETE_SCOPE_AND_RETURN_OP) {
 				*p = Processor::packInstruction(Processor::RETURN_OP, instruction.second);
 			}
 		}
 	}
-	codeDef->constants->shrink();
+	codeDefinition->constants->shrink();
 if (!suppressStdErr) {
-	disassemble(heap, *codeDef);
+	disassemble(heap, *codeDefinition);
 	int stackDepth = mainSection.stackDepth;
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
 //	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
-	std::cerr << "\tCode: " << codeDef->code.size() << std::endl;
-	std::cerr << "\tConstants: " << codeDef->constants->size() << std::endl;
-/* FIX :	for (const Value* p = codeDef->constants.begin(); p != codeDef->constants.end(); ++p) {
+	std::cerr << "\tCode: " << codeDefinition->code.size() << std::endl;
+	std::cerr << "\tConstants: " << codeDefinition->constants->size() << std::endl;
+/* FIX :	for (const Value* p = codeDefinition->constants.begin(); p != codeDefinition->constants.end(); ++p) {
 		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
 	}*/
-	std::cerr << "\tVars: " << codeDef->getVarsCount() << std::endl;
-	std::cerr << "\tArguments: " << codeDef->getArgumentsCount() << std::endl;
+	std::cerr << "\tVars: " << codeDefinition->getVarsCount() << std::endl;
+	std::cerr << "\tArguments: " << codeDefinition->getArgumentsCount() << std::endl;
 } else {
-	QuickArray<int> stackDepths(codeDef->getCodeSize());
+	QuickArray<int> stackDepths(codeDefinition->getCodeSize());
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
-	int errors = recursiveStackCheck(*codeDef, stackDepths, 0, 0);
+	int errors = recursiveStackCheck(*codeDefinition, stackDepths, 0, 0);
 //	assert(errors == 0);
 }
 	return p;
@@ -4129,8 +4124,8 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	this->e = e;
 	expectToken("(", true);
 	white();
-	Table& nameIndexes = codeDef->nameIndexes;
-	QuickVector<const String*>& argumentNames = codeDef->argumentNames;
+	Table& nameIndexes = codeDefinition->nameIndexes;
+	QuickVector<const String*>& argumentNames = codeDefinition->argumentNames;
 	while (!token(")", false)) {
 		if (eof()) {
 			error(SYNTAX_ERROR, argumentNames.size() == 0 ? "Expected ')'" : "Expected ',' or ')'");
@@ -4150,9 +4145,9 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	expectToken("{", true);
 	compile(p, e); // FIX: ugly as it sets p and e again, although it doesn't hurt
 	expectToken("}", false);
-	codeDef->name = functionName;
-	codeDef->selfName = selfName;
-	codeDef->source = heap.manage(new (&heap) String(String(FUNCTION_SPACE, *functionName, &heap), String(b, p, &heap), &heap)); // FIX : operator+ would make things clearer :)
+	codeDefinition->name = functionName;
+	codeDefinition->selfName = selfName;
+	codeDefinition->source = heap.manage(new (&heap) String(String(FUNCTION_SPACE, *functionName, &heap), String(b, p, &heap), &heap)); // FIX : operator+ would make things clearer :)
 	return p;
 }
 
@@ -4267,20 +4262,20 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 
 	GCHeap& heap = engine.getHeap();
 	const String* sourceCode = argv[0].toString(heap);
-	CodeDefinition* codeDef;
+	CodeDefinition* codeDefinition;
 	
 	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
 	 // FIX : .getObject?
 	if (bucket != 0) {
-		codeDef = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
+		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
 	} else {
-		codeDef = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
-		Compiler compiler(heap, codeDef, Compiler::FOR_EVAL);
+		codeDefinition = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
 		heap.protect(&compiler);
 		compiler.compile(*sourceCode);
-		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDef));
+		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
 	}
-	processor.enterEval(codeDef, direct);
+	processor.enterEval(codeDefinition, direct);
 	return Value();
 }
 
@@ -4392,11 +4387,11 @@ struct Support {
 		if (argc >= 1) {
 			GCHeap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
-			CodeDefinition* codeDef = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
-			Compiler compiler(heap, codeDef, Compiler::FOR_FUNCTION);
+			CodeDefinition* codeDefinition = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
+			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.manage(new (&heap) ScriptFunction(codeDef, engine.getGlobalScope())));
+			return Value(heap.manage(new (&heap) ScriptFunction(codeDefinition, engine.getGlobalScope())));
 		}
 		return Value::UNDEFINED;
 	}

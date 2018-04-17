@@ -637,29 +637,6 @@ class EvalFunction : public Function {
 				}
 };
 
-class CodeDefinition;
-
-class Scope : public GCItem {
-	public:		typedef GCItem super;
-				Scope(Scope* parentScope = 0) : indexedPointer(0), parentScope(parentScope) { };
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;  // don't touch v if you return NONEXISTENT
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
-				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) = 0;
-				Object* getPrototype(Engine& engine) const { return 0; }
-				Value* getIndexedPointer() const { return indexedPointer; }
-				Scope* getParentScope() const { return parentScope; }
-	
-	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Scope* parentScope;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parentScope);
-					super::gcMark(heap);
-				}
-};
-
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
@@ -714,6 +691,28 @@ class CodeDefinition : public Object {
 #endif
 };
 
+class Scope : public GCItem {
+	public:		typedef GCItem super;
+				Scope(Scope* parentScope, const CodeDefinition* codeDefinition) : indexedPointer(0), parentScope(parentScope), codeDefinition(codeDefinition) { };
+				virtual Flags readVar(Engine& engine, const String* name, Value* v) const { assert(parentScope != 0); return parentScope->readVar(engine, name, v); }
+				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { assert(parentScope != 0); return parentScope->writeVar(engine, name, v, flags); }
+				virtual bool deleteVar(Engine& engine, const String* key) { assert(parentScope != 0); return parentScope->deleteVar(engine, key); }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { assert(parentScope != 0); return parentScope->declareVar(engine, name, initValue, dontDelete); }
+				Value* getIndexedPointer() const { return indexedPointer; }
+				Scope* getParentScope() const { return parentScope; }
+				const CodeDefinition* getCodeDefinition() const { return codeDefinition; }
+	
+	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Scope* parentScope;
+				const CodeDefinition* codeDefinition;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(parentScope);
+					heap.mark(codeDefinition);
+					super::gcMark(heap);
+				}
+};
+
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
 	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
@@ -731,7 +730,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(CodeDefinition* codeDef, Scope* environment);
+				ScriptFunction(CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -739,12 +738,12 @@ class ScriptFunction : public ExtensibleFunction {
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
-				CodeDefinition* const codeDef;
-				Scope* const environment;
+				CodeDefinition* const codeDefinition;
+				Scope* const closure;
 				
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(codeDef);
-					heap.mark(environment);
+					heap.mark(codeDefinition);
+					heap.mark(closure);
 					super::gcMark(heap);
 				}
 };
@@ -800,44 +799,55 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
-
 class GlobalScope : public Scope {
 	public:		typedef Scope super;
-				GlobalScope(Object* globalObject, const CodeDefinition* codeDef);
+				GlobalScope(Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
 				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
 	protected:	Object* const globalObject;
-				const CodeDefinition* codeDef;
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(globalObject);
-					heap.mark(codeDef);
 					super::gcMark(heap);
 				}
 };
 
-class FunctionScope : public LazyScriptObject<Scope> {
+class WithScope : public Scope {
+	public:		typedef Scope super;
+				WithScope(Scope* parentScope, Object* withObject);
+				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
+				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const String* key);
+
+	protected:	Object* withObject;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(withObject);
+					super::gcMark(heap);
+				}
+};
+
+class FunctionScope : public Scope {
 	friend class Arguments;
 	
-	public:		typedef LazyScriptObject<Scope> super;
+	public:		typedef Scope super;
 
 				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
-				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+				ScriptObject* getDynamicVars(Engine& engine) const;
 
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				ScriptFunction* const function;
+	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
+				mutable ScriptObject* dynamicVars;
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(function);
 					heap.markViaReferences(indexed.begin(), indexed.end());
+					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
 
@@ -845,36 +855,25 @@ class FunctionScope : public LazyScriptObject<Scope> {
 
 /*
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-	codeDef pointer (for constants etc).
+	codeDefinition pointer (for constants etc).
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
 
 				EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef);
-				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
-				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-
-	protected:	const CodeDefinition* const evalCodeDef;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(evalCodeDef);
-					super::gcMark(heap);
-				}
 };
 
 /*
 	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
 	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
-	exit point.
+	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
+	the indexed variables.
 */
 class CatchScope : public Scope {
 	public:		typedef Scope super;
 
 				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
-				virtual const CodeDefinition* getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -886,22 +885,6 @@ class CatchScope : public Scope {
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(exceptionName);
 					exceptionValue.gcMark(heap);
-					super::gcMark(heap);
-				}
-};
-
-class WithScope : public Scope {
-	public:		typedef Scope super;
-				WithScope(Scope* parentScope, Object* withObject);
-				virtual const CodeDefinition* getFunctionDef() const;
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
-				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
-
-	protected:	Object* withObject;
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(withObject);
 					super::gcMark(heap);
 				}
 };
@@ -1084,7 +1067,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
-				void enterEval(CodeDefinition* codeDef, bool directCall);
+				void enterEval(CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
@@ -1143,7 +1126,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(GCHeap& heap, CodeDefinition* codeDef, Target compileFor);
+				Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1268,7 +1251,7 @@ class Compiler : public GCItem {
 				const Char* identifier(bool required, bool acceptReservedKeywords);
 
 				GCHeap& heap; // FIX : necessary?
-				CodeDefinition* const codeDef;
+				CodeDefinition* const codeDefinition;
 				const Target compilingFor;
 				CodeSection setupSection; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				CodeSection mainSection;
@@ -1280,7 +1263,7 @@ class Compiler : public GCItem {
 				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(codeDef);
+					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
 };
