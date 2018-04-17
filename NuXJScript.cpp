@@ -1508,9 +1508,9 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 /* --- Scope --- */
 
-Flags Scope::readVar(Engine& engine, const Value& key, Value* v) const { return NONEXISTENT; }
-bool Scope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) { return false; }
-bool Scope::deleteVar(Engine& engine, const Value& key) { return false; }
+Flags Scope::readVar(Engine& engine, const String* name, Value* v) const { return NONEXISTENT; }
+bool Scope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { return false; }
+bool Scope::deleteVar(Engine& engine, const String* name) { return false; }
 
 /* --- FunctionScope --- */
 
@@ -1531,11 +1531,8 @@ FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, 
 	}
 }
 
-Flags FunctionScope::readVar(Engine& engine, const Value& key, Value* v) const {
+Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
-	const String* name = &EMPTY_STRING;
-	assert(key.isString());
-	name = key.getString();
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
@@ -1543,7 +1540,7 @@ Flags FunctionScope::readVar(Engine& engine, const Value& key, Value* v) const {
 		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Flags flags = super::getOwnProperty(engine, key, v);
+		Flags flags = super::getOwnProperty(engine, Value(name), v);
 		if (flags != NONEXISTENT) {
 			return flags;
 		}
@@ -1552,14 +1549,11 @@ Flags FunctionScope::readVar(Engine& engine, const Value& key, Value* v) const {
 		*v = Value(function);
 		return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 	}
-	return parentScope->readVar(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
+	return parentScope->readVar(engine, name, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
-bool FunctionScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool FunctionScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
-	const String* name = &EMPTY_STRING;
-	assert(key.isString());
-	name = key.getString();
 	Int32 index;
 	if (codeDef->lookupNameIndex(name, index)) {
 		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
@@ -1578,21 +1572,17 @@ bool FunctionScope::writeVar(Engine& engine, const Value& key, const Value& v, F
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentScope->writeVar(engine, key, v, flags); // FIX : recursion
+	return parentScope->writeVar(engine, name, v, flags); // FIX : recursion
 }
 
-bool FunctionScope::deleteVar(Engine& engine, const Value& key) {
+bool FunctionScope::deleteVar(Engine& engine, const String* name) {
 	const CodeDefinition* codeDef = function->getDefinition();
-	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
-		name = key.getString();
-		Int32 index;
-		if (codeDef->lookupNameIndex(name, index)) {
-			return false;
-		}
+	Int32 index;
+	if (codeDef->lookupNameIndex(name, index)) {
+		return false;
 	}
 	if (parentScope == 0) {
-		return getCompleteObject(engine)->deleteProperty(engine, key);
+		return getCompleteObject(engine)->deleteProperty(engine, Value(name));
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
 		Table& props = getCompleteObject(engine)->accessProperties();
@@ -1604,7 +1594,7 @@ bool FunctionScope::deleteVar(Engine& engine, const Value& key) {
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentScope->deleteVar(engine, key); // FIX : recursion
+	return parentScope->deleteVar(engine, name); // FIX : recursion
 }
 
 void FunctionScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
@@ -1616,7 +1606,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 		}
 	}
 	if (!initValue.isUndefined()) {
-		writeVar(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
+		writeVar(engine, name, initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
@@ -1635,9 +1625,9 @@ EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : su
 	assert(evalCodeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
-Flags EvalScope::readVar(Engine& engine, const Value& key, Value* v) const { return parentScope->readVar(engine, key, v); }
-bool EvalScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->writeVar(engine, key, v, flags); }
-bool EvalScope::deleteVar(Engine& engine, const Value& key) { return parentScope->deleteVar(engine, key); }
+Flags EvalScope::readVar(Engine& engine, const String* name, Value* v) const { return parentScope->readVar(engine, name, v); }
+bool EvalScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { return parentScope->writeVar(engine, name, v, flags); }
+bool EvalScope::deleteVar(Engine& engine, const String* name) { return parentScope->deleteVar(engine, name); }
 void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, false); }
 
 /* --- GlobalScope --- */
@@ -1646,13 +1636,13 @@ GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : 
 	assert(codeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
-Flags GlobalScope::readVar(Engine& engine, const Value& key, Value* v) const {
-	return globalObject->getPropertyDeep(engine, key, v);
+Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
+	return globalObject->getPropertyDeep(engine, Value(name), v);
 }
-bool GlobalScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
-	return globalObject->setPropertyDeep(engine, key, v);
+bool GlobalScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
+	return globalObject->setPropertyDeep(engine, Value(name), v);
 }
-bool GlobalScope::deleteVar(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
+bool GlobalScope::deleteVar(Engine& engine, const String* name) { return globalObject->deleteProperty(engine, Value(name)); }
 void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
 	// FIX : deep or not?!
@@ -1669,19 +1659,19 @@ CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Va
 	indexedPointer = parentScope->getIndexedPointer();
 }
 
-Flags CatchScope::readVar(Engine& engine, const Value& key, Value* v) const {
-	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return DONT_DELETE_FLAG | EXISTS_FLAG; }
-	else return parentScope->readVar(engine, key, v);
+Flags CatchScope::readVar(Engine& engine, const String* name, Value* v) const {
+	if (name->isEqualTo(*exceptionName)) { *v = exceptionValue; return DONT_DELETE_FLAG | EXISTS_FLAG; }
+	else return parentScope->readVar(engine, name, v);
 }
 
-bool CatchScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
-	if (key.isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
-	else return parentScope->writeVar(engine, key, v, flags);
+bool CatchScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
+	if (name->isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
+	else return parentScope->writeVar(engine, name, v, flags);
 }
 
-bool CatchScope::deleteVar(Engine& engine, const Value& key) {
-	if (key.isEqualTo(*exceptionName)) return false;
-	else return parentScope->deleteVar(engine, key);
+bool CatchScope::deleteVar(Engine& engine, const String* name) {
+	if (name->isEqualTo(*exceptionName)) return false;
+	else return parentScope->deleteVar(engine, name);
 }
 
 /* --- WithScope --- */
@@ -1692,24 +1682,24 @@ WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope
 
 const CodeDefinition* WithScope::getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 
-Flags WithScope::readVar(Engine& engine, const Value& key, Value* v) const {
-	Flags flags = withObject->getPropertyDeep(engine, key, v);
-	return (flags != NONEXISTENT ? flags : parentScope->readVar(engine, key, v));
+Flags WithScope::readVar(Engine& engine, const String* name, Value* v) const {
+	Flags flags = withObject->getPropertyDeep(engine, Value(name), v);
+	return (flags != NONEXISTENT ? flags : parentScope->readVar(engine, name, v));
 }
 
-bool WithScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool WithScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
 	Value dummy;
 	// FIX : ok, this is seriously disturbed, climbing up the prototype tree first to check existence, then again to check non-read-only (in setPropertyDeep)
-	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
-	return (findFlags != NONEXISTENT ? withObject->setPropertyDeep(engine, key, v)
-			: parentScope->writeVar(engine, key, v, flags));
+	Flags findFlags = withObject->getPropertyDeep(engine, Value(name), &dummy);
+	return (findFlags != NONEXISTENT ? withObject->setPropertyDeep(engine, Value(name), v)
+			: parentScope->writeVar(engine, name, v, flags));
 }
 
-bool WithScope::deleteVar(Engine& engine, const Value& key) {
+bool WithScope::deleteVar(Engine& engine, const String* name) {
 	Value dummy;
-	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
-	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, key)
-			: parentScope->deleteVar(engine, key));
+	Flags findFlags = withObject->getPropertyDeep(engine, Value(name), &dummy);
+	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, Value(name))
+			: parentScope->deleteVar(engine, name));
 }
 
 /* --- Processor --- */
@@ -1933,18 +1923,17 @@ bool Processor::privateRun() {
 			case WRITE_INDEXED_OP:		assert(indexed != 0); indexed[operand] = vsp[0]; break;
 			case WRITE_INDEXED_POP_OP:	assert(indexed != 0); indexed[operand] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
-											const Value& name = constants[operand];
+											const String* name = constants[operand].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
-												error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
-														, IS_NOT_DEFINED_STRING, &heap)));
+												error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
 											}
 										}
 										break;
 									
-			case WRITE_NAMED_OP:		scope->writeVar(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_OP:		scope->writeVar(engine, constants[operand].getString(), vsp[0], STANDARD_FLAGS);
 										break;
 				
-			case WRITE_NAMED_POP_OP:	scope->writeVar(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_POP_OP:	scope->writeVar(engine, constants[operand].getString(), vsp[0], STANDARD_FLAGS);
 										pop(1);
 										break;
 
@@ -2164,7 +2153,7 @@ bool Processor::privateRun() {
 			}
 			
 			case DELETE_NAMED_OP: {
-				push(Value(scope->deleteVar(engine, constants[operand])));
+				push(Value(scope->deleteVar(engine, constants[operand].getString())));
 				break;
 			}
 			
@@ -2222,7 +2211,7 @@ bool Processor::privateRun() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				scope->readVar(engine, constants[operand], &v);
+				scope->readVar(engine, constants[operand].getString(), &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
