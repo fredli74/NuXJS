@@ -645,12 +645,12 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
-String::String() : QArray(0), hash(2166136261U) { assert(isEqualTo(EMPTY_STRING)); }
-String::String(const Char* b, const Char* e, Heap* heap) : QArray(static_cast<UInt32>(e - b), heap), hash(0) { std::copy(b, e, begin()); }
+String::String() : QArray(0), hash(0), bloomCode(0) { assert(isEqualTo(EMPTY_STRING)); }
+String::String(const Char* b, const Char* e, Heap* heap) : QArray(static_cast<UInt32>(e - b), heap), hash(0), bloomCode(0) { std::copy(b, e, begin()); }
 // FIX : needed ? String::String(const String& o) : QArray(o), hash(o.hash) { }
-String::String(const std::wstring& s, Heap* heap) : QArray(static_cast<UInt32>(s.size()), heap), hash(0) { std::copy(s.begin(), s.end(), begin()); }
+String::String(const std::wstring& s, Heap* heap) : QArray(static_cast<UInt32>(s.size()), heap), hash(0), bloomCode(0) { std::copy(s.begin(), s.end(), begin()); }
 
-String::String(const String& l, const String& r, Heap* heap) : QArray(l.size() + r.size(), heap), hash(0) {
+String::String(const String& l, const String& r, Heap* heap) : QArray(l.size() + r.size(), heap), hash(0), bloomCode(0) {
 	Char* e = std::copy(l.begin(), l.end(), begin());
 	std::copy(r.begin(), r.end(), e);
 }
@@ -710,6 +710,15 @@ bool String::isLessThan(const String& o) const {
 
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
+UInt32 String::createBloomCode() const {
+	if (bloomCode == 0) {
+		const UInt32 hash = calcHash();
+		bloomCode = (static_cast<UInt32>(1) << (hash & 31))
+				| (static_cast<UInt32>(1) << ((hash >> 16) & 31));
+	}
+	return bloomCode;
+}
+
 Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	GCHeap& heap = engine.getHeap();
 	return heap.manage(new (&heap) RangeEnumerator(heap, 0, size()));
@@ -721,6 +730,7 @@ const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e
 	}
 	String* s = heap.manage(new (&heap) String(b, e, &heap));
 	s->calcHash();
+	s->createBloomCode();
 	return s;
 }
 
@@ -1105,7 +1115,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
 		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap)
-		, name(0), selfName(0), source(0) {
+		, name(0), selfName(0), source(0), bloomSet(0) {
 	assert(constants != 0);
 }
 
@@ -1520,7 +1530,8 @@ static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 ar
 FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: super(function->closure, function->codeDefinition)
 		, function(function), passedArgumentsCount(argc)
-		, indexed(calcIndexedVariablesSize(function, argc), heap), dynamicVars(0) {
+		, indexed(calcIndexedVariablesSize(function, argc), heap), dynamicVars(0)
+		, bloomSet(function->codeDefinition->bloomSet) {
 	indexedPointer = indexed.begin() + codeDefinition->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
@@ -1541,61 +1552,70 @@ ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
 }
 
 Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const {
-	Int32 index;
-	if (codeDefinition->lookupNameIndex(name, index)) {
-		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-		*v = indexedPointer[index];
-		return DONT_DELETE_FLAG | EXISTS_FLAG;
-	}
-	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Flags flags = getDynamicVars(engine)->getOwnProperty(engine, Value(name), v);
-		if (flags != NONEXISTENT) {
-			return flags;
+	const UInt32 bloomCode = name->createBloomCode();
+	if ((bloomSet & bloomCode) == bloomCode) {
+		Int32 index;
+		if (codeDefinition->lookupNameIndex(name, index)) {
+			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+			*v = indexedPointer[index];
+			return DONT_DELETE_FLAG | EXISTS_FLAG;
+		}
+		if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+			Flags flags = getDynamicVars(engine)->getOwnProperty(engine, Value(name), v);
+			if (flags != NONEXISTENT) {
+				return flags;
+			}
+		}
+		if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
+			*v = Value(function);
+			return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 		}
 	}
-	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
-		*v = Value(function);
-		return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
-	}
-	return parentScope->readVar(engine, name, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
+	return parentScope->readVar(engine, name, v);
 }
 
 bool FunctionScope::writeVar(Engine& engine, const String* name, const Value& v, Flags flags) {
-	Int32 index;
-	if (codeDefinition->lookupNameIndex(name, index)) {
-		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-		indexedPointer[index] = v;
-		return true;
-	}
-	// FIX : make sub that lookup's the bucket, also use in getProperty
-	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Table& props = getDynamicVars(engine)->accessProperties();
-		Table::Bucket* bucket = props.lookup(name);
-		if (bucket != 0) {
-			props.update(bucket, v);
+	const UInt32 bloomCode = name->createBloomCode();
+	if ((bloomSet & bloomCode) == bloomCode) {
+		Int32 index;
+		if (codeDefinition->lookupNameIndex(name, index)) {
+			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+			indexedPointer[index] = v;
 			return true;
 		}
-	}
-	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
-		return false;
+		// FIX : make sub that lookup's the bucket, also use in getProperty
+		if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+			Table& props = getDynamicVars(engine)->accessProperties();
+			Table::Bucket* bucket = props.lookup(name);
+			if (bucket != 0) {
+				props.update(bucket, v);
+				return true;
+			}
+		}
+		if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
+			return false;
+		}
 	}
 	return parentScope->writeVar(engine, name, v, flags); // FIX : recursion
 }
 
 bool FunctionScope::deleteVar(Engine& engine, const String* name) {
-	Int32 index;
-	if (codeDefinition->lookupNameIndex(name, index)) {
-		return false;
-	}
-	if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
-		Table& props = getDynamicVars(engine)->accessProperties();
-		Table::Bucket* bucket = props.lookup(name);
-		if (bucket != 0) {
-			return props.erase(bucket);
+	const UInt32 bloomCode = name->createBloomCode();
+	if ((bloomSet & bloomCode) == bloomCode) {
+		Int32 index;
+		if (codeDefinition->lookupNameIndex(name, index)) {
+			return false;
 		}
-	}
-	if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
-		return false;
+		if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
+			Table& props = getDynamicVars(engine)->accessProperties();
+			Table::Bucket* bucket = props.lookup(name);
+			if (bucket != 0) {
+				return props.erase(bucket);
+			}
+		}
+		if (codeDefinition->selfName != 0 && name->isEqualTo(*codeDefinition->selfName)) {
+			return false;
+		}
 	}
 	return parentScope->deleteVar(engine, name); // FIX : recursion
 }
@@ -1605,6 +1625,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 	if (!function->getDefinition()->lookupNameIndex(name, index)) {
 		Table& props = getDynamicVars(engine)->accessProperties();
 		if (props.lookup(name) == 0) { // FIX : lookup and insert only if 0 at once, how?!
+			bloomSet |= name->createBloomCode();
 			props.update(props.insert(name), Value::UNDEFINED, dontDelete ? DONT_DELETE_FLAG : 0);
 		}
 	}
@@ -3471,6 +3492,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 			codeDefinition->varNames.append(name);
 			index = -static_cast<Int32>(codeDefinition->varNames.size());
 			nameIndexes.update(nameIndexes.insert(name), index);
+			codeDefinition->bloomSet |= name->createBloomCode();
 		}
 		if (withScopeCounter == 0 && index != CATCH_PARAMETER) {
 			lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
@@ -4097,10 +4119,12 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 if (!suppressStdErr) {
 	disassemble(heap, *codeDefinition);
 	int stackDepth = mainSection.stackDepth;
+	assert(stackDepth == 0);
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
 //	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
 	std::cerr << "\tCode: " << codeDefinition->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDefinition->constants->size() << std::endl;
+	std::cerr << "\tBloom set: " << std::hex << codeDefinition->bloomSet << std::dec << std::endl;
 /* FIX :	for (const Value* p = codeDefinition->constants.begin(); p != codeDefinition->constants.end(); ++p) {
 		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
 	}*/
@@ -4111,7 +4135,7 @@ if (!suppressStdErr) {
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
 	int errors = recursiveStackCheck(*codeDefinition, stackDepths, 0, 0);
-//	assert(errors == 0);
+	assert(errors == 0);
 }
 	return p;
 }
@@ -4140,6 +4164,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 		const String* name = String::newHashedString(heap, b, p);
 		nameIndexes.update(nameIndexes.insert(name), static_cast<Int32>(argumentNames.size()));
 		argumentNames.append(name);
+		codeDefinition->bloomSet |= name->createBloomCode();
 		white();
 	}
 	expectToken("{", true);
@@ -4148,6 +4173,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	codeDefinition->name = functionName;
 	codeDefinition->selfName = selfName;
 	codeDefinition->source = heap.manage(new (&heap) String(String(FUNCTION_SPACE, *functionName, &heap), String(b, p, &heap), &heap)); // FIX : operator+ would make things clearer :)
+	codeDefinition->bloomSet |= (selfName != 0 ? selfName->createBloomCode() : 0) | ARGUMENTS_STRING.createBloomCode();
 	return p;
 }
 

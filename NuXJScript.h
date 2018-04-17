@@ -431,10 +431,10 @@ class String : public virtual Object, public QuickArray<Char> {
 				String(const Char* b, const Char* e, Heap* heap = 0);
 				String(const String& l, const String& r, Heap* heap = 0);
 				explicit String(const std::wstring& s, Heap* heap = 0);
-				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0) { } // FIX : dangerous, right, make protected?
+				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0), bloomCode(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I added const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s) : QArray(static_cast<UInt32>(strlen(s))), hash(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s) : QArray(static_cast<UInt32>(strlen(s))), hash(0), bloomCode(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -446,8 +446,10 @@ class String : public virtual Object, public QuickArray<Char> {
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;
+				UInt32 createBloomCode() const;
 
-	protected:	mutable UInt32 hash;
+	protected:	mutable UInt32 bloomCode;
+				mutable UInt32 hash;
 };
 
 class RangeEnumerator : public Enumerator {
@@ -674,6 +676,7 @@ class CodeDefinition : public Object {
 				const String* name;
 				const String* selfName;
 				const String* source;
+				UInt32 bloomSet;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(constants);
@@ -844,6 +847,7 @@ class FunctionScope : public Scope {
 				const UInt32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
+				UInt32 bloomSet;
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(function);
 					heap.markViaReferences(indexed.begin(), indexed.end());
