@@ -1506,6 +1506,12 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 	completeObject->setOwnProperty(engine, Value(&CALLEE_STRING), Value(scope->function), DONT_ENUM_FLAG);
 }
 
+/* --- Scope --- */
+
+Flags Scope::readVar(Engine& engine, const Value& key, Value* v) const { return NONEXISTENT; }
+bool Scope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) { return false; }
+bool Scope::deleteVar(Engine& engine, const Value& key) { return false; }
+
 /* --- FunctionScope --- */
 
 static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
@@ -1525,7 +1531,7 @@ FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, 
 	}
 }
 
-Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags FunctionScope::readVar(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	assert(key.isString());
@@ -1546,10 +1552,10 @@ Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) 
 		*v = Value(function);
 		return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 	}
-	return parentScope->getOwnProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
+	return parentScope->readVar(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
 
-bool FunctionScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool FunctionScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	assert(key.isString());
@@ -1572,10 +1578,10 @@ bool FunctionScope::setOwnProperty(Engine& engine, const Value& key, const Value
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentScope->setOwnProperty(engine, key, v, flags); // FIX : recursion
+	return parentScope->writeVar(engine, key, v, flags); // FIX : recursion
 }
 
-bool FunctionScope::deleteProperty(Engine& engine, const Value& key) {
+bool FunctionScope::deleteVar(Engine& engine, const Value& key) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
 	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
@@ -1598,7 +1604,7 @@ bool FunctionScope::deleteProperty(Engine& engine, const Value& key) {
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		return false;
 	}
-	return parentScope->deleteProperty(engine, key); // FIX : recursion
+	return parentScope->deleteVar(engine, key); // FIX : recursion
 }
 
 void FunctionScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
@@ -1610,7 +1616,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 		}
 	}
 	if (!initValue.isUndefined()) {
-		setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
+		writeVar(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
@@ -1629,9 +1635,9 @@ EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : su
 	assert(evalCodeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
-Flags EvalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return parentScope->getOwnProperty(engine, key, v); }
-bool EvalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->setOwnProperty(engine, key, v, flags); }
-bool EvalScope::deleteProperty(Engine& engine, const Value& key) { return parentScope->deleteProperty(engine, key); }
+Flags EvalScope::readVar(Engine& engine, const Value& key, Value* v) const { return parentScope->readVar(engine, key, v); }
+bool EvalScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) { return parentScope->writeVar(engine, key, v, flags); }
+bool EvalScope::deleteVar(Engine& engine, const Value& key) { return parentScope->deleteVar(engine, key); }
 void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, false); }
 
 /* --- GlobalScope --- */
@@ -1640,15 +1646,16 @@ GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : 
 	assert(codeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
-Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags GlobalScope::readVar(Engine& engine, const Value& key, Value* v) const {
 	return globalObject->getPropertyDeep(engine, key, v);
 }
-bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool GlobalScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	return globalObject->setPropertyDeep(engine, key, v);
 }
-bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
+bool GlobalScope::deleteVar(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
 void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
+	// FIX : deep or not?!
 	const Flags flags = globalObject->getOwnProperty(engine, Value(name), &v);
 	if (flags == NONEXISTENT || !initValue.isUndefined()) {
 		globalObject->setOwnProperty(engine, Value(name), initValue, dontDelete ? DONT_DELETE_FLAG : 0);
@@ -1662,19 +1669,19 @@ CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Va
 	indexedPointer = parentScope->getIndexedPointer();
 }
 
-Flags CatchScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags CatchScope::readVar(Engine& engine, const Value& key, Value* v) const {
 	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return DONT_DELETE_FLAG | EXISTS_FLAG; }
-	else return parentScope->getOwnProperty(engine, key, v);
+	else return parentScope->readVar(engine, key, v);
 }
 
-bool CatchScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool CatchScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	if (key.isEqualTo(*exceptionName)) { exceptionValue = v; return true; }
-	else return parentScope->setOwnProperty(engine, key, v, flags);
+	else return parentScope->writeVar(engine, key, v, flags);
 }
 
-bool CatchScope::deleteProperty(Engine& engine, const Value& key) {
+bool CatchScope::deleteVar(Engine& engine, const Value& key) {
 	if (key.isEqualTo(*exceptionName)) return false;
-	else return parentScope->deleteProperty(engine, key);
+	else return parentScope->deleteVar(engine, key);
 }
 
 /* --- WithScope --- */
@@ -1685,24 +1692,24 @@ WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope
 
 const CodeDefinition* WithScope::getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
 
-Flags WithScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+Flags WithScope::readVar(Engine& engine, const Value& key, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, key, v);
-	return (flags != NONEXISTENT ? flags : parentScope->getOwnProperty(engine, key, v));
+	return (flags != NONEXISTENT ? flags : parentScope->readVar(engine, key, v));
 }
 
-bool WithScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+bool WithScope::writeVar(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	Value dummy;
 	// FIX : ok, this is seriously disturbed, climbing up the prototype tree first to check existence, then again to check non-read-only (in setPropertyDeep)
 	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
 	return (findFlags != NONEXISTENT ? withObject->setPropertyDeep(engine, key, v)
-			: parentScope->setOwnProperty(engine, key, v, flags));
+			: parentScope->writeVar(engine, key, v, flags));
 }
 
-bool WithScope::deleteProperty(Engine& engine, const Value& key) {
+bool WithScope::deleteVar(Engine& engine, const Value& key) {
 	Value dummy;
 	Flags findFlags = withObject->getPropertyDeep(engine, key, &dummy);
 	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, key)
-			: parentScope->deleteProperty(engine, key));
+			: parentScope->deleteVar(engine, key));
 }
 
 /* --- Processor --- */
@@ -1777,8 +1784,8 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , OpcodeInfo::TERMINAL },
 	{ THIS_OP                    , "THIS"                    , +1     , 0 },
 	{ VOID_OP                    , "VOID"                    , +1     , 0 },
-	{ SCOPE_OP                   , "SCOPE"                   , +1     , 0 },
 	{ DELETE_OP                  , "DELETE"                  , -1     , 0 },
+	{ DELETE_NAMED_OP            , "DELETE_NAMED"            , 1      , 0 },
 	{ GEN_FUNC_OP                , "GEN_FUNC"                , +1     , 0 },
 	{ DECLARE_OP                 , "DECLARE"                 , -1     , 0 },
 	{ CATCH_SCOPE_OP             , "CATCH_SCOPE"             , -1     , 0 },
@@ -1927,17 +1934,17 @@ bool Processor::privateRun() {
 			case WRITE_INDEXED_POP_OP:	assert(indexed != 0); indexed[operand] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
 											const Value& name = constants[operand];
-											if (scope->getOwnProperty(engine, name, ++vsp) == NONEXISTENT) {
+											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
 												error(REFERENCE_ERROR, heap.manage(new (&heap) String(*name.toString(heap)
 														, IS_NOT_DEFINED_STRING, &heap)));
 											}
 										}
 										break;
 									
-			case WRITE_NAMED_OP:		scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_OP:		scope->writeVar(engine, constants[operand], vsp[0], STANDARD_FLAGS);
 										break;
 				
-			case WRITE_NAMED_POP_OP:	scope->setOwnProperty(engine, constants[operand], vsp[0], STANDARD_FLAGS);
+			case WRITE_NAMED_POP_OP:	scope->writeVar(engine, constants[operand], vsp[0], STANDARD_FLAGS);
 										pop(1);
 										break;
 
@@ -2156,7 +2163,11 @@ bool Processor::privateRun() {
 				break;
 			}
 			
-			case SCOPE_OP: push(Value(scope)); break;
+			case DELETE_NAMED_OP: {
+				push(Value(scope->deleteVar(engine, constants[operand])));
+				break;
+			}
+			
 			case DELETE_OP: {
 				if ((o = convertToObject(vsp[-1], true)) != 0) {
 					poppush(Value(o->deleteProperty(engine, vsp[0])));
@@ -2211,7 +2222,7 @@ bool Processor::privateRun() {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				scope->getOwnProperty(engine, constants[operand], &v);
+				scope->readVar(engine, constants[operand], &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
@@ -2407,6 +2418,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDef) {
 			case Processor::WRITE_NAMED_OP:
 			case Processor::WRITE_NAMED_POP_OP:
 			case Processor::ADD_PROPERTY_OP:
+			case Processor::DELETE_NAMED_OP:
 			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
 			default: break;
 		}
@@ -3111,7 +3123,7 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
 				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
-				case ExpressionResult::NAMED: emit(Processor::SCOPE_OP); emitWithConstant(Processor::CONST_OP, xr.v);  /* fall through */
+				case ExpressionResult::NAMED: emitWithConstant(Processor::DELETE_NAMED_OP, xr.v); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
 				default: assert(0);
 			}

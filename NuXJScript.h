@@ -637,7 +637,28 @@ class EvalFunction : public Function {
 				}
 };
 
-class Scope;
+class CodeDefinition;
+
+class Scope : public GCItem {
+	public:		typedef GCItem super;
+				Scope(Scope* parentScope = 0) : indexedPointer(0), parentScope(parentScope) { };
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual const CodeDefinition* getFunctionDef() const = 0;
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) = 0;
+				Object* getPrototype(Engine& engine) const { return 0; }
+				Value* getIndexedPointer() const { return indexedPointer; }
+				Scope* getParentScope() const { return parentScope; }
+	
+	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Scope* parentScope;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(parentScope);
+					super::gcMark(heap);
+				}
+};
 
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
@@ -703,42 +724,6 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-};
-
-class Scope : public Object {
-	public:		typedef Object super;
-				Scope(Scope* parentScope = 0) : indexedPointer(0), parentScope(parentScope) { };
-				virtual const CodeDefinition* getFunctionDef() const = 0;
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) = 0;
-				Value* getIndexedPointer() const { return indexedPointer; }
-				Scope* getParentScope() const { return parentScope; }
-				virtual Object* getPrototype(Engine& engine) const { return 0; }
-	
-	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Scope* parentScope;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(parentScope);
-					super::gcMark(heap);
-				}
-};
-
-class GlobalScope : public Scope {
-	public:		typedef Scope super;
-				GlobalScope(Object* globalObject, const CodeDefinition* codeDef);
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-	
-	protected:	Object* const globalObject;
-				const CodeDefinition* codeDef;
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(globalObject);
-					heap.mark(codeDef);
-					super::gcMark(heap);
-				}
 };
 
 class ScriptFunction : public ExtensibleFunction {
@@ -815,6 +800,112 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
+
+class GlobalScope : public Scope {
+	public:		typedef Scope super;
+				GlobalScope(Object* globalObject, const CodeDefinition* codeDef);
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual const CodeDefinition* getFunctionDef() const { return codeDef; }
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+	
+	protected:	Object* const globalObject;
+				const CodeDefinition* codeDef;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(globalObject);
+					heap.mark(codeDef);
+					super::gcMark(heap);
+				}
+};
+
+class FunctionScope : public LazyScriptObject<Scope> {
+	friend class Arguments;
+	
+	public:		typedef LazyScriptObject<Scope> super;
+
+				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+
+	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				ScriptFunction* const function;
+				const UInt32 passedArgumentsCount;
+				QuickArray<Value> indexed; // Includes variables and arguments.
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(function);
+					heap.markViaReferences(indexed.begin(), indexed.end());
+					super::gcMark(heap);
+				}
+
+};
+
+/*
+	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
+	codeDef pointer (for constants etc).
+*/
+class EvalScope : public Scope {
+	public:		typedef Scope super;
+
+				EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef);
+				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+
+	protected:	const CodeDefinition* const evalCodeDef;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(evalCodeDef);
+					super::gcMark(heap);
+				}
+};
+
+/*
+	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
+	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
+	exit point.
+*/
+class CatchScope : public Scope {
+	public:		typedef Scope super;
+
+				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+				virtual const CodeDefinition* getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
+
+	protected:	const String* exceptionName;
+				Value exceptionValue;
+
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(exceptionName);
+					exceptionValue.gcMark(heap);
+					super::gcMark(heap);
+				}
+};
+
+class WithScope : public Scope {
+	public:		typedef Scope super;
+				WithScope(Scope* parentScope, Object* withObject);
+				virtual const CodeDefinition* getFunctionDef() const;
+				virtual Flags readVar(Engine& engine, const Value& key, Value* v) const;
+				virtual bool writeVar(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteVar(Engine& engine, const Value& key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
+
+	protected:	Object* withObject;
+				virtual void gcMark(GCHeap& heap) const {
+					heap.mark(withObject);
+					super::gcMark(heap);
+				}
+};
+
 class Engine {
 	public:		Engine(GCHeap& heap);
 				void setGlobalObject(GlobalScope* globalScope, Object* globals);
@@ -841,93 +932,6 @@ class Engine {
 				Function* toStringFunction;
 				Function* createRegExpFunction;
 				double unixEpochTimeDiff;
-};
-
-class FunctionScope : public LazyScriptObject<Scope> {
-	friend class Arguments;
-	
-	public:		typedef LazyScriptObject<Scope> super;
-
-				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
-				virtual const CodeDefinition* getFunctionDef() const { return function->getDefinition(); }
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				ScriptFunction* const function;
-				const UInt32 passedArgumentsCount;
-				QuickArray<Value> indexed; // Includes variables and arguments.
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(function);
-					heap.markViaReferences(indexed.begin(), indexed.end());
-					super::gcMark(heap);
-				}
-
-};
-
-/*
-	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-	codeDef pointer (for constants etc).
-*/
-class EvalScope : public Scope {
-	public:		typedef Scope super;
-
-				EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef);
-				virtual const CodeDefinition* getFunctionDef() const { return evalCodeDef; } // FIX : recursion
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-
-	protected:	const CodeDefinition* const evalCodeDef;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(evalCodeDef);
-					super::gcMark(heap);
-				}
-};
-
-/*
-	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
-	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
-	exit point.
-*/
-class CatchScope : public Scope {
-	public:		typedef Scope super;
-
-				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
-				virtual const CodeDefinition* getFunctionDef() const { return parentScope->getFunctionDef(); } // FIX : recursion
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
-
-	protected:	const String* exceptionName;
-				Value exceptionValue;
-
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(exceptionName);
-					exceptionValue.gcMark(heap);
-					super::gcMark(heap);
-				}
-};
-
-class WithScope : public Scope {
-	public:		typedef Scope super;
-				WithScope(Scope* parentScope, Object* withObject);
-				virtual const CodeDefinition* getFunctionDef() const;
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
-
-	protected:	Object* withObject;
-				virtual void gcMark(GCHeap& heap) const {
-					heap.mark(withObject);
-					super::gcMark(heap);
-				}
 };
 
 class Arguments : public LazyScriptObject<Object> {
@@ -1044,8 +1048,9 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, RETURN_OP
 					, DISCARD_RETURN_OP
 					, RETURN_TO_HOST_OP
-					, THIS_OP, VOID_OP, SCOPE_OP					// stack: -> value
+					, THIS_OP, VOID_OP								// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
+					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
 					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
 					, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
