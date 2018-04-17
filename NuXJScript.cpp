@@ -1528,17 +1528,13 @@ FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, 
 Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
-		name = key.getString();
-		Int32 index;
-		if (codeDef->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-			*v = indexedPointer[index];
-			return DONT_DELETE_FLAG | EXISTS_FLAG;
-		}
-	}
-	if (parentScope == 0) {
-		return getCompleteObject(engine)->getOwnProperty(engine, key, v);
+	assert(key.isString());
+	name = key.getString();
+	Int32 index;
+	if (codeDef->lookupNameIndex(name, index)) {
+		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+		*v = indexedPointer[index];
+		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	}
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
 		Flags flags = super::getOwnProperty(engine, key, v);
@@ -1548,7 +1544,7 @@ Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) 
 	}
 	if (codeDef->selfName != 0 && name->isEqualTo(*codeDef->selfName)) {
 		*v = Value(function);
-		return DONT_DELETE_FLAG | READ_ONLY_FLAG;
+		return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 	}
 	return parentScope->getOwnProperty(engine, key, v); // FIX: can we do a looping non-recursive solution? faster  AND (stack overflow) SAFER!
 }
@@ -1556,17 +1552,13 @@ Flags FunctionScope::getOwnProperty(Engine& engine, const Value& key, Value* v) 
 bool FunctionScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	const CodeDefinition* codeDef = function->getDefinition();
 	const String* name = &EMPTY_STRING;
-	if (key.isString()) { // FIX : <-- unnecessary except for the global scope, cause you can never have variables with numerical names
-		name = key.getString();
-		Int32 index;
-		if (codeDef->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-			indexedPointer[index] = v;
-			return true;
-		}
-	}
-	if (parentScope == 0) {
-		return getCompleteObject(engine)->setOwnProperty(engine, key, v, flags);
+	assert(key.isString());
+	name = key.getString();
+	Int32 index;
+	if (codeDef->lookupNameIndex(name, index)) {
+		assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
+		indexedPointer[index] = v;
+		return true;
 	}
 	// FIX : make sub that lookup's the bucket, also use in getProperty
 	if (completeObject != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
@@ -1633,8 +1625,7 @@ void FunctionScope::constructCompleteObject(Engine& engine) const {
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef)
-		: super(parentScope), evalCodeDef(evalCodeDef) {
+EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : super(parentScope), evalCodeDef(evalCodeDef) {
 	assert(evalCodeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
@@ -1649,8 +1640,12 @@ GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDef) : 
 	assert(codeDef->getVarsCount() == 0);
 	indexedPointer = 0;
 }
-Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const { return globalObject->getOwnProperty(engine, key, v); }
-bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) { return globalObject->setOwnProperty(engine, key, v, flags); }
+Flags GlobalScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+	return globalObject->getPropertyDeep(engine, key, v);
+}
+bool GlobalScope::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
+	return globalObject->setPropertyDeep(engine, key, v);
+}
 bool GlobalScope::deleteProperty(Engine& engine, const Value& key) { return globalObject->deleteProperty(engine, key); }
 void GlobalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
@@ -1668,8 +1663,7 @@ CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Va
 }
 
 Flags CatchScope::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
-	// FIX : always isString here right?
-	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return true; }
+	if (key.isEqualTo(*exceptionName)) { *v = exceptionValue; return DONT_DELETE_FLAG | EXISTS_FLAG; }
 	else return parentScope->getOwnProperty(engine, key, v);
 }
 

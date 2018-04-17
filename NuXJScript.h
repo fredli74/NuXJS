@@ -639,7 +639,7 @@ class EvalFunction : public Function {
 
 class Scope;
 
-// FIX : why is this a seperate item from CodeDef?
+// Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
 				Constants(Heap* heap) : QuickVector<Value>(heap) { }
@@ -707,11 +707,12 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 
 class Scope : public Object {
 	public:		typedef Object super;
-				Scope(Scope* parentScope = 0) : parentScope(parentScope), indexedPointer(0) { };
+				Scope(Scope* parentScope = 0) : indexedPointer(0), parentScope(parentScope) { };
 				virtual const CodeDefinition* getFunctionDef() const = 0;
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) = 0;
 				Value* getIndexedPointer() const { return indexedPointer; }
 				Scope* getParentScope() const { return parentScope; }
+				virtual Object* getPrototype(Engine& engine) const { return 0; }
 	
 	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Scope* parentScope;
