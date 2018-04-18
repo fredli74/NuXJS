@@ -826,7 +826,7 @@ bool Object::deleteProperty(Engine& engine, const Value& key) { return false; }
 Enumerator* Object::getPropertyEnumerator(Engine& engine) const { return &EMPTY_ENUMERATOR; }
 
 bool Object::updateProperty(Engine& engine, const Value& key, const Value& v) {
-	return (hasOwnProperty(engine, key) && (setOwnProperty(engine, key, v, STANDARD_FLAGS), true));
+	return (hasOwnProperty(engine, key) && ((void)(setOwnProperty(engine, key, v, STANDARD_FLAGS)), true));
 }
 
 bool Object::isOwnPropertyEnumerable(Engine& engine, const Value& key) const {

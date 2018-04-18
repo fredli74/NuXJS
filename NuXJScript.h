@@ -857,7 +857,6 @@ class FunctionScope : public Scope {
 					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
-
 };
 
 /*
