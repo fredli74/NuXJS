@@ -4933,6 +4933,8 @@ suppressStdErr = true;
                 Value vstack[1024];
                 Processor::CallFrame cstack[1024];
                 Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
+				String stackOverflowGuard("stack overflow");
+				vstack[1023] = Value(&stackOverflowGuard);
                 heap.protect(&processor);
                 const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
                 processor.chain(RETURN_TO_HOST_STUB);
@@ -5012,6 +5014,7 @@ suppressStdErr = true;
                     }
                 } while (!done);
                 source = EMPTY_STRING;
+				assert(vstack[1023].getString() == &stackOverflowGuard);
             }
         }
         catch (const Exception& x) {
