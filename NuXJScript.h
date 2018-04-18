@@ -332,8 +332,9 @@ class Object : public GCItem {
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;  // don't touch v if you return NONEXISTENT
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;  // Don't touch v if you return NONEXISTENT.
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);	// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists).
+				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);	// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
@@ -342,8 +343,8 @@ class Object : public GCItem {
 				bool hasOwnProperty(Engine& engine, const Value& key) const; // checks via getOwnProperty()
 				bool isOwnPropertyEnumerable(Engine& engine, const Value& key) const;
 				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
-				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // checks prototype chain for read-only
 				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
+				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
 };
 
 class Enumerator : public Object {
@@ -502,6 +503,7 @@ class ScriptObject : public virtual Object {
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 				Table& accessProperties();
@@ -588,6 +590,7 @@ class Array : public LazyScriptObject<Object> {
 				// FIX : toString too?
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
+				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
 
@@ -698,7 +701,7 @@ class Scope : public GCItem {
 	public:		typedef GCItem super;
 				Scope(Scope* parentScope, const CodeDefinition* codeDefinition) : indexedPointer(0), parentScope(parentScope), codeDefinition(codeDefinition) { };
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const { assert(parentScope != 0); return parentScope->readVar(engine, name, v); }
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags) { assert(parentScope != 0); return parentScope->writeVar(engine, name, v, flags); }
+				virtual void writeVar(Engine& engine, const String* name, const Value& v) { assert(parentScope != 0); return parentScope->writeVar(engine, name, v); }
 				virtual bool deleteVar(Engine& engine, const String* key) { assert(parentScope != 0); return parentScope->deleteVar(engine, key); }
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { assert(parentScope != 0); return parentScope->declareVar(engine, name, initValue, dontDelete); }
 				Value* getIndexedPointer() const { return indexedPointer; }
@@ -806,7 +809,7 @@ class GlobalScope : public Scope {
 	public:		typedef Scope super;
 				GlobalScope(Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
+				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
@@ -821,7 +824,7 @@ class WithScope : public Scope {
 	public:		typedef Scope super;
 				WithScope(Scope* parentScope, Object* withObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
+				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 
 	protected:	Object* withObject;
@@ -838,7 +841,7 @@ class FunctionScope : public Scope {
 
 				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
+				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 				ScriptObject* getDynamicVars(Engine& engine) const;
@@ -879,9 +882,8 @@ class CatchScope : public Scope {
 
 				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual bool writeVar(Engine& engine, const String* name, const Value& v, Flags flags);
+				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { parentScope->declareVar(engine, name, initValue, dontDelete); }
 
 	protected:	const String* exceptionName;
 				Value exceptionValue;

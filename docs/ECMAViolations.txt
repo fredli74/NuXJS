@@ -83,4 +83,5 @@
 	15.2.4.6 Object.prototype.isPrototypeOf (V)
 	15.2.3.2 Object.getPrototypeOf ( O )
 	15.2.3.6 Object.defineProperty ( O, P, Attributes )
-	
+
+*) Also see all tests/unconforming
