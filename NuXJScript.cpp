@@ -2647,6 +2647,16 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
 			case Processor::WRITE_NAMED_OP: replacementOpcode = Processor::WRITE_NAMED_POP_OP; break;
 			case Processor::SET_PROPERTY_OP: replacementOpcode = Processor::SET_PROPERTY_POP_OP; break;
+			case Processor::REPUSH_OP:
+			case Processor::CONST_OP:
+			case Processor::VOID_OP: {
+				code.resize(code.size() - 1);
+#if (VERIFY_STACK_LOGIC)
+	stackDepths.resize(stackDepths.size() - 2);
+#endif
+				lastEmitted = Processor::INVALID_OP;
+				return;
+			}
 			default: break;
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
