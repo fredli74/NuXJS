@@ -85,3 +85,6 @@
 	15.2.3.6 Object.defineProperty ( O, P, Attributes )
 
 *) Also see all tests/unconforming
+
+*) You cannot assign an object to an array's "length" property even if it has a valueOf() method. This is because of the asynchronous design of this engine. It would require a complicated interrupt mechanism (think "property setter") and it simply isn't worth the effort for this alone.
+

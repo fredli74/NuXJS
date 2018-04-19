@@ -7,7 +7,7 @@
 #include <string>
 #include <cstring>
 
-#define VERIFY_STACK_LOGIC 1
+#define VERIFY_STACK_LOGIC !defined(NDEBUG)
 
 typedef short Int16;
 typedef unsigned short UInt16;
@@ -21,30 +21,40 @@ typedef Byte Flags; // FIX : turn into enum
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 
-class Heap {
-	public:		virtual void* allocate(size_t size) = 0;
-				virtual void* allocateArray(size_t size) = 0;
-				virtual void deallocate(void *ptr) = 0;
-				virtual void deallocateArray(void *ptr) = 0;
+const int MAX_POOLED_SIZE = 1024;
+const int POOL_SIZE_GRANULARITY = 16;
+class Pool {
+	public:		Pool();
+				void* allocate(size_t size);
+				void* allocateArray(size_t size);
+				void deallocate(void *ptr);
+				void deallocateArray(void *ptr);
+				void purgePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
+				size_t size() const;
+                virtual ~Pool();
+
+	protected:	static int calcPoolIndex(size_t size);
+				void* pooled[MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY];
+				size_t allocated;
 };
 
-// Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
-inline void* operator new(size_t size, Heap* heap) { return (heap != 0 ? heap->allocate(size) : ::operator new(size)); }
-inline void* operator new[](size_t size, Heap* heap) { return (heap != 0 ? heap->allocateArray(size) : ::operator new[](size)); }
-inline void operator delete(void* ptr, Heap* heap) { return (heap != 0 ? heap->deallocate(ptr) : ::operator delete(ptr)); }
-inline void operator delete[](void* ptr, Heap* heap) { return (heap != 0 ? heap->deallocateArray(ptr) : ::operator delete[](ptr)); }
+// Since these can be called during static initialization we allow pool == 0 to use standard new/delete.
+inline void* operator new(size_t size, Pool* pool) { return (pool != 0 ? pool->allocate(size) : ::operator new(size)); }
+inline void* operator new[](size_t size, Pool* pool) { return (pool != 0 ? pool->allocateArray(size) : ::operator new[](size)); }
+inline void operator delete(void* ptr, Pool* pool) { return (pool != 0 ? pool->deallocate(ptr) : ::operator delete(ptr)); }
+inline void operator delete[](void* ptr, Pool* pool) { return (pool != 0 ? pool->deallocateArray(ptr) : ::operator delete[](ptr)); }
 
 // FIX : name
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
-	public:		explicit QuickArray(UInt32 n = BUILT_IN_COUNT, Heap* heap = 0)
-						: heap(heap), n(n), p(n <= BUILT_IN_COUNT ? a : new (heap) T[n]) {	}
-				explicit QuickArray(const QuickArray& copy) : n(0), heap(copy.heap), p(a) { (*this) = copy; }
+	public:		explicit QuickArray(UInt32 n, Pool* pool)
+						: pool(pool), n(n), p(n <= BUILT_IN_COUNT ? a : new (pool) T[n]) {	}
+				explicit QuickArray(const QuickArray& copy) : n(0), pool(copy.pool), p(a) { (*this) = copy; }
 				
-				Heap* getHeap() const { return heap; }
+				Pool* getHeap() const { return pool; }
 				
 				void swap(QuickArray& other) {
 					if (this != &other) {
-						std::swap(heap, other.heap);
+						std::swap(pool, other.pool);
 						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
 						std::swap(n, other.n);
 						T* x = p;
@@ -55,7 +65,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				
 				QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
-						QuickArray<T, BUILT_IN_COUNT> na(copy.n, copy.heap);
+						QuickArray<T, BUILT_IN_COUNT> na(copy.n, copy.pool);
 						std::copy(copy.p, copy.p + copy.n, na.p);
 						swap(na);
 					}
@@ -63,7 +73,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				
 				void resize(UInt32 newSize) {
-					QuickArray<T, BUILT_IN_COUNT> na(newSize, heap);
+					QuickArray<T, BUILT_IN_COUNT> na(newSize, pool);
 					std::copy(p, p + std::min(n, newSize), na.p);
 					swap(na);
 				}
@@ -79,18 +89,18 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						for (UInt32 i = n; i > 0; --i) {
 							p[i - 1].~T();
 						}
-						::operator delete(p, heap);
+						::operator delete(p, pool);
 					}
 				}
 				
-	protected:	Heap* heap;
+	protected:	Pool* pool;
 				T* p;
 				T a[BUILT_IN_COUNT];
 				UInt32 n;
 };
 
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickVector {
-	public:		explicit QuickVector(Heap* heap = 0) : qArray(BUILT_IN_COUNT, heap), count(0) { }
+	public:		explicit QuickVector(Pool* pool) : qArray(BUILT_IN_COUNT, pool), count(0) { }
 				bool empty() const { return count == 0; }
 				UInt32 size() const { return count; }
 				operator T*() const { return qArray.begin(); }
@@ -131,7 +141,7 @@ class GCList;
 class GCHeap;
 
 /*
-	GCItems normally belong to heaps*. You put them there by calling GCHeap::manage() or GCHeap::protect(). Every GCItem
+	GCItems normally belong to heaps*. You put them there by calling GCHeap::govern() or GCHeap::include(). Every GCItem
 	class is responsible for "marking" all GCItems it has references to. If it fails to do this, items that are still in
 	use may get garbage collected (= programming error).
 	
@@ -152,12 +162,11 @@ class GCItem {
 	friend class GCList;
 	friend class GCHeap; // FIX : move stuff to GCList so GCHeap doesn't have to be friend
 
-	public:		static void* operator new(size_t n, Heap* heap);
+	public:		static void* operator new(size_t n, Pool* pool);
 				static void operator delete(void* ptr);
-				static void operator delete(void* ptr, Heap* heap);
+				static void operator delete(void* ptr, Pool* pool);
 				
 				GCItem() throw();
-				GCItem(GCHeap& heap) throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
 				virtual void gcMark(GCHeap& heap) const;
@@ -167,12 +176,12 @@ class GCItem {
 				GCItem* _gcPrev;
 				GCItem* _gcNext;
 
-	private:	static void* operator new[](size_t, Heap&); // N/A
+	private:	static void* operator new[](size_t, Pool&); // N/A
 				static void operator delete[](void*); // N/A
 };
 
 // FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
-// list (_gcList = 0). But in GCHeap, managed items ought to be deleted, right?
+// list (_gcList = 0). But in GCHeap, governed items ought to be deleted, right?
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
 	public:		GCList();
@@ -183,36 +192,24 @@ class GCList : public GCItem {
 	protected:	UInt32 count;
 };
 
-const int MAX_POOLED_SIZE = 1024;
-const int POOL_SIZE_GRANULARITY = 16;
-class GCHeap : public Heap {
-	public:		typedef Heap super;
+class GCHeap : public Pool {
+	public:		typedef Pool super;
 				GCHeap();
-				template<class T> T* manage(T* item) throw() { currentList->claim(item); return item; }
-				template<class T> T* protect(T* item) throw() { rootList.claim(item); return item; } // FIX : don't like this name, it's really also "manage", but don't auto-free
-				virtual void* allocate(size_t size);
-				virtual void deallocate(void *ptr);
-				virtual void* allocateArray(size_t size);
-				virtual void deallocateArray(void *ptr);
+				template<class T> T* govern(T* item) throw() { currentList->claim(item); return item; }
+				template<class T> T& include(T& item) throw() { rootList.claim(&item); return item; }
 				UInt32 count() const;
-				size_t size() const;
-				UInt32 gc(); // FIX : gc(beyondItem) as in NuXScript was perhaps a very good idea, not sure we should have "protect" at all?
-				void deletePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
+				UInt32 gc();
 				void mark(const GCItem* item);
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				// FIX : used extremely rarely, keep?
 				bool belongs(const GCItem* item) { return (item != 0 && (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList)); }
-                virtual ~GCHeap();
-    
-	protected:	static int calcPoolIndex(size_t size);
-				GCList managedListA;
-				GCList managedListB;
+	
+	protected:	GCList governedListA;
+				GCList governedListB;
 				GCList rootList;
 				GCList* currentList;
 				GCList* newList;
-				size_t allocated;
-				void* pools[MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY];
 				
 	private:	GCHeap(const GCHeap& other); // N/A
 				GCHeap& operator=(const GCHeap& other); // N/A
@@ -322,7 +319,6 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	
 				Object() { }
-				Object(GCHeap& heap) : super(heap) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -346,9 +342,7 @@ class Object : public GCItem {
 };
 
 class Enumerator : public Object {
-	public:		typedef Object super;
-				
-				virtual Enumerator* asEnumerator() { return this; }
+	public:		virtual Enumerator* asEnumerator() { return this; }
 				virtual const String* nextPropertyName() = 0;
 };
 
@@ -387,7 +381,7 @@ class Table {
 								bool keyExists() const { return key != 0; }
 				};
 				
-				Table(Heap* heap = 0);
+				Table(Pool* pool);
 				Bucket* getFirst() const;											// Returns first bucket with an existing value or 0.
 				Bucket* getNext(Bucket* bucket) const;								// Returns next bucket with an existing value or 0.
 				Bucket* lookup(const String* key) const;							// Return bucket pointer for key or 0.
@@ -427,13 +421,13 @@ class String : public virtual Object, public QuickArray<Char> {
 
 				String();
 // FIX : neeeded?				String(const String& o);
-				String(const Char* b, const Char* e, Heap* heap = 0);
-				String(const String& l, const String& r, Heap* heap = 0);
-				explicit String(const std::wstring& s, Heap* heap = 0);
-				explicit String(UInt32 length, Heap* heap = 0) : QArray(length, heap), hash(0), bloomCode(0) { } // FIX : dangerous, right, make protected?
+				String(const Char* b, const Char* e, Pool* pool);
+				String(const String& l, const String& r, Pool* pool);
+				explicit String(const std::wstring& s, Pool* pool);
+				explicit String(UInt32 length, Pool* pool) : QArray(length, pool), hash(0), bloomCode(0) { } // FIX : dangerous, right, make protected?
 // FIX : wasn't compatible with Digital Mars, so I added const char* constructor again, but do we care?
 //				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s) : QArray(static_cast<UInt32>(strlen(s))), hash(0), bloomCode(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s, Pool* pool = 0) : QArray(static_cast<UInt32>(strlen(s)), pool), hash(0), bloomCode(0) { std::copy(s, s + size(), begin()); calcHash(); }
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -463,7 +457,7 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(GCHeap& heap, UInt32 initialCapacity);
+				StringListEnumerator(UInt32 initialCapacity, Pool* pool);
 				void add(const String* s);
 				virtual const String* nextPropertyName();
 
@@ -564,7 +558,6 @@ class StringWrapper : public ScriptObject {
 template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyScriptObject();
-				LazyScriptObject(GCHeap& heap);
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
@@ -611,8 +604,6 @@ class Array : public LazyScriptObject<Object> {
 class Function : public Object {
 	public:		typedef Object super;
 	
-				Function();
-				Function(GCHeap& heap);
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -628,7 +619,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(GCHeap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
+				EvalFunction(GCHeap& heap, bool direct) : direct(direct), functionDefCache(&heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -646,7 +637,7 @@ class EvalFunction : public Function {
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(GCHeap& heap) : super(heap), QuickVector<Value>(&heap) { }
+				Constants(GCHeap& heap) : QuickVector<Value>(&heap) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -721,14 +712,11 @@ class Scope : public GCItem {
 };
 
 class ExtensibleFunction : public LazyScriptObject<Function> {
-	public:		typedef LazyScriptObject<Function> super;
-	public:		ExtensibleFunction(GCHeap& heap);
 	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				FunctionPrototypeFunction(GCHeap& heap);
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
@@ -739,7 +727,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -759,8 +747,7 @@ class ScriptFunction : public ExtensibleFunction {
 
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-
-				SpecialConstructorFunction(GCHeap& heap, Function* regularFunction, Function* constructorFunction);
+				SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	

@@ -63,9 +63,8 @@ Run-time
 
 	* exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
 
-	* Split ScriptFrame -> GlobalFrame & ScriptFrame
-
 	* make variable lookup non-recusrive loop outside the objects, abuse to use get/setOwnProperty for this
+		- actually CPU hit got higher from that, so doing tail-recursion instead (all compilers eliminate tail recursion right?)
 
 	* setting array length needs to do a to_number, how to do this asynchronously?
 
@@ -149,8 +148,6 @@ OPTIMIZE
 Run-time
 ========
 
-	* special write with pop instructions (very common)?
-
 	* change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
 		- not too fond of the int cast in the byte array
 		- 32-bit opcode with 24-bit operand seems pretty solid
@@ -215,12 +212,6 @@ Run-time
 		- there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
 			- the only problem is that it won't help stuff that is pushed on the stack only, e.g. a[x] = y <- both x and y are pushed data on stack and changing those pointers really won't help anyone :)
 
-	* building arrays is slow because of:
-			bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
-				Value dummy;
-				if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
-		getOwnProperty here will convert key to string (on heap!), just to check if it exists somewhere in the chain before setting the array element
-
 	* have a tiny-string type which fits inside value directly (4 16-bit words or 8 8-bit bytes?), for faster/more economic character handling
 
 	* building strings is still slow, could they be built with an internal temporary type similar to $StringBuilder? Or a "PolyString" which consists of a meta-concatentation of two existing strings (or polystrings), possibly even substrings of those?
@@ -260,8 +251,6 @@ Compiler
 			  y: (JF_OR_POP | JF) @x
 			  => JT @y+1
 
-
-	* pop void optimization (almost always occurs with a return;)?
 
 	* eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
 

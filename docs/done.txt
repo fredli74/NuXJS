@@ -135,3 +135,15 @@ DONE
 
 	* let ExpressionResult remember if a value is already primitive, no need to make primitive again then, e.g. (5+a)*8 <- two TO_PRIMITIVE today, could be one
 
+	* pop void optimization (almost always occurs with a return;)?
+
+	* special write with pop instructions (very common)?
+
+	* building arrays is slow because of:
+			bool Object::setPropertyDeep(Engine& engine, const Value& key, const Value& v) {
+				Value dummy;
+				if (getOwnProperty(engine, key, &dummy) == NONEXISTENT) {
+		getOwnProperty here will convert key to string (on heap!), just to check if it exists somewhere in the chain before setting the array element
+		- did a trick
+
+	* Split ScriptFrame -> GlobalFrame & ScriptFrame
