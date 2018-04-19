@@ -192,9 +192,8 @@ class GCList : public GCItem {
 	protected:	UInt32 count;
 };
 
-class GCHeap : public Pool {
-	public:		typedef Pool super;
-				GCHeap();
+class GCHeap {
+	public:		GCHeap();
 				template<class T> T* govern(T* item) throw() { currentList->claim(item); return item; }
 				template<class T> T& include(T& item) throw() { rootList.claim(&item); return item; }
 				UInt32 count() const;
@@ -204,6 +203,8 @@ class GCHeap : public Pool {
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				// FIX : used extremely rarely, keep?
 				bool belongs(const GCItem* item) { return (item != 0 && (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList)); }
+	
+				Pool pool;
 	
 	protected:	GCList governedListA;
 				GCList governedListB;
@@ -619,7 +620,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(GCHeap& heap, bool direct) : direct(direct), functionDefCache(&heap) { }
+				EvalFunction(GCHeap& heap, bool direct) : direct(direct), functionDefCache(&heap.pool) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -628,7 +629,7 @@ class EvalFunction : public Function {
 				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
 				virtual void gcMark(GCHeap& heap) const {
-					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
+					functionDefCache = Table(&heap.pool); // Yeah we just empty everything on each gc sweep
 					functionDefCache.gcMark(heap);
 					super::gcMark(heap);
 				}
@@ -637,7 +638,7 @@ class EvalFunction : public Function {
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(GCHeap& heap) : QuickVector<Value>(&heap) { }
+				Constants(GCHeap& heap) : QuickVector<Value>(&heap.pool) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -890,6 +891,7 @@ class Engine : public GCItem {
 				void setGlobalObject(GlobalScope* globalScope, Object* globals);
 				void setupStandardLibrary(const String& librarySourceCode);
 				GCHeap& getHeap() const { return gcHeap; }
+				Pool* getPool() const { return &gcHeap.pool; }
 				Object* getGlobals() const { return globals; }
 				GlobalScope* getGlobalScope() const { return globalScope; }
 
@@ -1168,10 +1170,10 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(GCHeap& heap, int initialStackDepth)
-							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
+							: code(&heap.pool), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), inDeadCode(false)
 #if (VERIFY_STACK_LOGIC)
-	, stackDepths(&heap)
+	, stackDepths(&heap.pool)
 #endif
 							 { }
 					void emit(Processor::Opcode opcode, Int32 operand);
