@@ -779,15 +779,12 @@ void GCItem::operator delete(void* ptr, Heap* heap) {
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
 GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
-GCHeap* GCItem::_gcGetHeap() const { return _gcList == 0 ? (GCHeap*)(0) : &_gcList->_getHeap(); }
 void GCItem::gcMark(GCHeap& heap) const { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 /* --- GCList --- */
 
-GCList::GCList(GCHeap& heap) : heap(heap), count(0) { }
-
-GCHeap& GCList::_getHeap() const { return heap; }
+GCList::GCList() : count(0) { }
 
 UInt32 GCList::size() const { return count; }
 
@@ -2082,9 +2079,9 @@ bool Processor::privateRun() {
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 
 			case CALL_OP: {
-				Int32 n = operand;
-				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Function* f = returnPointer->asFunction();
+				const Int32 n = operand;
+				Value* const returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				Function* const f = returnPointer->asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.manage(new (&heap) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
@@ -2095,8 +2092,8 @@ bool Processor::privateRun() {
 			}
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
-				Int32 n = operand;
-				Object* thisObject = convertToObject(vsp[-n - 1], true);
+				const Int32 n = operand;
+				Object* const thisObject = convertToObject(vsp[-n - 1], true);
 				if (thisObject != 0) {
 					Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 					Value v(Value::UNDEFINED);
@@ -2113,21 +2110,23 @@ bool Processor::privateRun() {
 			}
 			
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
-				Int32 n = operand;
-				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
+				const Int32 n = operand;
+				Value* const returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Function* f = returnPointer->asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.manage(new (&heap) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
 				}
-				if (f == &engine.evalFunction) f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
+				if (f == &engine.evalFunction) {
+					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
+				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
 				break;
 			}
 
 			case NEW_OP: {
-				Int32 n = operand; // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
+				const Int32 n = operand; // fix : top declare all variables in this switch, I seem to recall from GAZL that it is better
 				Value* returnPointer = vsp - n; // Notice that call() will change vsp if it is a script function, so we save this first.
 				Function* f = returnPointer->asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) { // FIX : sub
@@ -4233,8 +4232,7 @@ void Compiler::compile(const String& source) {
 	}
 }
 
-GCHeap::GCHeap() : managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
-		, newList(&managedListB), allocated(0) {
+GCHeap::GCHeap() : currentList(&managedListA), newList(&managedListB), allocated(0) {
 	std::fill(pools + 0, pools + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
 }
 
@@ -4372,7 +4370,7 @@ template<class F> struct FunctorAdapter : public Function {
 	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(engine, processor, argc, argv, thisObject);
 	}
-	F f;
+	F* f;
 };
 
 template<class F> struct UnaryMathFunction : public Function {
@@ -4380,7 +4378,7 @@ template<class F> struct UnaryMathFunction : public Function {
 	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
-	const F f;
+	const F* f;
 };
 
 // template<class F> Value newNativeFunction(GCHeap& heap, const F& f) { return Value(heap.manage(new FunctorAdapter<F>(f))); }
@@ -4602,7 +4600,7 @@ struct Support {
 
 static struct {
 	String name;
-	UnaryMathFunction<double (*)(double)> func;
+	UnaryMathFunction<double (double)> func;
 } NATIVE_MATH_FUNCTIONS[] = {
 	{ String("acos"), acos }, { String("asin"), asin }, { String("atan"), atan }, { String("cos"), cos },
 	{ String("exp"), exp }, { String("floor"), floor }, { String("log"), log }, { String("sin"), sin },
@@ -4612,7 +4610,7 @@ static struct {
 
 static struct {
 	String name;
-	FunctorAdapter<Value (*)(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
+	FunctorAdapter<Value (Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
 } SUPPORT_FUNCTIONS[] = {
 	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
@@ -4625,8 +4623,8 @@ static struct {
 	, { String("localTimeDifference"), Support::localTimeDifference }
 };
 
-static UnaryMathFunction<bool (*)(double)> IS_NAN_FUNCTION(isNaN);
-static UnaryMathFunction<bool (*)(double)> IS_FINITE_FUNCTION(isFinite);
+static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
+static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
 Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectPrototype(&heap, 0), evalFunction(&heap, false)
 		, evalDirectFunction(&heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
@@ -4635,16 +4633,16 @@ Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectP
 		, stringPrototype(&heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
 		, arrayPrototype(&heap), unixEpochTimeDiff(0.0) {
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
-	
 	gcHeap.protect(&objectPrototype);
 	gcHeap.protect(&functionPrototype);
 	gcHeap.protect(&booleanPrototype);
 	gcHeap.protect(&numberPrototype);
 	gcHeap.protect(&stringPrototype);
 	gcHeap.protect(&arrayPrototype);
-	
+	gcHeap.protect(&evalFunction);
+	gcHeap.protect(&evalDirectFunction);
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		errorPrototypes[i] = gcHeap.protect(new (&gcHeap) ErrorPrototype(static_cast<ErrorType>(i)));
+		errorPrototypes[i] = gcHeap.manage(new (&gcHeap) ErrorPrototype(static_cast<ErrorType>(i)));
 	}
 }
 
@@ -4662,10 +4660,8 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
-	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(gcHeap.protect(&evalFunction)), DONT_ENUM_FLAG);
-	gcHeap.protect(&evalDirectFunction);
-	// FIX : why protect?
-	ScriptObject* supportObject = gcHeap.protect(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
+	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
+	ScriptObject* supportObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	// FIX : no new String?
 	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
 	supportObject->setOwnProperty(*this, Value(gcHeap.manage(new (&gcHeap) String("prototypes"))), Value(prototypesObject), STANDARD_FLAGS);
@@ -4840,14 +4836,13 @@ suppressStdErr = true;
      std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
      std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
     GCHeap heap;
+    Engine engine(heap);
+	heap.protect(&engine);
+
     Constants globalConstants(&heap);
     heap.protect(&globalConstants);
     CodeDefinition globalCode(&heap, &globalConstants);
     heap.protect(&globalCode);
-    ScriptFunction globalClosure(&globalCode, 0); // FIX : yuck!
-    heap.protect(&globalClosure);
-
-    Engine engine(heap);
 
     ScriptObject globals(&heap, &engine.objectPrototype);
     heap.protect(&globals);

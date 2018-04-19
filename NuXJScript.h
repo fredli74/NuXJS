@@ -159,7 +159,6 @@ class GCItem {
 				GCItem() throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
-				GCHeap* _gcGetHeap() const; // FIX : used?
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 	
@@ -175,14 +174,12 @@ class GCItem {
 // list (_gcList = 0). But in GCHeap, managed items ought to be deleted, right?
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
-	public:		GCList(GCHeap& heap);
-				GCHeap& _getHeap() const; // FIX : used?
+	public:		GCList();
 				UInt32 size() const;
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 
-	protected:	GCHeap& heap;
-				UInt32 count;
+	protected:	UInt32 count;
 };
 
 const int MAX_POOLED_SIZE = 1024;
@@ -894,8 +891,9 @@ class CatchScope : public Scope {
 				}
 };
 
-class Engine {
-	public:		Engine(GCHeap& heap);
+class Engine : public GCItem {
+	public:		typedef GCItem super;
+				Engine(GCHeap& heap);
 				void setGlobalObject(GlobalScope* globalScope, Object* globals);
 				void setupStandardLibrary(const String& librarySourceCode);
 				GCHeap& getHeap() const { return gcHeap; }
@@ -912,14 +910,32 @@ class Engine {
 				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
 				WrapperObject stringPrototype;
-				Error* errorPrototypes[ERROR_TYPE_COUNT];
 				Array arrayPrototype;
+				Error* errorPrototypes[ERROR_TYPE_COUNT];
 				EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
 				double unixEpochTimeDiff;
+	
+	public:		virtual void gcMark(GCHeap& heap) const {
+					heap.mark(globalScope);
+					heap.mark(globals);
+					heap.mark(&objectPrototype);
+					heap.mark(&functionPrototype);
+					heap.mark(&booleanPrototype);
+					heap.mark(&numberPrototype);
+					heap.mark(&stringPrototype);
+					heap.mark(&arrayPrototype);
+					heap.markViaPointers(errorPrototypes + 0, errorPrototypes + ERROR_TYPE_COUNT);
+					heap.mark(&evalFunction);
+					heap.mark(&evalDirectFunction);
+					heap.mark(toNumberFunction);
+					heap.mark(toStringFunction);
+					heap.mark(createRegExpFunction);
+					super::gcMark(heap);
+				}
 };
 
 class Arguments : public LazyScriptObject<Object> {
