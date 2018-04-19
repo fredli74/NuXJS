@@ -521,11 +521,11 @@ Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
-		case BOOLEAN_TYPE: return heap.manage(new (&heap) WrapperObject(&heap, &B_OOLEAN_STRING, *this, &engine.booleanPrototype));
-		case NUMBER_TYPE: return heap.manage(new (&heap) WrapperObject(&heap, &N_UMBER_STRING, *this, &engine.numberPrototype));
+		case BOOLEAN_TYPE: return heap.manage(new (&heap) WrapperObject(heap, &B_OOLEAN_STRING, *this, &engine.booleanPrototype));
+		case NUMBER_TYPE: return heap.manage(new (&heap) WrapperObject(heap, &N_UMBER_STRING, *this, &engine.numberPrototype));
 		// I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case STRING_TYPE: return (!requestExtensible ? static_cast<Object*>(const_cast<String*>(var.string))
-				: heap.manage(new (&heap) StringWrapper(&heap, var.string, &engine.stringPrototype)));
+				: heap.manage(new (&heap) StringWrapper(heap, var.string, &engine.stringPrototype)));
 		case OBJECT_TYPE: return var.object;
 	}
 }
@@ -767,16 +767,10 @@ void* GCItem::operator new(size_t n, Heap* heap) {
 	return p + 1;
 }
 
-void GCItem::operator delete(void* ptr) {
-	Heap** p = reinterpret_cast<Heap**>(ptr) - 1;
-	::operator delete(p, *p);
-}
-
-void GCItem::operator delete(void* ptr, Heap* heap) {
-	::operator delete(reinterpret_cast<Heap**>(ptr) - 1, heap);
-}
-
+void GCItem::operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(ptr) - 1; ::operator delete(p, *p); }
+void GCItem::operator delete(void* ptr, Heap* heap) { ::operator delete(reinterpret_cast<Heap**>(ptr) - 1, heap); }
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
+GCItem::GCItem(GCHeap& heap) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { heap.protect(this); }
 GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
 GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
 void GCItem::gcMark(GCHeap& heap) const { }
@@ -790,7 +784,7 @@ UInt32 GCList::size() const { return count; }
 
 void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
-	assert(count > 0);
+	assert(count > 0);	// If this assert triggers it could mean that you've forgot to call protect() on a GCItem and it has been both garbage collected and destructed (e.g. by going out of scope).
 	count--;
 	item->_gcPrev->_gcNext = item->_gcNext;
 	item->_gcNext->_gcPrev = item->_gcPrev;
@@ -1005,7 +999,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- ScriptObject --- */
 
-ScriptObject::ScriptObject(Heap* heap, Object* prototype) : properties(heap), prototype(prototype) { }
+ScriptObject::ScriptObject(GCHeap& heap, Object* prototype) : super(heap), properties(&heap), prototype(prototype) { }
 
 Object* ScriptObject::getPrototype(Engine& engine) const { return prototype; }
 Table& ScriptObject::accessProperties() { return properties; }
@@ -1034,7 +1028,7 @@ bool ScriptObject::deleteProperty(Engine& engine, const Value& key) {
 }
 
 static StringListEnumerator* createTableKeyList(GCHeap& heap, const Table& table) {
-	StringListEnumerator* list = heap.manage(new (&heap) StringListEnumerator(&heap, table.getLoadCount()));
+	StringListEnumerator* list = heap.manage(new (&heap) StringListEnumerator(heap, table.getLoadCount()));
 	for (Table::Bucket* bucket = table.getFirst(); bucket != 0; bucket = table.getNext(bucket)) {
 		if (bucket->doEnumerate()) {
 			list->add(bucket->getKey());
@@ -1049,8 +1043,8 @@ Enumerator* ScriptObject::getPropertyEnumerator(Engine& engine) const {
 
 /* --- WrapperObject --- */
 
-WrapperObject::WrapperObject(Heap* heap, const String* className, const Value& value, Object* prototype)
-	: className(className), wrapped(value), super(heap, prototype) {
+WrapperObject::WrapperObject(GCHeap& heap, const String* className, const Value& value, Object* prototype)
+	: super(heap, prototype), className(className), wrapped(value) {
 }
 
 const String* WrapperObject::getClassName() const { return className; }
@@ -1058,7 +1052,7 @@ Value WrapperObject::getInternalValue(GCHeap& heap) const { return wrapped; }
 
 /* --- StringWrapper --- */
 
-StringWrapper::StringWrapper(Heap* heap, const String* string, Object* prototype) : wrapped(string), super(heap, prototype) { }
+StringWrapper::StringWrapper(GCHeap& heap, const String* string, Object* prototype) : wrapped(string), super(heap, prototype) { }
 const String* StringWrapper::getClassName() const { return &S_TRING_STRING; }
 const String* StringWrapper::toString(GCHeap& heap) const { return wrapped; }
 Value StringWrapper::getInternalValue(GCHeap& heap) const { return Value(wrapped); }
@@ -1095,7 +1089,7 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 
 /* --- StringListEnumerator --- */
 
-StringListEnumerator::StringListEnumerator(Heap* heap, UInt32 initialCapacity) : list(heap), nextIndex(0) { list.reserve(initialCapacity); }
+StringListEnumerator::StringListEnumerator(GCHeap& heap, UInt32 initialCapacity) : list(&heap), nextIndex(0) { list.reserve(initialCapacity); }
 void StringListEnumerator::add(const String* s) { list.append(s); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
 
@@ -1121,8 +1115,8 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 /* --- CodeDefinition --- */
 
-CodeDefinition::CodeDefinition(Heap* heap, Constants* constants)
-		: code(0, heap), constants(constants), nameIndexes(heap), varNames(heap), argumentNames(heap)
+CodeDefinition::CodeDefinition(GCHeap& heap, Constants* constants)
+		: code(0, &heap), constants(constants), nameIndexes(&heap), varNames(&heap), argumentNames(&heap)
 		, name(0), selfName(0), source(0), bloomSet(0) {
 	assert(constants != 0);
 }
@@ -1138,6 +1132,8 @@ bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 
 /* --- Function --- */
 
+Function::Function() { }
+Function::Function(GCHeap& heap) : super(heap) { }
 Function* Function::asFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
@@ -1170,7 +1166,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 
 /* --- Array --- */
 
-Array::Array(Heap* heap) : length(0), denseVector(heap) { }
+Array::Array(GCHeap& heap) : super(heap), length(0), denseVector(&heap) { }
 
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
 
@@ -1294,6 +1290,8 @@ Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
 
 template<class SUPER> LazyScriptObject<SUPER>::LazyScriptObject() : completeObject(0) { }
 
+template<class SUPER> LazyScriptObject<SUPER>::LazyScriptObject(GCHeap& heap) : super(heap), completeObject(0) { }
+
 template<class SUPER> Flags LazyScriptObject<SUPER>::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	return getCompleteObject(engine)->getOwnProperty(engine, key, v);
 }
@@ -1313,7 +1311,7 @@ template<class SUPER> Enumerator* LazyScriptObject<SUPER>::getPropertyEnumerator
 template<class SUPER> ScriptObject* LazyScriptObject<SUPER>::getCompleteObject(Engine& engine) const {
 	if (completeObject == 0) {
 		GCHeap& heap = engine.getHeap();
-		completeObject = heap.manage(new (&heap) ScriptObject(&heap, SUPER::getPrototype(engine)));
+		completeObject = heap.manage(new (&heap) ScriptObject(heap, SUPER::getPrototype(engine)));
 		constructCompleteObject(engine);
 	}
 	return completeObject;
@@ -1321,9 +1319,11 @@ template<class SUPER> ScriptObject* LazyScriptObject<SUPER>::getCompleteObject(E
 
 /* --- ExtensibleFunction --- */
 
+ExtensibleFunction::ExtensibleFunction(GCHeap& heap) : super(heap) { }
+
 void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const {
 	GCHeap& heap = engine.getHeap();
-	ScriptObject* prototype = heap.manage(new (&heap) ScriptObject(&heap, &engine.objectPrototype));
+	ScriptObject* prototype = heap.manage(new (&heap) ScriptObject(heap, &engine.objectPrototype));
 	prototype->setOwnProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), DONT_ENUM_FLAG);
 #if (STRICTLY_ES3)
 	forObject->setOwnProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), (dontEnumPrototype ? (DONT_ENUM_FLAG | DONT_DELETE_FLAG) : DONT_DELETE_FLAG));
@@ -1334,9 +1334,7 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(CodeDefinition* codeDefinition, Scope* closure)
-		: codeDefinition(codeDefinition), closure(closure) {
-}
+ScriptFunction::ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure) : super(heap), codeDefinition(codeDefinition), closure(closure) { }
 Value ScriptFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
 CodeDefinition* ScriptFunction::getDefinition() const { return codeDefinition; }
 
@@ -1363,8 +1361,8 @@ void ScriptFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- SpecialConstructorFunction --- */
 
-SpecialConstructorFunction::SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction)
-		: regularFunction(regularFunction), constructorFunction(constructorFunction) {
+SpecialConstructorFunction::SpecialConstructorFunction(GCHeap& heap, Function* regularFunction, Function* constructorFunction)
+		: super(heap), regularFunction(regularFunction), constructorFunction(constructorFunction) {
 	assert(regularFunction != 0);
 }
 
@@ -1402,6 +1400,8 @@ void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
 }
 
 /* --- FunctionPrototypeFunction --- */
+
+FunctionPrototypeFunction::FunctionPrototypeFunction(GCHeap& heap) : super(heap) { }
 
 Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return Value::UNDEFINED;
@@ -1468,10 +1468,10 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 
 /* --- Arguments --- */
 
-Arguments::Arguments(Heap* heap, FunctionScope* scope, UInt32 argumentsCount)
+Arguments::Arguments(GCHeap& heap, FunctionScope* scope, UInt32 argumentsCount)
 		: scope(scope)
 		, argumentsCount(argumentsCount)
-		, deletedArguments(argumentsCount, heap) {
+		, deletedArguments(argumentsCount, &heap) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
@@ -1544,10 +1544,10 @@ static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 ar
 	return codeDefinition->getVarsCount() + std::max(codeDefinition->getArgumentsCount(), argc);
 }
 
-FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv)
+FunctionScope::FunctionScope(GCHeap& heap, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: super(function->closure, function->codeDefinition)
 		, function(function), passedArgumentsCount(argc)
-		, indexed(calcIndexedVariablesSize(function, argc), heap), dynamicVars(0)
+		, indexed(calcIndexedVariablesSize(function, argc), &heap), dynamicVars(0)
 		, bloomSet(function->codeDefinition->bloomSet) {
 	indexedPointer = indexed.begin() + codeDefinition->getVarsCount();
 	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
@@ -1560,9 +1560,9 @@ FunctionScope::FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, 
 ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
 	if (dynamicVars == 0) {
 		GCHeap& heap = engine.getHeap();
-		dynamicVars = heap.manage(new (&heap) ScriptObject(&heap, 0));
+		dynamicVars = heap.manage(new (&heap) ScriptObject(heap, 0));
 		dynamicVars->setOwnProperty(engine, Value(&ARGUMENTS_STRING)
-				, Value(heap.manage(new (&heap) Arguments(&heap, const_cast<FunctionScope*>(this), passedArgumentsCount)))
+				, Value(heap.manage(new (&heap) Arguments(heap, const_cast<FunctionScope*>(this), passedArgumentsCount)))
 				, DONT_DELETE_FLAG);
 	}
 	return dynamicVars;
@@ -1894,7 +1894,7 @@ void Processor::chain(const CodeWord* stub) {
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
-	scope = heap.manage(new (&heap) FunctionScope(&heap, func, argc, argv));
+	scope = heap.manage(new (&heap) FunctionScope(heap, func, argc, argv));
 	++cfp; // FIX : overflow check
 	assert(cfp < cstackEnd);
 	cfp->returnIP = ip;
@@ -2136,7 +2136,7 @@ bool Processor::privateRun() {
 				Value v(Value::UNDEFINED);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
-				Object* newObject = heap.manage(new (&heap) ScriptObject(&heap, prototype != 0 ? prototype : &engine.objectPrototype));
+				Object* newObject = heap.manage(new (&heap) ScriptObject(heap, prototype != 0 ? prototype : &engine.objectPrototype));
 				returnPointer[1] = f->construct(engine, *this, n, returnPointer + 1, newObject);							// Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				returnPointer[0] = Value(newObject);
 				vsp -= n - 1;
@@ -2146,12 +2146,12 @@ bool Processor::privateRun() {
 			case NEW_RESULT_OP: poppush(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
 			
 			case NEW_OBJECT_OP: {
-				push(Value(heap.manage(new (&heap) ScriptObject(&heap, &engine.objectPrototype))));
+				push(Value(heap.manage(new (&heap) ScriptObject(heap, &engine.objectPrototype))));
 				break;
 			}
 			
 			case NEW_ARRAY_OP: {
-				push(Value(heap.manage(new (&heap) Array(&heap))));
+				push(Value(heap.manage(new (&heap) Array(heap))));
 				break;
 			}
 			
@@ -2188,7 +2188,7 @@ bool Processor::privateRun() {
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand].getObject();
-				push(Value(heap.manage(new (&heap) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.manage(new (&heap) ScriptFunction(heap, reinterpret_cast<CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case DECLARE_OP: {
@@ -2559,10 +2559,10 @@ enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS
 
 struct Compiler::SemanticScope {
 	enum Type { ROOT_TYPE, LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
-	SemanticScope(Heap* heap, Type type, int stackDepth, SemanticScope* next)
-			: breaks(heap), continues(heap), finallys(heap), type(type), stackDepth(stackDepth), next(next) { }
-	SemanticScope(Heap* heap, const String& label, int stackDepth, SemanticScope* next)
-			: breaks(heap), continues(heap), finallys(heap), type(LABEL_TYPE), label(label)
+	SemanticScope(GCHeap& heap, Type type, int stackDepth, SemanticScope* next)
+			: breaks(&heap), continues(&heap), finallys(&heap), type(type), stackDepth(stackDepth), next(next) { }
+	SemanticScope(GCHeap& heap, const String& label, int stackDepth, SemanticScope* next)
+			: breaks(&heap), continues(&heap), finallys(&heap), type(LABEL_TYPE), label(label)
 			, stackDepth(stackDepth), next(next) { }
 	void makeIteratorScopes(SemanticScope* untilScope) {
 		for (SemanticScope* s = this; s != untilScope; s = s->next) {
@@ -2613,8 +2613,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileF
 		: heap(heap)
 		, codeDefinition(codeDefinition)
 		, compilingFor(compileFor)
-		, setupSection(&heap, 0)
-		, mainSection(&heap, 0)
+		, setupSection(heap, 0)
+		, mainSection(heap, 0)
 		, p(0)
 		, e(0)
 		, currentSection(0)
@@ -3376,7 +3376,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(&heap, codeDefinition->constants));
+	CodeDefinition* func = heap.manage(new (&heap) CodeDefinition(heap, codeDefinition->constants));
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	heap.protect(&funcCompiler);
 	try {
@@ -3631,7 +3631,7 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 		exitLoopPoint = emitForwardBranch(Processor::JF_OP);
 	}
 	expectToken(";", true);
-	CodeSection incrementSection(&heap, currentSection->stackDepth);
+	CodeSection incrementSection(heap, currentSection->stackDepth);
 	{
 		CodeSection* previousSection = changeSection(&incrementSection);
 		ExpressionResult incXR;
@@ -3683,7 +3683,7 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 	emit(Processor::WITH_SCOPE_OP);
 	{
 		++withScopeCounter;
-		SemanticScope withScope(&heap, SemanticScope::WITH_TYPE, currentSection->stackDepth, currentScope);
+		SemanticScope withScope(heap, SemanticScope::WITH_TYPE, currentSection->stackDepth, currentScope);
 		statement(&withScope, &withScope);
 		--withScopeCounter;
 	}
@@ -3726,10 +3726,10 @@ void Compiler::continueStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", true);
-	CodeSection initSection(&heap, currentSection->stackDepth);
+	CodeSection initSection(heap, currentSection->stackDepth);
 	if (token("var", true)) {
 		white();
 		acceptInOperator = false;
@@ -3785,7 +3785,7 @@ void Compiler::ifStatement(SemanticScope* currentScope) {
 
 void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	const BranchPoint loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	rvalueGroup();
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::JF_OP);
@@ -3799,7 +3799,7 @@ void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeL
 void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	white();
 	const BranchPoint loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	statement(&emptyLabelScope, &emptyLabelScope);
 	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -3891,7 +3891,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	QuickVector<BranchPoint> allFinallys;
 	BranchPoint catchPoint;
 	{
-		SemanticScope tryScope(&heap, SemanticScope::TRY_TYPE, currentSection->stackDepth, currentScope);
+		SemanticScope tryScope(heap, SemanticScope::TRY_TYPE, currentSection->stackDepth, currentScope);
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		if (compilingFor == FOR_EVAL) { // Eval result from try scope should be rolled back in case of a throw
 			emit(Processor::REPUSH_OP, 0);
@@ -3931,7 +3931,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		expectToken(")", true);
 		{
-			SemanticScope catchScope(&heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
+			SemanticScope catchScope(heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
 			block(&catchScope);
 			emit(Processor::POP_SCOPE_OP);
 			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
@@ -3958,7 +3958,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	emit(Processor::TRIED_OP);
 	completeForwardBranch(finallyRethrowPoint);
 	if (token("finally", true)) {
-		SemanticScope finallyScope(&heap, SemanticScope::FINALLY_TYPE, currentSection->stackDepth, currentScope);
+		SemanticScope finallyScope(heap, SemanticScope::FINALLY_TYPE, currentSection->stackDepth, currentScope);
 		if (compilingFor == FOR_EVAL) {	// Ecmascript dictates that finally block should never change completion value.
 			emit(Processor::VOID_OP);
 		}
@@ -3992,10 +3992,10 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	expectToken("{", true);
 	const Int32 testsSectionEntryStackDepth = currentSection->stackDepth;
 	const BranchPoint testsPoint = emitForwardBranch(Processor::JMP_OP);
-	CodeSection testsSection(&heap, testsSectionEntryStackDepth);
+	CodeSection testsSection(heap, testsSectionEntryStackDepth);
 	QuickVector<Int32> jumpOffsets(&heap);
 	BranchPoint defaultPoint;
-	SemanticScope emptyLabelScope(&heap, EMPTY_STRING, testsSectionEntryStackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, EMPTY_STRING, testsSectionEntryStackDepth, currentScope);
 	bool firstStatement = true;
 	white();
 	while (!token("}", false)) {
@@ -4081,7 +4081,7 @@ void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabels
 					error(SYNTAX_ERROR, "Duplicate label");
 				}
 			}
-			SemanticScope newLabelScope(&heap, label, currentSection->stackDepth, currentScope);
+			SemanticScope newLabelScope(heap, label, currentSection->stackDepth, currentScope);
 			statement(&newLabelScope, scopeLabelsEnd);
 			if (newLabelScope.type != SemanticScope::ITERATOR_LABEL_TYPE) {
 				completeBreaks(&newLabelScope);
@@ -4136,7 +4136,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	if (compilingFor == FOR_EVAL) {	// Eval mode needs statement completion value on top of stack
 		emit(Processor::VOID_OP);
 	}
-	SemanticScope rootScope(&heap, SemanticScope::ROOT_TYPE, 1, 0);
+	SemanticScope rootScope(heap, SemanticScope::ROOT_TYPE, 1, 0);
 	statementList(&rootScope);
 	if (compilingFor != FOR_EVAL) {	// Non-eval mode should return void value
 		emit(Processor::VOID_OP);
@@ -4341,7 +4341,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 	if (bucket != 0) {
 		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
 	} else {
-		codeDefinition = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		codeDefinition = heap.manage(new (&heap) CodeDefinition(heap, heap.manage(new (&heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
 		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
 		heap.protect(&compiler);
 		compiler.compile(*sourceCode);
@@ -4413,7 +4413,7 @@ struct Support {
 			}
 			Object* o = 0;
 			if (className->isEqualTo(S_TRING_STRING)) {
-				o = new (&heap) StringWrapper(&heap, internalValue.toString(heap), prototype);
+				o = new (&heap) StringWrapper(heap, internalValue.toString(heap), prototype);
 			} else if (className->isEqualTo(E_RROR_STRING)) {
 				for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 					if (prototype == engine.errorPrototypes[i]) {
@@ -4423,7 +4423,7 @@ struct Support {
 				}
 			}
 			if (o == 0) {
-				o = new (&heap) WrapperObject(&heap, className, internalValue, prototype);
+				o = new (&heap) WrapperObject(heap, className, internalValue, prototype);
 			}
 			return Value(heap.manage(o));
 		}
@@ -4435,7 +4435,8 @@ struct Support {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
 				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
-				return Value(engine.getHeap().manage(new (&engine.getHeap()) SpecialConstructorFunction(regularFunction, constructorFunction)));
+				GCHeap& heap = engine.getHeap();
+				return Value(heap.manage(new (&heap) SpecialConstructorFunction(heap, regularFunction, constructorFunction)));
 			}
 		}
 		return Value::UNDEFINED;
@@ -4459,11 +4460,11 @@ struct Support {
 		if (argc >= 1) {
 			GCHeap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
-			CodeDefinition* codeDefinition = heap.manage(new (&heap) CodeDefinition(&heap, heap.manage(new (&heap) Constants(&heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
+			CodeDefinition* codeDefinition = heap.manage(new (&heap) CodeDefinition(heap, heap.manage(new (&heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
 			heap.protect(&compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.manage(new (&heap) ScriptFunction(codeDefinition, engine.getGlobalScope())));
+			return Value(heap.manage(new (&heap) ScriptFunction(heap, codeDefinition, engine.getGlobalScope())));
 		}
 		return Value::UNDEFINED;
 	}
@@ -4626,21 +4627,13 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectPrototype(&heap, 0), evalFunction(&heap, false)
-		, evalDirectFunction(&heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
-		, booleanPrototype(&heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
-		, numberPrototype(&heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
-		, stringPrototype(&heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
-		, arrayPrototype(&heap), unixEpochTimeDiff(0.0) {
+Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectPrototype(heap, 0), functionPrototype(heap), evalFunction(heap, false)
+		, evalDirectFunction(heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
+		, booleanPrototype(heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
+		, numberPrototype(heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
+		, stringPrototype(heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
+		, arrayPrototype(heap), unixEpochTimeDiff(0.0) {
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
-	gcHeap.protect(&objectPrototype);
-	gcHeap.protect(&functionPrototype);
-	gcHeap.protect(&booleanPrototype);
-	gcHeap.protect(&numberPrototype);
-	gcHeap.protect(&stringPrototype);
-	gcHeap.protect(&arrayPrototype);
-	gcHeap.protect(&evalFunction);
-	gcHeap.protect(&evalDirectFunction);
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = gcHeap.manage(new (&gcHeap) ErrorPrototype(static_cast<ErrorType>(i)));
 	}
@@ -4661,9 +4654,9 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	
 	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
-	ScriptObject* supportObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
+	ScriptObject* supportObject = gcHeap.manage(new (&gcHeap) ScriptObject(gcHeap, &objectPrototype));
 	// FIX : no new String?
-	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(&gcHeap, &objectPrototype));
+	ScriptObject* prototypesObject = gcHeap.manage(new (&gcHeap) ScriptObject(gcHeap, &objectPrototype));
 	supportObject->setOwnProperty(*this, Value(gcHeap.manage(new (&gcHeap) String("prototypes"))), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, Value(&SUPPORT_FUNCTIONS[i].name), Value(&SUPPORT_FUNCTIONS[i].func), STANDARD_FLAGS);
@@ -4693,7 +4686,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	// FIX : all this boilerplating... build a function object or something instead?
 
-	CodeDefinition* code = gcHeap.manage(new (&gcHeap) CodeDefinition(&gcHeap, gcHeap.manage(new (&gcHeap) Constants(&gcHeap))));
+	CodeDefinition* code = gcHeap.manage(new (&gcHeap) CodeDefinition(gcHeap, gcHeap.manage(new (&gcHeap) Constants(gcHeap))));
 	{
 		Compiler compiler(gcHeap, code, Compiler::FOR_EVAL);
 		gcHeap.protect(&compiler);
@@ -4776,8 +4769,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 	}
 
 	class PrintFunction : public Function {
-		public:		typedef Function super;
-					virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		public:		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						if (interactive) {
@@ -4839,12 +4831,12 @@ suppressStdErr = true;
     Engine engine(heap);
 	heap.protect(&engine);
 
-    Constants globalConstants(&heap);
+    Constants globalConstants(heap);
     heap.protect(&globalConstants);
-    CodeDefinition globalCode(&heap, &globalConstants);
+    CodeDefinition globalCode(heap, &globalConstants);
     heap.protect(&globalCode);
 
-    ScriptObject globals(&heap, &engine.objectPrototype);
+    ScriptObject globals(heap, &engine.objectPrototype);
     heap.protect(&globals);
     GlobalScope globalScope(&globals, &globalCode);
     heap.protect(&globalScope);

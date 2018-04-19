@@ -157,6 +157,7 @@ class GCItem {
 				static void operator delete(void* ptr, Heap* heap);
 				
 				GCItem() throw();
+				GCItem(GCHeap& heap) throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
 				virtual void gcMark(GCHeap& heap) const;
@@ -221,7 +222,6 @@ class String;
 class Object;
 class Function;
 class Engine;
-class Function;
 class Value {
 	friend class Table;
 	
@@ -305,7 +305,6 @@ struct Attributes {
 };
 
 class Enumerator;
-class Function;
 class Processor;
 class ScriptObject;
 
@@ -321,7 +320,9 @@ const Flags NONEXISTENT = 0;		// use with getOwnProperty() to check for existenc
 // InternalObject ?
 class Object : public GCItem {
 	public:		typedef GCItem super;
-				
+	
+				Object() { }
+				Object(GCHeap& heap) : super(heap) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -462,7 +463,7 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(Heap* heap, UInt32 initialCapacity);
+				StringListEnumerator(GCHeap& heap, UInt32 initialCapacity);
 				void add(const String* s);
 				virtual const String* nextPropertyName();
 
@@ -496,7 +497,7 @@ class JoiningEnumerator : public Enumerator {
 class ScriptObject : public virtual Object {
 	public:		typedef Object super;
 				
-				ScriptObject(Heap* heap, Object* prototype);
+				ScriptObject(GCHeap& heap, Object* prototype);
 				virtual Object* getPrototype(Engine& engine) const;
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
@@ -518,7 +519,7 @@ class ScriptObject : public virtual Object {
 // fix : good candidate for a lazy object
 class WrapperObject : public ScriptObject {
 	public:		typedef ScriptObject super;
-				WrapperObject(Heap* heap, const String* className, const Value& value, Object* prototype);
+				WrapperObject(GCHeap& heap, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 	protected:	const String* const className;
@@ -533,7 +534,7 @@ class WrapperObject : public ScriptObject {
 // FIX : a lot like a LazyScriptObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
-				StringWrapper(Heap* heap, const String* string, Object* prototype);
+				StringWrapper(GCHeap& heap, const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
@@ -563,6 +564,7 @@ class StringWrapper : public ScriptObject {
 template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyScriptObject();
+				LazyScriptObject(GCHeap& heap);
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
@@ -581,7 +583,7 @@ template<class SUPER> class LazyScriptObject : public SUPER {
 class Array : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
 	
-				Array(Heap* heap);
+				Array(GCHeap& heap);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : toString too?
@@ -608,7 +610,9 @@ class Array : public LazyScriptObject<Object> {
 */
 class Function : public Object {
 	public:		typedef Object super;
-				
+	
+				Function();
+				Function(GCHeap& heap);
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -624,7 +628,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(Heap* heap, bool direct) : direct(direct), functionDefCache(heap) { }
+				EvalFunction(GCHeap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -642,7 +646,7 @@ class EvalFunction : public Function {
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(Heap* heap) : QuickVector<Value>(heap) { }
+				Constants(GCHeap& heap) : super(heap), QuickVector<Value>(&heap) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -657,7 +661,7 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Heap* heap, Constants* constants);
+				CodeDefinition(GCHeap& heap, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -718,11 +722,13 @@ class Scope : public GCItem {
 
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
+	public:		ExtensibleFunction(GCHeap& heap);
 	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
+				FunctionPrototypeFunction(GCHeap& heap);
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
@@ -733,7 +739,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -754,7 +760,7 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 
-				SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction);
+				SpecialConstructorFunction(GCHeap& heap, Function* regularFunction, Function* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
@@ -836,7 +842,7 @@ class FunctionScope : public Scope {
 	
 	public:		typedef Scope super;
 
-				FunctionScope(Heap* heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(GCHeap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -941,7 +947,7 @@ class Engine : public GCItem {
 class Arguments : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
 
-				Arguments(Heap* heap, FunctionScope* scope, UInt32 argumentsCount);
+				Arguments(GCHeap& heap, FunctionScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
@@ -1174,11 +1180,11 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(Heap* heap, int initialStackDepth)
-							: code(heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
+					CodeSection(GCHeap& heap, int initialStackDepth)
+							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), inDeadCode(false)
 #if (VERIFY_STACK_LOGIC)
-	, stackDepths(heap)
+	, stackDepths(&heap)
 #endif
 							 { }
 					void emit(Processor::Opcode opcode, Int32 operand);
