@@ -1841,7 +1841,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 
 Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), cstack(engine.getPool()), vstack(engine.getPool())
-		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin()), cfp(cstack.begin()), scope(0), constants(0), indexed(0)
+		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin() - 1), cfp(cstack.begin()), scope(0), constants(0), indexed(0)
 		, catchers(engine.getPool()) {
 }
 
@@ -2331,7 +2331,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 
 	int errors = 0;
 	for (; offset < codeSize; ++offset) {
-		if (stackDepths[offset] != UNKNOWN_STACK_DEPTH) {
+		if (stackDepths[offset] != DEAD_CODE_STACK_DEPTH) {
 			if (stackDepths[offset] != currentStackDepth) {
 				std::cerr << "Conflicting stack depth @" << offset << ": " << currentStackDepth << " & " << stackDepths[offset] << std::endl;
 				++errors;
@@ -2379,7 +2379,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 				if (targetOffset < 0 || targetOffset >= codeSize) {
 					std::cerr << "Invalid target @" << offset << ": @" << targetOffset << std::endl;
 					++errors;
-					break;
+					return errors;
 				}
 				const Int32 targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
 						+ (((info.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0);
@@ -2415,7 +2415,7 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDefinition) {
 	const UInt32 codeSize = codeDefinition.getCodeSize();
 	
 	QuickArray<Int32> stackDepths(codeSize, &heap.pool);
-	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
+	std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
 	
 	Int32 maxStackDepth = 0;
 	int errors = recursiveStackCheck(codeDefinition, stackDepths, 0, 0, maxStackDepth);
@@ -2431,14 +2431,14 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDefinition) {
 			break;
 		}
 
-		if (stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
+		if (stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
 			std::cerr << "?";
 		} else {
 			std::cerr << stackDepths[offset];
 		}
 		std::cerr << "\t";
 #if (VERIFY_STACK_LOGIC)
-		if (codeDefinition.stackDepths[offset] == UNKNOWN_STACK_DEPTH) {
+		if (codeDefinition.stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
 			std::cerr << "?";
 		} else {
 			std::cerr << codeDefinition.stackDepths[offset];
@@ -2597,10 +2597,12 @@ struct Compiler::SemanticScope {
 	}
 	
 	Int32 popStack(Compiler& compiler, Int32 currentDepth, Processor::Opcode popOpcode) {
-		const Int32 stackDistance = currentDepth - stackDepthOnEntry;
-		if (stackDistance > 0) {
-			compiler.emit(popOpcode, stackDistance);
-			currentDepth -= stackDistance;
+		if (!compiler.currentSection->inDeadCode) {
+			const Int32 stackDistance = currentDepth - stackDepthOnEntry;
+			if (stackDistance > 0) {
+				compiler.emit(popOpcode, stackDistance);
+				currentDepth -= stackDistance;
+			}
 		}
 		return currentDepth;
 	}
@@ -2640,8 +2642,8 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileF
 		, heap(heap)
 		, codeDefinition(codeDefinition)
 		, compilingFor(compileFor)
-		, setupSection(heap, 0)
-		, mainSection(heap, 0)
+		, setupSection(heap)
+		, mainSection(heap)
 		, p(0)
 		, e(0)
 		, currentSection(0)
@@ -2656,16 +2658,19 @@ void Compiler::error(ErrorType errorType, const char* message) {
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (inDeadCode) {	// unknown stack depth = dead code
+		assert(stackDepth == DEAD_CODE_STACK_DEPTH);
 		return;
 	}
+	assert(stackDepth != DEAD_CODE_STACK_DEPTH);
 #if (VERIFY_STACK_LOGIC)
-	stackDepths.append(inDeadCode ? UNKNOWN_STACK_DEPTH : stackDepth);
+	stackDepths.append(inDeadCode ? DEAD_CODE_STACK_DEPTH : stackDepth);
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 	assert(stackDepth >= 0);
 	maxStackDepth = std::max(maxStackDepth, stackDepth);		// Yeah, if we eliminate a (void/const/repush, pop) pair this might be one more than necessary, but it never seems to happen from emperical tests and it doesn't really matter in the first place.
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
+		stackDepth = DEAD_CODE_STACK_DEPTH;
 		inDeadCode = true;
 	}
 	if (opcode == Processor::POP_OP && operand == 1) {
@@ -2730,7 +2735,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 // FIX : share code somehow
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	const Int32 operand = 0;
-	const Int32 targetStackDepth = (currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH
+	const Int32 targetStackDepth = (currentSection->stackDepth == DEAD_CODE_STACK_DEPTH ? DEAD_CODE_STACK_DEPTH
 			: currentSection->stackDepth
 			+ opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0)
 			+ (((opcodeInfo.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
@@ -2740,15 +2745,15 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 }
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
-	assert(currentSection->inDeadCode || point.stackDepth == UNKNOWN_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
-	currentSection->lastEmitted = Processor::INVALID_OP;
-	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
+	assert(currentSection->inDeadCode || point.stackDepth == DEAD_CODE_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
+	if (point.stackDepth != DEAD_CODE_STACK_DEPTH) {
+		currentSection->lastEmitted = Processor::INVALID_OP;
 		currentSection->inDeadCode = false;
 		currentSection->stackDepth = point.stackDepth;
 		currentSection->maxStackDepth = std::max(currentSection->maxStackDepth, point.stackDepth);
+		const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
+		currentSection->code[point.codeOffset] = Processor::packInstruction(instruction.first, currentSection->code.size() - point.codeOffset - 1);
 	}
-	const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
-	currentSection->code[point.codeOffset] = Processor::packInstruction(instruction.first, currentSection->code.size() - point.codeOffset - 1);
 }
 
 void Compiler::completeForwardBranches(const BranchPoint* begin, const BranchPoint* end) {
@@ -2759,11 +2764,15 @@ void Compiler::completeForwardBranches(const BranchPoint* begin, const BranchPoi
 
 Compiler::BranchPoint Compiler::markBackwardBranch() {
 	currentSection->lastEmitted = Processor::INVALID_OP;
-	return BranchPoint(currentSection->code.size());
+	return BranchPoint(currentSection->code.size(), currentSection->stackDepth);
 }
 
 void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point) {
-	emit(opcode, point.codeOffset - 1 - currentSection->code.size());
+	if (!currentSection->inDeadCode) {
+		assert((currentSection->stackDepth == DEAD_CODE_STACK_DEPTH) == (point.stackDepth == DEAD_CODE_STACK_DEPTH));
+		assert(point.codeOffset < currentSection->code.size());
+		emit(opcode, point.codeOffset - 1 - currentSection->code.size());
+	}
 }
 
 UInt32 Compiler::addConstant(const Value& constant) {
@@ -2971,13 +2980,13 @@ Compiler::ExpressionResult Compiler::safeKeep() {
 		emit(Processor::SWAP_OP);				// evaluation result should be up front always
 		stackOffset = 2;
 	}
-	assert(currentSection->stackDepth >= stackOffset);
+	assert(currentSection->inDeadCode || currentSection->stackDepth >= stackOffset);
 	return ExpressionResult(ExpressionResult::SAFEKEPT, Value(currentSection->stackDepth - stackOffset));
 }
 
 void Compiler::returnSafeKept(const ExpressionResult& xr) {
 	assert(xr.t == ExpressionResult::SAFEKEPT);
-	assert(currentSection->stackDepth == UNKNOWN_STACK_DEPTH || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
+	assert(currentSection->inDeadCode || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
 	emit(evalPopOpcode(), 1);
 }
 
@@ -3677,9 +3686,7 @@ void Compiler::forStatement(SemanticScope* emptyLabelScope, SemanticScope* scope
 	completeIteratorContinues(emptyLabelScope, scopeLabelsEnd);
 	currentSection->insertSection(incrementSection);
 	emitBackwardBranch(Processor::JMP_OP, loopPoint);
-	if (exitLoopPoint.isValid()) {
-		completeForwardBranch(exitLoopPoint);
-	}
+	completeForwardBranch(exitLoopPoint);
 	completeIteratorBreaks(emptyLabelScope, scopeLabelsEnd);
 }
 
@@ -4006,9 +4013,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	emit(Processor::RETURN_OP);
 	
 	completeForwardBranch(tryEndPoint);
-	if (catchEndPoint.isValid()) {
-		completeForwardBranch(catchEndPoint);
-	}
+	completeForwardBranch(catchEndPoint);
 	if (compilingFor != FOR_EVAL) { // pop return space holder
 		emit(Processor::POP_OP, 1);
 	}
@@ -4035,25 +4040,30 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			error(SYNTAX_ERROR, "Expected '}'");
 		}
 		else if (token("case", false)) {
+			assert(currentSection == &mainSection);
+			currentSection->stackDepth = testsSection.stackDepth;
+			currentSection->inDeadCode = (testsSection.stackDepth == DEAD_CODE_STACK_DEPTH);
 			const BranchPoint casePoint = markBackwardBranch();
+
 			CodeSection* previousSection = changeSection(&testsSection);
 			makeRValue(controlXR);
 			rvalueExpression();
 			expectToken(":", true);
-			emit(Processor::X_EQ_OP);
-			emitBackwardBranch(Processor::JT_OP, casePoint);
-			jumpOffsets.append(testsSection.code.size() - 1);
+			if (!currentSection->inDeadCode) {
+				emit(Processor::X_EQ_OP);
+				jumpOffsets.append(testsSection.code.size());
+				emit(Processor::JT_OP, casePoint.codeOffset - 1 - currentSection->code.size());
+			}
 			changeSection(previousSection);
-			currentSection->stackDepth = testsSection.stackDepth;
-			currentSection->inDeadCode = false;
 		} else if (token("default", false)) {
 			expectToken(":", true);
 			if (defaultPoint.isValid()) {
 				error(SYNTAX_ERROR, "More than one 'default:'");
 			}
-			defaultPoint = markBackwardBranch();
+			assert(currentSection == &mainSection);
 			currentSection->stackDepth = testsSectionEntryStackDepth;
-			currentSection->inDeadCode = false;
+			currentSection->inDeadCode = (testsSectionEntryStackDepth == DEAD_CODE_STACK_DEPTH);
+			defaultPoint = markBackwardBranch();
 		} else if (firstStatement) {
 			error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
 		} else {
@@ -4067,6 +4077,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		white();
 	}
 	
+	assert(currentSection == &mainSection);
 	const BranchPoint donePoint = emitForwardBranch(Processor::JMP_OP);
 	completeForwardBranch(testsPoint);
 	for (const Int32* it = jumpOffsets.begin(); it != jumpOffsets.end(); ++it) {
@@ -4213,7 +4224,7 @@ if (!suppressStdErr) {
 	std::cerr << "\tArguments: " << codeDefinition->getArgumentsCount() << std::endl;
 } else {
 	QuickArray<Int32> stackDepths(codeDefinition->getCodeSize(), &heap.pool);
-	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
+	std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
 	
 	Int32 maxStackDepth = 0;
 	int errors = recursiveStackCheck(*codeDefinition, stackDepths, 0, 0, maxStackDepth);

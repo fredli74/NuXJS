@@ -1151,7 +1151,8 @@ enum Precedence {
 	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
-const int UNKNOWN_STACK_DEPTH = -0x80000000;
+const int DEAD_CODE_OFFSET = -0x80000000;
+const int DEAD_CODE_STACK_DEPTH = -0x80000000;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
@@ -1185,9 +1186,9 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(GCHeap& heap, Int32 initialStackDepth)
+					CodeSection(GCHeap& heap, Int32 initialStackDepth = 0)
 							: code(&heap.pool), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
-							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth), inDeadCode(false)
+							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth), inDeadCode(initialStackDepth == DEAD_CODE_STACK_DEPTH)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap.pool)
 #endif
@@ -1206,9 +1207,9 @@ class Compiler : public GCItem {
 				};
 	
 				struct BranchPoint {
-					BranchPoint(Int32 codeOffset = -1, Int32 stackDepth = UNKNOWN_STACK_DEPTH)
+					BranchPoint(Int32 codeOffset = DEAD_CODE_OFFSET, Int32 stackDepth = DEAD_CODE_STACK_DEPTH)
 							: codeOffset(codeOffset), stackDepth(stackDepth) { }
-					bool isValid() const { return codeOffset != -1; };
+					bool isValid() const { return codeOffset != DEAD_CODE_OFFSET; };
 					Int32 codeOffset;
 					Int32 stackDepth;
 				};
