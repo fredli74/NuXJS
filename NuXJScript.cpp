@@ -3332,7 +3332,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			makeRValue(operand(op), false);
 			const BranchPoint endPoint = emitForwardBranch(Processor::JMP_OP);
 			completeForwardBranch(falsePoint);
-			rvalueExpression(op.prec);
+			rvalueExpression(ASSIGN_PREC);
 			completeForwardBranch(endPoint);
             xr = ExpressionResult::PUSHED;
 			break;
@@ -4985,6 +4985,7 @@ suppressStdErr = true;
                     if (interactive) {
                         pushIOLines('!', String(ws, &heap.pool));
                     }
+					std::wcout << std::wstring(std::max<const Char*>(stopPoint - 8, source.begin()), std::min<const Char*>(stopPoint + 8, source.end())) << std::endl;
                     throw;
                 }
                 if (!suppressStdErr) {
