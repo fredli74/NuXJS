@@ -1151,8 +1151,8 @@ enum Precedence {
 	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
 };
 
-const int DEAD_CODE_OFFSET = -0x80000000;
-const int DEAD_CODE_STACK_DEPTH = -0x80000000;
+const Int32 INVALID_CODE_OFFSET = -0x80000000;
+const Int32 DEAD_CODE_STACK_DEPTH = -0x80000000;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
@@ -1188,13 +1188,14 @@ class Compiler : public GCItem {
 				struct CodeSection {
 					CodeSection(GCHeap& heap, Int32 initialStackDepth = 0)
 							: code(&heap.pool), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
-							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth), inDeadCode(initialStackDepth == DEAD_CODE_STACK_DEPTH)
+							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap.pool)
 #endif
 							 { }
 					void emit(Processor::Opcode opcode, Int32 operand);
 					void insertSection(const CodeSection& section);
+					bool inDeadCode() const { return stackDepth == DEAD_CODE_STACK_DEPTH; }
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
 	QuickVector<Int32> stackDepths;
@@ -1203,13 +1204,13 @@ class Compiler : public GCItem {
 					const Int32 initialStackDepth;
 					Int32 stackDepth;
 					Int32 maxStackDepth;
-					bool inDeadCode;
 				};
 	
 				struct BranchPoint {
-					BranchPoint(Int32 codeOffset = DEAD_CODE_OFFSET, Int32 stackDepth = DEAD_CODE_STACK_DEPTH)
+					BranchPoint(Int32 codeOffset = INVALID_CODE_OFFSET, Int32 stackDepth = DEAD_CODE_STACK_DEPTH)
 							: codeOffset(codeOffset), stackDepth(stackDepth) { }
-					bool isValid() const { return codeOffset != DEAD_CODE_OFFSET; };
+					bool isValid() const { return codeOffset != INVALID_CODE_OFFSET; };
+					bool inDeadCode() const { return stackDepth == DEAD_CODE_STACK_DEPTH; };
 					Int32 codeOffset;
 					Int32 stackDepth;
 				};

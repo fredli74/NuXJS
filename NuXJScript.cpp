@@ -2597,7 +2597,7 @@ struct Compiler::SemanticScope {
 	}
 	
 	Int32 popStack(Compiler& compiler, Int32 currentDepth, Processor::Opcode popOpcode) {
-		if (!compiler.currentSection->inDeadCode) {
+		if (!compiler.currentSection->inDeadCode()) {
 			const Int32 stackDistance = currentDepth - stackDepthOnEntry;
 			if (stackDistance > 0) {
 				compiler.emit(popOpcode, stackDistance);
@@ -2657,13 +2657,11 @@ void Compiler::error(ErrorType errorType, const char* message) {
 }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
-	if (inDeadCode) {	// unknown stack depth = dead code
-		assert(stackDepth == DEAD_CODE_STACK_DEPTH);
+	if (inDeadCode()) {	// unknown stack depth = dead code
 		return;
 	}
-	assert(stackDepth != DEAD_CODE_STACK_DEPTH);
 #if (VERIFY_STACK_LOGIC)
-	stackDepths.append(inDeadCode ? DEAD_CODE_STACK_DEPTH : stackDepth);
+	stackDepths.append(stackDepth);
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
@@ -2671,7 +2669,6 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	maxStackDepth = std::max(maxStackDepth, stackDepth);		// Yeah, if we eliminate a (void/const/repush, pop) pair this might be one more than necessary, but it never seems to happen from emperical tests and it doesn't really matter in the first place.
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
 		stackDepth = DEAD_CODE_STACK_DEPTH;
-		inDeadCode = true;
 	}
 	if (opcode == Processor::POP_OP && operand == 1) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
@@ -2735,7 +2732,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 // FIX : share code somehow
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	const Int32 operand = 0;
-	const Int32 targetStackDepth = (currentSection->stackDepth == DEAD_CODE_STACK_DEPTH ? DEAD_CODE_STACK_DEPTH
+	const Int32 targetStackDepth = (currentSection->inDeadCode() ? DEAD_CODE_STACK_DEPTH
 			: currentSection->stackDepth
 			+ opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0)
 			+ (((opcodeInfo.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
@@ -2745,10 +2742,9 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 }
 
 void Compiler::completeForwardBranch(const BranchPoint& point) {
-	assert(currentSection->inDeadCode || point.stackDepth == DEAD_CODE_STACK_DEPTH || point.stackDepth == currentSection->stackDepth);
-	if (point.stackDepth != DEAD_CODE_STACK_DEPTH) {
+	assert(currentSection->inDeadCode() || point.inDeadCode() || point.stackDepth == currentSection->stackDepth);
+	if (!point.inDeadCode()) {
 		currentSection->lastEmitted = Processor::INVALID_OP;
-		currentSection->inDeadCode = false;
 		currentSection->stackDepth = point.stackDepth;
 		currentSection->maxStackDepth = std::max(currentSection->maxStackDepth, point.stackDepth);
 		const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
@@ -2768,9 +2764,8 @@ Compiler::BranchPoint Compiler::markBackwardBranch() {
 }
 
 void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point) {
-	if (!currentSection->inDeadCode) {
-		assert((currentSection->stackDepth == DEAD_CODE_STACK_DEPTH) == (point.stackDepth == DEAD_CODE_STACK_DEPTH));
-		assert(point.codeOffset < currentSection->code.size());
+	if (!currentSection->inDeadCode()) {
+		assert(!point.inDeadCode() && 0 <= point.codeOffset && point.codeOffset < currentSection->code.size());
 		emit(opcode, point.codeOffset - 1 - currentSection->code.size());
 	}
 }
@@ -2980,13 +2975,13 @@ Compiler::ExpressionResult Compiler::safeKeep() {
 		emit(Processor::SWAP_OP);				// evaluation result should be up front always
 		stackOffset = 2;
 	}
-	assert(currentSection->inDeadCode || currentSection->stackDepth >= stackOffset);
+	assert(currentSection->inDeadCode() || currentSection->stackDepth >= stackOffset);
 	return ExpressionResult(ExpressionResult::SAFEKEPT, Value(currentSection->stackDepth - stackOffset));
 }
 
 void Compiler::returnSafeKept(const ExpressionResult& xr) {
 	assert(xr.t == ExpressionResult::SAFEKEPT);
-	assert(currentSection->inDeadCode || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
+	assert(currentSection->inDeadCode() || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
 	emit(evalPopOpcode(), 1);
 }
 
@@ -4042,14 +4037,13 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 		else if (token("case", false)) {
 			assert(currentSection == &mainSection);
 			currentSection->stackDepth = testsSection.stackDepth;
-			currentSection->inDeadCode = (testsSection.stackDepth == DEAD_CODE_STACK_DEPTH);
 			const BranchPoint casePoint = markBackwardBranch();
 
 			CodeSection* previousSection = changeSection(&testsSection);
 			makeRValue(controlXR);
 			rvalueExpression();
 			expectToken(":", true);
-			if (!currentSection->inDeadCode) {
+			if (!currentSection->inDeadCode()) {
 				emit(Processor::X_EQ_OP);
 				jumpOffsets.append(testsSection.code.size());
 				emit(Processor::JT_OP, casePoint.codeOffset - 1 - currentSection->code.size());
@@ -4062,7 +4056,6 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			}
 			assert(currentSection == &mainSection);
 			currentSection->stackDepth = testsSectionEntryStackDepth;
-			currentSection->inDeadCode = (testsSectionEntryStackDepth == DEAD_CODE_STACK_DEPTH);
 			defaultPoint = markBackwardBranch();
 		} else if (firstStatement) {
 			error(SYNTAX_ERROR, "Expected 'case', 'default' or '}'");
@@ -4211,7 +4204,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 if (!suppressStdErr) {
 	disassemble(heap, *codeDefinition);
 	Int32 stackDepth = mainSection.stackDepth;
-	assert(mainSection.inDeadCode || stackDepth == 0);
+	assert(mainSection.inDeadCode() || stackDepth == 0);
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
 	std::cerr << "\tMax stack depth: " << codeDefinition->maxStackDepth << std::endl;
 	std::cerr << "\tCode: " << codeDefinition->code.size() << std::endl;
