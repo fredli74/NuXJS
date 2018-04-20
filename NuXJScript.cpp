@@ -870,7 +870,7 @@ Value Object::getPropertyDeep(Engine& engine, const char* name) const { // FIX :
 
 UInt32 Table::calcMaxLoad(UInt32 bucketCount) { return (bucketCount - (bucketCount >> 4) - 1); }
 
-Table::Table(Pool* pool) : n(TABLE_BUILT_IN_N), buckets(1U << TABLE_BUILT_IN_N, pool), loadCount(0) { }
+Table::Table(Pool* pool) : buckets(1U << TABLE_BUILT_IN_N, pool), loadCount(0) { }
 
 UInt32 Table::getLoadCount() const { return loadCount; }
 Table::Bucket* Table::getFirst() const { return getNext(buckets.begin() - 1); }
@@ -892,7 +892,7 @@ Table::Bucket* Table::insert(const String* key) {
 	Bucket* bucket = find(key, hash);
 	if (!bucket->keyExists()) {
 		if (loadCount >= calcMaxLoad(buckets.size())) {
-			rebuild(n + 2);
+			rebuild(buckets.size() << 2);	// expand 4 times on overload
 			assert(loadCount < calcMaxLoad(buckets.size()));
 			bucket = find(key, hash);
 			assert(!bucket->keyExists());
@@ -936,7 +936,8 @@ bool Table::erase(Bucket* bucket) {
 
 void Table::gcMark(GCHeap& heap) const {
 	UInt32 rebuildLoadCount = 0;
-	for (UInt32 i = 0; i < buckets.size(); ++i) {
+	const UInt32 n = buckets.size();
+	for (UInt32 i = 0; i < n; ++i) {
 		const Bucket& bucket = buckets[i];
 		if (bucket.keyExists()) {
 			heap.mark(bucket.key);
@@ -951,7 +952,7 @@ void Table::gcMark(GCHeap& heap) const {
 		}
 	}
 	if (rebuildLoadCount != loadCount) {
-		UInt32 check = const_cast<Table*>(this)->rebuild((loadCount < calcMaxLoad(1U << (n - 1))) ? n - 1 : n);
+		UInt32 check = const_cast<Table*>(this)->rebuild(loadCount < calcMaxLoad(n >> 1) ? (n >> 1) : n);
 		(void)check;
 		assert(check == rebuildLoadCount);
 	}
@@ -975,10 +976,10 @@ Table::Bucket* Table::find(const String* key, UInt32 hash) const {
 	return &buckets[i];
 }
 
-UInt32 Table::rebuild(UInt32 newN) {
-	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> newBuckets(1U << newN, buckets.getHeap());
+UInt32 Table::rebuild(UInt32 newSize) {
+	QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> newBuckets(newSize, buckets.getPool());
 	UInt32 newLoadCount = 0;
-	UInt32 mask = (1U << newN) - 1;
+	UInt32 mask = newSize - 1;
 	for (UInt32 i = 0; i < buckets.size(); ++i) {
 		const Bucket& bucket = buckets[i];
 		if (bucket.valueExists()) {
@@ -991,7 +992,6 @@ UInt32 Table::rebuild(UInt32 newN) {
 		}
 	}
 	buckets.swap(newBuckets);
-	n = newN;
 	loadCount = newLoadCount;
 	return newLoadCount;
 }

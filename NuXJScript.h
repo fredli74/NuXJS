@@ -50,7 +50,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						: pool(pool), n(n), p(n <= BUILT_IN_COUNT ? a : new (pool) T[n]) {	}
 				explicit QuickArray(const QuickArray& copy) : n(0), pool(copy.pool), p(a) { (*this) = copy; }
 				
-				Pool* getHeap() const { return pool; }
+				Pool* getPool() const { return pool; }
 				
 				void swap(QuickArray& other) {
 					if (this != &other) {
@@ -402,7 +402,6 @@ class Table {
 				Bucket* find(const String* key, UInt32 hash) const;
 				UInt32 rebuild(UInt32 newN);
 				
-				UInt32 n;															// Size of member table is two to the power of n.
 				QuickArray<Bucket, 1U << TABLE_BUILT_IN_N> buckets;
 				UInt32 loadCount;													// Count of buckets with defined keys.
 };
