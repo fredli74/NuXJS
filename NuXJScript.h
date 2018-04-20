@@ -21,6 +21,7 @@ typedef Byte Flags; // FIX : turn into enum
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 
+// FIX : i think we should just simply slam Pool and GCHeap together again for a single Heap object. Use pointer for constructor when govern() is optional, use reference when required.
 const int MAX_POOLED_SIZE = 1024;
 const int POOL_SIZE_GRANULARITY = 16;
 class Pool {
