@@ -116,8 +116,8 @@ testFile => {
 		inFile = tempDir # 'test';
 	};
 	save(inFile, allInput);
-	error = try(> result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), !errorsToo));
-	if (error != void) result = error;
+	result = pipe(exe # (if (errorsToo) ' <' else ' ') # quotePath(inFile), false, @err, @rc);
+	if (rc === 2) throw("user aborted");
 	result = replace(result, "\r\n", "\n");
 	result = trim(result, '', "\n");
 	if (result === allOutput) {

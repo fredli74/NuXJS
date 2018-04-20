@@ -1839,10 +1839,13 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
-	: super(engine.getHeap()), engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
-	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), cfp(cstackStart - 1), scope(0), constants(0), indexed(0)
-	, catchers(engine.getPool()) { }
+Processor::Processor(Engine& engine)
+		: super(engine.getHeap()), engine(engine), cstack(engine.getPool()), vstack(engine.getPool())
+		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin()), cfp(cstack.begin()), scope(0), constants(0), indexed(0)
+		, catchers(engine.getPool()) {
+	vstack.resize(1024);
+	vsp = vstack.begin() - 1;
+}
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
 	assert(0 <= opcode && static_cast<int>(opcode) < 256);
@@ -1854,9 +1857,9 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { assert(vsp + 1 < vstackEnd); *++vsp = v; }
-void Processor::poppush(const Value& v) { assert(vsp >= vstackStart); *--vsp = v; }
-void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackStart); vsp -= count; }
+void Processor::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
+void Processor::poppush(const Value& v) { assert(vsp >= vstack.begin()); *--vsp = v; }
+void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::error(ErrorType errorType, const String* message) {
@@ -1875,8 +1878,8 @@ void Processor::updateInternals() {
 }
 
 void Processor::chain(const CodeWord* stub) {
-	++cfp; // FIX : overflow check
-	assert(cfp < cstackEnd);
+	cstack.resize(cstack.size() + 1);
+	cfp = cstack.end() - 1;
 	cfp->returnIP = ip;
 	cfp->scope = 0;
 	cfp->thisObject = 0;
@@ -1887,8 +1890,8 @@ void Processor::chain(const CodeWord* stub) {
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) FunctionScope(heap, func, argc, argv));
-	++cfp; // FIX : overflow check
-	assert(cfp < cstackEnd);
+	cstack.resize(cstack.size() + 1);
+	cfp = cstack.end() - 1;
 	cfp->returnIP = ip;
 	cfp->scope = scope;
 	cfp->thisObject = thisObject;
@@ -1899,8 +1902,8 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 
 void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 	this->scope = scope;
-	++cfp; // FIX : overflow check
-	assert(cfp < cstackEnd);
+	cstack.resize(cstack.size() + 1);
+	cfp = cstack.end() - 1;
 	cfp->returnIP = this->ip;
 	cfp->scope = this->scope;
 	cfp->thisObject = thisObject;
@@ -1913,8 +1916,8 @@ void Processor::enterEval(CodeDefinition* codeDefinition, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) EvalScope(heap, f, codeDefinition));
-	++cfp; // FIX : overflow check
-	assert(cfp < cstackEnd);
+	cstack.resize(cstack.size() + 1);
+	cfp = cstack.end() - 1;
 	cfp->returnIP = ip;
 	cfp->scope = scope;
 	cfp->thisObject = cfp[-1].thisObject;
@@ -1930,7 +1933,9 @@ void Processor::throwVirtualException(const Value& exception) {
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
 	assert(ip != 0);
-	cfp = catcher.cfp;
+	assert(catcher.cstackSize <= cstack.size());
+	cstack.resize(catcher.cstackSize);
+	cfp = cstack.end() - 1;
 	cfp->scope = catcher.scope;
 	vsp = catcher.vsp;
 	push(exception);
@@ -1948,7 +1953,6 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 
 bool Processor::privateRun() {
 	GCHeap& heap = engine.getHeap();
-	assert(cfp >= cstackStart);
 	updateInternals();
 	Object* o;
 	
@@ -2050,8 +2054,8 @@ bool Processor::privateRun() {
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
 
-			case JSR_OP:	++cfp; // FIX : bounds check? or reserve?
-							assert(cfp < cstackEnd);
+			case JSR_OP:	cstack.resize(cstack.size() + 1);
+							cfp = cstack.end() - 1;
 							cfp->returnIP = ip;
 							cfp->scope = scope;
 							cfp->thisObject = cfp[-1].thisObject;
@@ -2155,21 +2159,26 @@ bool Processor::privateRun() {
 			}
 
             case DELETE_SCOPE_AND_RETURN_OP: delete scope; // fall through
-			case RETURN_OP:	ip = (cfp--)->returnIP;
+			case RETURN_OP:	ip = cfp->returnIP;
 							assert(ip != 0);
-							assert(cfp >= cstackStart);
+							assert(!cstack.empty());
+							cstack.resize(cstack.size() - 1);
+							cfp = cstack.end() - 1;
 							updateInternals();
 							break;
 			
 			case DISCARD_RETURN_OP: {
-				--cfp;
-				assert(cfp >= cstackStart);
+				assert(!cstack.empty());
+				cstack.resize(cstack.size() - 1);
+				cfp = cstack.end() - 1;
 				break;
 			}
 			
 			case RETURN_TO_HOST_OP: { // FIX : I don't like this opcode, is it really necessary?
-				ip = (cfp--)->returnIP;
-				assert(cfp >= cstackStart - 1);
+				ip = cfp->returnIP;
+				assert(!cstack.empty());
+				cstack.resize(cstack.size() - 1);
+				cfp = cstack.end() - 1;
 				result = vsp[0];
 				pop(1);
 				clockCyclesLeft = cyclesLeft;
@@ -2225,7 +2234,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRY_OP: {
-				catchers.append(Catcher(ip + operand, vsp, cfp, scope));
+				catchers.append(Catcher(ip + operand, vsp, cstack.size(), scope));
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
@@ -2302,7 +2311,7 @@ bool Processor::run() {
 	}
 }
 
-static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<int>& stackDepths, int offset, int currentStackDepth) {
+static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<Int32>& stackDepths, Int32 offset, Int32 currentStackDepth, Int32& maxStackDepth) {
 	const CodeWord* code = codeDefinition.getCodePointer();
 	const UInt32 codeSize = codeDefinition.getCodeSize();
 
@@ -2324,6 +2333,11 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 			++errors;
 		}
 		stackDepths[offset] = currentStackDepth;
+		if (currentStackDepth > codeDefinition.getMaxStackDepth()) {
+			std::cerr << "Stack overflow (code max is " << codeDefinition.getMaxStackDepth() << ", stack depth @" << offset << " is " << currentStackDepth << ")" << std::endl;
+			++errors;
+		}
+		maxStackDepth = std::max(maxStackDepth, currentStackDepth);
 #if (VERIFY_STACK_LOGIC)
 	if (stackDepths[offset] != codeDefinition.stackDepths[offset]) {
 		std::cerr << "Invalid compile-time stack depth @" << offset << " (" << codeDefinition.stackDepths[offset] << " vs " << stackDepths[offset] << ")" << std::endl;
@@ -2331,8 +2345,9 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 	}
 #endif
 		const Processor::OpcodeInfo& info = Processor::getOpcodeInfo(opcode);
-		const int thisStackUse = info.stackUse + (((info.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
+		const Int32 thisStackUse = info.stackUse + (((info.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 		currentStackDepth += thisStackUse;
+		maxStackDepth = std::max(maxStackDepth, currentStackDepth);
 		if (currentStackDepth < 0) {
 			std::cerr << "Negative stack depth @" << offset << std::endl;
 			++errors;
@@ -2352,9 +2367,9 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 					++errors;
 					break;
 				}
-				const int targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
+				const Int32 targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
 						+ (((info.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0);
-				errors += recursiveStackCheck(codeDefinition, stackDepths, targetOffset, targetStackDepth);
+				errors += recursiveStackCheck(codeDefinition, stackDepths, targetOffset, targetStackDepth, maxStackDepth);
 				if (opcode == Processor::JMP_OP) {
 					return errors;
 				}
@@ -2364,6 +2379,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 			case Processor::DELETE_SCOPE_AND_RETURN_OP: {
 				if (currentStackDepth != 0) {
 					std::cerr << "Invalid return stack depth @" << offset << ": " << currentStackDepth << std::endl;
+					++errors;
 				}
 				return errors;
 			}
@@ -2384,10 +2400,14 @@ static void disassemble(GCHeap& heap, const CodeDefinition& codeDefinition) {
 	const Value* constants = codeDefinition.getConstantsPointer();
 	const UInt32 codeSize = codeDefinition.getCodeSize();
 	
-	QuickArray<int> stackDepths(codeSize, &heap.pool);
+	QuickArray<Int32> stackDepths(codeSize, &heap.pool);
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
-	int errors = recursiveStackCheck(codeDefinition, stackDepths, 0, 0);
+	Int32 maxStackDepth = 0;
+	int errors = recursiveStackCheck(codeDefinition, stackDepths, 0, 0, maxStackDepth);
+	if (maxStackDepth != codeDefinition.getMaxStackDepth()) {
+		std::cerr << "Notice: code definition max stack depth is " << codeDefinition.getMaxStackDepth() << " but max stack depth actually used is " << maxStackDepth << std::endl;
+	}
 	
 	for (UInt32 offset = 0; offset < codeSize; ++offset) {
 		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(code[offset]);
@@ -2551,19 +2571,19 @@ enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS
 
 struct Compiler::SemanticScope {
 	enum Type { ROOT_TYPE, LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
-	SemanticScope(GCHeap& heap, Type type, int stackDepth, SemanticScope* next)
-			: breaks(&heap.pool), continues(&heap.pool), finallys(&heap.pool), type(type), stackDepth(stackDepth), next(next) { }
-	SemanticScope(GCHeap& heap, const String& label, int stackDepth, SemanticScope* next)
+	SemanticScope(GCHeap& heap, Type type, Int32 stackDepthOnEntry, SemanticScope* next)
+			: breaks(&heap.pool), continues(&heap.pool), finallys(&heap.pool), type(type), stackDepthOnEntry(stackDepthOnEntry), next(next) { }
+	SemanticScope(GCHeap& heap, const String& label, Int32 stackDepthOnEntry, SemanticScope* next)
 			: breaks(&heap.pool), continues(&heap.pool), finallys(&heap.pool), type(LABEL_TYPE), label(label)
-			, stackDepth(stackDepth), next(next) { }
+			, stackDepthOnEntry(stackDepthOnEntry), next(next) { }
 	void makeIteratorScopes(SemanticScope* untilScope) {
 		for (SemanticScope* s = this; s != untilScope; s = s->next) {
 			s->type = ITERATOR_LABEL_TYPE;
 		}
 	}
 	
-	int popStack(Compiler& compiler, int currentDepth, Processor::Opcode popOpcode) {
-		const int stackDistance = currentDepth - stackDepth;
+	Int32 popStack(Compiler& compiler, Int32 currentDepth, Processor::Opcode popOpcode) {
+		const Int32 stackDistance = currentDepth - stackDepthOnEntry;
 		if (stackDistance > 0) {
 			compiler.emit(popOpcode, stackDistance);
 			currentDepth -= stackDistance;
@@ -2571,7 +2591,7 @@ struct Compiler::SemanticScope {
 		return currentDepth;
 	}
 	
-	int rollback(Compiler& compiler, int rollbackStackDepth, Processor::Opcode popOpcode) {
+	Int32 rollback(Compiler& compiler, Int32 rollbackStackDepth, Processor::Opcode popOpcode) {
 		switch (type) {
 			case CATCH_TYPE:
 			case WITH_TYPE: compiler.emit(Processor::POP_SCOPE_OP); break;
@@ -2595,7 +2615,7 @@ struct Compiler::SemanticScope {
 	Type type;
 	const String label; // empty for automatic while, for, case labels
 	SemanticScope* const next;
-	int stackDepth;
+	Int32 stackDepthOnEntry;
 	QuickVector<BranchPoint> breaks; // source points for break jmp's
 	QuickVector<BranchPoint> continues; // source points for continue jmp's
 	QuickVector<BranchPoint> finallys; // source points for finally jsr's
@@ -2630,6 +2650,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 	assert(stackDepth >= 0);
+	maxStackDepth = std::max(maxStackDepth, stackDepth);		// Yeah, if we eliminate a (void/const/repush, pop) pair this might be one more than necessary, but it never seems to happen from emperical tests and it doesn't really matter in the first place.
 	if ((opcodeInfo.flags & Processor::OpcodeInfo::TERMINAL) != 0) {
 		inDeadCode = true;
 	}
@@ -2667,7 +2688,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 }
 
 void Compiler::CodeSection::insertSection(const CodeSection& section) {
-	const int stackAdjust = stackDepth - section.initialStackDepth;
+	const Int32 stackAdjust = stackDepth - section.initialStackDepth;
 	lastEmitted = Processor::INVALID_OP;
 	code.insert(code.end(), section.code.begin(), section.code.end());
 #if (VERIFY_STACK_LOGIC)
@@ -2676,6 +2697,7 @@ void Compiler::CodeSection::insertSection(const CodeSection& section) {
 	}
 #endif
 	stackDepth = section.stackDepth + stackAdjust;
+	maxStackDepth = std::max(maxStackDepth, section.maxStackDepth + stackAdjust);
 }
 
 void Compiler::emit(Processor::Opcode opcode, Int32 operand) {
@@ -2694,7 +2716,7 @@ Compiler::BranchPoint Compiler::emitForwardBranch(Processor::Opcode opcode) {
 // FIX : share code somehow
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	const Int32 operand = 0;
-	const int targetStackDepth = (currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH
+	const Int32 targetStackDepth = (currentSection->inDeadCode ? UNKNOWN_STACK_DEPTH
 			: currentSection->stackDepth
 			+ opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0)
 			+ (((opcodeInfo.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
@@ -2709,6 +2731,7 @@ void Compiler::completeForwardBranch(const BranchPoint& point) {
 	if (point.stackDepth != UNKNOWN_STACK_DEPTH) {
 		currentSection->inDeadCode = false;
 		currentSection->stackDepth = point.stackDepth;
+		currentSection->maxStackDepth = std::max(currentSection->maxStackDepth, point.stackDepth);
 	}
 	const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(currentSection->code[point.codeOffset]);
 	currentSection->code[point.codeOffset] = Processor::packInstruction(instruction.first, currentSection->code.size() - point.codeOffset - 1);
@@ -2929,7 +2952,7 @@ Processor::Opcode Compiler::evalPopOpcode() const {
 }
 
 Compiler::ExpressionResult Compiler::safeKeep() {
-	int stackOffset = 1;
+	Int32 stackOffset = 1;
 	if (compilingFor == FOR_EVAL) {
 		emit(Processor::SWAP_OP);				// evaluation result should be up front always
 		stackOffset = 2;
@@ -3591,7 +3614,7 @@ void Compiler::forInStatement(SemanticScope* emptyLabelScope, SemanticScope* sco
 	enumXR = safeKeep();
 	expectToken(")", true);
 	for (SemanticScope* s = emptyLabelScope; s != scopeLabelsEnd; s = s->next) {	// we must change stack depth of all labels that point to this scope, otherwise we'll pop the enumerator on continue
-		s->stackDepth = currentSection->stackDepth;
+		s->stackDepthOnEntry = currentSection->stackDepth;
 	}
 	const BranchPoint loopPoint = markBackwardBranch();
 	makeRValue(enumXR);
@@ -3685,7 +3708,7 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 
 void Compiler::breakStatement(SemanticScope* currentScope) {
 	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap.pool);
-	int rollbackStackDepth = currentSection->stackDepth;
+	Int32 rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->label.isEqualTo(label)
 				&& (s->type == SemanticScope::ITERATOR_LABEL_TYPE || s->type == SemanticScope::LABEL_TYPE)) {
@@ -3701,7 +3724,7 @@ void Compiler::breakStatement(SemanticScope* currentScope) {
 
 void Compiler::continueStatement(SemanticScope* currentScope) {
 	const String label = String((whiteNoLF() ? identifier(false, false) : p), p, &heap.pool);
-	int rollbackStackDepth = currentSection->stackDepth;
+	Int32 rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->label.isEqualTo(label) && (s->type == SemanticScope::ITERATOR_LABEL_TYPE
 				|| (s->type == SemanticScope::LABEL_TYPE && !label.empty()))) {
@@ -3813,7 +3836,7 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	}
 	returnXR = makeRValue(returnXR);
 
-	int rollbackStackDepth = currentSection->stackDepth;
+	Int32 rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, Processor::PUSH_BACK_OP);
 	}
@@ -4156,12 +4179,14 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 		}
 	}
 	codeDefinition->constants->shrink();
+	codeDefinition->maxStackDepth = mainSection.maxStackDepth;
+	
 if (!suppressStdErr) {
 	disassemble(heap, *codeDefinition);
-	int stackDepth = mainSection.stackDepth;
-	assert(stackDepth == 0);
+	Int32 stackDepth = mainSection.stackDepth;
+	assert(mainSection.inDeadCode || stackDepth == 0);
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
-//	std::cerr << "\tMax stack depth: " << stackDepth << std::endl;
+	std::cerr << "\tMax stack depth: " << codeDefinition->maxStackDepth << std::endl;
 	std::cerr << "\tCode: " << codeDefinition->code.size() << std::endl;
 	std::cerr << "\tConstants: " << codeDefinition->constants->size() << std::endl;
 	std::cerr << "\tBloom set: " << std::hex << codeDefinition->bloomSet << std::dec << std::endl;
@@ -4171,10 +4196,11 @@ if (!suppressStdErr) {
 	std::cerr << "\tVars: " << codeDefinition->getVarsCount() << std::endl;
 	std::cerr << "\tArguments: " << codeDefinition->getArgumentsCount() << std::endl;
 } else {
-	QuickArray<int> stackDepths(codeDefinition->getCodeSize(), &heap.pool);
+	QuickArray<Int32> stackDepths(codeDefinition->getCodeSize(), &heap.pool);
 	std::fill(stackDepths.begin(), stackDepths.end(), UNKNOWN_STACK_DEPTH);
 	
-	int errors = recursiveStackCheck(*codeDefinition, stackDepths, 0, 0);
+	Int32 maxStackDepth = 0;
+	int errors = recursiveStackCheck(*codeDefinition, stackDepths, 0, 0, maxStackDepth);
 	assert(errors == 0);
 }
 	return p;
@@ -4693,9 +4719,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		compiler.compile(librarySourceCode);
 	}
 	{
-		Value vstack[128];
-		Processor::CallFrame cstack[128];
-		Processor processor(*this, cstack, cstack + 128, vstack, vstack + 128);
+		Processor processor(*this);
 		gcHeap.include(processor);
 		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
 		processor.chain(RETURN_TO_HOST_STUB);
@@ -4911,11 +4935,7 @@ suppressStdErr = true;
             }
             
             if (execute) {
-                Value vstack[1024];
-                Processor::CallFrame cstack[1024];
-                Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
-				String stackOverflowGuard("stack overflow");
-				vstack[1023] = Value(&stackOverflowGuard);
+                Processor processor(engine);
                 const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
                 processor.chain(RETURN_TO_HOST_STUB);
                 
@@ -4980,8 +5000,8 @@ suppressStdErr = true;
                     
                     if (done) {
                         if (!suppressStdErr) {
-                            std::cerr << "\tOn stack: " << (processor.vsp - vstack + 1) << std::endl;
-                            assert(processor.vsp - vstack + 1 == 0);
+                            std::cerr << "\tOn stack: " << (processor.vsp - processor.vstack.begin() + 1) << std::endl;
+                            assert(processor.vsp - processor.vstack.begin() + 1 == 0);
                             Value v = processor.getResult();
                             std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
                             assert(processor.catchers.empty());
@@ -4994,7 +5014,6 @@ suppressStdErr = true;
                     }
                 } while (!done);
                 source = EMPTY_STRING;
-				assert(vstack[1023].getString() == &stackOverflowGuard);
             }
         }
         catch (const Exception& x) {

@@ -114,6 +114,7 @@
 		1DEB923208733DC60010E9CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_CXX0X_EXTENSIONS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
@@ -124,6 +125,7 @@
 		1DEB923308733DC60010E9CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_CXX0X_EXTENSIONS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.8;

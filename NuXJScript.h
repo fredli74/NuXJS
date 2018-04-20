@@ -7,7 +7,11 @@
 #include <string>
 #include <cstring>
 
-#define VERIFY_STACK_LOGIC !defined(NDEBUG)
+#ifndef NDEBUG
+	#define VERIFY_STACK_LOGIC 1
+#else
+	#define VERIFY_STACK_LOGIC 0
+#endif
 
 typedef short Int16;
 typedef unsigned short UInt16;
@@ -670,6 +674,7 @@ class CodeDefinition : public Object {
 				UInt32 getCodeSize() const { return code.size(); }
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
+				UInt32 getMaxStackDepth() const { return maxStackDepth; }
 
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
@@ -679,7 +684,8 @@ class CodeDefinition : public Object {
 				const String* name;
 				const String* selfName;
 				const String* source;
-				UInt32 bloomSet;
+				UInt32 bloomSet;							// Bloom bits of all local variables, arguments (+ self name and "arguments"). For faster scope resolution.
+				UInt32 maxStackDepth;
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(constants);
@@ -1004,10 +1010,10 @@ class Processor : public GCItem {
 				// FIX : {ip, vsp, cfp} could be a struct used by Processor too, or.. CallFrame?
 	protected:	struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, CallFrame* cfp, Scope* scope) : ip(ip), cfp(cfp), vsp(vsp), scope(scope) { }
+					Catcher(const CodeWord* ip, Value* vsp, UInt32 cstackSize, Scope* scope) : ip(ip), vsp(vsp), cstackSize(cstackSize), scope(scope) { }
 					const CodeWord* ip;
 					Value* vsp;
-					CallFrame* cfp;
+					UInt32 cstackSize;
 					Scope* scope;
 				};
 			// FIX : public
@@ -1089,7 +1095,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
-	public:		Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd);
+	public:		Processor(Engine& engine);
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
@@ -1108,14 +1114,13 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				
 				Engine& engine;
-				CallFrame* const cstackStart;
-				CallFrame* const cstackEnd;
-				Value* const vstackStart;
-				Value* const vstackEnd;
-
+	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
+				QuickVector<CallFrame> cstack;
+				QuickVector<Value> vstack;
+
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
@@ -1123,8 +1128,9 @@ public: // FIX : not public, just for some asserts now I think
 				Value result;
 
 				virtual void gcMark(GCHeap& heap) const {
-					heap.markViaReferences(vstackStart, vsp + 1);
-					for (CallFrame* c = cstackStart; c != cfp + 1; ++c) {
+					// FIX : trim these?
+					heap.markViaReferences(vstack.begin(), vsp + 1);
+					for (CallFrame* c = cstack.begin(); c != cfp + 1; ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}
@@ -1179,9 +1185,9 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(GCHeap& heap, int initialStackDepth)
+					CodeSection(GCHeap& heap, Int32 initialStackDepth)
 							: code(&heap.pool), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
-							, stackDepth(initialStackDepth), inDeadCode(false)
+							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth), inDeadCode(false)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap.pool)
 #endif
@@ -1190,20 +1196,21 @@ class Compiler : public GCItem {
 					void insertSection(const CodeSection& section);
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
-	QuickVector<int> stackDepths;
+	QuickVector<Int32> stackDepths;
 #endif
 					Processor::Opcode lastEmitted;
-					const int initialStackDepth;
-					int stackDepth;
+					const Int32 initialStackDepth;
+					Int32 stackDepth;
+					Int32 maxStackDepth;
 					bool inDeadCode;
 				};
 	
 				struct BranchPoint {
-					BranchPoint(Int32 codeOffset = -1, int stackDepth = UNKNOWN_STACK_DEPTH)
+					BranchPoint(Int32 codeOffset = -1, Int32 stackDepth = UNKNOWN_STACK_DEPTH)
 							: codeOffset(codeOffset), stackDepth(stackDepth) { }
 					bool isValid() const { return codeOffset != -1; };
 					Int32 codeOffset;
-					int stackDepth;
+					Int32 stackDepth;
 				};
 
 				void error(ErrorType errorType, const char* message);
