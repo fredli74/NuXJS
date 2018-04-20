@@ -1,9 +1,9 @@
 /*
-	systools.pika v0.947
+	systools.pika v0.948
 
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2009-2014, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2009-2018, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 */
 /*
@@ -53,10 +53,10 @@
 
 		Executes a shell command and optionally throws exception if command exits with a non-zero return code.
 
-	'output' = pipe('command', [throwOnError = true])
+	'output' = pipe('command', [throwOnError = true], [@err], [@rc])
 	
 		Executes a shell command, captures its output and returns it. Optionally throws exception if command exits with
-		a non-zero return code.
+		a non-zero return code. The optional @err and @rc will be filled with stderr output and return code if present.
 		
 	eraseFile('path')
 	
@@ -191,23 +191,26 @@ makeTempDir = function {
 	( dir )
 };
 pipe = function {
-	vargs(@command,, @throwOnError);
-	defaults(@throwOnError, true);
+	vargs(@command,, @throwOnError, @err, @rc);
+	defaults(@throwOnError, true, @err, void, @rc, void);
 	
 	tempDir = makeTempDir();
-	err = void;
-	rc = system(bake('({command}) 1>{quotePath(tempDir # "stdout")} 2>{quotePath(tempDir # "stderr")}'));
-	if (rc != 0) {
-		err = bake('Error executing {escape(command)} ({rc})');
-		if (try(>e = load(tempDir # "stderr")) == void && e != '') {
+	r = system(bake('({command}) 1>{quotePath(tempDir # "stdout")} 2>{quotePath(tempDir # "stderr")}'));
+	if (rc != void) [rc] = r;
+	try(>{ e = void; e = load(tempDir # "stderr") });
+	if (err != void) [err] = e;
+	if (throwOnError && r != 0) {
+		wipeTempDir(tempDir);
+		x = bake('Error executing {escape(command)} ({r})');
+		if (e != void) {
 			e = replace(e, "\t\r\n", ' ', find, 1);
 			if (length(e) > 80) e = e{:80 - 3} # '...';
-			err #= bake(': {e} ({rc})');
+			x #= bake(': {e} ({r})');
 		};
+		throw(x);
 	};
 	o = load(tempDir # "stdout");
 	wipeTempDir(tempDir);
-	if (err != void && throwOnError) throw(err);
 	( trim(o, void) )
 };
 eraseFile = function { shell(bake('{DEL_COMMAND} {quoteWildcardPath($0)} {DIRECT_ALL_TO_NULL}')) };
