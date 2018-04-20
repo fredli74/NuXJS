@@ -656,7 +656,6 @@ class Constants : public GCItem, public QuickVector<Value> {
 				}
 };
 
-const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
 // This is an Object so that we can store it as a constant and also in Table
 class CodeDefinition : public Object {
 	friend class FunctionScope;
@@ -1010,9 +1009,9 @@ class Processor : public GCItem {
 				// FIX : {ip, vsp, cfp} could be a struct used by Processor too, or.. CallFrame?
 	protected:	struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, UInt32 cstackSize, Scope* scope) : ip(ip), vsp(vsp), cstackSize(cstackSize), scope(scope) { }
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 cstackSize, Scope* scope) : ip(ip), vstackOffset(vstackOffset), cstackSize(cstackSize), scope(scope) { }
 					const CodeWord* ip;
-					Value* vsp;
+					UInt32 vstackOffset;
 					UInt32 cstackSize;
 					Scope* scope;
 				};
@@ -1098,8 +1097,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 	public:		Processor(Engine& engine);
 				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
-				void chain(const CodeWord* ip, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
-				void enterEval(CodeDefinition* codeDefinition, bool directCall);
+				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
+				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
@@ -1112,7 +1111,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
-				
+				void reserveVStackSpace(UInt32 maxStackDepth);
+
 				Engine& engine;
 	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];

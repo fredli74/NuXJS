@@ -1857,7 +1857,10 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
+void Processor::push(const Value& v) { if (vsp + 1 >= vstack.end()) {
+std::cerr << "stack size: " << vstack.size() << ", offset: " << vsp + 1 - vstack.begin() << std::endl;
+}
+assert(vsp + 1 < vstack.end()); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstack.begin()); *--vsp = v; }
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
@@ -1887,6 +1890,12 @@ void Processor::chain(const CodeWord* stub) {
 	updateInternals();
 }
 
+void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
+	const UInt32 vstackSize = static_cast<UInt32>(vsp + 1 - vstack.begin());
+	vstack.resize(std::max(vstack.size(), vstackSize + maxStackDepth));
+	vsp = vstack.begin() + vstackSize - 1;
+}
+
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) FunctionScope(heap, func, argc, argv));
@@ -1896,23 +1905,24 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 	cfp->scope = scope;
 	cfp->thisObject = thisObject;
 	ip = func->getDefinition()->getCodePointer();
+	reserveVStackSpace(func->getDefinition()->getMaxStackDepth());
 	updateInternals();
 	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
-void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
+void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
 	this->scope = scope;
 	cstack.resize(cstack.size() + 1);
 	cfp = cstack.end() - 1;
 	cfp->returnIP = this->ip;
 	cfp->scope = this->scope;
 	cfp->thisObject = thisObject;
-	this->ip = ip;
-	assert(ip != 0);
+	ip = codeDefinition->getCodePointer();
+	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
 }
 
-void Processor::enterEval(CodeDefinition* codeDefinition, bool directCall) {
+void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) EvalScope(heap, f, codeDefinition));
@@ -1922,6 +1932,7 @@ void Processor::enterEval(CodeDefinition* codeDefinition, bool directCall) {
 	cfp->scope = scope;
 	cfp->thisObject = cfp[-1].thisObject;
 	ip = codeDefinition->getCodePointer();
+	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
 	--vsp;
 }
@@ -1937,7 +1948,8 @@ void Processor::throwVirtualException(const Value& exception) {
 	cstack.resize(catcher.cstackSize);
 	cfp = cstack.end() - 1;
 	cfp->scope = catcher.scope;
-	vsp = catcher.vsp;
+	// FIX : resize stack? vstack.resize(catcher.vstackSize);
+	vsp = vstack.begin() + catcher.vstackOffset - 1;
 	push(exception);
 	catchers.resize(catchers.size() - 1);
 	updateInternals();
@@ -2234,7 +2246,8 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRY_OP: {
-				catchers.append(Catcher(ip + operand, vsp, cstack.size(), scope));
+				assert(vsp + 1 - vstack.begin() >= 0);
+				catchers.append(Catcher(ip + operand, static_cast<UInt32>(vsp + 1 - vstack.begin()), cstack.size(), scope));
 				break;
 			}
 			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
@@ -3405,6 +3418,8 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
 	canDeleteScopeOnExit = false;
 }
+
+const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 	if (!preOperate(xr, precedence)) {
@@ -4972,7 +4987,7 @@ suppressStdErr = true;
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
-                processor.chain(globalCode.getCodePointer(), &globalScope, &globals);
+                processor.chain(&globalCode, &globalScope, &globals);
                 
                 bool done = false;
                 clock_t start = ::clock();
