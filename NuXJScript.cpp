@@ -1843,8 +1843,6 @@ Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), cstack(engine.getPool()), vstack(engine.getPool())
 		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin()), cfp(cstack.begin()), scope(0), constants(0), indexed(0)
 		, catchers(engine.getPool()) {
-	vstack.resize(1024);
-	vsp = vstack.begin() - 1;
 }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
@@ -1891,9 +1889,12 @@ void Processor::chain(const CodeWord* stub) {
 }
 
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
-	const UInt32 vstackSize = static_cast<UInt32>(vsp + 1 - vstack.begin());
-	vstack.resize(std::max(vstack.size(), vstackSize + maxStackDepth));
-	vsp = vstack.begin() + vstackSize - 1;
+	const UInt32 vstackOffset = static_cast<UInt32>(vsp + 1 - vstack.begin());
+	const UInt32 requiredSize = vstackOffset + maxStackDepth;
+	if (requiredSize > vstack.size()) {
+		vstack.resize(requiredSize);
+	}
+	vsp = vstack.begin() + vstackOffset - 1;
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
