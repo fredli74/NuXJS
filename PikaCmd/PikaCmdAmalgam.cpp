@@ -5,13 +5,13 @@
 	
 	\version
 	
-	Version 0.941
+	Version 0.942
 	
 	\page Copyright
 	
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2009-2014, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 
 	Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -35,13 +35,14 @@
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#if !defined(PikaScript_h)
-#define PikaScript_h 0x0100
+#ifndef PikaScript_h
+#define PikaScript_h
 
 #include "assert.h" // Note: I always include assert.h like this so that you can override it with a "local" file.
 #include <vector>
 #include <map>
 #include <string>
+#include <functional>
 
 // These are defined as macros in the Windows headers and collide with some of our "proper" C++ definitions. Sorry, it
 // just ain't right to use global macros in C++. I #undef them. Include PikaScript.h before the Windows headers if you
@@ -56,14 +57,12 @@
 */
 namespace Pika {
 
-using namespace std;
-
 #if (PIKA_UNICODE)
 	#define STR(s) L##s
-	#define PIKA_SCRIPT_VERSION L"0.941"
+	#define PIKA_SCRIPT_VERSION L"0.942"
 #else
 	#define STR(x) x
-	#define PIKA_SCRIPT_VERSION "0.941"
+	#define PIKA_SCRIPT_VERSION "0.942"
 #endif
 
 typedef unsigned char uchar;
@@ -81,7 +80,7 @@ typedef unsigned long ulong;
 */
 //@{
 
-template<class S> string toStdString(const S& s);																		///< Converts the string \p s to a standard C++ string. \details The default implementation is std::string(s.begin(), s.end()). You should specialize this template if necessary.
+template<class S> std::string toStdString(const S& s);																	///< Converts the string \p s to a standard C++ string. \details The default implementation is std::string(s.begin(), s.end()). You should specialize this template if necessary.
 template<class S> ulong hexToLong(typename S::const_iterator& p, const typename S::const_iterator& e);					///< Converts a string in hexadecimal form to an ulong integer. \details \p p is updated on return to point to the first unparsed (e.g. invalid) character. If \p p == \p e, the full string was successfully converted.
 template<class S> long stringToLong(typename S::const_iterator& p, const typename S::const_iterator& e);				///< Converts a string in decimal form to a signed long integer. \details \p p is updated on return to point to the first unparsed (e.g. invalid) character. If \p p == \p e, the full string was successfully converted.
 template<class S, typename T> S intToString(T i, int radix = 10, int minLength = 1);									///< Converts the integer \p i to a string with a radix and minimum length of your choice. \details \p radix can be anything between 1 (binary) and 16 (hexadecimal).
@@ -100,7 +99,7 @@ template<class S> S escape(const S& s);																					///< Depending on th
 	
 	You would normally use the helper function bound_mem_fun() to automatically instantiate the correct template.
 */
-template<class C, class A0, class R> class bound_mem_fun_t : public unary_function<A0, R> {
+template<class C, class A0, class R> class bound_mem_fun_t : public std::unary_function<A0, R> {
 	public:		bound_mem_fun_t(R (C::*m)(A0), C* o) : m(m), o(o) { }
 	public:		R operator()(A0 a) const { return (o->*m)(a); }
 	protected:	R (C::*m)(A0);
@@ -133,13 +132,13 @@ template<class T> class Dumb { };
 	\p S class is not directly compatible. Since what() is defined to return a pointer only, we need storage for the
 	converted string within this class too (Exception::converted).
 */
-template<class S> class Exception : public exception {
+template<class S> class Exception : public std::exception {
 	public:		Exception(const S& error) : error(error) { }															///< Simply constructs the exception with error string \p error.
 	public:		virtual S getError() const throw() { return error; }													///< Return the error string for this exception.
 	public:		virtual const char *what() const throw() { return (converted = toStdString(error)).c_str(); }			///< Returns the error as a null-terminated char string. \details Use getError() if you can since it is faster and permits other character types than char.
 	public:		virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
 	protected:	S error;																								///< The error string.
-	protected:	mutable string converted;																				///< Since what() is defined to return a pointer only, we need storage for the converted string within this class too.
+	protected:	mutable std::string converted;																			///< Since what() is defined to return a pointer only, we need storage for the converted string within this class too.
 };
 
 /**
@@ -291,7 +290,7 @@ template<class Config> struct Script {
 	*/
 	class Variables {
 		public:		typedef Script ForScript;
-		public:		typedef vector< pair<String, Value> > VarList;
+		public:		typedef std::vector< std::pair<String, Value> > VarList;
 		public:		virtual bool lookup(const String& symbol, Value& result) = 0;										///< Lookup \p symbol. \details If found, store the found value in \p result and return true, otherwise return false.
 		public:		virtual bool assign(const String& symbol, const Value& value) = 0;									///< Assign \p value to \p symbol and return true if the assignment succeeded. \details If false is returned, the calling Frame::set() will throw an exception.
 		public:		virtual bool erase(const String& symbol) = 0;														///< Erase \p symbol. Return true if the symbol existed and was successfully erased.
@@ -327,7 +326,7 @@ template<class Config> struct Script {
 		public:		Value getOptional(const String& identifier, const Value& defaultValue = Value()) const;				///< Tries to get the variable value as with get() (but never "falls back"). \details If the variable cannot be found, \p defaultValue will be returned instead.
 		public:		const Value& set(const String& identifier, const Value& v);											///< Sets a variable value. \details Just as with get(), \p identifier may be prefixed with a "frame identifier" to address a different Frame.
 		public:		Value reference(const String& identifier) const;													///< Creates a reference to the variable identified by \p identifier by prefixing it with a "frame label". \details If the identifier is already prefixed with a "frame identifier" (such as \c ^) it will be resolved to determine the frame. Otherwise, the label of this Frame instance is used.
-		public:		pair< Frame*, String > resolveFrame(const String& identifier) const;								///< Resolves the frame for \p identifier and returns it together with \p identifier stripped of any prefixed "frame identifier". \details The rules are as follows: 1) If the identifier has a leading \c ::, the "root frame" is returned. 2) If the identifier begins with an existing frame label, this frame is used for resolving the rest of the identifier. (If a frame label cannot be found an exception is thrown.) 3) For each leading '^' the previous frame is used for resolving the rest of the identifier. 4) Finally, if the identifier does not begin with the '$' character, the "closure" of the current frame is returned, otherwise the current frame is returned.
+		public:		std::pair< Frame*, String > resolveFrame(const String& identifier) const;							///< Resolves the frame for \p identifier and returns it together with \p identifier stripped of any prefixed "frame identifier". \details The rules are as follows: 1) If the identifier has a leading \c ::, the "root frame" is returned. 2) If the identifier begins with an existing frame label, this frame is used for resolving the rest of the identifier. (If a frame label cannot be found an exception is thrown.) 3) For each leading '^' the previous frame is used for resolving the rest of the identifier. 4) Finally, if the identifier does not begin with the '$' character, the "closure" of the current frame is returned, otherwise the current frame is returned.
 		//@}
 		/// \name Calling functions and evaluating source code.
 		//@{
@@ -340,10 +339,10 @@ template<class Config> struct Script {
 		//@{
 		public:		void registerNative(const String& identifier, Native* native);										///< Registers the native function (or object) \p native with \p identifier in the appropriate variable space (determined by any "frame identifier" present in \p identifier). \details Once registered, the native is considered "owned" by the variable space. In other words, all registered natives will be deleted by the Variables destructor. Also, if you register a new native on an already used identifier, the old native for that identifier will be deleted automatically. Besides assigning the native with Variables::assignNative() this method also sets the variable \p identifier to \c <identifier> (unless \p native is a null-pointer).
 		public:		template<class A0, class R> void registerNative(const String& i, R (*f)(A0)) {
-						registerNative(i, newUnaryFunctor(ptr_fun(f)));
+						registerNative(i, newUnaryFunctor(std::ptr_fun(f)));
 					}																									///< Helper template for easily registering a unary C++ function. \details The C++ function should take a single argument of either Frame& or any of the native types that are convertible from Script::Value. It should return a value of any type that is convertible to Script::Value or void.
 		public:		template<class A0, class A1, class R> void registerNative(const String& i, R (*f)(A0, A1)) {
-						registerNative(i, newBinaryFunctor(ptr_fun(f)));
+						registerNative(i, newBinaryFunctor(std::ptr_fun(f)));
 					}																									///< Helper template for easily registering a binary C++ function. \details The C++ function should take two arguments of any of the native types that are convertible from Script::Value. It should return a value of any type that is convertible to Script::Value or void.
 		public:		template<class C, class A0, class R> void registerNative(const String& i, C* o, R (C::*m)(A0)) {
 						registerNative(i, newUnaryFunctor(bound_mem_fun(m, o)));
@@ -354,7 +353,7 @@ template<class Config> struct Script {
 		//@{
 		public:		virtual ~Frame() { }																				///< The default destructor does nothing, but it is always good practice to have a virtual destructor.
 		//@}
-		protected:	typedef pair<bool, Value> XValue;																	///< The XValue differentiates lvalues and rvalues and is used internally in the interpreter. \details first = lvalue or not, second = symbol (for lvalue) or actual value (for rvalue).
+		protected:	typedef std::pair<bool, Value> XValue;																///< The XValue differentiates lvalues and rvalues and is used internally in the interpreter. \details first = lvalue or not, second = symbol (for lvalue) or actual value (for rvalue).
 		protected:	void tick(const StringIt& p, const XValue& v, Precedence thres, bool exit);
 		protected:	Value rvalue(const XValue& v, bool fallback = true);
 		protected:	const Value& lvalue(const XValue& v);
@@ -434,8 +433,8 @@ template<class Config> struct Script {
 		See Variables for descriptions on the overloaded member functions in this class.
 	*/
 	class STLVariables : public Variables {
-		public:		typedef map<const String, Value> VariableMap;
-		public:		typedef map<const String, Native* > NativeMap;
+		public:		typedef std::map<const String, Value> VariableMap;
+		public:		typedef std::map<const String, Native* > NativeMap;
 		public:		virtual bool lookup(const String& symbol, Value& result);
 		public:		virtual bool assign(const String& symbol, const Value& value) { vars[symbol] = value; return true; }
 		public:		virtual bool erase(const String& symbol) { return (vars.erase(symbol) > 0); }
@@ -527,7 +526,7 @@ template<class Config> struct Script {
 		to aggregate various methods into a single C++ function. You may then use this function to extract the method
 		name.
 	*/
-	static pair<Value, String> getThisAndMethod(Frame& frame);
+	static std::pair<Value, String> getThisAndMethod(Frame& frame);
 	static Value getThis(Frame& frame) { return getThisAndMethod(frame).first; }										///< Returns only the "this" value as descripted in getThisAndMethod().
 	static Value getMethod(Frame& frame) { return getThisAndMethod(frame).second; }										///< Returns only the "method" value as descripted in getThisAndMethod().
 
@@ -572,7 +571,7 @@ template<class Config> struct Script {
 	Script::STLVariables.
 */
 struct StdConfig {
-	typedef STLValue<string> Value;
+	typedef STLValue<std::string> Value;
 	typedef Script<StdConfig>::STLVariables Locals;
 	typedef Locals Globals;
 };
@@ -599,13 +598,13 @@ typedef Script<StdConfig> StdScript;
 	                                                                           
 	\version
 	
-	Version 0.941
+	Version 0.942
 	
 	\page Copyright
 	
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2009-2014, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 
 	Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -629,13 +628,14 @@ typedef Script<StdConfig> StdScript;
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#if !defined(PikaScriptImpl_h)
-#define PikaScriptImpl_h 0x0100
+#ifndef PikaScriptImpl_h
+#define PikaScriptImpl_h
 
 #include <math.h>
 #include <time.h>
 #include <string.h>
 #include <algorithm>
+#include <functional>
 #include <iostream>
 #include <fstream>
 #include <limits>
@@ -644,8 +644,6 @@ typedef Script<StdConfig> StdScript;
 #endif
 
 namespace Pika {
-
-using namespace std;
 
 template<typename T> inline T mini(T a, T b) { return (a < b) ? a : b; }
 template<typename T> inline T maxi(T a, T b) { return (a < b) ? b : a; }
@@ -665,34 +663,35 @@ template<typename T> inline T maxi(T a, T b) { return (a < b) ? b : a; }
 
 inline uint uintChar(char c) { return uchar(c); }
 inline uint uintChar(wchar_t c) { return c; }
-template<class C> basic_ostream<C>& xcout();
-template<class C> basic_istream<C>& xcin();
-template<> inline std::basic_ostream<char>& xcout() { return cout; }
-template<> inline std::basic_ostream<wchar_t>& xcout() { return wcout; }
-template<> inline std::basic_istream<char>& xcin() { return cin; }
-template<> inline std::basic_istream<wchar_t>& xcin() { return wcin; }
-template<> inline string toStdString(const string& s) { return s; }
+template<class C> std::basic_ostream<C>& xcout();
+template<class C> std::basic_istream<C>& xcin();
+template<> inline std::basic_ostream<char>& xcout() { return std::cout; }
+template<> inline std::basic_ostream<wchar_t>& xcout() { return std::wcout; }
+template<> inline std::basic_istream<char>& xcin() { return std::cin; }
+template<> inline std::basic_istream<wchar_t>& xcin() { return std::wcin; }
+template<> inline std::string toStdString(const std::string& s) { return s; }
 
 inline ulong shiftRight(ulong l, int r) { return l >> r; }
 inline ulong shiftLeft(ulong l, int r) { return l << r; }
 inline ulong bitAnd(ulong l, ulong r) { return l & r; }
 inline ulong bitOr(ulong l, ulong r) { return l | r; }
 inline ulong bitXor(ulong l, ulong r) { return l ^ r; }
+inline double modulo(double x, double y) { return fmod(x, y); }
 
 template<class C> inline bool isSymbolChar(C c) {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '$';
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$';
 }
 
 template<class C> inline bool maybeWhite(C c) { return (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '/'); }
 
-template<class S> string toStdString(const S& s) { return string(s.begin(), s.end()); }
-template<> string toStdString(const string& s);
-inline string& toStdString(string& s) { return s; }
+template<class S> std::string toStdString(const S& s) { return std::string(s.begin(), s.end()); }
+template<> std::string toStdString(const std::string& s);
+inline std::string& toStdString(std::string& s) { return s; }
 
 template<class S> ulong hexToLong(typename S::const_iterator& p, const typename S::const_iterator& e) {
 	assert(p <= e);
 	ulong l = 0;
-	for (; p < e && (*p >= '0' && *p <= '9' || *p >= 'A' && *p <= 'F' || *p >= 'a' && *p <= 'f'); ++p)
+	for (; p < e && ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')); ++p)
 		l = (l << 4) + (*p <= '9' ? *p - '0' : (*p & ~0x20) - ('A' - 10));
 	return l;
 }
@@ -707,22 +706,22 @@ template<class S> long stringToLong(typename S::const_iterator& p, const typenam
 
 template<class S, class T> S intToString(T i, int radix, int minLength) {
 	assert(2 <= radix && radix <= 16);
-	assert(0 <= minLength && minLength <= sizeof (T) * 8);
+	assert(0 <= minLength && minLength <= static_cast<int>(sizeof (T) * 8));
 	typename S::value_type buffer[sizeof (T) * 8 + 1], * p = buffer + sizeof (T) * 8 + 1, * e = p - minLength;
 	for (T x = i; p > e || x != 0; x /= radix) {
 		assert(p >= buffer + 2);
 		*--p = STR("fedcba9876543210123456789abcdef")[15 + x % radix];													// Mirrored hex string to handle negative x.
 	}
-	if (numeric_limits<T>::is_signed && i < 0) *--p = '-';
+	if (std::numeric_limits<T>::is_signed && i < 0) *--p = '-';
 	return S(p, buffer + sizeof (T) * 8 + 1 - p);
 }
 
 template<class S> double stringToDouble(typename S::const_iterator& p, const typename S::const_iterator& e) {
 	assert(p <= e);
 	double d = 0, sign = (e - p > 1 && (*p == '+' || *p == '-') ? (*p++ == '-' ? -1.0 : 1.0) : 1.0);
-	if (numeric_limits<double>::has_infinity && e - p >= 8 && equal(p, p + 8, STR("infinity"))) {
+	if (std::numeric_limits<double>::has_infinity && e - p >= 8 && equal(p, p + 8, STR("infinity"))) {
 		p += 8;
-		d = numeric_limits<double>::infinity();
+		d = std::numeric_limits<double>::infinity();
 	} else if (p < e && *p >= '0' && *p <= '9') {
 		if (*p == '0') ++p; else do { d = d * 10.0 + (*p - '0'); } while (++p < e && *p >= '0' && *p <= '9');
 		if (e - p > 1 && *p == '.' && p[1] >= '0' && p[1] <= '9') {
@@ -751,7 +750,7 @@ template<class S> S doubleToString(double d, int precision) {
 	double x = fabs(d), y = x;
 	if (y <= EPSILON) return S(STR("0"));
 	else if (precision >= 12 && y < LARGE && long(d) == d) return intToString<S, long>(long(d));
-	else if (numeric_limits<double>::has_infinity && x == numeric_limits<double>::infinity())
+	else if (std::numeric_limits<double>::has_infinity && x == std::numeric_limits<double>::infinity())
 		return d < 0 ? S(STR("-infinity")) : S(STR("+infinity"));
 	typename S::value_type buffer[32], * bp = buffer + 2, * dp = bp, * pp = dp + 1, * ep = pp + precision;
 	for (; x >= 10.0 && pp < ep; x *= 0.1) ++pp;																		// Normalize values > 10 and move period position.
@@ -776,7 +775,6 @@ template<class S> S doubleToString(double d, int precision) {
 	if (x >= 5) {																										// If remainder is >= 5, increment trailing 9's...
 		while (dp[-1] == '9') *--dp = '0';
 		if (dp == bp) *--bp = '1'; else dp[-1]++;																		// If we are at spare position, set to '1' and include, otherwise, increment last non-9.
-		if (dp[-1] == '1') --ep;																						// We incremented a 0, cut precision (afterwards, a bit Q&D).
 	}
 	*pp = '.';
 	if (ep > pp) while (ep[-1] == '0') --ep;
@@ -792,14 +790,14 @@ template<class S> S unescape(typename S::const_iterator& p, const typename S::co
 	typedef typename S::value_type CHAR;
 	static const CHAR ESCAPE_CHARS[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'',  'a',  'b',  'f',  'n',  'r',  't',  'v' };
 	static const CHAR ESCAPE_CODES[ESCAPE_CODE_COUNT] = { '\\', '\"', '\'', '\a', '\b', '\f', '\n', '\r', '\t', '\v' };
-	if (p >= e || *p != '"' && *p != '\'') throw Exception<S>(STR("Invalid string literal"));
+	if (p >= e || (*p != '"' && *p != '\'')) throw Exception<S>(STR("Invalid string literal"));
 	S d;
 	typename S::const_iterator b = ++p;
-	if (p[-1] == '\'') while (e - (p = find(p, e, '\'')) > 1 && p[1] == '\'') { d += S(b, ++p); b = ++p; }
+	if (p[-1] == '\'') while (e - (p = std::find(p, e, '\'')) > 1 && p[1] == '\'') { d += S(b, ++p); b = ++p; }
 	else while (p < e && *p != '\"') {
 		if (*p == '\\' && p + 1 < e) {
 			d += S(b, p);
-			const CHAR* f = find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
+			const CHAR* f = std::find(ESCAPE_CHARS, ESCAPE_CHARS + ESCAPE_CODE_COUNT, *++p);
 			long l;
 			if (f != ESCAPE_CHARS + ESCAPE_CODE_COUNT) { ++p; l = ESCAPE_CODES[f - ESCAPE_CHARS]; }
 			else if (*p == 'x') { b = ++p; l = hexToLong<S>(p, (e - p > 2 ? p + 2 : e)); }
@@ -829,7 +827,7 @@ template<class S> S escape(const S& s) {
 		while (b < e && *b >= 32 && *b <= 126 && *b != '\\' && *b != '\"') ++b;
 		d += S(l, b);
 		if (b >= e) break;
-		const CHAR* f = find(ESCAPE_CODES, ESCAPE_CODES + ESCAPE_CODE_COUNT, *b);
+		const CHAR* f = std::find(ESCAPE_CODES, ESCAPE_CODES + ESCAPE_CODE_COUNT, *b);
 		if (f != ESCAPE_CODES + ESCAPE_CODE_COUNT) (d += '\\') += ESCAPE_CHARS[f - ESCAPE_CODES];
 		else if (uintChar(*b) == uintChar(*b)) (d += STR("\\x")) += intToString<S>(uintChar(*b), 16, 2);
 		else (d += STR("\\u")) += intToString<S>(uintChar(*b), 16, 4);
@@ -899,7 +897,7 @@ TMPL T_TYPE(Frame*) Script<CFG>::Frame::resolveFrame(StringIt& p, const StringIt
 	assert(p <= e);
 	Frame* f = const_cast<Frame*>(this);
 	if (p < e && *p == ':') {
-		StringIt n = find(p + 1, e, ':');
+		StringIt n = std::find(p + 1, e, ':');
 		if (n >= e) throw Xception(String(STR("Invalid identifier: ")) += escape(String(p, e)));
 		if (n - p > 1) {
 			String s(p, n + 1);
@@ -914,40 +912,40 @@ TMPL T_TYPE(Frame*) Script<CFG>::Frame::resolveFrame(StringIt& p, const StringIt
 	return f;
 }
 
-TMPL pair< T_TYPE(Frame*), T_TYPE(String) > Script<CFG>::Frame::resolveFrame(const String& identifier) const {
+TMPL std::pair< T_TYPE(Frame*), T_TYPE(String) > Script<CFG>::Frame::resolveFrame(const String& identifier) const {
 	switch (identifier[0]) {
-		default:	return pair<Frame*, String>(closure, identifier);
-		case '$':	return pair<Frame*, String>(const_cast<Frame*>(this), identifier);
+		default:	return std::pair<Frame*, String>(closure, identifier);
+		case '$':	return std::pair<Frame*, String>(const_cast<Frame*>(this), identifier);
 		case ':': case '^': {
 			StringIt b = const_cast<const String&>(identifier).begin(), e = const_cast<const String&>(identifier).end();
 			Frame* frame = resolveFrame(b, e);
-			return pair<Frame*, String>(frame, String(b, e));
+			return std::pair<Frame*, String>(frame, String(b, e));
 		}
 	}
 }
 
 TMPL T_TYPE(Value) Script<CFG>::Frame::get(const String& identifier, bool fallback) const {
 	Value temp;
-	pair<Frame*, String> fs = resolveFrame(identifier);
+	std::pair<Frame*, String> fs = resolveFrame(identifier);
 	if (fs.first->vars.lookup(fs.second, temp)) return temp;
 	else if (fallback && isSymbolChar(identifier[0]) && root.vars.lookup(fs.second, temp)) return temp;
 	else throw Xception(String(STR("Undefined: ")) += escape(identifier));
 }
 
 TMPL T_TYPE(Value) Script<CFG>::Frame::getOptional(const String& identifier, const Value& defaultValue) const {
-	pair<Frame*, String> fs = resolveFrame(identifier);
+	std::pair<Frame*, String> fs = resolveFrame(identifier);
 	Value temp;
 	return fs.first->vars.lookup(fs.second, temp) ? temp : defaultValue;
 }
 
 TMPL const T_TYPE(Value)& Script<CFG>::Frame::set(const String& identifier, const Value& v) {
-	pair<Frame*, String> fs = resolveFrame(identifier);
+	std::pair<Frame*, String> fs = resolveFrame(identifier);
 	if (!fs.first->vars.assign(fs.second, v)) throw Xception(String(STR("Cannot modify: ")) += escape(identifier));
 	return v;
 }
 
 TMPL T_TYPE(Value) Script<CFG>::Frame::reference(const String& identifier) const {
-	pair<Frame*, String> fs = resolveFrame(identifier);
+	std::pair<Frame*, String> fs = resolveFrame(identifier);
 	return fs.first->label + fs.second;
 }
 
@@ -1038,7 +1036,6 @@ TMPL template<class F> bool Script<CFG>::Frame::addSubOp(StringIt& p, const Stri
 TMPL template<class E, class I, class S> bool Script<CFG>::Frame::lgtOp(StringIt& p, const StringIt& e, XValue& v
 		, bool dry, Precedence thres, const E& excl, const I& incl, S shift) {
 	assert(p <= e);
-	assert(shift >= 0);
 	if (p + 1 < e && p[1] == *p) return assignableOp(p, e, v, dry, thres, 2, SHIFT, shift);								// <-- shift
 	else if (p + 1 < e && p[1] == '=') return binaryOp(p, e, v, dry, thres, 2, COMPARE, incl);							// <-- less/greater or equal
 	else return binaryOp(p, e, v, dry, thres, 1, COMPARE, excl);														// <-- less/greater
@@ -1056,7 +1053,7 @@ TMPL bool Script<CFG>::Frame::pre(StringIt& p, const StringIt& e, XValue& v, boo
 		case '^':	while (++p < e && *p == '^'); break;																// <-- frame peek
 		case '@':	expr(++p, e, v, false, dry, PREFIX); if (!dry) v = XValue(false, reference(lvalue(v))); return true;// <-- reference
 		case '[':	termExpr(++p, e, v, false, dry, BRACKETS, ']'); if (!dry) v = XValue(true, rvalue(v)); return true;	// <-- indirection
-		case '<':	p = find(p, e, '>'); if (p < e) ++p; if (!dry) v = XValue(false, String(b, p)); return true;		// <-- native literal
+		case '<':	p = std::find(p, e, '>'); if (p < e) ++p; if (!dry) v = XValue(false, String(b, p)); return true;	// <-- native literal
 		case '\'': case '"': { Value s(unescape<String>(p, e)); if (!dry) v = XValue(false, s); } return true;			// <-- string literal
 		case 'e':	if (token(p, e, STR("lse"))) throw Xception(STR("Unexpected 'else' (preceded by ';'?)")); break;	// <-- error on unexpected else
 		case 't':	if (token(p, e, STR("rue"))) { if (!dry) v = XValue(false, true); return true; } break;				// <-- true literal
@@ -1156,27 +1153,27 @@ TMPL bool Script<CFG>::Frame::post(StringIt& p, const StringIt& e, XValue& v, bo
 		case ' ': case '\t': case '\r': case '\n':
 					if (thres < DEFINITION) { Char c = *p; while (++p < e && *p == c); return true; } break;			// <-- white spaces
 		case '/':	if (thres < DEFINITION && p + 1 < e && (p[1] == '/' || p[1] == '*')) { white(p, e); return true; }	// <-- comment
-					return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, divides<double>());							// <-- divide
-		case '+':	return addSubOp(p, e, v, dry, thres, plus<double>());												// <-- add
-		case '-':	return addSubOp(p, e, v, dry, thres, minus<double>());												// <-- subtract
-		case '#':	return assignableOp(p, e, v, dry, thres, 1, CONCAT, plus<String>());								// <-- concat
-		case '*':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, multiplies<double>());							// <-- multipy
-		case '\\':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, divides<long>());								// <-- integer division
-		case '%':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, ptr_fun<double, double>(fmod));				// <-- modulus
+					return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, std::divides<double>());						// <-- divide
+		case '+':	return addSubOp(p, e, v, dry, thres, std::plus<double>());											// <-- add
+		case '-':	return addSubOp(p, e, v, dry, thres, std::minus<double>());											// <-- subtract
+		case '#':	return assignableOp(p, e, v, dry, thres, 1, CONCAT, std::plus<String>());							// <-- concat
+		case '*':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, std::multiplies<double>());					// <-- multipy
+		case '\\':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, std::divides<long>());							// <-- integer division
+		case '%':	return assignableOp(p, e, v, dry, thres, 1, MUL_DIV, modulo);										// <-- modulus
 		case '^':	return assignableOp(p, e, v, dry, thres, 1, BIT_XOR, bitXor);										// <-- xor
-		case '<':	return lgtOp(p, e, v, dry, thres, less<Value>(), less_equal<Value>(), shiftLeft);					// <-- shift left
-		case '>':	return lgtOp(p, e, v, dry, thres, greater<Value>(), greater_equal<Value>(), shiftRight);			// <-- shift right
+		case '<':	return lgtOp(p, e, v, dry, thres, std::less<Value>(), std::less_equal<Value>(), shiftLeft);			// <-- shift left
+		case '>':	return lgtOp(p, e, v, dry, thres, std::greater<Value>(), std::greater_equal<Value>(), shiftRight);	// <-- shift right
 		
 		case '!':	if (e - p > 2 && p[2] == '=' && p[1] == '=')
-						return binaryOp(p, e, v, dry, thres, 3, EQUALITY, not_equal_to<String>());						// <-- literal not equals
+						return binaryOp(p, e, v, dry, thres, 3, EQUALITY, std::not_equal_to<String>());					// <-- literal not equals
 					else if (p + 1 < e && p[1] == '=')
-						return binaryOp(p, e, v, dry, thres, 2, EQUALITY, not_equal_to<Value>());						// <-- not equals
+						return binaryOp(p, e, v, dry, thres, 2, EQUALITY, std::not_equal_to<Value>());					// <-- not equals
 					break;
 
 		case '=':	if (e - p > 2 && p[2] == '=' && p[1] == '=')
-						return binaryOp(p, e, v, dry, thres, 3, EQUALITY, equal_to<String>());							// <-- literal equals
+						return binaryOp(p, e, v, dry, thres, 3, EQUALITY, std::equal_to<String>());						// <-- literal equals
 					else if (p + 1 < e && p[1] == '=')
-						return binaryOp(p, e, v, dry, thres, 2, EQUALITY, equal_to<Value>());							// <-- equals
+						return binaryOp(p, e, v, dry, thres, 2, EQUALITY, std::equal_to<Value>());						// <-- equals
 					else if (thres <= ASSIGN) {
 						XValue r;																						// <-- assign
 						expr(++p, e, r, false, dry, ASSIGN);
@@ -1313,10 +1310,10 @@ TMPL T_TYPE(Value) Script<CFG>::Frame::evaluate(const String source) {
 			} catch (const Xception& x) {
 				if (root.doTrace(TRACE_ERROR)) tick(p, XValue(false, x.getError()), TRACE_ERROR, previous == 0);
 				throw;
-			} catch (const exception& x) {
+			} catch (const std::exception& x) {
 				if (root.doTrace(TRACE_ERROR)) {
 					const char* s = x.what();
-					String err = String(basic_string<Char>(s, s + strlen(s)));
+					String err = String(std::basic_string<Char>(s, s + strlen(s)));
 					tick(p, XValue(false, err), TRACE_ERROR, previous == 0);
 				}
 				throw;
@@ -1365,7 +1362,7 @@ TMPL T_TYPE(Value) Script<CFG>::Frame::call(const String& callee, const Value& b
 }
 
 TMPL void Script<CFG>::Frame::registerNative(const String& identifier, Native* native) {
-	pair<Frame*, String> p = resolveFrame(identifier);
+	std::pair<Frame*, String> p = resolveFrame(identifier);
 	if (!p.first->vars.assignNative(p.second, native))
 		throw Xception(String(STR("Cannot register native: ")) += escape(identifier));
 	if (native != 0)
@@ -1376,7 +1373,7 @@ TMPL void Script<CFG>::Frame::registerNative(const String& identifier, Native* n
 
 TMPL Script<CFG>::Root::Root(Variables& vars) : Frame(vars, *this, 0), traceLevel(NO_TRACE), isInsideTracer(false)
 		, autoLabelStart(autoLabel + 29) {
-	fill_n(autoLabel, 32, ':');
+	std::fill_n(autoLabel, 32, ':');
 }
 
 TMPL T_TYPE(String) Script<CFG>::Root::generateLabel() {
@@ -1443,11 +1440,11 @@ TMPL Script<CFG>::STLVariables::~STLVariables() {
 	for (typename NativeMap::iterator it = natives.begin(); it != natives.end(); ++it) delete it->second;
 }
 
-TMPL pair<T_TYPE(Value), T_TYPE(String)> Script<CFG>::getThisAndMethod(Frame& f) {
+TMPL std::pair<T_TYPE(Value), T_TYPE(String)> Script<CFG>::getThisAndMethod(Frame& f) {
 	const String fn = f.get(STR("$callee"));
-	StringIt it = find(fn.rbegin(), fn.rend(), '.').base();
+	StringIt it = std::find(fn.rbegin(), fn.rend(), '.').base();
 	if (it <= fn.begin()) throw Xception(STR("Non-method call"));
-	return pair<Value, String>(f.getPrevious().reference(String(fn.begin(), it - 1)), String(it, fn.end()));
+	return std::pair<Value, String>(f.getPrevious().reference(String(fn.begin(), it - 1)), String(it, fn.end()));
 }
 
 /* --- Standard Library --- */
@@ -1455,7 +1452,7 @@ TMPL pair<T_TYPE(Value), T_TYPE(String)> Script<CFG>::getThisAndMethod(Frame& f)
 TMPL T_TYPE(Value) Script<CFG>::lib::elevate(Frame& f) { return f.execute(f.get(getThisAndMethod(f).first, true)); }
 TMPL ulong Script<CFG>::lib::length(const String& s) { return static_cast<ulong>(s.size()); }
 TMPL T_TYPE(String) Script<CFG>::lib::lower(String s) { transform(s.begin(), s.end(), s.begin(), ::tolower); return s; }
-TMPL void Script<CFG>::lib::print(const String& s) { xcout<Char>() << basic_string<Char>(s) << endl; }
+TMPL void Script<CFG>::lib::print(const String& s) { xcout<Char>() << std::basic_string<Char>(s) << std::endl; }
 TMPL double Script<CFG>::lib::random(double m) { return m * rand() / double(RAND_MAX); }
 TMPL T_TYPE(String) Script<CFG>::lib::reverse(String s) { std::reverse(s.begin(), s.end()); return s; }
 TMPL void Script<CFG>::lib::thrower(const String& s) { throw Xception(s); }
@@ -1474,7 +1471,7 @@ TMPL uint Script<CFG>::lib::ordinal(const String& s) {
 
 TMPL bool Script<CFG>::lib::deleter(const Frame& f) {
 	Value x = f.get(STR("$0"));
-	pair<Frame*, String> fs = f.getPrevious().resolveFrame(x);
+	std::pair<Frame*, String> fs = f.getPrevious().resolveFrame(x);
 	return fs.first->getVariables().erase(fs.second);
 }
 
@@ -1485,7 +1482,7 @@ TMPL T_TYPE(Value) Script<CFG>::lib::evaluate(const Frame& f) {
 TMPL bool Script<CFG>::lib::exists(const Frame& f) {
 	Value x = f.get(STR("$0"));
 	Value result;
-	pair<Frame*, String> fs = f.getPrevious().resolveFrame(x);
+	std::pair<Frame*, String> fs = f.getPrevious().resolveFrame(x);
 	return fs.first->getVariables().lookup(fs.second, result);
 }
 
@@ -1495,7 +1492,7 @@ TMPL ulong Script<CFG>::lib::find(const String& a, const String& b) {
 
 TMPL void Script<CFG>::lib::foreach(Frame& f) {
 	Value arg1 = f.get(STR("$1"));
-	pair<Frame*, String> fs = f.getPrevious().resolveFrame(f.get(STR("$0"))[Value()]); 
+	std::pair<Frame*, String> fs = f.getPrevious().resolveFrame(f.get(STR("$0"))[Value()]); 
 	typename Variables::VarList list;
 	fs.first->getVariables().list(fs.second, list);
 	for (typename Variables::VarList::const_iterator it = list.begin(); it != list.end(); ++it) {
@@ -1505,9 +1502,9 @@ TMPL void Script<CFG>::lib::foreach(Frame& f) {
 }
 
 TMPL T_TYPE(String) Script<CFG>::lib::input(const String& prompt) {
-	xcout<Char>() << basic_string<Char>(prompt);
-	basic_string<Char> s;
-	basic_istream<Char>& instream = xcin<Char>();
+	xcout<Char>() << std::basic_string<Char>(prompt);
+	std::basic_string<Char> s;
+	std::basic_istream<Char>& instream = xcin<Char>();
 	if (instream.eof()) throw Xception(STR("Unexpected end of input file"));
 	if (!instream.good()) throw Xception(STR("Input file error"));
 	getline(instream, s);
@@ -1517,13 +1514,15 @@ TMPL T_TYPE(String) Script<CFG>::lib::input(const String& prompt) {
 TMPL T_TYPE(Value) Script<CFG>::lib::invoke(Frame& f) {
 	Value source = f.get(STR("$2")), arg4 = f.getOptional(STR("$4"));
 	long offset = long(f.getOptional(STR("$3"), 0));
-	vector<Value> a(arg4.isVoid() ? long(f.get(source[String(STR("n"))])) - offset : long(arg4));
+	long n = arg4.isVoid() ? long(f.get(source[String(STR("n"))])) - offset : long(arg4);
+	if (n < 0) throw Xception(STR("Too few array elements"));
+	std::vector<Value> a(n);
 	for (long i = 0; i < long(a.size()); ++i) a[i] = f.get(source[i + offset]);
 	return f.call(f.getOptional(STR("$0")), f.getOptional(STR("$1")), long(a.size()), a.empty() ? 0 : &a[0]);
 }
 
 TMPL T_TYPE(String) Script<CFG>::lib::load(const String& file) {
-	basic_ifstream<Char> instream(toStdString(file).c_str());															// Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
+	std::basic_ifstream<Char> instream(toStdString(file).c_str());															// Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
 	if (!instream.good()) throw Xception(String(STR("Cannot open file for reading: ")) += escape(file));
 	String chars;
 	while (!instream.eof()) {
@@ -1555,7 +1554,7 @@ TMPL T_TYPE(String) Script<CFG>::lib::radix(const Frame& f) {
 }
 
 TMPL void Script<CFG>::lib::save(const String& file, const String& chars) {
-	basic_ofstream<Char> outstream(toStdString(file).c_str());															// Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
+	std::basic_ofstream<Char> outstream(toStdString(file).c_str());															// Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
 	if (!outstream.good()) throw Xception(String(STR("Cannot open file for writing: ")) += escape(file));
 	outstream.write(chars.data(), chars.size());
 	if (!outstream.good()) throw Xception(String(STR("Error writing to file: ")) += escape(file));
@@ -1572,12 +1571,12 @@ TMPL ulong Script<CFG>::lib::span(const String& a, const String& b) {
 }
 
 TMPL T_TYPE(String) Script<CFG>::lib::precision(const Frame& f) {
-	return doubleToString<String>(f.get(STR("$0")), mini(maxi(long(f.get(STR("$1"))), 1L), 16L));
+	return doubleToString<String>(f.get(STR("$0")), mini(maxi(int(f.get(STR("$1"))), 1), 16));
 }
 
 TMPL int Script<CFG>::lib::system(const String& command) {
 	int xc = (command.empty() ? -1 : ::system(toStdString(command).c_str()));
-	if (xc < 0) throw Xception(String(STR("Could not execute system command: ")) += escape(command));
+	if (xc < 0) throw Xception(String(STR("Error executing system command: ")) += escape(command));
 	return xc;
 }
 
@@ -1703,8 +1702,8 @@ TMPL Script<CFG>::Variables::~Variables() { }
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#if !defined(QStrings_h)
-#define QStrings_h 0x0100
+#ifndef QStrings_h
+#define QStrings_h
 
 #include <stdlib.h>
 #include <string.h>
@@ -1713,6 +1712,7 @@ TMPL Script<CFG>::Variables::~Variables() { }
 #include <string>
 #include <algorithm>
 #include <limits>
+#include "assert.h"
 
 namespace QStrings {
 
@@ -2098,8 +2098,8 @@ void unitTest();
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#if !defined(QuickVars_h)
-#define QuickVars_h 0x0100
+#ifndef QuickVars_h
+#define QuickVars_h
 
 #if !defined(PikaScriptImpl_h)
 #include "PikaScriptImpl.h"
@@ -2170,13 +2170,13 @@ template<class Super, unsigned int CACHE_SIZE = 11> class QuickVars : public Sup
 	
 	\version
 	
-	Version 0.941
+	Version 0.942
 	
 	\page Copyright
 	
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2009-2014, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 
 	Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -2263,10 +2263,10 @@ template struct Script<StdConfig>;
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <assert.h>
 #if !defined(QStrings_h)
 #include "QStrings.h"
 #endif
+#include "assert.h"
 
 namespace QStrings {
 
@@ -2297,7 +2297,7 @@ void unitTest() {
 		t += QString<char>(c, 1);
 	}
 	assert(t == s);
-	assert(cs.end() - cs.begin() == cs.size());
+	assert(static_cast<size_t>(cs.end() - cs.begin()) == cs.size());
 	assert(cs.end() - cs.size() == cs.begin());
 	assert(cs.begin() + cs.size() == cs.end());
 	assert(QString<char>(cs.begin(), cs.begin() + 3) == "hej");
@@ -2695,8 +2695,8 @@ const char* BUILT_IN_HELP =
 	"describe('#help', 'describe',\t\"describe('category', 'page', 'syntax', ['description'], ['examples'], ['seealso'])\", \"Adds a help page to the database.\", \"describe('#mine', 'countIf', '+count = countIf(@array, <value>)', 'Counts the number of items in @array that is equal to <value>.', \\\"n = countIf(@fruits, 'apple')\\\")\");\n"
 	"\n"
 	"describe('#math', 'abs',\t'+y = abs(+x)',\t\t\t\t'Returns the absolute value of +x.', \"abs(3.7) == 3.7\\nabs(-3.7) == 3.7\\nabs(-infinity) == +infinity\", 'sign');\n"
-	"describe('#math', 'acos',\t'+y = acos(+x)',\t\t\t\"Returns the arccosine of +x (which should be in the range -1 to 1 or the result will be undefined). The returned value is in the range 0 to PI.\\n\\nInverse: cos().\", \"acos(0.0) == PI / 2\\nacos(0.73168886887382) == 0.75\\nacos(cos(0.5)) == 0.5\", 'asin, atan, cos');\n"
-	"describe('#math', 'asin',\t'+y = asin(+x)',\t\t\t\"Returns the arcsine of +x (which should be in the range -1 to 1 or the result will be undefined). The returned value is in the range -PI / 2 to PI / 2.\\n\\nInverse: sin().\", \"asin(0.0) == 0.0\\nasin(0.68163876002334) == 0.75\\nasin(sin(0.5)) == 0.5\", 'acos, atan, sin');\n"
+	"describe('#math', 'acos',\t'+y = acos(+x)',\t\t\t\"Returns the arccosine of +x (which should be in the range -1 to 1 or the result will be undefined). The returned value is in the range 0 to PI.\\n\\nInverse: cos().\", \"acos(0.0) == PI / 2\\nacos(0.73168886887382) == 0.75\\nacos(cos(0.6)) == 0.6\", 'asin, atan, cos');\n"
+	"describe('#math', 'asin',\t'+y = asin(+x)',\t\t\t\"Returns the arcsine of +x (which should be in the range -1 to 1 or the result will be undefined). The returned value is in the range -PI / 2 to PI / 2.\\n\\nInverse: sin().\", \"asin(0.0) == 0.0\\nasin(0.69613523862736) == 0.77\\nasin(sin(0.5)) == 0.5\", 'acos, atan, sin');\n"
 	"describe('#math', 'atan',\t'+y = atan(+x)',\t\t\t\"Returns the arctangent of +x. The returned value is in the range -PI / 2 to PI / 2.\\n\\nInverse: tan().\", \"atan(0.0) == 0.0\\natan(0.93159645994407) == 0.75\\natan(tan(0.5)) == 0.5\", 'acos, asin, atan2, tan');\n"
 	"describe('#math', 'atan2',\t'+z = atan2(+y, +x)',\t\t'Returns the arctangent of +y/+x with proper handling of quadrants. The returned value is in the range -PI to PI.', \"atan2(0.0, 1.0) == 0.0\\natan2(1.0, 0.0) == PI / 2\\natan2(sin(0.5), cos(0.5)) == 0.5\", 'atan');\n"
 	"describe('#math', 'cbrt',\t'+y = cbrt(+x)',\t\t\t\"Returns the cube root of +x.\\n\\nInverse: cube(+y).\", \"cbrt(0.0) == 0.0\\ncbrt(0.421875) == 0.75\\ncbrt(cube(-0.7)) == -0.7\", 'sqr');\n"
@@ -2707,20 +2707,20 @@ const char* BUILT_IN_HELP =
 	"describe('#math', 'exp',\t'+y = exp(+x)',\t\t\t\t\"Returns the exponential of +x. I.e, the result is e to the power +x.\\n\\nInverse: log().\", \"exp(0.0) == 1.0\\nexp(1.0) == 2.718281828459\\nexp(-0.28768207245178) == 0.75\\nexp(log(0.6)) == 0.6\", 'log, log2, log10, pow');\n"
 	"describe('#math', 'factorial',\t'+y = factorial(+x)',\t'Returns the factorial of value +x. +x should be an integer in the range of 1 to 170.', \"factorial(10) == 3628800\");\n"
 	"describe('#math', 'floor',\t'+y = floor(+x)',\t\t\t'Returns the floor of value +x. Floor() rounds both positive and negative values downwards.', \"floor(0.0) == 0.0\\nfloor(-0.99999) == -1.0\\nfloor(1000.00001) == 1000.0\", 'ceil, round, trunc');\n"
-	"describe('#math', 'log',\t'+y = log(+x)',\t\t\t\t\"Returns the natural logarithm of +x (i.e. the logarithm with base e). +x should be positive or the result will be undefined.\\n\\nInverse: exp().\", \"log(0.0) == -infinity\\nlog(1.0) == 0.0\\nlog(2.7182818284593) == 1.0\\nlog(exp(0.6)) == 0.6\", 'exp, log2, log10, logb, nroot, pow');\n"
-	"describe('#math', 'log2',\t'+y = log2(+x)',\t\t\t\"Returns the base-2 logarithm of +x. +x should be positive or the result will be undefined.\\n\\nInverse: pow(2, +y).\", \"log2(0.0) == -infinity\\nlog2(1.0) == 0.0\\nlog2(65536.0) == 16.0\\nlog2(pow(2, 1.2)) == 1.2\", 'exp, log, log10, logb, nroot, pow');\n"
+	"describe('#math', 'log',\t'+y = log(+x)',\t\t\t\t\"Returns the natural logarithm of +x (i.e. the logarithm with base e). +x should be positive or the result will be undefined.\\n\\nInverse: exp().\", \"log(0.0) == -infinity\\nlog(1.0) == 0.0\\nlog(2.7182818284591) == 1.0\\nlog(exp(0.6)) == 0.6\", 'exp, log2, log10, logb, nroot, pow');\n"
+	"describe('#math', 'log2',\t'+y = log2(+x)',\t\t\t\"Returns the base-2 logarithm of +x. +x should be positive or the result will be undefined.\\n\\nInverse: pow(2, +y).\", \"log2(0.0) == -infinity\\nlog2(1.0) == 0.0\\nlog2(65536.0) == 16.0\\nlog2(pow(2, 1.3)) == 1.3\", 'exp, log, log10, logb, nroot, pow');\n"
 	"describe('#math', 'log10',\t'+y = log10(+x)',\t\t\t\"Returns the base-10 logarithm of +x. +x should be positive or the result will be undefined.\\n\\nInverse: pow(10, +y).\", \"log10(0.0) == -infinity\\nlog10(1.0) == 0.0\\nlog10(10000.0) == 4.0\\nlog10(pow(10, 0.6)) == 0.6\", 'exp, log, log2, logb, nroot, pow');\n"
 	"describe('#math', 'logb',\t'+y = logb(+b, +x)',\t\t\"Returns the logarithm of +x with base +b. +x should be positive or the result will be undefined. Equivalent to log(+x) / log(+b).\\n\\nInverses: +x = pow(+b, +y), +b = nroot(+y, +x).\", \"logb(20, 1.0) == 0.0\\nlogb(20, 8000) == 3\", 'exp, log, log2, log10, nroot, pow');\n"
 	"describe('#math', 'nroot',\t'+x = nroot(+y, +z)',\t\t\"Returns the nth (+y) root of +z.\\n\\nInverse: +z = pow(+x, +y).\", \"nroot(11, pow(17, 11)) == 17\", 'exp, log, log2, logb, log10, pow');\n"
-	"describe('#math', 'pow',\t'+z = pow(+x, +y)',\t\t\t\"Returns +x raised to the power of +y.\\n\\nInverses: +y = log(+z) / log(+x) or logb(+x, +z), +x = pow(+z, 1.0 / +y) or nroot(+y, +z).\", \"pow(0.0, 0.0) == 1.0\\npow(10.0, 4.0) == 10000.0\\npow(10.0, log10(0.7)) == 0.7\\npow(pow(2.7, 9.6), 1.0 / 9.6) == 2.7\", 'exp, log, log2, logb, log10, nroot');\n"
+	"describe('#math', 'pow',\t'+z = pow(+x, +y)',\t\t\t\"Returns +x raised to the power of +y.\\n\\nInverses: +y = log(+z) / log(+x) or logb(+x, +z), +x = pow(+z, 1.0 / +y) or nroot(+y, +z).\", \"pow(0.0, 0.0) == 1.0\\npow(10.0, 4.0) == 10000.0\\npow(10.0, log10(0.8)) == 0.8\\npow(pow(2.8, 9.8), 1.0 / 9.8) == 2.8\", 'exp, log, log2, logb, log10, nroot');\n"
 	"describe('#math', 'random',\t'+y = random(+x)',\t\t\t'Returns a pseudo-random number between 0 and +x.', 'random(100.0)');\n"
 	"describe('#math', 'round',\t'+y = round(+x)',\t\t\t'Rounds the value of +x to the nearest integer. If the decimal part of +x is exactly 0.5, the rounding will be upwards (e.g. -3.5 rounds to 3.0).', \"round(1.23456) == 1\\nround(-1.6789) == -2\\nround(3.5) == 4.0\\nround(-3.5) == -3.0\\nround(1000.499999) == 1000.0\", 'ceil, floor, trunc');\n"
 	"describe('#math', 'sign',\t'+y = sign(+x)',\t\t\t\"Returns -1 if +x is negative, +1 if +x is positive or 0 if +x is zero.\", \"sign(0.0) == 0.0\\nsign(12.34) == 1\\nsign(-infinity) == -1\", 'abs');\n"
 	"describe('#math', 'sin',\t'+y = sin(+x)',\t\t\t\t\"Returns the sine of +x. The returned value is in the range -1 to 1.\\n\\nInverse: asin().\", \"sin(0.0) == 0.0\\nsin(0.84806207898148) == 0.75\\nsin(asin(0.5)) == 0.5\", 'asin, cos, tan');\n"
-	"describe('#math', 'sinh',\t'+y = sinh(+x)',\t\t\t'Returns the hyperbolic sine of +x.', \"sinh(0.0) == 0.0\\nsinh(0.6931471805599453) == 0.75\", 'cosh, tanh');\n"
-	"describe('#math', 'sqr',\t'+y = sqr(+x)',\t\t\t\t\"Returns the square of +x.\\n\\nInverse: sqrt(+y).\", \"sqr(0.0) == 0.0\\nsqr(0.86602540378444) == 0.75\\nsqr(sqrt(0.7)) == 0.7\", 'cube, sqrt');\n"
+	"describe('#math', 'sinh',\t'+y = sinh(+x)',\t\t\t'Returns the hyperbolic sine of +x.', \"sinh(0.0) == 0.0\\nsinh(0.61958958372348) == 0.66\", 'cosh, tanh');\n"
+	"describe('#math', 'sqr',\t'+y = sqr(+x)',\t\t\t\t\"Returns the square of +x.\\n\\nInverse: sqrt(+y).\", \"sqr(0.0) == 0.0\\nsqr(0.86602540378444) == 0.75\\nsqr(sqrt(0.75)) == 0.75\", 'cube, sqrt');\n"
 	"describe('#math', 'sqrt',\t'+y = sqrt(+x)',\t\t\t\"Returns the square root of +x. +x should be positive or the result will be undefined.\\n\\nInverse: sqr(+y).\", \"sqrt(0.0) == 0.0\\nsqrt(0.5625) == 0.75\\nsqrt(sqr(0.7)) == 0.7\", 'sqr');\n"
-	"describe('#math', 'tan',\t'+y = tan(+x)',\t\t\t\t\"Returns the tangent of +x.\\n\\nInverse: atan(+y).\", \"tan(0.0) == 0.0\\ntan(0.64350110879329) == 0.75\\ntan(atan(0.3)) == 0.3\", 'atan, cos, sin');\n"
+	"describe('#math', 'tan',\t'+y = tan(+x)',\t\t\t\t\"Returns the tangent of +x.\\n\\nInverse: atan(+y).\", \"tan(0.0) == 0.0\\ntan(0.603982978253) == 0.69\\ntan(atan(0.3)) == 0.3\", 'atan, cos, sin');\n"
 	"describe('#math', 'tanh',\t'+y = tanh(+x)',\t\t\t'Returns the hyperbolic tangent of +x.', \"tanh(0.0) == 0.0\\ntanh(0.9729550745276566) == 0.75\", 'cosh, sinh');\n"
 	"describe('#math', 'trunc',\t'+y = trunc(+x, [+n = 0])',\t'Truncates the value of +x leaving up to +n decimal places intact. If +n is omitted, all decimals are truncated. Truncation rounds positive values downwards and negative values upwards.', \"trunc(1.23456) == 1\\ntrunc(-1.23456) == -1\\ntrunc(1.23456, 2) == 1.23\\ntrunc(1.5, 10) == 1.5\", 'ceil, floor, precision, round');\n"
 	"\n"
@@ -2742,7 +2742,7 @@ const char* BUILT_IN_HELP =
 	"describe('#strings', 'lower',\t\t\"'lowercase' = lower('string')\",\t\t\t\t\t\"Translates 'string' character by character to lower case. Notice that the standard implementation only works with characters having ASCII values between 32 and 126 inclusively.\", \"lower('aBcD') === 'abcd'\", 'upper');\n"
 	"describe('#strings', 'mismatch',\t\"+offset = mismatch('first', 'second')\",\t\t\t\"Compares the 'first' and 'second' strings character by character and returns the zero-based offset of the first mismatch (e.g. 0 = first character). If the strings are identical in contents, the returned value is the length of the shortest string. As usual, the comparison is case sensitive.\", \"mismatch('abcd', 'abcd') == 4\\nmismatch('abc', 'abcd') == 3\\nmismatch('abCd', 'abcd') == 2\", 'find, search, span');\n"
 	"describe('#strings', 'ordinal',\t\t\"+code = ordinal('character')\",\t\t\t\t\t\t\"Returns the ordinal (i.e. the character code) of the single character string 'character'. Depending on how PikaScript is configured, the character code is an ASCII or Unicode value. If 'character' cannot be converted to a character code the exception 'Value is not single character: {character}' will be thrown.\\n\\nInverse: char(+code).\", \"ordinal('A') == 65\\nordinal(char(211)) == 211\", 'char');\n"
-	"describe('#strings', 'precision',\t\"'string' = precision(+value, +precision)\",\t\t\t\"Converts +value to a decimal number string (in scientific E notation if required). +precision is the maximum number of digits to include in the output. Scientific E notation (e.g. 1.3e+3) will be used if +precision is smaller than the number of digits required to express +value in decimal notation. The maximum number of characters returned is (+precision) plus 7 (for possible minus sign, decimal point and exponent).\", \"precision(12345, 3) === '1.23e+4'\\nprecision(9876, 8) === '9876'\\nprecision(9876.54321, 8) === '9876.5432'\\nprecision(-0.000000123456, 5) === '-1.2346e-7'\\nprecision(+infinity, 1) === '+infinity'\", \"radix, trunc\");\n"
+	"describe('#strings', 'precision',\t\"'string' = precision(+value, +precision)\",\t\t\t\"Converts +value to a decimal number string (in scientific E notation if required). +precision is the maximum number of digits to include in the output. Scientific E notation (e.g. 1.3e+3) will be used if +precision is smaller than the number of digits required to express +value in decimal notation. The maximum number of characters returned is +precision plus 7 (for possible minus sign, decimal point and exponent).\", \"precision(12345, 3) === '1.23e+4'\\nprecision(9876, 8) === '9876'\\nprecision(9876.54321, 8) === '9876.5432'\\nprecision(-0.000000123456, 5) === '-1.2346e-7'\\nprecision(+infinity, 1) === '+infinity'\", \"radix, trunc\");\n"
 	"describe('#strings', 'radix',\t\t\"'string' = radix(+value, +radix, [+minLength])\",\t\"Converts the integer +value to a string using a selectable radix between 2 (binary) and 16 (hexadecimal). If +minLength is specified and the string becomes shorter than this, it will be padded with leading zeroes. May throw 'Radix out of range: {radix}' or 'Minimum length out of range: {minLength}'.\", \"radix(0xaa, 2, 12) === '000010101010'\\nradix(3735928559, 16) === 'deadbeef'\\nradix(0x2710, 10) === 10000\", 'precision');\n"
 	"describe('#strings', 'repeat',\t\t\"'repeated' = repeat('repeatme', +count)\",\t\t\t\"Concatenates 'repeatme' +count number of times.\", \"repeat(' ', 5) === '     '\\nrepeat('-#-', 10) === '-#--#--#--#--#--#--#--#--#--#-'\");\n"
 	"describe('#strings', 'replace',\t\t\"'processed' = replace('source', 'what', 'with', [>findFunction = search], [+dropCount = length(what)], [>replaceFunction = >$1])\",\t\"Replaces all occurrences of 'what' with 'with' in the 'source' string.\\n\\nThe optional >findFunction allows you to modify how the function finds occurrences of 'what' and +dropCount determines how many characters are replaced on each occurrence. The default >findFunction is ::search (and +dropCount is the number of characters in 'what'), which means that 'what' represents a substring to substitute. If you want this function to substitute any occurrence of any character in 'what', you can let >findFunction be ::find and +dropCount be 1. Similarly, you may use ::span to substitute occurrences of all characters not present in 'what'.\\n\\nFinally, >replaceFunction lets you customize how substrings should be replaced. It will be called with two arguments, the source substring in $0 and 'with' in $1, and it is expected to return the replacement substring.\", \"replace('Barbazoo', 'zoo', 'bright') === 'Barbabright'\\nreplace('Barbalama', 'lm', 'p', find, 1) === 'Barbapapa'\\nreplace('Bqaxrbzzabypeillme', 'Bbarel', '', span, 1) === 'Barbabelle'\\nreplace('B03102020', '0123', 'abmr', find, 1, >$1{$0}) === 'Barbamama'\", \"bake, find, search, span\");\n"
@@ -2770,7 +2770,7 @@ const char* BUILT_IN_HELP =
 	"describe('#utils', 'exists',\t\"?found = exists(@variable)\",\t\t\t\t\t\t\"Returns true if the variable referenced to by @variable is defined. Notice that this function does not \\\"fall back\\\" to the global frame if a local variable does not exist. Therefore you should always prefix the variable name with '::' if you want to check for the existance of a global variable or function.\", \"exists(@::aglobal)\\nexists(@users['magnus lidstrom'])\", 'coalesce, defaults, delete');\n"
 	"describe('#utils', 'include',\t\"include('filePath')\",\t\t\t\t\t\t\t\t\"Runs a PikaScript source file as with run() but only if 'filePath' has not been \\\"included\\\" before. The function determines this by checking the existance of a global ::included[filePath]. It defines this global after completing execution the first time. (run() does not define or use this global.) Use include() with source files that defines library functions and constants, e.g. 'stdlib.pika'.\", \"include('stdlib.pika')\", 'run');\n"
 	"describe('#utils', 'input',\t\t\"'answer' = input('question')\",\t\t\t\t\t\t\"Prints 'question' and returns a line read from the standard input stream (excluding any terminating line feed characters). May throw 'Unexpected end of input file' or 'Input file error'.\", \"name = input(\\\"What's your name? \\\")\", 'print');\n"
-	"describe('#utils', 'invoke',\t\"<result> = invoke(['callee'], [>body], @args, [+offset = 0], [+count])\",\t\"Calls 'callee' (or >body) with the argument list @args. The difference between using 'callee' or >body is that the former should be a string with a function name, while the latter should be an actual function body. If both arguments are present, >body will be executed, but the called function's $callee variable will be set to 'callee'. For debugging purposes it is recommended that you use the 'callee' argument.\\n\\n+offset can be used to adjust the element index for the first argument. +count is the number of arguments. If it is omitted, [@args].n is used to determine the count.\", \"invoke('max', , @values)\\ninvoke('(callback)', $0, @$, 1, 4)\", \"evaluate, invokeMethod, run\");\n"
+	"describe('#utils', 'invoke',\t\"<result> = invoke(['callee'], [>body], @args, [+offset = 0], [+count])\",\t\"Calls 'callee' (or >body) with the argument list @args. The difference between using 'callee' or >body is that the former should be a string with a function name, while the latter should be an actual function body. If both arguments are present, >body will be executed, but the called function's $callee variable will be set to 'callee'. For debugging purposes it is recommended that you use the 'callee' argument.\\n\\n+offset can be used to adjust the element index for the first argument. +count is the number of arguments. If it is omitted, [@args].n is used to determine the count.\\n\\nMay throw 'Too few array elements'.\", \"invoke('max', , @values)\\ninvoke('(callback)', $0, @$, 1, 4)\", \"evaluate, invokeMethod, run\");\n"
 	"describe('#utils', 'load',\t\t\"'contents' = load('filePath')\",\t\t\t\t\t\"Loads a file from disk and returns it as a string. The standard implementation uses the file I/O of the standard C++ library, which takes care of line ending conversion etc. It can normally only handle ASCII text files. May throw 'Cannot open file for reading: {filePath}' or 'Error reading from file: {filePath}'.\", \"data = load('myfolder/myfile.txt')\", 'save');\n"
 	"describe('#utils', 'max',\t\t'<m> = max(<x>, <y>, [<z>, ...])',\t\t\t\t\t'Returns the largest value of all the arguments.', \"max(5, 3, 7, 1, 4) == 7\\nmax('Sleepy', 'Grumpy', 'Happy', 'Bashful', 'Dopey', 'Sneezy', 'Doc') === 'Sneezy'\\nmax('Zero', '10', '5') === 'Zero'\", 'min');\n"
 	"describe('#utils', 'min',\t\t'<m> = min(<x>, <y>, [<z>, ...])',\t\t\t\t\t'Returns the smallest value of all the arguments.', \"min(5, 3, 7, 1, 4) == 1\\nmin('Sleepy', 'Grumpy', 'Happy', 'Bashful', 'Dopey', 'Sneezy', 'Doc') === 'Bashful'\\nmin('Zero', '10', '5') === '5'\", 'max');\n"
@@ -2779,7 +2779,7 @@ const char* BUILT_IN_HELP =
 	"describe('#utils', 'run',\t\t\"<result> = run('filePath', [<args>, ...])\",\t\t\"Loads and executes a PikaScript source file. The code is executed in the \\\"closure\\\" of the global frame, which means that variable assignments etc work on globals. The code can still use temporary local variables with the $ prefix. The passed <args> are available in $1 and up. $0 will be 'filePath'. The returned value is the final result value of the executed code, just as it would be for a function call. The first line of the source code file may be a \\\"Unix shebang\\\" (in which case it is simply ignored). Use include() if you wish to avoid a file from running more than once.\", \"run('chess.pika')\\nhtmlCode = run('makeHTML.pika', 'Make This Text HTML')\", 'evaluate, include, invoke');\n"
 	"describe('#utils', 'save',\t\t\"save('filePath', 'contents')\",\t\t\t\t\t\t\"Saves 'contents' to a file (replacing any existing file). The standard implementation uses the file I/O of the standard C++ library, which takes care of line ending conversion etc. It can normally only handle ASCII text files. May throw 'Cannot open file for writing: {filePath}' or 'Error writing to file: {filePath}'.\", \"save('myfolder/myfile.txt', 'No, sir, away! A papaya war is on!')\", 'load');\n"
 	"describe('#utils', 'sourceFor', \"'code' = sourceFor(@variable|@container, ['prefix' = ''])\",\t\t\"*** WARNING, THIS FUNCTION IS SLIGHTLY BROKEN AND MAY BE REMOVED. USE AT OWN RISK! ***\\n\\nCreates source code for recalling the definition of @variable or @container (with all its sub-elements). The created code can be used with evaluate() to recall the definition in any given frame. For example: evaluate('code', @$) would recreate variables in the current local frame and evaluate('code', @::) would create them in the global frame.\\n\\nEach output line will be prefixed with 'prefix'.\", \"save('AllGlobals.pika', sourceFor(@::))\\nevaluate(sourceFor(@wildmatch)) == wildmatch\\nevaluate(sourceFor(@::globalToLocalPlease), @$)\\nprint(sourceFor(@myFunction, \\\"\\\\t\\\\t\\\"))\", \"dump, evaluate, toSource\");\n"
-	"describe('#utils', 'system',\t\"+exitCode = system('command')\",\t\t\t\t\t\"Tries to execute 'command' through the operating system's command interpreter. +exitCode is the return value from the command interpreter (a value of 0 usually means no error). May throw 'Could not execute system command: {command}'.\");\n"
+	"describe('#utils', 'system',\t\"+exitCode = system('command')\",\t\t\t\t\t\"Tries to execute 'command' through the operating system's command interpreter. +exitCode is the return value from the command interpreter (a value of 0 usually means no error). May throw 'Error executing system command: {command}'.\");\n"
 	"describe('#utils', 'swap',\t\t\"swap(@a, @b)\",\t\t\t\t\t\t\t\t\t\t\"Swaps the contents of the variables referenced to by @a and @b. This function is useful in sorting algorithms.\", \"swap(@master, @slave)\", 'compare, qsort');\n"
 	"describe('#utils', 'time',\t\t\"+secs = time()\",\t\t\t\t\t\t\t\t\t\"Returns the system clock as \\\"epoch time\\\", i.e. the number of seconds that has passed since a specific reference date (usually January 1 1970).\", \"elapsed = time() - lastcheck\");\n"
 	"describe('#utils', 'throw',\t\t\"throw('error')\",\t\t\t\t\t\t\t\t\t\"Throws an exception. 'error' should describe the error in human readable form. Use try() to catch errors. (PikaScript exceptions are standard C++ exceptions. It is up to the host application how uncaught exceptions are handled.)\", \"throw('Does not compute')\", 'try');\n"
@@ -2792,11 +2792,11 @@ const char* BUILT_IN_INTERACTIVE =
 	"#! /usr/local/bin/PikaCmd\n"
 	"\n"
 	"/*\n"
-	"\tinteractive.pika v0.941\n"
+	"\tinteractive.pika v0.942\n"
 	"\n"
 	"\tPikaScript is released under the \"New Simplified BSD License\". http://www.opensource.org/licenses/bsd-license.php\n"
 	"\t\n"
-	"\tCopyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem\n"
+	"\tCopyright (c) 2009-2014, NuEdge Development / Magnus Lidstroem\n"
 	"\tAll rights reserved.\n"
 	"*/\n"
 	"\n"
@@ -2833,6 +2833,16 @@ const char* BUILT_IN_INTERACTIVE =
 	"';\n"
 	"\t\n"
 	"\targs(@prompt, @where);\n"
+	"\tprintReturn = printError = print;\n"
+	"\tRETURN_COLOR = ERROR_COLOR = '';\n"
+	"\tif (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {\n"
+	"\t\tRETURN_COLOR = \"\\x1B[0;2m\";\n"
+	"\t\tERROR_COLOR = \"\\x1B[1;31m\";\n"
+	"\t\toldPrint = print;\n"
+	"\t\toldInput = input;\n"
+	"\t\t::print = function { <print>((if ($0{0} != \"\\x1B\") \"\\x1B[0;32m\") # $0) };\n"
+	"\t\t::input = function { <input>(if ($0{0} != \"\\x1B\") \"\\x1B[0;33m\" # $0 # \"\\x1B[m\" else $0) };\n"
+	"\t};\n"
 	"\t::_ = void;\n"
 	"\toneLine = function { limitLength(singleLine($0), CONSOLE_COLS - 7) };\n"
 	"\tshow = function {\n"
@@ -2846,7 +2856,7 @@ const char* BUILT_IN_INTERACTIVE =
 	"\t\telse {\n"
 	"\t\t\t::__ = void;\n"
 	"\t\t\ttryThis => (::__ = evaluate(s, where));\n"
-	"\t\t\tprintThis = '----- ( {oneLine(toSource(::__))} )';\n"
+	"\t\t\tprintThis = RETURN_COLOR # '----- ( {oneLine(toSource(::__))} )';\n"
 	"\t\t\t\n"
 	"\t\t\tif (s{0} === '!') tryThis => (::__ = system(s{1:}))\n"
 	"\t\t\telse if (s{0} === '%') {\n"
@@ -2879,12 +2889,18 @@ const char* BUILT_IN_INTERACTIVE =
 	"\t\t\t\tfor (; { s #= LF # (l = input('')); l !== '}' }; );\n"
 	"\t\t\t};\n"
 	"\n"
-	"\t\t\tif (tryThis !== void && (x = try(tryThis)) !== void) printThis = '!!!!! {x}';\n"
+	"\t\t\tif (tryThis !== void && (x = try(tryThis)) !== void) printThis = ERROR_COLOR # '!!!!! {x}';\n"
 	"\t\t\tif (printThis !== void) print(bake(printThis));\n"
 	"\t\t\t::_ = ::__;\n"
 	"\t\t\t( true )\n"
 	"\t\t}\n"
 	"\t}; );\n"
+	"\n"
+	"\tif (exists(@oldPrint)) {\n"
+	"\t\t::print = oldPrint;\n"
+	"\t\t::input = oldInput;\n"
+	"\t\tprint(\"\\x1B[m\");\n"
+	"\t}\n"
 	"};\n"
 	"\n"
 	"if (exists(@$1) && $1 == 'go') {\n"
@@ -2896,11 +2912,11 @@ const char* BUILT_IN_INTERACTIVE =
 
 const char* BUILT_IN_STDLIB =
 	"/*\n"
-	"\tstdlib.pika v0.941\n"
+	"\tstdlib.pika v0.942\n"
 	"\n"
 	"\tPikaScript is released under the \"New Simplified BSD License\". http://www.opensource.org/licenses/bsd-license.php\n"
 	"\t\n"
-	"\tCopyright (c) 2009-2013, NuEdge Development / Magnus Lidstroem\n"
+	"\tCopyright (c) 2009-2015, NuEdge Development / Magnus Lidstroem\n"
 	"\tAll rights reserved.\n"
 	"*/\n"
 	"\n"
@@ -2965,7 +2981,7 @@ const char* BUILT_IN_STDLIB =
 	"\t\tif (i >= ^$n) throw('Too few arguments');\n"
 	"\t\tif (exists(@^$[i])) [$[i]] = ^$[i]\n"
 	"\t};\n"
-	"\tfor (++i; i < $n && i <= ^$n; ++i) if (exists(@^$[i - 1])) [$[i]] = ^$[i - 1];\n"
+	"\tfor (++i; i < $n; ++i) if (i <= ^$n && exists(@^$[i - 1])) [$[i]] = ^$[i - 1] else delete($[i]);\n"
 	"\tif (i <= ^$n) throw('Too many arguments');\n"
 	"\t( i - 1 )\n"
 	"};\n"
@@ -3195,13 +3211,13 @@ const char* BUILT_IN_STDLIB =
 
 	\version
 
-	Version 0.941
+	Version 0.942
 	
 	\page Copyright
 
 	PikaScript is released under the "New Simplified BSD License". http://www.opensource.org/licenses/bsd-license.php
 	
-	Copyright (c) 2010-2013, NuEdge Development / Magnus Lidstroem
+	Copyright (c) 2010-2014, NuEdge Development / Magnus Lidstroem
 	All rights reserved.
 
 	Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -3331,7 +3347,7 @@ static Script::String loadFile(std::basic_ifstream<Script::Char>& instream, cons
 std::string pikaCmdDir;
 
 Script::String overloadedLoad(const Script::String& filename) {
-	std::string name(Pika::toStdString(filename)); // Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
+	std::string name(Pika::toStdString(filename));	// Sorry, can't pass a wchar_t filename. MSVC supports it, but it is non-standard. So we convert to a std::string to be on the safe side.
 	{
 		std::basic_ifstream<Script::Char> instream(name.c_str());
 		if (instream.good()) return loadFile(instream, filename);
@@ -3357,7 +3373,7 @@ int main(int argc, const char* argv[]) {
 	std::srand(static_cast<unsigned int>(std::time(0)) ^ static_cast<unsigned int>(std::clock()));
 	rand();
 	if (argc < 2)
-		std::cout << "PikaCmd version " << PIKA_SCRIPT_VERSION << ". (C) 2010-2013 NuEdge Development. "
+		std::cout << "PikaCmd version " << PIKA_SCRIPT_VERSION << ". (C) 2010-2014 NuEdge Development. "
 				"All rights reserved." << std::endl << "Run PikaCmd -? for command-line argument syntax."
 				<< std::endl << std::endl;
 	try {
@@ -3371,11 +3387,11 @@ int main(int argc, const char* argv[]) {
 		root.assign("exitCode", Script::Value(0));
 		root.assign("PLATFORM", Script::String(TO_STRING(PLATFORM_STRING)));
 		const Script::String fn(argc < 2 ? "default.pika" : argv[1]);
-		root.assign(Script::String("$0"), fn); // Also assign args to global scope so we can access them anywhere.
+		root.assign(Script::String("$0"), fn);	// Also assign args to global scope so we can access them anywhere.
 		std::vector<Script::Value> args(1, fn);
 		for (int i = 2; i < argc; ++i) {
 			args.push_back(Script::String(argv[i]));
-			root.assign(Script::String("$") += Pika::intToString<Script::String>(i - 1), argv[i]); // Also assign args to global scope so we can access them anywhere.
+			root.assign(Script::String("$") += Pika::intToString<Script::String>(i - 1), argv[i]);	// Also assign args to global scope so we can access them anywhere.
 		}
 		root.call("run", (fn[0] == '{' ? Script::String(BUILT_IN_DIRECT) : Script::Value()), args.size(), &args[0]);
 		exitCode = static_cast<int>(root.getOptional("exitCode"));

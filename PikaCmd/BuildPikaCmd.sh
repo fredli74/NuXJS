@@ -1,9 +1,20 @@
-#!/bin/bash
+#!/bin/sh
 
 BuildCpp()
 {
+	compiler_path="g++"
+	static_lib_option=
+
+	# use gcc on mac, better backwards compatiblity
+	
+	if [ -e "/Developer/usr/bin/g++" ]; then
+		echo USING GCC
+		compiler_path="/Developer/usr/bin/g++"
+		static_lib_option="-static-libgcc"
+	fi
+
 	echo Compiling $1...
-	g++ -x c++ -pipe -Wno-trigraphs -fno-rtti -Os -Wreturn-type -Wunused-variable -DNDEBUG -fmessage-length=0 -funroll-loops -ffast-math -fstrict-aliasing -m32 -fvisibility=hidden -fvisibility-inlines-hidden -fno-threadsafe-statics -o $@ >/var/tmp/buildlog.txt 2>&1
+	${compiler_path} -x c++ -pipe -Wno-trigraphs -fno-rtti -Os -Wreturn-type -Wunused-variable -DNDEBUG -fmessage-length=0 -funroll-loops -ffast-math -fstrict-aliasing -m32 -fvisibility=hidden -fvisibility-inlines-hidden -fno-threadsafe-statics ${static_lib_option} -o $@ >/var/tmp/buildlog.txt 2>&1
 	if [ $? -ne 0 ]; then
 		cat /var/tmp/buildlog.txt
 		echo Compilation of $1 failed
