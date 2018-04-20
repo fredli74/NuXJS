@@ -202,7 +202,7 @@ class GCHeap {
 				template<class T> T& include(T& item) throw() { rootList.claim(&item); return item; }
 				UInt32 count() const;
 				UInt32 gc();
-				void mark(const GCItem* item);
+				void mark(const GCItem* item) { if (item != 0 && item->_gcList == currentList) { newList->claim(const_cast<GCItem*>(item)); } }
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				// FIX : used extremely rarely, keep?

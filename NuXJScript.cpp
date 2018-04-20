@@ -4307,6 +4307,9 @@ UInt32 GCHeap::gc() {
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
 		item->gcMark(*this);
 	}
+	for (const GCItem* item = newList->_gcPrev; item != newList; item = item->_gcPrev) {
+		item->gcMark(*this);
+	}
 	
 	{
 		UInt32 n = 0;
@@ -4322,13 +4325,6 @@ UInt32 GCHeap::gc() {
 
 	std::swap(currentList, newList);
 	return sweptCount;
-}
-
-void GCHeap::mark(const GCItem* item) {
-	if (item != 0 && item->_gcList == currentList) {
-		newList->claim(const_cast<GCItem*>(item));
-		item->gcMark(*this);
-	}
 }
 
 Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
