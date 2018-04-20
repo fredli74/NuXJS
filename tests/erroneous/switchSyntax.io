@@ -45,3 +45,11 @@
 > switch (1) { case a: }
 ! !!!! ReferenceError: a is not defined
 -
+> switch (x) { default: break; default: break }
+! !!!! Line: 1
+! !!!! SyntaxError: More than one 'default:'
+-
+> function f() { return; switch (x) { default: return 9; default: return 7 } }
+! !!!! Line: 1
+! !!!! SyntaxError: More than one 'default:'
+-
