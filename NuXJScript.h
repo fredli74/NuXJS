@@ -167,8 +167,10 @@ class GCItem {
 				static void operator delete(void* ptr, Pool* pool);
 				
 				GCItem() throw();
+				GCItem(GCHeap& heap) throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
+				GCHeap* getGCHeap() const;
 				virtual void gcMark(GCHeap& heap) const;
 				virtual ~GCItem();
 	
@@ -184,12 +186,14 @@ class GCItem {
 // list (_gcList = 0). But in GCHeap, governed items ought to be deleted, right?
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
-	public:		GCList();
-				UInt32 size() const;
+	friend class GCItem;
+	friend class GCHeap;
+	public:		GCList(GCHeap& heap);
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 
-	protected:	UInt32 count;
+	protected:	GCHeap& heap;
+				UInt32 count;
 };
 
 class GCHeap {
@@ -320,6 +324,7 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	
 				Object() { }
+				Object(GCHeap& heap) : super(heap) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -412,7 +417,7 @@ class Table {
 	
 	The ECMAScript String object on the other hand is represented by an extensible StringWrapper.
 */
-class String : public virtual Object, public QuickArray<Char> {
+class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
 
@@ -489,7 +494,7 @@ class JoiningEnumerator : public Enumerator {
 				}
 };
 
-class ScriptObject : public virtual Object {
+class ScriptObject : public Object {
 	public:		typedef Object super;
 				
 				ScriptObject(GCHeap& heap, Object* prototype);
@@ -558,7 +563,7 @@ class StringWrapper : public ScriptObject {
 */
 template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
-				LazyScriptObject();
+				LazyScriptObject(GCHeap& heap) : super(heap), completeObject(0) { }
 				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Engine& engine, const Value& key);
@@ -605,6 +610,8 @@ class Array : public LazyScriptObject<Object> {
 class Function : public Object {
 	public:		typedef Object super;
 	
+				Function() { }
+				Function(GCHeap& heap) : super(heap) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -620,7 +627,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(GCHeap& heap, bool direct) : direct(direct), functionDefCache(&heap.pool) { }
+				EvalFunction(GCHeap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap.pool) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -638,7 +645,7 @@ class EvalFunction : public Function {
 // Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(GCHeap& heap) : QuickVector<Value>(&heap.pool) { }
+				Constants(GCHeap& heap) : super(heap), QuickVector<Value>(&heap.pool) { }
 	protected:	virtual void gcMark(GCHeap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -692,7 +699,7 @@ class CodeDefinition : public Object {
 
 class Scope : public GCItem {
 	public:		typedef GCItem super;
-				Scope(Scope* parentScope, const CodeDefinition* codeDefinition) : indexedPointer(0), parentScope(parentScope), codeDefinition(codeDefinition) { };
+				Scope(GCHeap& heap, Scope* parentScope, const CodeDefinition* codeDefinition) : super(heap), indexedPointer(0), parentScope(parentScope), codeDefinition(codeDefinition) { };
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const { assert(parentScope != 0); return parentScope->readVar(engine, name, v); }
 				virtual void writeVar(Engine& engine, const String* name, const Value& v) { assert(parentScope != 0); return parentScope->writeVar(engine, name, v); }
 				virtual bool deleteVar(Engine& engine, const String* key) { assert(parentScope != 0); return parentScope->deleteVar(engine, key); }
@@ -713,11 +720,14 @@ class Scope : public GCItem {
 };
 
 class ExtensibleFunction : public LazyScriptObject<Function> {
+	public:		typedef LazyScriptObject<Function> super;
+				ExtensibleFunction(GCHeap& heap) : super(heap) { }
 	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
+				FunctionPrototypeFunction(GCHeap& heap) : super(heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Engine& engine) const;
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
@@ -728,7 +738,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -748,7 +758,7 @@ class ScriptFunction : public ExtensibleFunction {
 
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction);
+				SpecialConstructorFunction(GCHeap& heap, Function* regularFunction, Function* constructorFunction);
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
@@ -769,7 +779,7 @@ enum ErrorType {
 
 class Error : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
-				Error(ErrorType type, const String* message = 0);
+				Error(GCHeap& heap, ErrorType type, const String* message = 0);
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const; // error type name
@@ -792,13 +802,13 @@ class Error : public LazyScriptObject<Object> {
 
 class ErrorPrototype : public Error {
 	public:		typedef Error super;
-				ErrorPrototype(ErrorType type);
+				ErrorPrototype(GCHeap& heap, ErrorType type);
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
 class GlobalScope : public Scope {
 	public:		typedef Scope super;
-				GlobalScope(Object* globalObject, const CodeDefinition* codeDefinition);
+				GlobalScope(GCHeap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -813,7 +823,7 @@ class GlobalScope : public Scope {
 
 class WithScope : public Scope {
 	public:		typedef Scope super;
-				WithScope(Scope* parentScope, Object* withObject);
+				WithScope(GCHeap& heap, Scope* parentScope, Object* withObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -857,7 +867,7 @@ class FunctionScope : public Scope {
 class EvalScope : public Scope {
 	public:		typedef Scope super;
 
-				EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef);
+				EvalScope(GCHeap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
 
@@ -870,7 +880,7 @@ class EvalScope : public Scope {
 class CatchScope : public Scope {
 	public:		typedef Scope super;
 
-				CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+				CatchScope(GCHeap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);

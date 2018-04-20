@@ -770,16 +770,16 @@ void* GCItem::operator new(size_t n, Pool* pool) {
 void GCItem::operator delete(void* ptr) { Pool** p = reinterpret_cast<Pool**>(ptr) - 1; ::operator delete(p, *p); }
 void GCItem::operator delete(void* ptr, Pool* pool) { ::operator delete(reinterpret_cast<Pool**>(ptr) - 1, pool); }
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
-GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(0), _gcNext(0) { }
-GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = 0; _gcNext = 0; return *this; }
+GCItem::GCItem(GCHeap& heap) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { heap.include(*this); }
+GCItem::GCItem(const GCItem& copy) throw() { *this = copy; }
+GCItem& GCItem::operator=(const GCItem& copy) throw() { _gcList = 0; _gcPrev = this; _gcNext = this; if (copy._gcList != 0) copy._gcList->heap.include(*this); return *this; }
+GCHeap* GCItem::getGCHeap() const { return (_gcList == 0 ? 0 : &_gcList->heap); }
 void GCItem::gcMark(GCHeap& heap) const { }
 GCItem::~GCItem() { if (_gcList != 0) _gcList->relinquish(this); }
 
 /* --- GCList --- */
 
-GCList::GCList() : count(0) { }
-
-UInt32 GCList::size() const { return count; }
+GCList::GCList(GCHeap& heap) : heap(heap), count(0) { }
 
 void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
@@ -998,7 +998,7 @@ UInt32 Table::rebuild(UInt32 newN) {
 
 /* --- ScriptObject --- */
 
-ScriptObject::ScriptObject(GCHeap& heap, Object* prototype) : properties(&heap.pool), prototype(prototype) { }
+ScriptObject::ScriptObject(GCHeap& heap, Object* prototype) : super(heap), properties(&heap.pool), prototype(prototype) { }
 
 Object* ScriptObject::getPrototype(Engine& engine) const { return prototype; }
 Table& ScriptObject::accessProperties() { return properties; }
@@ -1115,7 +1115,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 /* --- CodeDefinition --- */
 
 CodeDefinition::CodeDefinition(GCHeap& heap, Constants* constants)
-	: code(0, &heap.pool), constants(constants), nameIndexes(&heap.pool), varNames(&heap.pool), argumentNames(&heap.pool)
+	: super(heap), code(0, &heap.pool), constants(constants), nameIndexes(&heap.pool), varNames(&heap.pool), argumentNames(&heap.pool)
 	, name(0), selfName(0), source(0), bloomSet(0)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap.pool)
@@ -1167,7 +1167,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 
 /* --- Array --- */
 
-Array::Array(GCHeap& heap) : length(0), denseVector(&heap.pool) { }
+Array::Array(GCHeap& heap) : super(heap), length(0), denseVector(&heap.pool) { }
 
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
 
@@ -1240,7 +1240,7 @@ bool Array::setOwnProperty(Engine& engine, const Value& key, const Value& v, Fla
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			GCHeap& heap = engine.getHeap();
-			throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(RANGE_ERROR, heap.govern(new (&heap.pool) String("Invalid array length")))))); // FIX : how could we do this without exceptions?
+			throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, RANGE_ERROR, heap.govern(new (&heap.pool) String("Invalid array length")))))); // FIX : how could we do this without exceptions?
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1289,8 +1289,6 @@ Enumerator* Array::getPropertyEnumerator(Engine& engine) const {
 
 /* --- LazyScriptObject --- */
 
-template<class SUPER> LazyScriptObject<SUPER>::LazyScriptObject() : completeObject(0) { }
-
 template<class SUPER> Flags LazyScriptObject<SUPER>::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	return getCompleteObject(engine)->getOwnProperty(engine, key, v);
 }
@@ -1331,7 +1329,7 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(CodeDefinition* codeDefinition, Scope* closure) : codeDefinition(codeDefinition), closure(closure) { }
+ScriptFunction::ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure) : super(heap), codeDefinition(codeDefinition), closure(closure) { }
 Value ScriptFunction::getInternalValue(GCHeap& heap) const { return Value(toString(heap)); }
 CodeDefinition* ScriptFunction::getDefinition() const { return codeDefinition; }
 
@@ -1358,8 +1356,8 @@ void ScriptFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- SpecialConstructorFunction --- */
 
-SpecialConstructorFunction::SpecialConstructorFunction(Function* regularFunction, Function* constructorFunction)
-		: regularFunction(regularFunction), constructorFunction(constructorFunction) {
+SpecialConstructorFunction::SpecialConstructorFunction(GCHeap& heap, Function* regularFunction, Function* constructorFunction)
+		: super(heap), regularFunction(regularFunction), constructorFunction(constructorFunction) {
 	assert(regularFunction != 0);
 }
 
@@ -1416,7 +1414,8 @@ void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
 
 /* --- Error --- */
 
-Error::Error(ErrorType type, const String* message)	: errorType(type), name(&ERROR_NAMES[errorType]), message(message) {
+Error::Error(GCHeap& heap, ErrorType type, const String* message)
+		: super(heap), errorType(type), name(&ERROR_NAMES[errorType]), message(message) {
 	assert(0 <= errorType && errorType < ERROR_TYPE_COUNT);
 }
 
@@ -1454,7 +1453,7 @@ void Error::constructCompleteObject(Engine& engine) const {
 
 /* --- ErrorPrototype --- */
 
-ErrorPrototype::ErrorPrototype(ErrorType type) : super(type) { }
+ErrorPrototype::ErrorPrototype(GCHeap& heap, ErrorType type) : super(heap, type) { }
 
 Object* ErrorPrototype::getPrototype(Engine& engine) const {
 	return (errorType == GENERIC_ERROR ? static_cast<Object*>(&engine.objectPrototype)
@@ -1464,7 +1463,7 @@ Object* ErrorPrototype::getPrototype(Engine& engine) const {
 /* --- Arguments --- */
 
 Arguments::Arguments(GCHeap& heap, FunctionScope* scope, UInt32 argumentsCount)
-		: scope(scope), argumentsCount(argumentsCount), deletedArguments(argumentsCount, &heap.pool) {
+		: super(heap), scope(scope), argumentsCount(argumentsCount), deletedArguments(argumentsCount, &heap.pool) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
@@ -1538,7 +1537,7 @@ static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 ar
 }
 
 FunctionScope::FunctionScope(GCHeap& heap, ScriptFunction* function, UInt32 argc, const Value* argv)
-		: super(function->closure, function->codeDefinition)
+		: super(heap, function->closure, function->codeDefinition)
 		, function(function), passedArgumentsCount(argc)
 		, indexed(calcIndexedVariablesSize(function, argc), &heap.pool), dynamicVars(0)
 		, bloomSet(function->codeDefinition->bloomSet) {
@@ -1647,7 +1646,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Scope* parentScope, const CodeDefinition* evalCodeDef) : super(parentScope, evalCodeDef) {
+EvalScope::EvalScope(GCHeap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef) : super(heap, parentScope, evalCodeDef) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 
@@ -1657,8 +1656,8 @@ void EvalScope::declareVar(Engine& engine, const String* name, const Value& init
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(Object* globalObject, const CodeDefinition* codeDefinition)
-		: super(0, codeDefinition), globalObject(globalObject) {
+GlobalScope::GlobalScope(GCHeap& heap, Object* globalObject, const CodeDefinition* codeDefinition)
+		: super(heap, 0, codeDefinition), globalObject(globalObject) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1679,8 +1678,8 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 
 /* --- CatchScope --- */
 
-CatchScope::CatchScope(Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(parentScope, parentScope->getCodeDefinition()), exceptionName(exceptionName)
+CatchScope::CatchScope(GCHeap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
+		: super(heap, parentScope, parentScope->getCodeDefinition()), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) {
 	indexedPointer = parentScope->getIndexedPointer();
 }
@@ -1712,8 +1711,8 @@ bool CatchScope::deleteVar(Engine& engine, const String* name) {
 
 /* --- WithScope --- */
 
-WithScope::WithScope(Scope* parentScope, Object* withObject) : super(parentScope, parentScope->getCodeDefinition())
-		, withObject(withObject) {
+WithScope::WithScope(GCHeap& heap, Scope* parentScope, Object* withObject)
+		: super(heap, parentScope, parentScope->getCodeDefinition()), withObject(withObject) {
 	indexedPointer = parentScope->getIndexedPointer();
 }
 
@@ -1841,7 +1840,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 }
 
 Processor::Processor(Engine& engine, CallFrame* cstackStart, CallFrame* cstackEnd, Value* vstackStart, Value* vstackEnd)
-	: engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
+	: super(engine.getHeap()), engine(engine), cstackStart(cstackStart), cstackEnd(cstackEnd), vstackStart(vstackStart), vstackEnd(vstackEnd)
 	, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstackStart - 1), cfp(cstackStart - 1), scope(0), constants(0), indexed(0)
 	, catchers(engine.getPool()) { }
 
@@ -1864,7 +1863,7 @@ void Processor::error(ErrorType errorType, const String* message) {
 // FIX : which? both works!
 //	throwVirtualException(Value(errorObject)
 	GCHeap& heap = engine.getHeap();
-	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(errorType, message))));
+	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, message))));
 }
 
 void Processor::updateInternals() {
@@ -1913,7 +1912,7 @@ void Processor::chain(const CodeWord* ip, Scope* scope, Object* thisObject) {
 void Processor::enterEval(CodeDefinition* codeDefinition, bool directCall) {
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
-	scope = heap.govern(new (&heap.pool) EvalScope(f, codeDefinition));
+	scope = heap.govern(new (&heap.pool) EvalScope(heap, f, codeDefinition));
 	++cfp; // FIX : overflow check
 	assert(cfp < cstackEnd);
 	cfp->returnIP = ip;
@@ -2181,7 +2180,7 @@ bool Processor::privateRun() {
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand].getObject();
-				push(Value(heap.govern(new (&heap.pool) ScriptFunction(reinterpret_cast<CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.govern(new (&heap.pool) ScriptFunction(heap, reinterpret_cast<CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			case DECLARE_OP: {
@@ -2209,14 +2208,14 @@ bool Processor::privateRun() {
 			}
 			case CATCH_SCOPE_OP: {
 				assert(cfp->scope == scope);
-				cfp->scope = scope = heap.govern(new (&heap.pool) CatchScope(scope, constants[operand].getString(), vsp[0]));
+				cfp->scope = scope = heap.govern(new (&heap.pool) CatchScope(heap, scope, constants[operand].getString(), vsp[0]));
 				pop(1);
 				break;
 			}
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
 				assert(cfp->scope == scope);
 				if ((o = convertToObject(vsp[0], false)) != 0) {
-					cfp->scope = scope = heap.govern(new (&heap.pool) WithScope(scope, o));
+					cfp->scope = scope = heap.govern(new (&heap.pool) WithScope(heap, scope, o));
 					pop(1);
 				}
 				break;
@@ -2603,7 +2602,8 @@ struct Compiler::SemanticScope {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileFor)
-		: heap(heap)
+		: super(heap)
+		, heap(heap)
 		, codeDefinition(codeDefinition)
 		, compilingFor(compileFor)
 		, setupSection(heap, 0)
@@ -2617,7 +2617,7 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileF
 }
 
 void Compiler::error(ErrorType errorType, const char* message) {
-	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(errorType, heap.govern(new (&heap.pool) String(message))))));
+	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, heap.govern(new (&heap.pool) String(message))))));
 }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
@@ -4297,9 +4297,9 @@ Pool::~Pool() {
 
 /* --- GCHeap --- */
 
-GCHeap::GCHeap() : currentList(&governedListA), newList(&governedListB) { }
+GCHeap::GCHeap() : governedListA(*this), governedListB(*this), rootList(*this), currentList(&governedListA), newList(&governedListB) { }
 
-UInt32 GCHeap::count() const { return currentList->size(); }
+UInt32 GCHeap::count() const { return currentList->count; }
 
 UInt32 GCHeap::gc() {
 	UInt32 sweptCount = 0;
@@ -4420,7 +4420,7 @@ struct Support {
 			} else if (className->isEqualTo(E_RROR_STRING)) {
 				for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 					if (prototype == engine.errorPrototypes[i]) {
-						o = new (&heap.pool) Error(static_cast<ErrorType>(i));
+						o = new (&heap.pool) Error(heap, static_cast<ErrorType>(i));
 						break;
 					}
 				}
@@ -4439,7 +4439,7 @@ struct Support {
 			if (regularFunction != 0) {
 				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
 				GCHeap& heap = engine.getHeap();
-				return Value(heap.govern(new (&heap.pool) SpecialConstructorFunction(regularFunction, constructorFunction)));
+				return Value(heap.govern(new (&heap.pool) SpecialConstructorFunction(heap, regularFunction, constructorFunction)));
 			}
 		}
 		return Value::UNDEFINED;
@@ -4467,7 +4467,7 @@ struct Support {
 			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
 			heap.include(compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.govern(new (&heap.pool) ScriptFunction(codeDefinition, engine.getGlobalScope())));
+			return Value(heap.govern(new (&heap.pool) ScriptFunction(heap, codeDefinition, engine.getGlobalScope())));
 		}
 		return Value::UNDEFINED;
 	}
@@ -4630,23 +4630,16 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-Engine::Engine(GCHeap& heap) : gcHeap(heap), globalScope(0), globals(0), objectPrototype(heap, 0), evalFunction(heap, false)
+Engine::Engine(GCHeap& heap) : super(heap), gcHeap(heap), globalScope(0), globals(0), objectPrototype(heap, 0)
+		, functionPrototype(heap), evalFunction(heap, false)
 		, evalDirectFunction(heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
 		, arrayPrototype(heap), unixEpochTimeDiff(0.0) {
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
-	heap.include(objectPrototype);
-	heap.include(functionPrototype);
-	heap.include(booleanPrototype);
-	heap.include(numberPrototype);
-	heap.include(stringPrototype);
-	heap.include(arrayPrototype);
-	heap.include(evalFunction);
-	heap.include(evalDirectFunction);
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		errorPrototypes[i] = gcHeap.govern(new (&heap.pool) ErrorPrototype(static_cast<ErrorType>(i)));
+		errorPrototypes[i] = gcHeap.govern(new (&heap.pool) ErrorPrototype(heap, static_cast<ErrorType>(i)));
 	}
 }
 
@@ -4731,17 +4724,17 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
 	// FIX : all these gcHeap.govern(new String()) ... could be a utility function!
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveNumber"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveNumber"))))));
 	}
 	
 	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveString"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveString"))))));
 	}
 
 	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.createRegExp"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.createRegExp"))))));
 	}
 }
 
@@ -4840,26 +4833,20 @@ suppressStdErr = true;
      std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
     GCHeap heap;
     Engine engine(heap);
-	heap.include(engine);
-
     Constants globalConstants(heap);
-    heap.include(globalConstants);
     CodeDefinition globalCode(heap, &globalConstants);
-    heap.include(globalCode);
 
     ScriptObject globals(heap, &engine.objectPrototype);
-    heap.include(globals);
-    GlobalScope globalScope(&globals, &globalCode);
-    heap.include(globalScope);
+    GlobalScope globalScope(heap, &globals, &globalCode);
+    GlobalScope globalScopeCopy(globalScope);
 
 	engine.setGlobalObject(&globalScope, &globals);
-
-    
+	
     PrintFunction printFunction;
-    globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(&heap.include(printFunction)), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(&printFunction), DONT_ENUM_FLAG);
     GCFunction gcFunction;
     const String GC_STRING("gc");
-    globals.setOwnProperty(engine, Value(&GC_STRING), Value(&heap.include(gcFunction)), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
 	
 	if (loadStdLib) {
 		try {
@@ -4933,7 +4920,6 @@ suppressStdErr = true;
                 Processor processor(engine, cstack, cstack + 1024, vstack, vstack + 1024);
 				String stackOverflowGuard("stack overflow");
 				vstack[1023] = Value(&stackOverflowGuard);
-                heap.include(processor);
                 const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
                 processor.chain(RETURN_TO_HOST_STUB);
                 
