@@ -750,15 +750,15 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(GCHeap& heap, CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(GCHeap& heap, const CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(GCHeap& heap) const;
 				virtual Value getInternalValue(GCHeap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				CodeDefinition* getDefinition() const;
+				const CodeDefinition* getDefinition() const;
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
-				CodeDefinition* const codeDefinition;
+				const CodeDefinition* const codeDefinition;
 				Scope* const closure;
 				
 				virtual void gcMark(GCHeap& heap) const {
