@@ -16,6 +16,28 @@
 > print(false?3:true?true?2:5:9)
 < 2
 -
+> print((false?9:3,6))
+< 6
+-
+> print((true?9:3,6))
+< 6
+-
+> a = [false?9:3,6]; print(a[0]); print(a[1]);
+< 3
+< 6
+-
+> a = [true?9:3,6]; print(a[0]); print(a[1]);
+< 9
+< 6
+-
+> f = function(a, b) { print(a); print(b); }; f(false?9:3,6);
+< 3
+< 6
+-
+> f(true?9:3,6);
+< 9
+< 6
+-
 > false?a=3:a=6; print(a)
 < 6
 -
