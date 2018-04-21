@@ -190,8 +190,6 @@ class GCItem {
 				static void operator delete[](void*); // N/A
 };
 
-// FIX : what should we do with items that are left in a GCList that destructs? I guess at least "release" them from the
-// list (_gcList = 0). But in GCHeap, governed items ought to be deleted, right?
 // These are double-linked circular lists with a dummy node first to minimize code complexity.
 class GCList : public GCItem {
 	friend class GCItem;
@@ -199,6 +197,8 @@ class GCList : public GCItem {
 	public:		GCList(GCHeap& heap);
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
+				UInt32 deleteAll() throw();
+				~GCList();
 
 	protected:	GCHeap& heap;
 				UInt32 count;
@@ -210,7 +210,11 @@ class GCHeap {
 				template<class T> T& include(T& item) throw() { rootList.claim(&item); return item; }
 				UInt32 count() const;
 				UInt32 gc();
-				void mark(const GCItem* item) { if (item != 0 && item->_gcList == currentList) { newList->claim(const_cast<GCItem*>(item)); } }
+				void mark(const GCItem* item) {
+					if (item != 0 && item->_gcList == currentList) {
+						newList->claim(const_cast<GCItem*>(item));
+					}
+				}
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
 				// FIX : used extremely rarely, keep?

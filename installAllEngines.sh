@@ -1,5 +1,5 @@
 if [[ ! -e $(which brew) ]]; then
-	ruby -e "$(curl -fsSL https://raw.github.com/mxcl/homebrew/go)"
+	ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 	brew doctor
 fi
 if [[ ! -e $(which v8) ]]; then

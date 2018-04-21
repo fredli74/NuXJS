@@ -784,7 +784,7 @@ GCList::GCList(GCHeap& heap) : heap(heap), count(0) { }
 void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
 	assert(count > 0);	// If this assert triggers it could mean that you've forgot to call include() on a GCItem and it has been both garbage collected and destructed (e.g. by going out of scope).
-	count--;
+	--count;
 	item->_gcPrev->_gcNext = item->_gcNext;
 	item->_gcNext->_gcPrev = item->_gcPrev;
 }
@@ -799,6 +799,109 @@ void GCList::claim(GCItem* item) throw() {
 	_gcNext = item;
 	item->_gcList = this;
 	++count;
+}
+
+UInt32 GCList::deleteAll() throw() {
+	const UInt32 n = count;
+	for (const GCItem* i = _gcNext->_gcNext; i != _gcNext; i = i->_gcNext) {
+		assert(i->_gcPrev->_gcList == this);
+		delete i->_gcPrev;
+	}
+	assert(_gcPrev == _gcNext && _gcPrev == this);
+	return n;
+}
+
+GCList::~GCList() {
+	deleteAll();
+}
+
+/* --- Pool --- */
+
+Pool::Pool() : allocated(0) {
+	std::fill(pooled + 0, pooled + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
+}
+
+int Pool::calcPoolIndex(const size_t size) {
+	return (0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
+			? static_cast<int>((size + (POOL_SIZE_GRANULARITY - 1)) / POOL_SIZE_GRANULARITY)
+			: -1;
+}
+
+void* Pool::allocate(size_t size) {
+	void* block = 0;
+	const int poolIndex = calcPoolIndex(size);
+	if (poolIndex >= 0) {
+		size = poolIndex * POOL_SIZE_GRANULARITY;
+		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
+		block = pooled[poolIndex];
+		if (block != 0) {
+			pooled[poolIndex] = *(static_cast<void**>(block));
+		}
+	}
+	if (block == 0) {
+		block = ::operator new(size + sizeof (size_t));
+	}
+	size_t* p = reinterpret_cast<size_t*>(block);
+	*p = size;
+	allocated += size;
+	return p + 1;
+}
+
+void Pool::deallocate(void *ptr) {
+	size_t* p = reinterpret_cast<size_t*>(ptr) - 1;
+	size_t size = *p;
+	const int poolIndex = calcPoolIndex(size);
+	if (poolIndex >= 0) {
+		*(void **)(p) = pooled[poolIndex];
+		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
+		pooled[poolIndex] = p;
+	} else {
+		::operator delete(p);
+	}
+	allocated -= size;
+	assert(allocated >= 0);
+}
+
+void* Pool::allocateArray(size_t size) { return allocate(size); }
+void Pool::deallocateArray(void *ptr) { return deallocate(ptr); }
+
+void Pool::purgePooled() {
+	for (int poolIndex = 0; poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY; ++poolIndex) {
+		void* p = pooled[poolIndex];
+		while (p != 0) {
+			void* n = *(void **)(p);
+			::operator delete(p);
+			p = n;
+		}
+		pooled[poolIndex] = 0;
+	}
+}
+
+size_t Pool::size() const {
+	return allocated;
+}
+
+Pool::~Pool() {
+	purgePooled();
+}
+
+/* --- GCHeap --- */
+
+GCHeap::GCHeap()
+		: governedListA(*this), governedListB(*this), rootList(*this)
+		, currentList(&governedListA), newList(&governedListB) { }
+
+UInt32 GCHeap::count() const { return currentList->count; }
+
+UInt32 GCHeap::gc() {
+	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
+		item->gcMark(*this);
+	}
+	for (const GCItem* item = newList->_gcPrev; item != newList; item = item->_gcPrev) {
+		item->gcMark(*this);
+	}
+	std::swap(currentList, newList);
+	return newList->deleteAll();
 }
 
 /* --- Object --- */
@@ -4244,108 +4347,6 @@ void Compiler::compile(const String& source) {
 	}
 }
 
-/* --- Pool --- */
-
-Pool::Pool() : allocated(0) {
-	std::fill(pooled + 0, pooled + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
-}
-
-int Pool::calcPoolIndex(const size_t size) {
-	return (0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
-			? static_cast<int>((size + (POOL_SIZE_GRANULARITY - 1)) / POOL_SIZE_GRANULARITY)
-			: -1;
-}
-
-void* Pool::allocate(size_t size) {
-	void* block = 0;
-	const int poolIndex = calcPoolIndex(size);
-	if (poolIndex >= 0) {
-		size = poolIndex * POOL_SIZE_GRANULARITY;
-		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
-		block = pooled[poolIndex];
-		if (block != 0) {
-			pooled[poolIndex] = *(static_cast<void**>(block));
-		}
-	}
-	if (block == 0) {
-		block = ::operator new(size + sizeof (size_t));
-	}
-	size_t* p = reinterpret_cast<size_t*>(block);
-	*p = size;
-	allocated += size;
-	return p + 1;
-}
-
-void Pool::deallocate(void *ptr) {
-	size_t* p = reinterpret_cast<size_t*>(ptr) - 1;
-	size_t size = *p;
-	const int poolIndex = calcPoolIndex(size);
-	if (poolIndex >= 0) {
-		*(void **)(p) = pooled[poolIndex];
-		assert(0 <= poolIndex && poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY);
-		pooled[poolIndex] = p;
-	} else {
-		::operator delete(p);
-	}
-	allocated -= size;
-	assert(allocated >= 0);
-}
-
-void* Pool::allocateArray(size_t size) { return allocate(size); }
-void Pool::deallocateArray(void *ptr) { return deallocate(ptr); }
-
-void Pool::purgePooled() {
-	for (int poolIndex = 0; poolIndex < MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY; ++poolIndex) {
-		void* p = pooled[poolIndex];
-		while (p != 0) {
-			void* n = *(void **)(p);
-			::operator delete(p);
-			p = n;
-		}
-		pooled[poolIndex] = 0;
-	}
-}
-
-size_t Pool::size() const {
-	return allocated;
-}
-
-Pool::~Pool() {
-	purgePooled();
-}
-
-/* --- GCHeap --- */
-
-GCHeap::GCHeap() : governedListA(*this), governedListB(*this), rootList(*this), currentList(&governedListA), newList(&governedListB) { }
-
-UInt32 GCHeap::count() const { return currentList->count; }
-
-UInt32 GCHeap::gc() {
-	UInt32 sweptCount = 0;
-	
-	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
-		item->gcMark(*this);
-	}
-	for (const GCItem* item = newList->_gcPrev; item != newList; item = item->_gcPrev) {
-		item->gcMark(*this);
-	}
-	
-	{
-		UInt32 n = 0;
-		for (const GCItem* i = currentList->_gcNext->_gcNext; i != currentList->_gcNext; i = i->_gcNext) {
-			assert(i->_gcPrev->_gcList == currentList);
-			delete i->_gcPrev;
-			++n;
-		}
-
-		currentList->_gcPrev = currentList->_gcNext = currentList;
-		sweptCount = n;
-	}
-
-	std::swap(currentList, newList);
-	return sweptCount;
-}
-
 Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
@@ -5048,5 +5049,5 @@ suppressStdErr = true;
 }
 
 int main(int argc, const char* argv[]) {
-    return testMain(argc, argv);
+    testMain(argc, argv);
 }
