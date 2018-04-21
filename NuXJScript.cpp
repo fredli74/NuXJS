@@ -1089,7 +1089,7 @@ const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : St
 /* --- StringListEnumerator --- */
 
 StringListEnumerator::StringListEnumerator(UInt32 initialCapacity, Pool* pool) : list(pool), nextIndex(0) { list.reserve(initialCapacity); }
-void StringListEnumerator::add(const String* s) { list.append(s); }
+void StringListEnumerator::add(const String* s) { list.push(s); }
 const String* StringListEnumerator::nextPropertyName() { return (nextIndex < list.size() ? list[nextIndex++] : 0); }
 
 /* --- JoiningEnumerator --- */
@@ -1217,16 +1217,16 @@ bool Array::setOwnProperty(Engine& engine, const Value& key, const Value& v, Fla
 			}
 			if (index == denseVector.size()) {
 				if (completeObject == 0) {
-					denseVector.append(v);
+					denseVector.push(v);
 				} else {
 					GCHeap& heap = engine.getHeap();
 					Table& props = completeObject->accessProperties();
 					Table::Bucket* bucket = props.lookup(String::fromInt(heap, index));
 					if (bucket == 0 || bucket->hasStandardFlags()) {
 						UInt32 moveIndex = index + 1;
-						denseVector.append(v);
+						denseVector.push(v);
 						while ((bucket = props.lookup(String::fromInt(heap, moveIndex))) != 0 && bucket->hasStandardFlags()) {
-							denseVector.append(bucket->getValue());
+							denseVector.push(bucket->getValue());
 							props.erase(bucket);
 							++moveIndex;
 						}
@@ -1841,7 +1841,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 
 Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), cstack(engine.getPool()), vstack(engine.getPool())
-		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin() - 1), cfp(cstack.begin()), scope(0), constants(0), indexed(0)
+		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin() - 1), scope(0), constants(0), indexed(0)
 		, catchers(engine.getPool()) {
 }
 
@@ -1871,7 +1871,7 @@ void Processor::error(ErrorType errorType, const String* message) {
 }
 
 void Processor::updateInternals() {
-	scope = cfp->scope;
+	scope = cstack.back().scope;
 	if (scope != 0) { // FIX : use dummy scope?
 		constants = scope->getCodeDefinition()->getConstantsPointer();
 		indexed = scope->getIndexedPointer();
@@ -1879,11 +1879,7 @@ void Processor::updateInternals() {
 }
 
 void Processor::chain(const CodeWord* stub) {
-	cstack.resize(cstack.size() + 1);
-	cfp = cstack.end() - 1;
-	cfp->returnIP = ip;
-	cfp->scope = 0;
-	cfp->thisObject = 0;
+	cstack.push(CallFrame(ip, 0, 0));
 	ip = stub;
 	updateInternals();
 }
@@ -1900,11 +1896,7 @@ void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) FunctionScope(heap, func, argc, argv));
-	cstack.resize(cstack.size() + 1);
-	cfp = cstack.end() - 1;
-	cfp->returnIP = ip;
-	cfp->scope = scope;
-	cfp->thisObject = thisObject;
+	cstack.push(CallFrame(ip, scope, thisObject));
 	ip = func->getDefinition()->getCodePointer();
 	reserveVStackSpace(func->getDefinition()->getMaxStackDepth());
 	updateInternals();
@@ -1912,12 +1904,7 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 }
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
-	this->scope = scope;
-	cstack.resize(cstack.size() + 1);
-	cfp = cstack.end() - 1;
-	cfp->returnIP = this->ip;
-	cfp->scope = this->scope;
-	cfp->thisObject = thisObject;
+	cstack.push(CallFrame(ip, scope, thisObject));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -1927,11 +1914,7 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 	Scope* f = (directCall ? scope : engine.getGlobalScope());
 	GCHeap& heap = engine.getHeap();
 	scope = heap.govern(new (&heap.pool) EvalScope(heap, f, codeDefinition));
-	cstack.resize(cstack.size() + 1);
-	cfp = cstack.end() - 1;
-	cfp->returnIP = ip;
-	cfp->scope = scope;
-	cfp->thisObject = cfp[-1].thisObject;
+	cstack.push(CallFrame(ip, scope, cstack.back().thisObject));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -1947,12 +1930,11 @@ void Processor::throwVirtualException(const Value& exception) {
 	assert(ip != 0);
 	assert(catcher.cstackSize <= cstack.size());
 	cstack.resize(catcher.cstackSize);
-	cfp = cstack.end() - 1;
-	cfp->scope = catcher.scope;
+	cstack.back().scope = catcher.scope;
 	// FIX : resize stack? vstack.resize(catcher.vstackSize);
 	vsp = vstack.begin() + catcher.vstackOffset - 1;
 	push(exception);
-	catchers.resize(catchers.size() - 1);
+	catchers.pop();
 	updateInternals();
 }
 
@@ -2067,11 +2049,7 @@ bool Processor::privateRun() {
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
 
-			case JSR_OP:	cstack.resize(cstack.size() + 1);
-							cfp = cstack.end() - 1;
-							cfp->returnIP = ip;
-							cfp->scope = scope;
-							cfp->thisObject = cfp[-1].thisObject;
+			case JSR_OP:	cstack.push(CallFrame(ip, scope, cstack.back().thisObject));
 							ip += operand;
 							break;
 
@@ -2172,33 +2150,28 @@ bool Processor::privateRun() {
 			}
 
             case DELETE_SCOPE_AND_RETURN_OP: delete scope; // fall through
-			case RETURN_OP:	ip = cfp->returnIP;
+			case RETURN_OP:	ip = cstack.back().returnIP;
 							assert(ip != 0);
-							assert(!cstack.empty());
-							cstack.resize(cstack.size() - 1);
-							cfp = cstack.end() - 1;
+							cstack.pop();
 							updateInternals();
 							break;
 			
 			case DISCARD_RETURN_OP: {
 				assert(!cstack.empty());
-				cstack.resize(cstack.size() - 1);
-				cfp = cstack.end() - 1;
+				cstack.pop();
 				break;
 			}
 			
 			case RETURN_TO_HOST_OP: { // FIX : I don't like this opcode, is it really necessary?
-				ip = cfp->returnIP;
-				assert(!cstack.empty());
-				cstack.resize(cstack.size() - 1);
-				cfp = cstack.end() - 1;
+				ip = cstack.back().returnIP;
+				cstack.pop();
 				result = vsp[0];
 				pop(1);
 				clockCyclesLeft = cyclesLeft;
 				return false;
 			}
 
-			case THIS_OP: push(Value(cfp->thisObject)); break;
+			case THIS_OP: push(Value(cstack.back().thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			case GEN_FUNC_OP: {
 				o = constants[operand].getObject();
@@ -2229,29 +2202,29 @@ bool Processor::privateRun() {
 				break;
 			}
 			case CATCH_SCOPE_OP: {
-				assert(cfp->scope == scope);
-				cfp->scope = scope = heap.govern(new (&heap.pool) CatchScope(heap, scope, constants[operand].getString(), vsp[0]));
+				assert(cstack.back().scope == scope);
+				cstack.back().scope = scope = heap.govern(new (&heap.pool) CatchScope(heap, scope, constants[operand].getString(), vsp[0]));
 				pop(1);
 				break;
 			}
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
-				assert(cfp->scope == scope);
+				assert(cstack.back().scope == scope);
 				if ((o = convertToObject(vsp[0], false)) != 0) {
-					cfp->scope = scope = heap.govern(new (&heap.pool) WithScope(heap, scope, o));
+					cstack.back().scope = scope = heap.govern(new (&heap.pool) WithScope(heap, scope, o));
 					pop(1);
 				}
 				break;
 			}
 			case POP_SCOPE_OP: {
-				cfp->scope = scope = scope->getParentScope();
+				cstack.back().scope = scope = scope->getParentScope();
 				break;
 			}
 			case TRY_OP: {
 				assert(vsp + 1 - vstack.begin() >= 0);
-				catchers.append(Catcher(ip + operand, static_cast<UInt32>(vsp + 1 - vstack.begin()), cstack.size(), scope));
+				catchers.push(Catcher(ip + operand, static_cast<UInt32>(vsp + 1 - vstack.begin()), cstack.size(), scope));
 				break;
 			}
-			case TRIED_OP: catchers.resize(catchers.size() - 1); break;
+			case TRIED_OP: catchers.pop(); break;
 			case THROW_OP: throwVirtualException(vsp[0]); break;
 			case IN_OP: {
 				o = vsp[0].asObject();
@@ -2622,7 +2595,7 @@ struct Compiler::SemanticScope {
 		}
 		switch (type) {
 			case TRY_TYPE:
-			case CATCH_TYPE: finallys.append(compiler.emitForwardBranch(Processor::JSR_OP)); break;
+			case CATCH_TYPE: finallys.push(compiler.emitForwardBranch(Processor::JSR_OP)); break;
 			default: break;
 		}
 		return rollbackStackDepth;
@@ -2661,7 +2634,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 		return;
 	}
 #if (VERIFY_STACK_LOGIC)
-	stackDepths.append(stackDepth);
+	stackDepths.push(stackDepth);
 #endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
@@ -2679,9 +2652,9 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 			case Processor::REPUSH_OP:
 			case Processor::CONST_OP:
 			case Processor::VOID_OP: {
-				code.resize(code.size() - 1);
+				code.pop();
 #if (VERIFY_STACK_LOGIC)
-	stackDepths.resize(stackDepths.size() - 2);
+	stackDepths.pop(2);
 #endif
 				lastEmitted = Processor::INVALID_OP;
 				return;
@@ -2690,16 +2663,16 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 		}
 		if (replacementOpcode != Processor::INVALID_OP) {
 			const Int32 oldOperand = Processor::unpackInstruction(code.end()[-1]).second;
-			code.resize(code.size() - 1); // FIX : pop method in vector?
+			code.pop();
 #if (VERIFY_STACK_LOGIC)
-	stackDepths.resize(stackDepths.size() - 1);
+	stackDepths.pop();
 #endif
-			code.append(Processor::packInstruction(replacementOpcode, oldOperand));
+			code.push(Processor::packInstruction(replacementOpcode, oldOperand));
 			lastEmitted = replacementOpcode;
 			return;
 		}
 	}
-	code.append(Processor::packInstruction(opcode, operand));
+	code.push(Processor::packInstruction(opcode, operand));
 	lastEmitted = opcode;
 }
 
@@ -2709,7 +2682,7 @@ void Compiler::CodeSection::insertSection(const CodeSection& section) {
 	code.insert(code.end(), section.code.begin(), section.code.end());
 #if (VERIFY_STACK_LOGIC)
 	for (int i = 0; i < section.stackDepths.size(); ++i) {
-		stackDepths.append(section.stackDepths[i] + stackAdjust);
+		stackDepths.push(section.stackDepths[i] + stackAdjust);
 	}
 #endif
 	stackDepth = section.stackDepth + stackAdjust;
@@ -2777,7 +2750,7 @@ UInt32 Compiler::addConstant(const Value& constant) {
 			return index;
 		}
 	}
-	constants->append(constant);
+	constants->push(constant);
 	return constants->size() - 1;
 }
 
@@ -3572,7 +3545,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 		if (bucket != 0) {
 			index = bucket->getIndexValue();
 		} else {
-			codeDefinition->varNames.append(name);
+			codeDefinition->varNames.push(name);
 			index = -static_cast<Int32>(codeDefinition->varNames.size());
 			nameIndexes.update(nameIndexes.insert(name), index);
 			codeDefinition->bloomSet |= name->createBloomCode();
@@ -3731,7 +3704,7 @@ void Compiler::breakStatement(SemanticScope* currentScope) {
 		if (s->label.isEqualTo(label)
 				&& (s->type == SemanticScope::ITERATOR_LABEL_TYPE || s->type == SemanticScope::LABEL_TYPE)) {
 			s->popStack(*this, rollbackStackDepth, evalPopOpcode());
-			s->breaks.append(emitForwardBranch(Processor::JMP_OP));
+			s->breaks.push(emitForwardBranch(Processor::JMP_OP));
 			semicolon();
 			return;
 		}
@@ -3750,7 +3723,7 @@ void Compiler::continueStatement(SemanticScope* currentScope) {
 				error(SYNTAX_ERROR, "Illegal label for continue");
 			}
 			s->popStack(*this, rollbackStackDepth, evalPopOpcode());
-			s->continues.append(emitForwardBranch(Processor::JMP_OP));
+			s->continues.push(emitForwardBranch(Processor::JMP_OP));
 			semicolon();
 			return;
 		}
@@ -3934,7 +3907,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		if (compilingFor == FOR_EVAL) {
 			emit(Processor::PUSH_BACK_OP, 1);
 		}
-		tryScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+		tryScope.finallys.push(emitForwardBranch(Processor::JSR_OP));
 		allFinallys.insert(allFinallys.end(), tryScope.finallys.begin(), tryScope.finallys.end());
 	}
 	const BranchPoint tryEndPoint = emitForwardBranch(Processor::JMP_OP);
@@ -3968,7 +3941,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 			SemanticScope catchScope(heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
 			block(&catchScope);
 			emit(Processor::POP_SCOPE_OP);
-			catchScope.finallys.append(emitForwardBranch(Processor::JSR_OP));
+			catchScope.finallys.push(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 			allFinallys.insert(allFinallys.end(), catchScope.finallys.begin(), catchScope.finallys.end());
 		}
@@ -4045,7 +4018,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 			expectToken(":", true);
 			if (!currentSection->inDeadCode()) {
 				emit(Processor::X_EQ_OP);
-				jumpOffsets.append(testsSection.code.size());
+				jumpOffsets.push(testsSection.code.size());
 				emit(Processor::JT_OP, casePoint.codeOffset - 1 - currentSection->code.size());
 			}
 			changeSection(previousSection);
@@ -4249,7 +4222,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 		const Char* b = identifier(true, false);
 		const String* name = String::newHashedString(heap, b, p);
 		nameIndexes.update(nameIndexes.insert(name), static_cast<Int32>(argumentNames.size()));
-		argumentNames.append(name);
+		argumentNames.push(name);
 		codeDefinition->bloomSet |= name->createBloomCode();
 		white();
 	}
@@ -4985,7 +4958,7 @@ suppressStdErr = true;
                     if (interactive) {
                         pushIOLines('!', String(ws, &heap.pool));
                     }
-					std::wcout << std::wstring(std::max<const Char*>(stopPoint - 8, source.begin()), std::min<const Char*>(stopPoint + 8, source.end())) << std::endl;
+// FIX :						std::wcout << std::wstring(std::max<const Char*>(stopPoint - 8, source.begin()), std::min<const Char*>(stopPoint + 8, source.end())) << std::endl;
                     throw;
                 }
                 if (!suppressStdErr) {

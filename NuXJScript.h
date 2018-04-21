@@ -131,7 +131,10 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					count += (e - b);
 					std::copy(b, e, p);
 				}
-				void append(const T& t) { insert(end(), &t, &t + 1); }
+				void push(const T& t) { insert(end(), &t, &t + 1); }
+                void pop(int n = 1) { resize(count - n); }
+                T& back() { assert(count > 0); return qArray[count - 1]; }
+                const T& back() const { assert(count > 0); return qArray[count - 1]; }
 				void shrink() { qArray.resize(count); }
 			// FIX : ambigious according to c++ standard or something, didnt' work -v
 			#if 0 && !defined(NDEBUG) // FIX : test performance in release
@@ -1001,6 +1004,9 @@ class Processor : public GCItem {
 
 				// FIX : this could be a struct used by a member Processor too instead of separate ip, scope etc...
 				struct CallFrame {
+					CallFrame() { }
+					CallFrame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
+							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
 					const CodeWord* returnIP;
 					Scope* scope;
 					Object* thisObject; // doesn't change during function execution
@@ -1124,13 +1130,12 @@ public: // FIX : not public, just for some asserts now I think
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
 				Value* vsp; // FIX : not public, just for an assert now
-				CallFrame* cfp;
 				Value result;
 
 				virtual void gcMark(GCHeap& heap) const {
 					// FIX : trim these?
 					heap.markViaReferences(vstack.begin(), vsp + 1);
-					for (CallFrame* c = cstack.begin(); c != cfp + 1; ++c) {
+					for (CallFrame* c = cstack.begin(); c != cstack.end(); ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}

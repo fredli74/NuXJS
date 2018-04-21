@@ -11,6 +11,7 @@ if (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {
 	INPUT_COLOR = "\x1B[1;37m";
 	GOT_COLOR = "\x1B[1;31m";
 	EXPECTED_COLOR = "\x1B[1;32m";
+	RESET_COLOR = "\x1B[0m";
 };
 
 help => {
@@ -180,4 +181,6 @@ if (!didHelp) {
 		s = chop(s, 2);
 		print(s);
 	}
-} // (!didHelp)
+}; // (!didHelp)
+
+print(RESET_COLOR);
