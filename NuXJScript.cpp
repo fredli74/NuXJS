@@ -1931,11 +1931,6 @@ void Processor::poppush(const Value& v) { assert(vsp >= vstack.begin()); *--vsp 
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
-void Processor::error(ErrorType errorType, const String* message) {
-	GCHeap& heap = engine.getHeap();
-	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, message))));
-}
-
 void Processor::updateInternals() {
 	scope = cstack.back().scope;
 	if (scope != 0) { // FIX : use dummy scope?
@@ -2004,6 +1999,11 @@ void Processor::throwVirtualException(const Value& exception) {
 	updateInternals();
 }
 
+void Processor::error(ErrorType errorType, const String* message) {
+	GCHeap& heap = engine.getHeap();
+	throwVirtualException(Value(heap.govern(new (&heap.pool) Error(heap, errorType, message))));
+}
+
 Object* Processor::convertToObject(const Value& v, const bool requestExtensible) {
 	Object* const object = v.toObject(engine, requestExtensible);
 	if (object == 0) {
@@ -2030,6 +2030,7 @@ bool Processor::privateRun() {
 											const String* name = constants[operand].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
 												error(REFERENCE_ERROR, heap.govern(new (&heap.pool) String(*name, IS_NOT_DEFINED_STRING, &heap.pool)));
+												break;
 											}
 										}
 										break;
@@ -2043,26 +2044,32 @@ bool Processor::privateRun() {
 
 			case GET_PROPERTY_OP: {
 				const Object* o = convertToObject(vsp[-1], false);
-				if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
-					vsp[-1] = Value::UNDEFINED;
+				if (o != 0) {
+					if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
+						vsp[-1] = Value::UNDEFINED;
+					}
+					pop(1);
 				}
-				pop(1);
 				break;
 			}
 			
 			case SET_PROPERTY_OP: {
 				Object* o = convertToObject(vsp[-2], false);
-				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-				vsp[-2] = vsp[0];
-				pop(2);
+				if (o != 0) {
+					o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+					vsp[-2] = vsp[0];
+					pop(2);
+				}
 				break;
 			}
 			
 			case SET_PROPERTY_POP_OP: {
 				Object* o = convertToObject(vsp[-2], false);
-				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-				pop(3);
-				break;
+				if (o != 0) {
+					o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+					pop(3);
+					break;
+				}
 			}
 
 			case OBJ_TO_NUMBER_OP: {
@@ -2142,6 +2149,7 @@ bool Processor::privateRun() {
 				Function* const f = returnPointer->asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+					break;
 				}
 				*returnPointer = f->call(engine, *this, n, returnPointer + 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				vsp -= n;
@@ -2151,15 +2159,18 @@ bool Processor::privateRun() {
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				const Int32 n = operand;
 				Object* const thisObject = convertToObject(vsp[-n - 1], true);
-				Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				Value v(Value::UNDEFINED);
-				Function* f;
-				const Value& name = vsp[-n];
-				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
-					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+				if (thisObject != 0) {
+					Value* returnPointer = vsp - n - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
+					Value v(Value::UNDEFINED);
+					Function* f;
+					const Value& name = vsp[-n];
+					if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+						error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+						break;
+					}
+					*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
+					vsp -= n + 1;
 				}
-				*returnPointer = f->call(engine, *this, n, returnPointer + 2, thisObject); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-				vsp -= n + 1;
 				break;
 			}
 			
@@ -2169,6 +2180,7 @@ bool Processor::privateRun() {
 				Function* f = returnPointer->asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+					break;
 				}
 				if (f == &engine.evalFunction) {
 					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
@@ -2184,6 +2196,7 @@ bool Processor::privateRun() {
 				Function* f = returnPointer->asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) { // FIX : sub
 					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*returnPointer->toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+					break;
 				}
 				Value v(Value::UNDEFINED);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
@@ -2266,7 +2279,9 @@ bool Processor::privateRun() {
 			
 			case DELETE_OP: {
 				Object* o = convertToObject(vsp[-1], true);
-				poppush(Value(o->deleteProperty(engine, vsp[0])));
+				if (o != 0) {
+					poppush(Value(o->deleteProperty(engine, vsp[0])));
+				}
 				break;
 			}
 			
@@ -2280,8 +2295,10 @@ bool Processor::privateRun() {
 			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
 				assert(cstack.back().scope == scope);
 				Object* o = convertToObject(vsp[0], false);
-				cstack.back().scope = scope = heap.govern(new (&heap.pool) WithScope(heap, scope, o));
-				pop(1);
+				if (o != 0) {
+					cstack.back().scope = scope = heap.govern(new (&heap.pool) WithScope(heap, scope, o));
+					pop(1);
+				}
 				break;
 			}
 			
@@ -2301,6 +2318,7 @@ bool Processor::privateRun() {
 				const Object* o = vsp[0].asObject();
 				if (o == 0) {
 					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(CANNOT_USE_IN_OPERATOR_STRING, *vsp[0].toString(heap), &heap.pool)));
+					break;
 				}
 				Value dummy;
 				vsp[-1] = Value(o->getPropertyDeep(engine, vsp[-1], &dummy) != NONEXISTENT);
@@ -2311,6 +2329,7 @@ bool Processor::privateRun() {
 				Function* f = vsp[0].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*vsp[0].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap.pool)));
+					break;
 				}
 				vsp[-1] = Value(f->hasInstance(engine, *this, vsp[-1].asObject()));
 				pop(1);
@@ -2328,12 +2347,14 @@ bool Processor::privateRun() {
 				const Object* o = convertToObject(vsp[0], false);
 				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
-				Enumerator* enumerator = &EMPTY_ENUMERATOR;
-				do {
-					enumerator = heap.govern(new (&heap.pool) JoiningEnumerator(engine, enumerator, o));
-					o = o->getPrototype(engine);
-				} while (o != 0);
-				vsp[0] = Value(enumerator);
+				if (o != 0) {
+					Enumerator* enumerator = &EMPTY_ENUMERATOR;
+					do {
+						enumerator = heap.govern(new (&heap.pool) JoiningEnumerator(engine, enumerator, o));
+						o = o->getPrototype(engine);
+					} while (o != 0);
+					vsp[0] = Value(enumerator);
+				}
 				break;
 			}
 			
