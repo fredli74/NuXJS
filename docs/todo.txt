@@ -99,11 +99,6 @@ LOW PRIO
 Run-time
 ========
 
-	* divide by 0 checks? NaN checks?
-		- is currently not compatible with -ffast_math, which is bad I guess
-		- also isnan is not standard C++ :(, on Windows it is called _isnan
-		- do a special Value variation that tracks NAN and Infinities?
-
 	* I don't know but the "emulation" in arguments object feels a bit over the top (registering deleted items etc)
 
 	* Why don't we make Engine a GCItem too and gcMark whatever it has instead of "rooting" it?
@@ -122,10 +117,6 @@ Compiler
 
 	* better errors with line numbers and stuff (should we go back to the global "pickup" idea i had in old NuXScript?)
 		- should pass char* in exception probably, as it is now new Compilers are created for each function compiling and the Compiler owns the char*, which means in a throw we lose the correct char*
-
-	* safe-kept variables aren't resetted on early exits, e.g.
-		b: switch (x) { case 1: switch(x) { case 2: break b } }
-		won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
 
 	* max recursion on compiler for sandboxed mode
 
@@ -148,19 +139,17 @@ OPTIMIZE
 Run-time
 ========
 
-	* change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
-		- not too fond of the int cast in the byte array
-		- 32-bit opcode with 24-bit operand seems pretty solid
-
 	* quicker calls by using a frame stack for functions that do not create closures
 		- problem is when we create closures with eval though, e.g. return(eval("(function(a,b) { return a+b+c })"));
 		- two options: 1) copy frame (byte by byte) to heap when necessary, 2) make super-quick allocation possible and some flag to indicate direct destruction on exit (poor-man generational gc)
 			- might be a third option: eval code that isn't executed via "eval" direct-call is treated differently according to http://www.ecma-international.org/ecma-262/5.1/#sec-10.4.2
 		- another option would be to not require a frame *at all* for quick calls that doesn't have eval or sub-functions (is it possible?). Just allocate space on the value stack. But what to do with accepting too few arguments?
 			- I think this is possible and we could copy the arguments like we do today
+			- I've decided this is too complicated for v1.0 + setting up the value stack for this is about as complicated as allocating from our super-quick pool
 		- third option: simply focus on making a fast mem pool instead
 			- oh snap, it's the gc that's the main performance problem, not the allocation/freeing... gotta look into that
 			- actually, I think it might be the CPU cache rather... reusing the same stack memory is much nicer to the CPU than spraying half the memory full with temporaries and then delete them...
+		- fourth option: on scope pop: manual delete of scopes that are in the root gc list, on closure creation (= generate function): move all scopes above to "governed" gc list
 
 	* could we gain something on representing bools as doubles (0 and 1) in the union? e.g. converting to/from double would be quicker
 
@@ -170,13 +159,12 @@ Run-time
 
 	* if we supplied a local variable index to CatchFrame (for the exception variable) we could access it by index instead of by name in the catch scope (and in the CatchFrame property getters/setters), but I am not convinced it would make an enormous performance improvement.
 
-	* ERASE_INDEXED_OP for quickly resetting safe kept variables, worth it? (three instructions now, void, write, pop)
-
 	* NEXT_PROPERTY_OP is always preceeded by READ_INDEXED (since it is always a non-constant safe-kept variable), combine into one instruction (with two operands)
 		- if we don't do the REPUSH idea instead of safe-keeping so much
 
 	* Make writes terminal and REPUSH in a = b = c type of expression...
 		- after a lot of experiments with this I think we better expand this in the future to a general opcode pattern reducer instead (see rev 19228)
+		- instead added _pop variations on write opcodes
 
 	* Don't lookup names in frame when not necessary. (And use hash table!)
 		- we do don't we? (use hash table), not sure what I meant with this bullet at all
@@ -203,6 +191,8 @@ Run-time
 		- A completely different approach would to be to abort the scope climbing when you encounter a scope that has been used by eval, thus determining this in run-time, and continue the search by name (through code-def lookup) at that point. I guess CPU hit could be negligable if we just set a pointer (climbScope) to 0 whenever direct eval is being executed in a scope. It would improve performance where eval is included in the code but for some reason isn't actually used (`if (false) eval(s)`). But it would prevent further optimizations (not yet tested) like having a constant-time short vector in each scope for scope-chain upwards instead of only a linked-list. (I think it is *extremely* rare that you have closures that are deeper than say 8 levels.)
 
 		- Also, as the compiler works now, a simple late declaration of a var is enough to break things. E.g. `var x = 5; (function() { print(x); var x; })()` should print "undefined" and not "5". This could of course be solved as soon as you encounter "var x". But what about: `var x = 5; (function() { (function() { print(x); })(); var x })();`. The recompile when finding eval approach alone doesn't cut it (svn revision 19277). What we need is a second compilation pass to bind all variables. To bad. Chess benchmark is twice as fast without global variable lookup by name.
+
+		- bloom filter helped quite a bit!
 
 	* internal int type
 
@@ -255,17 +245,13 @@ Compiler
 	* eliminate re-thrower in try / catch / finally if no finally block (by replacing the first try in catch with jmp +0)
 
 	* share constant pointers (strings etc) between each compiled unit, e.g. function in function will not share the same string pointers
+		- I think they do now right?
 
 	* try to move POP_FRAME to first in FINALLY block, need different JSR and a new RSR / JMP_INDIRECT then that pushes and pops instruction offset on value stack instead (ought to work)
 		- we could go back to switches for these when we don't need to POP_FRAME_OP on CATCH_TYPE:
 		- if (s->type == Scope::CATCH_TYPE || s->type == Scope::FINALLY_TYPE) emit(Processor::POP_FRAME_OP);
 
 	* don't like the outputCode solution, setting / resetting stuff manually isn't good programming style
-
-	* if it wasn't for the problem with the value stack order in the return statement (i.e. the return expression has to be emitted before any "early exits pop's" etc are emitted) we wouldn't have to use safeKeep so much, but could just keep stuff on the stack and repush (e.g. the enumerator object for "for in")
-		- actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
-
-	* switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
 
 	* fast lookup of operators (some clever quick hashing)
 		- can't do normal quick-hashing since it requires string length... perhaps I can develop a quick hashing that matches beginning of strings only?
@@ -274,6 +260,7 @@ Compiler
 	* couldn't we share identical strings in the same engine? any disadvantage to that?
 
 	* simple constants pre-calculations
+		- can we instantiate a small processor to do this?
 
 	* instead of flushing/discarding results of statements directly, couldn't we keep them until the next statement? i.e. eliminating stuff like "WRITE_INDEXED #-1", "POP", "READ_INDEXED #-1" (except when branch targets of course)
 
@@ -286,7 +273,7 @@ GC
 	* take a shot at generational gc
 		- couldn't it work if we just make sure that a reference from old -> new gen protects the item in new gen until we sweep the old gen?
 		- actually, I don't think we should think new and old gen... we should think standard heap and "sleepy" heap..
-
-	* no need for recursive marking, just add to one end of the list and continue looping to the end of list
+		- we could do this on an object level: sleepy object has a different setter that checks -> new gen references, but how can we change object class on the fly? I suppose we can't, which would mean a flag for this = slightly yucky.
 
 	* count actual memory allocated as in old NuXScript?
+		- we do in pools

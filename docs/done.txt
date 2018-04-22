@@ -147,3 +147,31 @@ DONE
 		- did a trick
 
 	* Split ScriptFrame -> GlobalFrame & ScriptFrame
+
+	* ERASE_INDEXED_OP for quickly resetting safe kept variables, worth it? (three instructions now, void, write, pop)
+		- safekept now on stack, no need anymore
+
+	* change byte code to int code and check performance, or maybe the opposite, add byte, short etc immediates?
+		- not too fond of the int cast in the byte array
+		- 32-bit opcode with 24-bit operand seems pretty solid
+
+	* safe-kept variables aren't resetted on early exits, e.g.
+		b: switch (x) { case 1: switch(x) { case 2: break b } }
+		won't reset the safe kept x's, so there is a risk this kind of code holds on to more garbage than necessary (but freed at function exit of course!)
+		- safe-kept now on stack, not relevant any more
+
+	* divide by 0 checks? NaN checks?
+		- is currently not compatible with -ffast_math, which is bad I guess
+		- also isnan is not standard C++ :(, on Windows it is called _isnan
+		- do a special Value variation that tracks NAN and Infinities?
+		- no, we require non-fast-math, and that's it
+
+	* no need for recursive marking, just add to one end of the list and continue looping to the end of list
+		- yeah, much better
+
+	* switch statements could benefit from a JUMP_AND_POP_IF_TRUE so that we could REPUSH the control value instead of safekeeping it
+		- safe-keeping on stack made this happen
+
+	* if it wasn't for the problem with the value stack order in the return statement (i.e. the return expression has to be emitted before any "early exits pop's" etc are emitted) we wouldn't have to use safeKeep so much, but could just keep stuff on the stack and repush (e.g. the enumerator object for "for in")
+		- actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
+		- we now do safekeep on stack!
