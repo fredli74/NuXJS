@@ -1880,7 +1880,6 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ NEW_OBJECT_OP              , "NEW_OBJECT"              , +1     , 0 },
 	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , 0 },
 	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , 0 },
-	{ DELETE_SCOPE_AND_RETURN_OP , "DELETE_SCOPE_AND_RETURN" , -1     , OpcodeInfo::TERMINAL },
 	{ RETURN_OP                  , "RETURN"                  , -1     , OpcodeInfo::TERMINAL },
 	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , 0 },
 	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , OpcodeInfo::TERMINAL },
@@ -2227,7 +2226,6 @@ bool Processor::privateRun() {
 				break;
 			}
 
-            case DELETE_SCOPE_AND_RETURN_OP: delete scope; // fall through
 			case RETURN_OP:	{
 				ip = cstack.back().returnIP;
 				assert(ip != 0);
@@ -2450,8 +2448,7 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 				}
 				break;
 			}
-			case Processor::RETURN_TO_HOST_OP:
-			case Processor::DELETE_SCOPE_AND_RETURN_OP: {
+			case Processor::RETURN_TO_HOST_OP: {
 				if (currentStackDepth != 0) {
 					std::cerr << "Invalid return stack depth @" << offset << ": " << currentStackDepth << std::endl;
 					++errors;
@@ -2699,19 +2696,8 @@ struct Compiler::SemanticScope {
 };
 
 Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileFor)
-		: super(heap)
-		, heap(heap)
-		, codeDefinition(codeDefinition)
-		, compilingFor(compileFor)
-		, setupSection(heap)
-		, mainSection(heap)
-		, p(0)
-		, e(0)
-		, currentSection(0)
-		, acceptInOperator(true)
-		, withScopeCounter(0)
-		, canDeleteScopeOnExit(false) {
-}
+		: super(heap), heap(heap), codeDefinition(codeDefinition), compilingFor(compileFor), setupSection(heap), mainSection(heap)
+		, p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
 void Compiler::error(ErrorType errorType, const char* message) {
 	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, heap.govern(new (&heap.pool) String(message))))));
@@ -3415,7 +3401,6 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			Processor::Opcode callOp = Processor::CALL_OP;
 			if (xr.t == ExpressionResult::NAMED && xr.v.isEqualTo(EVAL_STRING)) {
 				callOp = Processor::CALL_EVAL_OP;
-				canDeleteScopeOnExit = false;
 			}
 			if (xr.t == ExpressionResult::PROPERTY) {
 				callOp = Processor::CALL_METHOD_OP;
@@ -3482,7 +3467,6 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 		throw;
 	}
 	emitWithConstant(Processor::GEN_FUNC_OP, Value(func));
-	canDeleteScopeOnExit = false;
 }
 
 const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
@@ -3571,9 +3555,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 						const String* name = String::newHashedString(heap, b, p);
 						xr = ExpressionResult(ExpressionResult::NAMED, Value(name));
 						 // Notice: compilingFor != FOR_EVAL and checking for "arguments" is only for non-strict mode (if we ever support strict-mode in the future)
-						if (name->isEqualTo(ARGUMENTS_STRING)) {
-							canDeleteScopeOnExit = false;
-						} else if (compilingFor == FOR_FUNCTION && withScopeCounter == 0) {
+						if (!name->isEqualTo(ARGUMENTS_STRING) && compilingFor == FOR_FUNCTION && withScopeCounter == 0) {
 							const Table::Bucket* bucket = codeDefinition->nameIndexes.lookup(name);
 							if (bucket != 0) {
 								const Int32 index = bucket->getIndexValue();
@@ -3919,7 +3901,7 @@ void Compiler::returnStatement(SemanticScope* currentScope) {
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		rollbackStackDepth = s->rollback(*this, rollbackStackDepth, Processor::PUSH_BACK_OP);
 	}
-	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
+	emit(Processor::RETURN_OP);
 	semicolon();
 }
 
@@ -4224,7 +4206,6 @@ void Compiler::statementList(SemanticScope* currentScope) {
 }
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
-	canDeleteScopeOnExit = (compilingFor == FOR_FUNCTION);
 	changeSection(&mainSection);
 	p = b;
 	this->e = e;
@@ -4238,7 +4219,7 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	if (compilingFor != FOR_EVAL) {	// Non-eval mode should return void value
 		emit(Processor::VOID_OP);
 	}
-	emit(Processor::DELETE_SCOPE_AND_RETURN_OP);
+	emit(Processor::RETURN_OP);
 
 	assert(currentSection == &mainSection);
 	codeDefinition->code.resize(setupSection.code.size() + mainSection.code.size());
@@ -4251,14 +4232,6 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	std::copy(setupSection.stackDepths.begin(), setupSection.stackDepths.end(), codeDefinition->stackDepths.begin());
 	std::copy(mainSection.stackDepths.begin(), mainSection.stackDepths.end(), codeDefinition->stackDepths.begin() + setupSection.stackDepths.size());
 #endif
-	if (!canDeleteScopeOnExit) {
-		for (CodeWord* p = codeDefinition->code.begin(), *e = codeDefinition->code.end(); p != e; ++p) {
-			const std::pair<Processor::Opcode, Int32> instruction = Processor::unpackInstruction(*p);
-			if (instruction.first == Processor::DELETE_SCOPE_AND_RETURN_OP) {
-				*p = Processor::packInstruction(Processor::RETURN_OP, instruction.second);
-			}
-		}
-	}
 	codeDefinition->constants->shrink();
 	codeDefinition->maxStackDepth = mainSection.maxStackDepth;
 	
@@ -4290,7 +4263,6 @@ if (!suppressStdErr) {
 const Char* Compiler::compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName) {
 	assert(compilingFor == FOR_FUNCTION);  // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 	assert(functionName != 0);
-	canDeleteScopeOnExit = true;
 	p = b;
 	this->e = e;
 	expectToken("(", true);

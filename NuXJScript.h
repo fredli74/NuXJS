@@ -1066,7 +1066,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
-					, DELETE_SCOPE_AND_RETURN_OP
 					, RETURN_OP
 					, DISCARD_RETURN_OP
 					, RETURN_TO_HOST_OP
@@ -1302,7 +1301,6 @@ class Compiler : public GCItem {
 				CodeSection* currentSection;
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
-				bool canDeleteScopeOnExit; // three reasons we can't delete scope on exit: 1) function generated inside function == we might need the closure, 2) function calls eval directly == it might generate a function, 3) function uses arguments variable == arguments object share variable space with scope
 
 				virtual void gcMark(GCHeap& heap) const {
 					heap.mark(codeDefinition);
