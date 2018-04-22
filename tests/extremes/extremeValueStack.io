@@ -39,8 +39,3 @@
 < first
 < last
 -
-> stackOverflowTest(1000000)
-< 1000000
-< first
-< last
--

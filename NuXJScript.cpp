@@ -62,7 +62,7 @@ static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
 /* --- String constants --- */
 
 // FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
-const String EMPTY_STRING("");
+const String EMPTY_STRING;
 const String ANONYMOUS_STRING("anonymous");
 const String UNDEFINED_STRING("undefined");
 const String OBJECT_STRING("object");
@@ -530,33 +530,6 @@ Object* Value::toObject(Engine& engine, bool requestExtensible) const {
 	}
 }
 
-bool Value::operator==(const Value& r) const {
-	if (type != r.type) return false;
-	switch (type) {
-		default: assert(0);
-		case UNDEFINED_TYPE:
-		case NULL_TYPE: return true;
-		case BOOLEAN_TYPE: return var.boolean == r.var.boolean;
-		case NUMBER_TYPE: return var.number == r.var.number;
-		case STRING_TYPE: return var.string->isEqualTo(*r.var.string);
-		case OBJECT_TYPE: return var.object == r.var.object;
-	}
-}
-
-bool Value::operator<(const Value& r) const {
-	if (type < r.type) return true;
-	if (type > r.type) return false;
-	switch (type) {
-		default: assert(0);
-		case UNDEFINED_TYPE:
-		case NULL_TYPE: return false;
-		case BOOLEAN_TYPE: return var.boolean < r.var.boolean;
-		case NUMBER_TYPE: return var.number < r.var.number;
-		case STRING_TYPE: return var.string->isLessThan(*r.var.string);
-		case OBJECT_TYPE: return var.object < r.var.object;
-	}
-}
-
 bool Value::compareStrictly(const Value& r) const {
 	assert(r.type == type);
 	switch (type) {
@@ -606,8 +579,8 @@ bool Value::isLessThan(const Value& y) const {
 		return var.string->isLessThan(*y.var.string);
 	}
 	double thisNumber = toDouble();
-	double otherNumber = y.toDouble();
-	return thisNumber < otherNumber;
+	double thatNumber = y.toDouble();
+	return thisNumber < thatNumber;
 }
 
 bool Value::isLessThanOrEqualTo(const Value& y) const {
@@ -615,8 +588,8 @@ bool Value::isLessThanOrEqualTo(const Value& y) const {
 		return !y.var.string->isLessThan(*var.string);
 	}
 	double thisNumber = toDouble();
-	double otherNumber = y.toDouble();
-	return thisNumber <= otherNumber;
+	double thatNumber = y.toDouble();
+	return thisNumber <= thatNumber;
 }
 
 Value Value::add(GCHeap& heap, const Value& y) const {
@@ -625,7 +598,7 @@ Value Value::add(GCHeap& heap, const Value& y) const {
 		const String* rs = y.toString(heap);
 		if (rs->empty()) return Value(ls);
 		if (ls->empty()) return Value(rs);
-		return Value(heap.govern(new (&heap.pool) String(*ls, *rs, &heap.pool)));
+		return Value(String::concat(heap, *ls, *rs));
 	}
 	return Value(toDouble() + y.toDouble());
 }
@@ -645,14 +618,27 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
-String::String() : QArray(0, 0), hash(0), bloomCode(0) { assert(isEqualTo(EMPTY_STRING)); }
-String::String(const Char* b, const Char* e, Pool* pool) : QArray(static_cast<UInt32>(e - b), pool), hash(0), bloomCode(0) { std::copy(b, e, begin()); }
-// FIX : needed ? String::String(const String& o) : QArray(o), hash(o.hash) { }
-String::String(const std::wstring& s, Pool* pool) : QArray(static_cast<UInt32>(s.size()), pool), hash(0), bloomCode(0) { std::copy(s.begin(), s.end(), begin()); }
+String::String() : QArray(0, 0), hash(2166136261), bloom(0x10000020) {
+	assert(String("").calcHash() == hash && String("").createBloomCode() == bloom);
+}
 
-String::String(const String& l, const String& r, Pool* pool) : QArray(l.size() + r.size(), pool), hash(0), bloomCode(0) {
+String::String(const Char* b, const Char* e, Pool* pool) : QArray(static_cast<UInt32>(e - b), pool), hash(0), bloom(0) {
+	std::copy(b, e, begin());
+}
+
+String::String(const String& l, const String& r, Pool* pool) : QArray(l.size() + r.size(), pool), hash(0), bloom(0) {
 	Char* e = std::copy(l.begin(), l.end(), begin());
 	std::copy(r.begin(), r.end(), e);
+}
+
+String::String(const std::wstring& s, Pool* pool) : QArray(static_cast<UInt32>(s.size()), pool), hash(0), bloom(0) {
+	std::copy(s.begin(), s.end(), begin());
+}
+
+String::String(const char* s, Pool* pool) : QArray(static_cast<UInt32>(strlen(s)), pool), hash(0), bloom(0) {
+	std::copy(s, s + size(), begin());
+	calcHash();
+	createBloomCode();
 }
 
 const String* String::typeOfString() const { return &STRING_STRING; }
@@ -711,17 +697,20 @@ bool String::isLessThan(const String& o) const {
 std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
 
 UInt32 String::createBloomCode() const {
-	if (bloomCode == 0) {
+	if (bloom == 0) {
 		const UInt32 hash = calcHash();
-		bloomCode = (static_cast<UInt32>(1) << (hash & 31))
-				| (static_cast<UInt32>(1) << ((hash >> 16) & 31));
+		bloom = (static_cast<UInt32>(1) << (hash & 31)) | (static_cast<UInt32>(1) << ((hash >> 16) & 31));
 	}
-	return bloomCode;
+	return bloom;
 }
 
 Enumerator* String::getPropertyEnumerator(Engine& engine) const {
 	GCHeap& heap = engine.getHeap();
 	return heap.govern(new (&heap.pool) RangeEnumerator(heap, 0, size()));
+}
+
+const String* String::newString(GCHeap& heap, const char* s) {
+	return heap.govern(new (&heap.pool) String(s, &heap.pool));
 }
 
 const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e) {
@@ -732,6 +721,10 @@ const String* String::newHashedString(GCHeap& heap, const Char* b, const Char* e
 	s->calcHash();
 	s->createBloomCode();
 	return s;
+}
+
+const String* String::concat(GCHeap& heap, const String& l, const String& r) {
+	return heap.govern(new (&heap.pool) String(l, r, &heap.pool));
 }
 
 const String* String::fromInt(GCHeap& heap, Int32 i) {
@@ -928,7 +921,7 @@ bool Object::isOwnPropertyEnumerable(Engine& engine, const Value& key) const {
 }
 
 const String* Object::toString(GCHeap& heap) const {
-	return heap.govern(new (&heap.pool) String(String(BRACKET_OBJECT_STRING, *getClassName(), &heap.pool), END_BRACKET_STRING, &heap.pool));
+	return String::concat(heap, String(BRACKET_OBJECT_STRING, *getClassName(), &heap.pool), END_BRACKET_STRING);
 }
 
 bool Object::hasOwnProperty(Engine& engine, const Value& key) const {
@@ -1257,7 +1250,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
-		processor.error(TYPE_ERROR, engine.getHeap().govern(new (engine.getPool()) String("Non-object prototype in instanceof check")));
+		processor.error(TYPE_ERROR, String::newString(engine.getHeap(), "Non-object prototype in instanceof check"));
 		return false;
 	}
 	while ((object = object->getPrototype(engine)) != 0) {
@@ -1343,7 +1336,7 @@ bool Array::setOwnProperty(Engine& engine, const Value& key, const Value& v, Fla
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			GCHeap& heap = engine.getHeap();
-			throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, RANGE_ERROR, heap.govern(new (&heap.pool) String("Invalid array length")))))); // FIX : how could we do this without exceptions?
+			throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, RANGE_ERROR, String::newString(heap, "Invalid array length"))))); // FIX : how could we do this without exceptions?
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1464,7 +1457,7 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 		Value v;
 		regularFunction->getPropertyDeep(engine, Value(&NAME_STRING), &v);
 		GCHeap& heap = engine.getHeap();
-		processor.error(TYPE_ERROR, heap.govern(new (&heap.pool) String(*v.toString(heap), String(" is not a constructor"), &heap.pool)));
+		processor.error(TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 		return Value();
 	} else {
 		return constructorFunction->call(engine, processor, argc, argv, thisObject);
@@ -1513,7 +1506,7 @@ Value Error::getInternalValue(GCHeap& heap) const { return Value(&ERROR_NAMES[er
 Object* Error::getPrototype(Engine& engine) const { return engine.errorPrototypes[errorType]; }
 
 const String* Error::toString(GCHeap& heap) const {
-	return (message == 0 ? name : heap.govern(new (&heap.pool) String(String(*name, COLON_SPACE, &heap.pool), *message, &heap.pool))); // FIX : we really need operator+ :)
+	return (message == 0 ? name : String::concat(heap, String(*name, COLON_SPACE, &heap.pool), *message));
 }
 
 void Error::updateReflection(Engine& engine) {
@@ -2700,7 +2693,7 @@ Compiler::Compiler(GCHeap& heap, CodeDefinition* codeDefinition, Target compileF
 		, p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
 void Compiler::error(ErrorType errorType, const char* message) {
-	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, heap.govern(new (&heap.pool) String(message))))));
+	throw Exception(heap, Value(heap.govern(new (&heap.pool) Error(heap, errorType, String::newString(heap, message)))));
 }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
@@ -4291,7 +4284,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 	expectToken("}", false);
 	codeDefinition->name = functionName;
 	codeDefinition->selfName = selfName;
-	codeDefinition->source = heap.govern(new (&heap.pool) String(String(FUNCTION_SPACE, *functionName, &heap.pool), String(b, p, &heap.pool), &heap.pool)); // FIX : operator+ would make things clearer :)
+	codeDefinition->source = String::concat(heap, String(FUNCTION_SPACE, *functionName, &heap.pool), String(b, p, &heap.pool));
 	codeDefinition->bloomSet |= (selfName != 0 ? selfName->createBloomCode() : 0) | ARGUMENTS_STRING.createBloomCode();
 	return p;
 }
@@ -4449,7 +4442,7 @@ struct Support {
 		GCHeap& heap = engine.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
-			processor.error(TYPE_ERROR, heap.govern(new (&heap.pool) String("apply / call used on non-function")));
+			processor.error(TYPE_ERROR, String::newString(heap, "apply / call used on non-function"));
 			return Value();
 		} else {
 			Object* newThis = (argc > 1 ? argv[1].toObject(engine, true) : 0);
@@ -4596,8 +4589,8 @@ static struct {
 	{ String("isPropertyEnumerable"), Support::isPropertyEnumerable }, { String("atan2"), Support::atan2 },
 	{ String("pow"), Support::pow }, { String("parseFloat"), Support::parseFloat },
 	{ String("charCodeAt"), Support::charCodeAt }, { String("substring"), Support::substring },
-	{ String("submatch"), Support::submatch }, { String("getCurrentTime"), Support::getCurrentTime }
-	, { String("localTimeDifference"), Support::localTimeDifference }
+	{ String("submatch"), Support::submatch }, { String("getCurrentTime"), Support::getCurrentTime },
+	{ String("localTimeDifference"), Support::localTimeDifference }
 };
 
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
@@ -4632,19 +4625,19 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	
 	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
 	ScriptObject* supportObject = gcHeap.govern(new (&gcHeap.pool) ScriptObject(gcHeap, &objectPrototype));
-	// FIX : no new String?
 	ScriptObject* prototypesObject = gcHeap.govern(new (&gcHeap.pool) ScriptObject(gcHeap, &objectPrototype));
-	supportObject->setOwnProperty(*this, Value(gcHeap.govern(new (&gcHeap.pool) String("prototypes"))), Value(prototypesObject), STANDARD_FLAGS);
+	// FIX : static strings?
+	supportObject->setOwnProperty(*this, Value(String::newString(gcHeap, "prototypes")), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, Value(&SUPPORT_FUNCTIONS[i].name), Value(&SUPPORT_FUNCTIONS[i].func), STANDARD_FLAGS);
 	}
-	supportObject->setOwnProperty(*this, Value(gcHeap.govern(new (&gcHeap.pool) String("isNaN"))), Value(&IS_NAN_FUNCTION), STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, Value(gcHeap.govern(new (&gcHeap.pool) String("isFinite"))), Value(&IS_FINITE_FUNCTION), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(gcHeap, "isNaN")), Value(&IS_NAN_FUNCTION), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(gcHeap, "isFinite")), Value(&IS_FINITE_FUNCTION), STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&UNDEFINED_STRING), Value::UNDEFINED, STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&NAN_STRING), Value::NOT_A_NUMBER, STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&INFINITY_STRING), Value::INFINITE_NUMBER, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, Value(gcHeap.govern(new (&gcHeap.pool) String("maxNumber"))), Value(std::numeric_limits<double>::max()), STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, Value(gcHeap.govern(new (&gcHeap.pool) String("minNumber"))), Value(std::numeric_limits<double>::denorm_min()), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(gcHeap, "maxNumber")), Value(std::numeric_limits<double>::max()), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(gcHeap, "minNumber")), Value(std::numeric_limits<double>::denorm_min()), STANDARD_FLAGS);
 	
 	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, Value(&NATIVE_MATH_FUNCTIONS[i].name), Value(&NATIVE_MATH_FUNCTIONS[i].func), STANDARD_FLAGS);
@@ -4694,18 +4687,17 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	// FIX : sub v
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
-	// FIX : all these gcHeap.govern(new String()) ... could be a utility function!
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveNumber"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, String::newString(gcHeap, "Standard library is missing support.toPrimitiveNumber")))));
 	}
 	
 	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.toPrimitiveString"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, String::newString(gcHeap, "Standard library is missing support.toPrimitiveString")))));
 	}
 
 	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, gcHeap.govern(new (&gcHeap.pool) String("Standard library is missing support.createRegExp"))))));
+		throw Exception(gcHeap, Value(gcHeap.govern(new (&gcHeap.pool) Error(gcHeap, GENERIC_ERROR, String::newString(gcHeap, "Standard library is missing support.createRegExp")))));
 	}
 }
 
@@ -4872,7 +4864,7 @@ suppressStdErr = true;
                     source = String(source, line, &heap.pool);
                 } else {
                     if (source.size() > 0 && source[0] == '?') {
-                        source = String(String(String("print("), String(source.begin() + 1, source.end(), &heap.pool), &heap.pool), String(")"), &heap.pool); // FIX : operator+
+                        source = String(String(String("print("), String(source.begin() + 1, source.end(), &heap.pool), &heap.pool), String(")"), &heap.pool); // FIX : operator +
                     }
                     if (interactive) {
                         pushIOLines('>', source);

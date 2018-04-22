@@ -55,14 +55,14 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				
 				Pool* getPool() const { return pool; }
 				
-				void swap(QuickArray& other) {
-					if (this != &other) {
-						std::swap(pool, other.pool);
-						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, other.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
-						std::swap(n, other.n);
+				void swap(QuickArray& that) {
+					if (this != &that) {
+						std::swap(pool, that.pool);
+						std::swap_ranges(a + 0, a + BUILT_IN_COUNT, that.a); // Note: if this one throws, we have messed up this object, but it is not completely broken (i.e. shouldn't crash destruction).
+						std::swap(n, that.n);
 						T* x = p;
-						p = ((other.p == other.a) ? a : other.p);
-						other.p = ((x == a) ? other.a : x);
+						p = ((that.p == that.a) ? a : that.p);
+						that.p = ((x == a) ? that.a : x);
 					}
 				}
 				
@@ -226,8 +226,8 @@ class GCHeap {
 				GCList* currentList;
 				GCList* newList;
 				
-	private:	GCHeap(const GCHeap& other); // N/A
-				GCHeap& operator=(const GCHeap& other); // N/A
+	private:	GCHeap(const GCHeap& that); // N/A
+				GCHeap& operator=(const GCHeap& that); // N/A
 };
 
 class String;
@@ -267,8 +267,6 @@ class Value {
 				double toDouble() const;
 				const String* toString(GCHeap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
-				bool operator==(const Value& r) const; // FIX : kill these two?
-				bool operator<(const Value& r) const;
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
 				bool isEqualTo(const String& s) const;
@@ -430,19 +428,17 @@ class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
 
+				static const String* newString(GCHeap& heap, const char* s);
 				static const String* newHashedString(GCHeap& heap, const Char* b, const Char* e);
+				static const String* concat(GCHeap& heap, const String& l, const String& r);
 				static const String* fromInt(GCHeap& heap, Int32 i);
 				static const String* fromDouble(GCHeap& heap, double d);
 
 				String();
-// FIX : neeeded?				String(const String& o);
 				String(const Char* b, const Char* e, Pool* pool);
 				String(const String& l, const String& r, Pool* pool);
 				explicit String(const std::wstring& s, Pool* pool);
-				explicit String(UInt32 length, Pool* pool) : QArray(length, pool), hash(0), bloomCode(0) { } // FIX : dangerous, right, make protected?
-// FIX : wasn't compatible with Digital Mars, so I added const char* constructor again, but do we care?
-//				template<UInt32 N> explicit String(const char (&s)[N]) : QArray(N - 1), hash(0) { std::copy(s, s + N - 1, begin()); calcHash(); }
-				explicit String(const char* s, Pool* pool = 0) : QArray(static_cast<UInt32>(strlen(s)), pool), hash(0), bloomCode(0) { std::copy(s, s + size(), begin()); calcHash(); }
+				explicit String(const char* s, Pool* pool = 0);
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(GCHeap& heap) const;
@@ -456,7 +452,7 @@ class String : public Object, public QuickArray<Char> {
 				std::wstring toStdString() const;
 				UInt32 createBloomCode() const;
 
-	protected:	mutable UInt32 bloomCode;
+	protected:	mutable UInt32 bloom;
 				mutable UInt32 hash;
 };
 

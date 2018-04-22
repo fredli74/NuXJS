@@ -63,14 +63,16 @@ Run-time
 
 	* exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
 
-	* make variable lookup non-recusrive loop outside the objects, abuse to use get/setOwnProperty for this
+	* make variable lookup non-recursive loop outside the objects, abuse to use get/setOwnProperty for this
 		- actually CPU hit got higher from that, so doing tail-recursion instead (all compilers eliminate tail recursion right?)
 
 	* setting array length needs to do a to_number, how to do this asynchronously?
 
-	* Global object should have standard object prototype, so e.g. 'toString' should be accessible as a global via Object.prototype
-
 	* Must have $toPrimitiveNoHint as well, for + and == (I think those are the only ones). This is for Date() objects to work I guess. See 8.6.2.6 [[DefaultValue]] (hint)
+
+	* Make gc async/incremental in the sense that you actively and repeatdly call it until it is done (doesn't block native cpu, even if it "blocks" vm cpu).
+
+	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
 
 Compiler
 ========

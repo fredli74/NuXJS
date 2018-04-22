@@ -175,3 +175,6 @@ DONE
 	* if it wasn't for the problem with the value stack order in the return statement (i.e. the return expression has to be emitted before any "early exits pop's" etc are emitted) we wouldn't have to use safeKeep so much, but could just keep stuff on the stack and repush (e.g. the enumerator object for "for in")
 		- actually, this isn't the case, case return expressions "safeKeep" before finally calls, not sure what the problem is to be honest, maybe we can keep stuff on the stack, could turn into many pops on early exits though
 		- we now do safekeep on stack!
+
+	* Global object should have standard object prototype, so e.g. 'toString' should be accessible as a global via Object.prototype
+
