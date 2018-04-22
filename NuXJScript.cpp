@@ -1423,11 +1423,7 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 	GCHeap& heap = engine.getHeap();
 	ScriptObject* prototype = heap.govern(new (&heap.pool) ScriptObject(heap, &engine.objectPrototype));
 	prototype->setOwnProperty(engine, Value(&CONSTRUCTOR_STRING), Value(const_cast<ExtensibleFunction*>(this)), DONT_ENUM_FLAG);
-#if (STRICTLY_ES3)
 	forObject->setOwnProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), (dontEnumPrototype ? (DONT_ENUM_FLAG | DONT_DELETE_FLAG) : DONT_DELETE_FLAG));
-#else
-	forObject->setOwnProperty(engine, Value(&PROTOTYPE_STRING), Value(prototype), DONT_ENUM_FLAG | DONT_DELETE_FLAG);
-#endif
 }
 
 /* --- ScriptFunction --- */
@@ -1448,13 +1444,8 @@ Value ScriptFunction::call(Engine& engine, Processor& processor, UInt32 argc, co
 
 void ScriptFunction::constructCompleteObject(Engine& engine) const {
 	createPrototypeObject(engine, completeObject, false);
-#if (STRICTLY_ES3)
 	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDefinition->getName()), DONT_ENUM_FLAG);
 	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDefinition->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
-#else
-	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(codeDefinition->getName()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(codeDefinition->getArgumentsCount()), READ_ONLY_FLAG | DONT_ENUM_FLAG);
-#endif
 }
 
 /* --- SpecialConstructorFunction --- */
@@ -1506,13 +1497,8 @@ Value FunctionPrototypeFunction::call(Engine& engine, Processor& processor, UInt
 Object* FunctionPrototypeFunction::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
 void FunctionPrototypeFunction::constructCompleteObject(Engine& engine) const {
-#if (STRICTLY_ES3)
 	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), DONT_ENUM_FLAG);
 	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG);
-#else
-	completeObject->setOwnProperty(engine, Value(&NAME_STRING), Value(&EMPTY_STRING), READ_ONLY_FLAG | DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(engine, Value(&LENGTH_STRING), Value(0.0), READ_ONLY_FLAG | DONT_ENUM_FLAG);
-#endif
 }
 
 /* --- Error --- */
@@ -1572,11 +1558,9 @@ Arguments::Arguments(GCHeap& heap, FunctionScope* scope, UInt32 argumentsCount)
 
 const String* Arguments::getClassName() const { return &A_RGUMENTS_STRING; }
 
-#if (STRICTLY_ES3)
 const String* Arguments::toString(GCHeap& heap) const {
 	return heap.govern(new (&heap.pool) String(String(BRACKET_OBJECT_STRING, O_BJECT_STRING, &heap.pool), END_BRACKET_STRING, &heap.pool));
 }
-#endif
 
 Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPrototype; }
 
@@ -1588,11 +1572,7 @@ Value* Arguments::findProperty(const Value& key) const {
 Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
 	const Value* p = findProperty(key);
 	return (p == 0 ? super::getOwnProperty(engine, key, v) : ((void)(*v = *p)
-#if (STRICTLY_ES3)
 			, (STANDARD_FLAGS | DONT_ENUM_FLAG | EXISTS_FLAG)));
-#else
-			, (STANDARD_FLAGS | EXISTS_FLAG)));
-#endif
 }
 
 bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
@@ -1610,19 +1590,7 @@ bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
-#if (STRICTLY_ES3)
 	return (completeObject == 0 ? super::getPropertyEnumerator(engine) : completeObject->getPropertyEnumerator(engine));
-#else
-	GCHeap& heap = engine.getHeap();
-	StringListEnumerator* list = heap.govern(new (&heap.pool) StringListEnumerator(argumentsCount));
-	for (UInt32 i = 0; i < argumentsCount; ++i) {
-		if (!deletedArguments[i]) {
-			list->add(String::fromInt(heap, i));
-		}
-	}
-	return (completeObject == 0 ? static_cast<Enumerator*>(list)
-			: heap.govern(new (&heap.pool) JoiningEnumerator(engine, list, completeObject)));
-#endif
 }
 
 void Arguments::constructCompleteObject(Engine& engine) const {
@@ -1958,10 +1926,7 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { if (vsp + 1 >= vstack.end()) {
-std::cerr << "stack size: " << vstack.size() << ", offset: " << vsp + 1 - vstack.begin() << std::endl;
-}
-assert(vsp + 1 < vstack.end()); *++vsp = v; }
+void Processor::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
 void Processor::poppush(const Value& v) { assert(vsp >= vstack.begin()); *--vsp = v; }
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }

@@ -1,8 +1,6 @@
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
 
-#define STRICTLY_ES3 1
-
 #include "assert.h"
 #include <string>
 #include <cstring>
