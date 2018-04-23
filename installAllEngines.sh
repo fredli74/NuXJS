@@ -12,5 +12,5 @@ if [[ ! -e $(which rhino) ]]; then
 	brew install rhino
 fi
 if [[ ! -e /bin/jsc ]]; then
-	sudo ln -s /System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Resources/jsc /bin/jsc
+	sudo ln -s /System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Resources/jsc /usr/local/bin
 fi

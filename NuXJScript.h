@@ -420,6 +420,7 @@ class String : public Object, public QuickArray<Char> {
 				String();
 				String(const Char* b, const Char* e, Heap* heap = 0);		// Create string from begin to end pointers. `heap` is optional and only used for allocating string array.
 				String(const String& l, const String& r, Heap* heap = 0);	// Create string by concatenating two strings. `heap` is optional and only used for allocating string array.
+			// FIX : get rid of std::string?
 				explicit String(const std::wstring& s, Heap* heap = 0);		// `heap` is optional and only used for allocating string array.
 				explicit String(const char* s, Heap* heap = 0);				// Create string from constant 8-bit string. Will also generate hash and bloom code. `heap` is optional and only used for allocating string array.
 				virtual const String* typeOfString() const;

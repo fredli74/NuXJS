@@ -4725,6 +4725,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 	class NativeTestObject : public Object {
 		protected:	struct AddFunction : public Function {
 						typedef Function super;
+					//	AddFunction() : super("(x,y){%(+x,+y)}")
 						virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = engine.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
@@ -4746,6 +4747,13 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 						if (key.isEqualTo(String("add"))) { *v = Value(&addFunction); return EXISTS_FLAG | READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG; };
 						return super::getOwnProperty(engine, key, v);
 					}
+		
+					virtual const String* toString(Heap& heap) const {
+						std::stringstream ss;
+						ss << "x: " << x << ", y: " << y;
+						return String::newString(heap, ss.str().c_str());
+					}
+
 		
 		protected:	double x;
 					double y;
@@ -4811,7 +4819,7 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
-globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
+//globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
 
 	if (loadStdLib) {
 		try {
