@@ -851,11 +851,10 @@ class FunctionScope : public Scope {
 
 /*
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-	codeDefinition pointer (for constants etc).
+	codeDefinition pointer (for constants etc) and it declares deletable vars.
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
-
 				EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
@@ -1046,7 +1045,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
 					, RETURN_OP
 					, DISCARD_RETURN_OP
-					, RETURN_TO_HOST_OP
 					, THIS_OP, VOID_OP								// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean

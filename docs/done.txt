@@ -178,3 +178,7 @@ DONE
 
 	* Global object should have standard object prototype, so e.g. 'toString' should be accessible as a global via Object.prototype
 
+	* count (and run-time check) necessary value stack depth for functions
+		- alternative have a low-rate check with a margin + make certain there is never a possibility to push more than x per instruction
+			- we should build a VM test routine that checks each opcode, how much it changes the stack and stuff
+			- we did something even better, a recursive stack depth code validator

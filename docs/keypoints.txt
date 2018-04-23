@@ -6,6 +6,8 @@
 
 *) mark and sweep (stop-the-world) GC, but heap is the standard C++ heap, allocations are done with new etc
 
-*) full EcmaScript 3 compliant, partially EcmaScript 5 (for example, custom property getter and setter functions are not supported)
+*) fully EcmaScript 3 compliant (with some partial EcmaScript 5 support where it makes most sense)
 
 *) fully asynchronous and sandboxed VM, you run as much or as little code you want at a time
+
+*) did I say sandbox?!

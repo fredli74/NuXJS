@@ -1864,7 +1864,6 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , 0 },
 	{ RETURN_OP                  , "RETURN"                  , -1     , OpcodeInfo::TERMINAL },
 	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , 0 },
-	{ RETURN_TO_HOST_OP          , "RETURN_TO_HOST"          , 0      , OpcodeInfo::TERMINAL },
 	{ THIS_OP                    , "THIS"                    , +1     , 0 },
 	{ VOID_OP                    , "VOID"                    , +1     , 0 },
 	{ DELETE_OP                  , "DELETE"                  , -1     , 0 },
@@ -1942,7 +1941,7 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 	ip = func->getDefinition()->getCodePointer();
 	reserveVStackSpace(func->getDefinition()->getMaxStackDepth());
 	updateInternals();
-	--vsp; // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
+	pop(1); // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
@@ -1953,14 +1952,14 @@ void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
-	Scope* f = (directCall ? scope : engine.getGlobalScope());
+	scope = (directCall ? scope : engine.getGlobalScope());
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) EvalScope(heap, f, codeDefinition));
-	cstack.push(CallFrame(ip, scope, cstack.back().thisObject));
+	scope = heap.govern(new(heap) EvalScope(heap, scope, codeDefinition));
+	cstack.push(CallFrame(ip, scope, directCall ? cstack.back().thisObject : engine.getGlobals()));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
-	--vsp;
+	pop(1);
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -2204,14 +2203,18 @@ bool Processor::privateRun() {
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
 				Value* returnPointer = vsp - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = engine.createRegExpFunction->call(engine, *this, 2, returnPointer, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
-				--vsp;
+				pop(1);
 				break;
 			}
 
 			case RETURN_OP:	{
 				ip = cstack.back().returnIP;
-				assert(ip != 0);
 				cstack.pop();
+				if (ip == 0) {
+					result = vsp[0];
+					pop(1);
+					return false;
+				}
 				updateInternals();
 				break;
 			}
@@ -2222,14 +2225,6 @@ bool Processor::privateRun() {
 				break;
 			}
 			
-			case RETURN_TO_HOST_OP: { // FIX : I don't like this opcode, is it really necessary?
-				ip = cstack.back().returnIP;
-				cstack.pop();
-				result = vsp[0];
-				pop(1);
-				return false;
-			}
-
 			case THIS_OP: push(Value(cstack.back().thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			
@@ -2429,13 +2424,6 @@ static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<
 					return errors;
 				}
 				break;
-			}
-			case Processor::RETURN_TO_HOST_OP: {
-				if (currentStackDepth != 0) {
-					std::cerr << "Invalid return stack depth @" << offset << ": " << currentStackDepth << std::endl;
-					++errors;
-				}
-				return errors;
 			}
 			case Processor::RETURN_OP: // fix: check all returns from jsr end with the same stack pointer as entry (keep track with extra parameter that only updates with JSR)
 			case Processor::THROW_OP: {
@@ -3440,7 +3428,6 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 	assert(functionName != 0);
 	CodeDefinition* func = heap.govern(new(heap) CodeDefinition(heap, codeDefinition->constants));
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
-	heap.include(funcCompiler);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
 	}
@@ -4301,7 +4288,6 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 	} else {
 		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
 		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
-		heap.include(compiler);
 		compiler.compile(*sourceCode);
 		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
 	}
@@ -4420,7 +4406,6 @@ struct Support {
 			const String* source = argv[0].toString(heap);
 			CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
-			heap.include(compiler);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
 			return Value(heap.govern(new(heap) ScriptFunction(heap, codeDefinition, engine.getGlobalScope())));
 		}
@@ -4648,24 +4633,19 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap))));
 	{
 		Compiler compiler(heap, code, Compiler::FOR_EVAL);
-		heap.include(compiler);
 		compiler.compile(librarySourceCode);
 	}
 	{
 		Processor processor(*this);
-		heap.include(processor);
-		const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
-		processor.chain(RETURN_TO_HOST_STUB);
-++processor.vsp; // FIX!!!
+++processor.vsp;
 		processor.enterEval(code, false);
 		bool needsMoreTime = processor.run();
 		assert(!needsMoreTime);
 		Value v = processor.getResult();
 		Function* f = v.asFunction();
 		if (f != 0) {
-			processor.chain(RETURN_TO_HOST_STUB);
 			Value argv[1] = { Value(supportObject) };
-++processor.vsp; // FIX!!!
+++processor.vsp;
 			f->call(*this, processor, 1, argv, getGlobals());
 			needsMoreTime = processor.run();
 			assert(!needsMoreTime);
@@ -4817,7 +4797,8 @@ suppressStdErr = true;
 		}
 	}
     suppressStdErr = doSuppressStdErr;
-    
+	
+	Processor processor(engine);
     while (inStream->good()) {
         bool execute = false;
         try {
@@ -4867,12 +4848,7 @@ suppressStdErr = true;
             }
             
             if (execute) {
-                Processor processor(engine);
-                const CodeWord RETURN_TO_HOST_STUB[] = { Processor::RETURN_TO_HOST_OP };
-                processor.chain(RETURN_TO_HOST_STUB);
-                
                 Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
-                heap.include(compiler);
                 try {
                     compiler.compile(source);
                 }
