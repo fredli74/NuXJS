@@ -4,10 +4,7 @@ TODO
 Run-time
 ========
 
-	* count (and run-time check) necessary value stack depth for functions
-		- alternative have a low-rate check with a margin + make certain there is never a possibility to push more than x per instruction
-			- we should build a VM test routine that checks each opcode, how much it changes the stack and stuff
-		- also implement a max recursion on compiler to not overload stack (function in function in function etc)
+	* also implement a max recursion on compiler to not overload stack (function in function in function etc)
 
 	* basic library (math, string, array ops)
 
