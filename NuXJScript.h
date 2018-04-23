@@ -369,19 +369,19 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	
 				Object() { }
-				Object(Heap& heap) : super(heap) { }
-				virtual Function* asFunction();
-				virtual const String* typeOfString() const;
-				virtual const String* getClassName() const;
-				virtual const String* toString(Heap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
-				virtual Value getInternalValue(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
+				Object(Heap& heap) : super(heap) { }					// Automatically include on `heap`.
+				virtual Function* asFunction();							// Default returns 0. (Functions returns this.)
+				virtual const String* typeOfString() const;				// Default reutrns "object". (Strings and functions override.)
+				virtual const String* getClassName() const;				// Default returns "Object".
+				virtual const String* toString(Heap& heap) const; 		// this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
+				virtual Value getInternalValue(Heap& heap) const;		// Used by the standard library to retrieve internal value for wrappers (Number, String etc), source code for functions and parser function for RegExp. Default returns Value::UNDEFINED.
+				virtual Object* getPrototype(Engine& engine) const;		// Default returns the Object prototype.
 
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;  // Don't touch v if you return NONEXISTENT.
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);	// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists).
-				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);	// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;					// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
+				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
+				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
+				virtual bool deleteProperty(Engine& engine, const Value& key);									// Default returns false.
+				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;								// Default returns an empty enumerator.
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				// FIX : or maybe drop them, we now check with getOwnProperty

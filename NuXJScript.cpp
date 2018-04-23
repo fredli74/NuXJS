@@ -4722,6 +4722,38 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 		}
 	};
 
+	class NativeTestObject : public Object {
+		protected:	struct AddFunction : public Function {
+						typedef Function super;
+						virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+							Heap& heap = engine.getHeap();
+							if (thisObject->getClassName() != &NativeTestObject::className) {
+								throw Exception(heap, Value(heap.govern(new(heap) Error(heap, TYPE_ERROR, String::newString(heap, "Invalid class")))));
+							}
+							const NativeTestObject* me = reinterpret_cast<NativeTestObject*>(thisObject);
+							const double addX = (argc >= 1 ? argv[0].toDouble() : 0.0);
+							const double addY = (argc >= 2 ? argv[1].toDouble() : 0.0);
+							return Value(heap.govern(new(heap) NativeTestObject(heap, addX + me->x, addY + me->y)));
+						}
+					};
+
+		public:		typedef Object super;
+					NativeTestObject(Heap& heap, double x, double y) : super(heap), x(x), y(y) { }
+					virtual const String* getClassName() const { return &className; };
+					virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const {
+						if (key.isEqualTo(String("x"))) { *v = Value(x); return EXISTS_FLAG | READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG; };
+						if (key.isEqualTo(String("y"))) { *v = Value(y); return EXISTS_FLAG | READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG; };
+						if (key.isEqualTo(String("add"))) { *v = Value(&addFunction); return EXISTS_FLAG | READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG; };
+						return super::getOwnProperty(engine, key, v);
+					}
+		
+		protected:	double x;
+					double y;
+					static String className;
+					static AddFunction addFunction;
+	};
+	String NativeTestObject::className("NativeTestObject");
+	NativeTestObject::AddFunction NativeTestObject::addFunction;
 
 int testMain(int argc, const char* argv[]) {
     String source(EMPTY_STRING);
@@ -4779,7 +4811,8 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
-	
+globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
+
 	if (loadStdLib) {
 		try {
 			std::wifstream stdlibStream("stdlib.js");
