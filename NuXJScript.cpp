@@ -4838,7 +4838,6 @@ suppressStdErr = true;
 	}
     suppressStdErr = doSuppressStdErr;
 	
-	Processor processor(engine);
     while (inStream->good()) {
         bool execute = false;
         try {
@@ -4921,6 +4920,7 @@ suppressStdErr = true;
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
+				Processor processor(engine);
                 processor.chain(&globalCode, &globalScope, &globals);
                 
                 bool done = false;

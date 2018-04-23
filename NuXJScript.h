@@ -608,7 +608,6 @@ class Function : public Object {
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Engine& engine) const;
 				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				// FIX : all argc -> UInt32 maybe?
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
 				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
@@ -965,7 +964,7 @@ class Exception : public std::exception {
 // FIX : test with very short max sz length
 class Exception : public std::exception { // FIX : runtime_error instead?
 	public:		static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
-					throw Exception(heap, Value(heap.govern(new(heap) Error(heap, TYPE_ERROR, message))));
+					throw Exception(heap, Value(heap.govern(new(heap) Error(heap, type, message))));
 				}
 	public:		Exception(Heap& heap, const Value& value) throw() : value(value) { // FIX : not inline
 					strcpy(sz, "Unknown exception (failed conversion to string)");
