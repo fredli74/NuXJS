@@ -964,6 +964,9 @@ class Exception : public std::exception {
 
 // FIX : test with very short max sz length
 class Exception : public std::exception { // FIX : runtime_error instead?
+	public:		static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
+					throw Exception(heap, Value(heap.govern(new(heap) Error(heap, TYPE_ERROR, message))));
+				}
 	public:		Exception(Heap& heap, const Value& value) throw() : value(value) { // FIX : not inline
 					strcpy(sz, "Unknown exception (failed conversion to string)");
 					const String* src = value.toString(heap);
@@ -1086,9 +1089,9 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const { return result; }
-				void error(ErrorType errorType, const String* message = 0);
-				
-	protected:	void push(const Value& v);
+	
+	protected:	void error(ErrorType errorType, const String* message = 0);
+				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void poppush(const Value& v);
 				void updateInternals();

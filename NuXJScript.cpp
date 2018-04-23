@@ -1239,7 +1239,8 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
-		processor.error(TYPE_ERROR, String::newString(engine.getHeap(), "Non-object prototype in instanceof check"));
+		Heap& heap = engine.getHeap();
+		Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "Non-object prototype in instanceof check"));
 		return false;
 	}
 	while ((object = object->getPrototype(engine)) != 0) {
@@ -1325,7 +1326,7 @@ bool Array::setOwnProperty(Engine& engine, const Value& key, const Value& v, Fla
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			Heap& heap = engine.getHeap();
-			throw Exception(heap, Value(heap.govern(new(heap) Error(heap, RANGE_ERROR, String::newString(heap, "Invalid array length"))))); // FIX : how could we do this without exceptions?
+			Exception::throwError(heap, RANGE_ERROR, String::newString(heap, "Invalid array length")); // FIX : how could we do this without exceptions?
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1446,11 +1447,9 @@ Value SpecialConstructorFunction::construct(Engine& engine, Processor& processor
 		Value v;
 		regularFunction->getPropertyDeep(engine, Value(&NAME_STRING), &v);
 		Heap& heap = engine.getHeap();
-		processor.error(TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
-		return Value();
-	} else {
-		return constructorFunction->call(engine, processor, argc, argv, thisObject);
+		Exception::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 	}
+	return constructorFunction->call(engine, processor, argc, argv, thisObject);
 }
 
 void SpecialConstructorFunction::constructCompleteObject(Engine& engine) const {
@@ -2048,8 +2047,8 @@ bool Processor::privateRun() {
 				if (o != 0) {
 					o->setPropertyDeep(engine, vsp[-1], vsp[0]);
 					pop(3);
-					break;
 				}
+				break;
 			}
 
 			case OBJ_TO_NUMBER_OP: {
@@ -2670,7 +2669,7 @@ Compiler::Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor
 		, p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
 void Compiler::error(ErrorType errorType, const char* message) {
-	throw Exception(heap, Value(heap.govern(new(heap) Error(heap, errorType, String::newString(heap, message)))));
+	Exception::throwError(heap, errorType, String::newString(heap, message));
 }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
@@ -4416,7 +4415,7 @@ struct Support {
 		Heap& heap = engine.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
-			processor.error(TYPE_ERROR, String::newString(heap, "apply / call used on non-function"));
+			Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "apply / call used on non-function"));
 			return Value();
 		} else {
 			Object* newThis = (argc > 1 ? argv[1].toObject(engine, true) : 0);
@@ -4656,17 +4655,17 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	// FIX : sub v
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
-		throw Exception(heap, Value(heap.govern(new(heap) Error(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveNumber")))));
+		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveNumber"));
 	}
 	
 	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(heap, Value(heap.govern(new(heap) Error(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveString")))));
+		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveString"));
 	}
 
 	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
-		throw Exception(heap, Value(heap.govern(new(heap) Error(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.createRegExp")))));
+		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.createRegExp"));
 	}
 }
 
@@ -4729,7 +4728,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 						virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = engine.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
-								throw Exception(heap, Value(heap.govern(new(heap) Error(heap, TYPE_ERROR, String::newString(heap, "Invalid class")))));
+								Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "Invalid class"));
 							}
 							const NativeTestObject* me = reinterpret_cast<NativeTestObject*>(thisObject);
 							const double addX = (argc >= 1 ? argv[0].toDouble() : 0.0);
