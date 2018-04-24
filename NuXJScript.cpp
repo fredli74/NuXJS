@@ -1892,7 +1892,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 
 Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), cstack(&engine.getHeap()), vstack(&engine.getHeap())
-		, clockCyclesLeft(0x7FFFFFFF), ip(0), vsp(vstack.begin() - 1), scope(0), constants(0), indexed(0)
+		, clockCyclesLeft(0x7FFFFFFF), ip(0), scope(0), thisObject(0), vsp(vstack.begin() - 1), constants(0), indexed(0)
 		, catchers(&engine.getHeap()) {
 }
 
@@ -1913,6 +1913,7 @@ void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles;
 
 void Processor::updateInternals() {
 	scope = cstack.back().scope;
+	thisObject = cstack.back().thisObject;
 	if (scope != 0) { // FIX : use dummy scope?
 		constants = scope->getCodeDefinition()->getConstantsPointer();
 		indexed = scope->getIndexedPointer();
@@ -1949,7 +1950,7 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 	scope = (directCall ? scope : engine.getGlobalScope());
 	Heap& heap = engine.getHeap();
 	scope = heap.govern(new(heap) EvalScope(heap, scope, codeDefinition));
-	cstack.push(CallFrame(ip, scope, directCall ? cstack.back().thisObject : engine.getGlobals()));
+	cstack.push(CallFrame(ip, scope, directCall ? thisObject : engine.getGlobals()));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -2105,7 +2106,7 @@ bool Processor::privateRun() {
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
 
-			case JSR_OP:	cstack.push(CallFrame(ip, scope, cstack.back().thisObject));
+			case JSR_OP:	cstack.push(CallFrame(ip, scope, thisObject));
 							ip += operand;
 							break;
 
@@ -2228,7 +2229,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			
-			case THIS_OP: push(Value(cstack.back().thisObject)); break;
+			case THIS_OP: push(Value(thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			
 			case GEN_FUNC_OP: {

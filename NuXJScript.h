@@ -1109,6 +1109,8 @@ public: // FIX : not public, just for some asserts now I think
 
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
+				Scope* scope;
+				Object* thisObject;
 				Value* vsp; // FIX : not public, just for an assert now
 				Value result;
 
@@ -1125,7 +1127,6 @@ public: // FIX : not public, just for some asserts now I think
 
 				// Copies from call stack. Will be gc marked from there.
 				
-				Scope* scope;
 				const Value* constants;
 				Value* indexed;
 };
