@@ -1066,7 +1066,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
 					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
-					, FINISHED_OP									// return false to host
 					, OP_COUNT
 				};
 	

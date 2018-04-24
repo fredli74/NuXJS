@@ -1881,8 +1881,7 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ TYPEOF_OP                  , "TYPEOF"                  , 0      , 0 },
 	{ TYPEOF_NAMED_OP            , "TYPEOF_NAMED"            , 1      , 0 },
 	{ GET_ENUMERATOR_OP          , "GET_ENUMERATOR"          , 0      , 0 },
-	{ NEXT_PROPERTY_OP           , "NEXT_PROPERTY"           , 0      , OpcodeInfo::POP_ON_BRANCH },
-	{ FINISHED_OP                , "FINISHED_OP"             , 0      , OpcodeInfo::TERMINAL }
+	{ NEXT_PROPERTY_OP           , "NEXT_PROPERTY"           , 0      , OpcodeInfo::POP_ON_BRANCH }
 };
 
 const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
@@ -1891,13 +1890,10 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-const CodeWord Processor::FINISHED_CODE_THUNK[1] = { FINISHED_OP };
-
 Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), fstack(&engine.getHeap()), vstack(&engine.getHeap())
-		, clockCyclesLeft(0x7FFFFFFF), ip(FINISHED_CODE_THUNK), scope(0), thisObject(0), vsp(vstack.begin() - 1)
+		, clockCyclesLeft(0x7FFFFFFF), ip(0), scope(0), thisObject(0), vsp(vstack.begin() - 1)
 		, constants(0), indexed(0), catchers(&engine.getHeap()) {
-	assert(unpackInstruction(FINISHED_CODE_THUNK[0]).first == FINISHED_OP);	// just checking the encoding logic
 }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
@@ -1916,19 +1912,12 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vs
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::updateInternals() {
-	if (!fstack.empty()) {
-		Frame& f = fstack.back();
-		thisObject = f.thisObject;
-		scope = f.scope;
-		assert(scope != 0);
-		constants = scope->getCodeDefinition()->getConstantsPointer();
-		indexed = scope->getIndexedPointer();
-	} else {
-		thisObject = 0;
-		scope = 0;
-		constants = 0;
-		indexed = 0;
-	}
+	Frame& f = fstack.back();
+	thisObject = f.thisObject;
+	scope = f.scope;
+	assert(scope != 0);
+	constants = scope->getCodeDefinition()->getConstantsPointer();
+	indexed = scope->getIndexedPointer();
 }
 
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
@@ -1971,10 +1960,13 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX: what exception to throw here?
-		ip = FINISHED_CODE_THUNK;
+		ip = 0;
 		vsp = vstack.begin() - 1;
+		scope = 0;
+		thisObject = 0;
+		constants = 0;
+		indexed = 0;
 		fstack.resize(0);
-		updateInternals();
 		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
@@ -2219,6 +2211,18 @@ bool Processor::privateRun() {
 			case RETURN_OP:	{
 				ip = fstack.back().returnIP;
 				fstack.pop();
+				if (ip == 0) {
+					assert(fstack.empty());
+					assert(catchers.empty());
+					assert(vsp == vstack.begin());
+					scope = 0;
+					thisObject = 0;
+					constants = 0;
+					indexed = 0;
+					result = vsp[0];
+					pop(1);
+					return false;
+				}
 				updateInternals();
 				break;
 			}
@@ -2349,19 +2353,7 @@ bool Processor::privateRun() {
 				}
 				break;
 			}
-			
-			case FINISHED_OP: {
-				assert(fstack.empty());
-				assert(catchers.empty());
-				assert(vsp == vstack.begin());
-				assert(scope == 0);
-				assert(thisObject == 0);
-				result = vsp[0];
-				pop(1);
-				--ip;
-				return false;
-			}
-			
+				
 			default: assert(0);
 		}
 	}
