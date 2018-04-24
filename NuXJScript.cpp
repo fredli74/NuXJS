@@ -756,7 +756,7 @@ const String* String::fromDouble(Heap& heap, double d) {
 /* --- GCItem --- */
 
 void* GCItem::operator new(size_t n, Heap& heap) {
-	Heap** p = reinterpret_cast<Heap**>(::operator new(n + sizeof (heap), &heap));
+	Heap** p = reinterpret_cast<Heap**>(::operator new(sizeof (Heap*) + n, &heap));
 	*p = &heap;
 	return p + 1;
 }

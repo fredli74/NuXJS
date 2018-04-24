@@ -155,9 +155,11 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				}
 				
 				void resize(UInt32 newSize) {
-					QuickArray<T, BUILT_IN_COUNT> na(newSize, associatedHeap);
-					std::copy(p, p + std::min(n, newSize), na.p);
-					swap(na);
+					if (newSize != n) {
+						QuickArray<T, BUILT_IN_COUNT> na(newSize, associatedHeap);
+						std::copy(p, p + std::min(n, newSize), na.p);
+						swap(na);
+					}
 				}
 				
 				bool empty() const { return n == 0; }
