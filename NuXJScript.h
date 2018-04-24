@@ -1084,7 +1084,7 @@ class Processor : public GCItem {
 				void error(ErrorType errorType, const String* message = 0);
 				void push(const Value& v);
 				void pop(Int32 count = 1);
-				void poppush(const Value& v);
+				void pop2push1(const Value& v);
 				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
@@ -1174,7 +1174,7 @@ class Compiler : public GCItem {
 				struct SemanticScope;
 	
 				struct CodeSection {
-					CodeSection(Heap& heap, Int32 initialStackDepth = 0)
+					CodeSection(Heap& heap, Int32 initialStackDepth)
 							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
