@@ -987,24 +987,22 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 class Processor : public GCItem {
 	public:		typedef GCItem super;
 
-				// FIX : this could be a struct used by a member Processor too instead of separate ip, scope etc...
-				struct CallFrame {
-					CallFrame() { }
-					CallFrame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
+				struct Frame {
+					Frame() { }
+					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
 							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
 					const CodeWord* returnIP;
 					Scope* scope;			// doesn't change during function execution
 					Object* thisObject; 	// doesn't change during function execution
 				};
 				
-				// FIX : {ip, vsp, cfp} could be a struct used by Processor too, or.. CallFrame?
 	protected:	struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 cstackSize, Scope* scope) : ip(ip), vstackOffset(vstackOffset), cstackSize(cstackSize), scope(scope) { }
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 fstackSize)
+							: ip(ip), vstackOffset(vstackOffset), fstackSize(fstackSize) { }
 					const CodeWord* ip;
 					UInt32 vstackOffset;
-					UInt32 cstackSize;
-					Scope* scope;
+					UInt32 fstackSize;
 				};
 			// FIX : public
 public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
@@ -1106,8 +1104,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
-				QuickVector<CallFrame> cstack;
 				QuickVector<Value> vstack;
+				QuickVector<Frame> fstack;
 
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
@@ -1119,7 +1117,7 @@ public: // FIX : not public, just for some asserts now I think
 				virtual void gcMark(Heap& heap) const {
 					// FIX : trim these?
 					heap.markViaReferences(vstack.begin(), vsp + 1);
-					for (CallFrame* c = cstack.begin(); c != cstack.end(); ++c) {
+					for (Frame* c = fstack.begin(); c != fstack.end(); ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}

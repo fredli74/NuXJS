@@ -1891,7 +1891,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 }
 
 Processor::Processor(Engine& engine)
-		: super(engine.getHeap()), engine(engine), cstack(&engine.getHeap()), vstack(&engine.getHeap())
+		: super(engine.getHeap()), engine(engine), fstack(&engine.getHeap()), vstack(&engine.getHeap())
 		, clockCyclesLeft(0x7FFFFFFF), ip(0), scope(0), thisObject(0), vsp(vstack.begin() - 1), constants(0), indexed(0)
 		, catchers(&engine.getHeap()) {
 }
@@ -1912,8 +1912,8 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vs
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::updateInternals() {
-	scope = cstack.back().scope;
-	thisObject = cstack.back().thisObject;
+	scope = fstack.back().scope;
+	thisObject = fstack.back().thisObject;
 	if (scope != 0) { // FIX : use dummy scope?
 		constants = scope->getCodeDefinition()->getConstantsPointer();
 		indexed = scope->getIndexedPointer();
@@ -1932,7 +1932,7 @@ void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
 	scope = heap.govern(new(heap) FunctionScope(heap, func, argc, argv));
-	cstack.push(CallFrame(ip, scope, thisObject));
+	fstack.push(Frame(ip, scope, thisObject));
 	ip = func->getDefinition()->getCodePointer();
 	reserveVStackSpace(func->getDefinition()->getMaxStackDepth());
 	updateInternals();
@@ -1940,7 +1940,7 @@ void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Obje
 }
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
-	cstack.push(CallFrame(ip, scope, thisObject));
+	fstack.push(Frame(ip, scope, thisObject));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -1950,7 +1950,7 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 	scope = (directCall ? scope : engine.getGlobalScope());
 	Heap& heap = engine.getHeap();
 	scope = heap.govern(new(heap) EvalScope(heap, scope, codeDefinition));
-	cstack.push(CallFrame(ip, scope, directCall ? thisObject : engine.getGlobals()));
+	fstack.push(Frame(ip, scope, directCall ? thisObject : engine.getGlobals()));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -1962,16 +1962,15 @@ void Processor::throwVirtualException(const Value& exception) {
 		ip = 0;
 		constants = 0;
 		indexed = 0;
-		cstack.resize(0);
+		fstack.resize(0);
 		vsp = vstack.begin() - 1;
 		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
 	assert(ip != 0);
-	assert(catcher.cstackSize <= cstack.size());
-	cstack.resize(catcher.cstackSize);
-	cstack.back().scope = catcher.scope;
+	assert(catcher.fstackSize <= fstack.size());
+	fstack.resize(catcher.fstackSize);
 	vsp = vstack.begin() + catcher.vstackOffset - 1;
 	push(exception);
 	catchers.pop();
@@ -2106,7 +2105,7 @@ bool Processor::privateRun() {
 			case GEQ_OP:	poppush(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += operand; break;
 
-			case JSR_OP:	cstack.push(CallFrame(ip, scope, thisObject));
+			case JSR_OP:	fstack.push(Frame(ip, scope, thisObject));
 							ip += operand;
 							break;
 
@@ -2207,10 +2206,10 @@ bool Processor::privateRun() {
 			}
 
 			case RETURN_OP:	{
-				ip = cstack.back().returnIP;
-				cstack.pop();
+				ip = fstack.back().returnIP;
+				fstack.pop();
 				if (ip == 0) {
-					assert(cstack.empty());
+					assert(fstack.empty());
 					assert(catchers.empty());
 					constants = 0;
 					indexed = 0;
@@ -2224,8 +2223,8 @@ bool Processor::privateRun() {
 			}
 			
 			case DISCARD_RETURN_OP: {
-				assert(!cstack.empty());
-				cstack.pop();
+				assert(!fstack.empty());
+				fstack.pop();
 				break;
 			}
 			
@@ -2265,7 +2264,7 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				cstack.push(CallFrame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[operand].getString(), vsp[0])), thisObject));
+				fstack.push(Frame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[operand].getString(), vsp[0])), thisObject));
 				pop(1);
 				updateInternals();
 				break;
@@ -2274,7 +2273,7 @@ bool Processor::privateRun() {
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
-					cstack.push(CallFrame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject));
+					fstack.push(Frame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject));
 					pop(1);
 					updateInternals();
 				}
@@ -2282,14 +2281,14 @@ bool Processor::privateRun() {
 			}
 			
 			case POP_SCOPE_OP: {
-				cstack.pop();
+				fstack.pop();
 				updateInternals();
 				break;
 			}
 			
 			case TRY_OP: {
 				assert(vsp + 1 - vstack.begin() >= 0);
-				catchers.push(Catcher(ip + operand, static_cast<UInt32>(vsp + 1 - vstack.begin()), cstack.size(), scope));
+				catchers.push(Catcher(ip + operand, static_cast<UInt32>(vsp + 1 - vstack.begin()), fstack.size()));
 				break;
 			}
 			case TRIED_OP: catchers.pop(); break;
@@ -3910,21 +3909,48 @@ void Compiler::block(SemanticScope* scope) {
 							// spaceHolder					// (eval)
 		finally()
 	}
-							// spaceHolder thrownValue		// (eval) thrownValue
+							// spaceHolder thrownA			// (eval) thrownA
 	catch (x) {
+		*try {
 							// spaceHolder					// (eval)
-		try {
 			<statements>
 			finally()
-		}
-							// spaceHolder newThrownValue	// (eval) newThrownValue
-		catch {
-							// newThrownValue				// newThrownValue
-			finally()
-							// newThrownValue				// newThrownValue
-			throw
-		}
+		*}
+							// spaceHolder thrownA thrownB	// (eval) thrownA thrownB
+		*catch {
+							// thrownB						// thrownB
+			*finally()
+							// thrownB						// thrownB
+			*throw
+		*}
 	}
+							// spaceHolder					// (eval)
+	finally {
+							// spaceHolder					// rollback (eval)
+		<statements>
+							// spaceHolder					// rollback
+	}
+							//								// (eval)
+
+
+
+							// NO EVAL						// EVAL
+							// ========						// ========
+ 
+							// spaceHolder					// (eval)
+	try {
+							// spaceHolder					// rollback (eval)
+		<statements>
+							// spaceHolder					// (eval)
+		finally()
+	}
+							// spaceHolder thrownA			// (eval) thrownA
+	*catch {
+							// thrownA						// thrownA
+		*finally()
+							// thrownA						// thrownA
+		*throw
+	*}
 							// spaceHolder					// (eval)
 	finally {
 							// spaceHolder					// rollback (eval)
@@ -3941,8 +3967,9 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	
 	QuickVector<BranchPoint> allFinallys(&heap);
 	BranchPoint catchPoint;
+	const Int32 trySectionEntryStackDepth = currentSection->stackDepth;
 	{
-		SemanticScope tryScope(heap, SemanticScope::TRY_TYPE, currentSection->stackDepth, currentScope);
+		SemanticScope tryScope(heap, SemanticScope::TRY_TYPE, trySectionEntryStackDepth, currentScope);
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
 		if (compilingFor == FOR_EVAL) { // Eval result from try scope should be rolled back in case of a throw
 			emit(Processor::REPUSH_OP, 0);
@@ -3978,8 +4005,8 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		}
 		nameIndexes.update(indexBucket, CATCH_PARAMETER); // prohibit further var accesses or declarations to the capture parameter via fast index binding.
 		completeForwardBranch(catchPoint);
-		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 		catchPoint = emitForwardBranch(Processor::TRY_OP);
+		emitWithConstant(Processor::CATCH_SCOPE_OP, Value(exceptionVarName));
 		expectToken(")", true);
 		{
 			SemanticScope catchScope(heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
@@ -3999,7 +4026,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	// Re-thrower (could actually be eliminated if we only have catch and no finally, but we don't know yet)
 	
 	completeForwardBranch(catchPoint);
-	emit(Processor::PUSH_BACK_OP, 1);
+	emit(Processor::PUSH_BACK_OP, currentSection->stackDepth - trySectionEntryStackDepth);
 	BranchPoint finallyRethrowPoint = emitForwardBranch(Processor::JSR_OP);
 	emit(Processor::THROW_OP);
 
