@@ -1412,8 +1412,11 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure) : super(heap), codeDefinition(codeDefinition), closure(closure) { }
+ScriptFunction::ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure)
+		: super(heap), codeDefinition(codeDefinition), closure(closure) { }
+
 Value ScriptFunction::getInternalValue(Heap& heap) const { return Value(toString(heap)); }
+
 const CodeDefinition* ScriptFunction::getDefinition() const { return codeDefinition; }
 
 const String* ScriptFunction::toString(Heap& heap) const {
@@ -1935,7 +1938,6 @@ void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
-//	pop(1); // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -3964,6 +3966,12 @@ void Compiler::block(SemanticScope* scope) {
 void Compiler::tryStatement(SemanticScope* currentScope) {
 	white();
 
+/* FIX : drop if we keep the reserve-one-element-for-return-on-stack-solution
+	if (compilingFor != FOR_EVAL) { // space holder for return value so that we can break out of finallys (with the same stack pop count) regardless if try scope returns a value or not
+		emit(Processor::VOID_OP, 0);
+	}
+*/
+
 	QuickVector<BranchPoint> allFinallys(&heap);
 	BranchPoint catchPoint;
 	const Int32 trySectionEntryStackDepth = currentSection->stackDepth;
@@ -4052,6 +4060,12 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	
 	completeForwardBranch(tryEndPoint);
 	completeForwardBranch(catchEndPoint);
+
+/* FIX : drop if we keep the reserve-one-element-for-return-on-stack-solution
+	if (compilingFor != FOR_EVAL) { // pop return space holder
+		emit(Processor::POP_OP, 1);
+	}
+*/
 }
 
 /*
@@ -4208,14 +4222,17 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	this->e = e;
 	acceptInOperator = true;
 	
+	// FIX : not 100% necessary now because we should always start with undefined on top of stack
 	if (compilingFor == FOR_EVAL) {
-		emit(Processor::POP_OP, 1);
+		emit(Processor::POP_OP, 1);	// FIX : only if we reserve one element for return like we do now
 		emit(Processor::VOID_OP);
 	}
 	SemanticScope rootScope(heap, SemanticScope::ROOT_TYPE, 1, 0);
 	statementList(&rootScope);
-	if (compilingFor == FOR_FUNCTION) {
-		emit(Processor::POP_OP, 1);
+	// FIX : sometimes necessary even if we start with undefined on top of stack, because try/catch rethrower might need to safe-keep its exception there
+	if (compilingFor != FOR_EVAL) {
+		// FIX : if RETURN_OP took a push back count we could just do void_op here, or even have another RETURN_VOID_OP
+		emit(Processor::POP_OP, 1);	// FIX : only if we reserve one element for return like we do now
 		emit(Processor::VOID_OP);
 	}
 	emit(Processor::RETURN_OP);
@@ -4322,7 +4339,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
 	}
 	processor.enterEval(codeDefinition, direct);
-	return Value();
+	return Value::UNDEFINED;
 }
 
 /* FIX : funny C++11 thing

@@ -1025,6 +1025,7 @@ class Processor : public GCItem {
 					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
 					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
 					, POP_OP										// operand: count, stack: ... ->
+					// FIX : push back is a really bad name, it's really pop back and then push sort of
 					, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
 					, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
 					, SWAP_OP
@@ -1038,7 +1039,9 @@ class Processor : public GCItem {
 					, NEW_OBJECT_OP									// stack: -> object
 					, NEW_ARRAY_OP									// stack: -> array_object
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
+					// FIX : should we have an optional pop argument (push back) to RETURN_OP?
 					, RETURN_OP
+					// FIX : maybe we should also have a RETURN_VOID_OP?
 					, DISCARD_RETURN_OP
 					, THIS_OP, VOID_OP								// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
