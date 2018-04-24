@@ -883,6 +883,7 @@ class CatchScope : public Scope {
 				}
 };
 
+// FIX : rename to RunTime?
 class Engine : public GCItem {
 	public:		typedef GCItem super;
 				Engine(Heap& heap);
@@ -1072,8 +1073,8 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
 					Opcode opcode;
 					const char* mnemonic;
-					int stackUse;
-					int flags;
+					Int32 stackUse;
+					Byte flags;
 				};
 	
 				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
@@ -1081,7 +1082,6 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void chain(const CodeWord* stub);
 				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);

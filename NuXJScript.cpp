@@ -564,7 +564,8 @@ bool Value::isEqualTo(const Value& r) const {
 			case NULL_TYPE: return true;
 			case BOOLEAN_TYPE: return false;
 			case NUMBER_TYPE: return (r.type == BOOLEAN_TYPE && var.number == (r.var.boolean ? 1.0 : 0.0));
-			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*var.string) == (r.type == BOOLEAN_TYPE ? (r.var.boolean ? 1.0 : 0.0) : r.var.number));
+			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*var.string)
+					== (r.type == BOOLEAN_TYPE ? (r.var.boolean ? 1.0 : 0.0) : r.var.number));
 			default: return false;
 		}
 	}
@@ -1918,12 +1919,6 @@ void Processor::updateInternals() {
 	}
 }
 
-void Processor::chain(const CodeWord* stub) {
-	cstack.push(CallFrame(ip, 0, 0));
-	ip = stub;
-	updateInternals();
-}
-
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 	const UInt32 vstackOffset = static_cast<UInt32>(vsp + 1 - vstack.begin());
 	const UInt32 requiredSize = vstackOffset + maxStackDepth;
@@ -1963,6 +1958,11 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX: what exception to throw here?
+		ip = 0;
+		constants = 0;
+		indexed = 0;
+		cstack.resize(0);
+		vsp = vstack.begin() - 1;
 		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
@@ -1971,7 +1971,6 @@ void Processor::throwVirtualException(const Value& exception) {
 	assert(catcher.cstackSize <= cstack.size());
 	cstack.resize(catcher.cstackSize);
 	cstack.back().scope = catcher.scope;
-	// FIX : resize stack? vstack.resize(catcher.vstackSize);
 	vsp = vstack.begin() + catcher.vstackOffset - 1;
 	push(exception);
 	catchers.pop();
@@ -2210,6 +2209,11 @@ bool Processor::privateRun() {
 				ip = cstack.back().returnIP;
 				cstack.pop();
 				if (ip == 0) {
+					assert(cstack.empty());
+					assert(catchers.empty());
+					constants = 0;
+					indexed = 0;
+					assert(vsp == vstack.begin());
 					result = vsp[0];
 					pop(1);
 					return false;
@@ -2363,7 +2367,7 @@ bool Processor::run() {
 static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<Int32>& stackDepths, Int32 offset, Int32 currentStackDepth, Int32& maxStackDepth) {
 	const CodeWord* code = codeDefinition.getCodePointer();
 	const UInt32 codeSize = codeDefinition.getCodeSize();
-
+	
 	int errors = 0;
 	for (; offset < codeSize; ++offset) {
 		if (stackDepths[offset] != DEAD_CODE_STACK_DEPTH) {
@@ -4837,7 +4841,9 @@ suppressStdErr = true;
 		}
 	}
     suppressStdErr = doSuppressStdErr;
-	
+
+	Processor processor(engine);
+
     while (inStream->good()) {
         bool execute = false;
         try {
@@ -4920,7 +4926,6 @@ suppressStdErr = true;
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
-				Processor processor(engine);
                 processor.chain(&globalCode, &globalScope, &globals);
                 
                 bool done = false;
