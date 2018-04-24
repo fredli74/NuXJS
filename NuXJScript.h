@@ -993,8 +993,8 @@ class Processor : public GCItem {
 					CallFrame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
 							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
 					const CodeWord* returnIP;
-					Scope* scope;
-					Object* thisObject; // doesn't change during function execution
+					Scope* scope;			// doesn't change during function execution
+					Object* thisObject; 	// doesn't change during function execution
 				};
 				
 				// FIX : {ip, vsp, cfp} could be a struct used by Processor too, or.. CallFrame?

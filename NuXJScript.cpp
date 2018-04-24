@@ -2265,24 +2265,25 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				assert(cstack.back().scope == scope);
-				cstack.back().scope = scope = heap.govern(new(heap) CatchScope(heap, scope, constants[operand].getString(), vsp[0]));
+				cstack.push(CallFrame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[operand].getString(), vsp[0])), thisObject));
 				pop(1);
+				updateInternals();
 				break;
 			}
 			
-			case WITH_SCOPE_OP: { // FIX : why don't we use the value stack for pushing / popping scopes only (when it isn't a full call)
-				assert(cstack.back().scope == scope);
+			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
-					cstack.back().scope = scope = heap.govern(new(heap) WithScope(heap, scope, o));
+					cstack.push(CallFrame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject));
 					pop(1);
+					updateInternals();
 				}
 				break;
 			}
 			
 			case POP_SCOPE_OP: {
-				cstack.back().scope = scope = scope->getParentScope();
+				cstack.pop();
+				updateInternals();
 				break;
 			}
 			
@@ -4729,7 +4730,6 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 	class NativeTestObject : public Object {
 		protected:	struct AddFunction : public Function {
 						typedef Function super;
-					//	AddFunction() : super("(x,y){%(+x,+y)}")
 						virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = engine.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
