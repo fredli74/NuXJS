@@ -985,6 +985,8 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 
 // FIX : Processor -> Interpreter
 class Processor : public GCItem {
+	friend class ScriptFunction;
+	
 	public:		typedef GCItem super;
 
 				struct Frame {
@@ -995,18 +997,7 @@ class Processor : public GCItem {
 					Scope* scope;
 					Object* thisObject;
 				};
-				
-	protected:	struct Catcher {
-					Catcher() { }
-					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 fstackSize)
-							: ip(ip), vstackOffset(vstackOffset), fstackSize(fstackSize) { }
-					const CodeWord* ip;
-					UInt32 vstackOffset;
-					UInt32 fstackSize;
-				};
-			// FIX : public
-public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
-
+	
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
 					, CONST_OP										// operand: const_index, stack: -> constant
@@ -1082,14 +1073,15 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
+				void call(const Value& function, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
-				Value getResult() const { return result; }
-	
-	protected:	void error(ErrorType errorType, const String* message = 0);
+				Value getResult() const;
+
+	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
+				void error(ErrorType errorType, const String* message = 0);
 				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void poppush(const Value& v);
@@ -1098,6 +1090,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reserveVStackSpace(UInt32 maxStackDepth);
+				void reset();
 
 				Engine& engine;
 	
@@ -1113,16 +1106,24 @@ public: // FIX : not public, just for some asserts now I think
 				Scope* scope;
 				Object* thisObject;
 				Value* vsp; // FIX : not public, just for an assert now
-				Value result;
+
+				struct Catcher {
+					Catcher() { }
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 fstackSize)
+							: ip(ip), vstackOffset(vstackOffset), fstackSize(fstackSize) { }
+					const CodeWord* ip;
+					UInt32 vstackOffset;
+					UInt32 fstackSize;
+				};
+
+				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 				virtual void gcMark(Heap& heap) const {
-					// FIX : trim these?
 					heap.markViaReferences(vstack.begin(), vsp + 1);
 					for (Frame* c = fstack.begin(); c != fstack.end(); ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
 					}
-					result.gcMark(heap);
 					super::gcMark(heap);
 				}
 

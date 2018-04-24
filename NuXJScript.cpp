@@ -1892,8 +1892,9 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 
 Processor::Processor(Engine& engine)
 		: super(engine.getHeap()), engine(engine), fstack(&engine.getHeap()), vstack(&engine.getHeap())
-		, clockCyclesLeft(0x7FFFFFFF), ip(0), scope(0), thisObject(0), vsp(vstack.begin() - 1)
-		, constants(0), indexed(0), catchers(&engine.getHeap()) {
+		, clockCyclesLeft(0x7FFFFFFF), catchers(&engine.getHeap()) {
+	vstack.push(Value::UNDEFINED);
+	reset();
 }
 
 CodeWord Processor::packInstruction(const Opcode opcode, const Int32 operand) {
@@ -1929,44 +1930,42 @@ void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 	vsp = vstack.begin() + vstackOffset - 1;
 }
 
-void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
-	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) FunctionScope(heap, func, argc, argv));
-	fstack.push(Frame(ip, scope, thisObject));
-	ip = func->getDefinition()->getCodePointer();
-	reserveVStackSpace(func->getDefinition()->getMaxStackDepth());
-	updateInternals();
-	pop(1); // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
-}
-
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
 	fstack.push(Frame(ip, scope, thisObject));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
-//	pop(1); // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
+	pop(1); // That is right, we pre-compensate for the fact that in comparison to native calls we will end up pushing vsp once for the return value
+}
+
+void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
+	Heap& heap = engine.getHeap();
+	scope = heap.govern(new(heap) FunctionScope(heap, func, argc, argv));
+	chain(func->getDefinition(), scope, thisObject);
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
-	scope = (directCall ? scope : engine.getGlobalScope());
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) EvalScope(heap, scope, codeDefinition));
-	fstack.push(Frame(ip, scope, directCall ? thisObject : engine.getGlobals()));
-	ip = codeDefinition->getCodePointer();
-	reserveVStackSpace(codeDefinition->getMaxStackDepth());
-	updateInternals();
-	pop(1);
+	scope = heap.govern(new(heap) EvalScope(heap, (directCall ? scope : engine.getGlobalScope()), codeDefinition));
+	chain(codeDefinition, scope, directCall ? thisObject : engine.getGlobals());
+}
+
+void Processor::reset() {
+	clockCyclesLeft = 0x7FFFFFFF;
+	catchers.resize(0);
+	fstack.resize(0);
+	vstack.resize(1);
+	vsp = vstack.begin();
+	ip = 0;
+	scope = 0;
+	thisObject = 0;
+	constants = 0;
+	indexed = 0;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
 	if (catchers.empty()) { // FIX: what exception to throw here?
-		ip = 0;
-		vsp = vstack.begin() - 1;
-		scope = 0;
-		thisObject = 0;
-		constants = 0;
-		indexed = 0;
-		fstack.resize(0);
+		reset();
 		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
@@ -1991,6 +1990,10 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 		error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 	}
 	return object;
+}
+
+void Processor::call(const Value& function, UInt32 argc, const Value* argv, Object* thisObject) {
+	
 }
 
 bool Processor::privateRun() {
@@ -2212,15 +2215,8 @@ bool Processor::privateRun() {
 				ip = fstack.back().returnIP;
 				fstack.pop();
 				if (ip == 0) {
-					assert(fstack.empty());
-					assert(catchers.empty());
-					assert(vsp == vstack.begin());
-					scope = 0;
-					thisObject = 0;
-					constants = 0;
-					indexed = 0;
-					result = vsp[0];
-					pop(1);
+					assert(fstack.empty() && catchers.empty() && vsp == vstack.begin());
+					reset();
 					return false;
 				}
 				updateInternals();
@@ -2360,7 +2356,15 @@ bool Processor::privateRun() {
 	return true;
 }
 
+Value Processor::getResult() const {
+	assert(ip == 0 && vsp == vstack.begin()); // make sure you've called run() until it returns false
+	return vsp[0];
+}
+
 bool Processor::run() {
+	if (ip == 0) {
+		return false;
+	}
 	try {
 		return privateRun();
 	}
@@ -4674,7 +4678,6 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	{
 		Processor processor(*this);
-++processor.vsp;
 		processor.enterEval(code, false);
 		bool needsMoreTime = processor.run();
 		assert(!needsMoreTime);
@@ -4682,7 +4685,6 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		Function* f = v.asFunction();
 		if (f != 0) {
 			Value argv[1] = { Value(supportObject) };
-++processor.vsp;
 			f->call(*this, processor, 1, argv, getGlobals());
 			needsMoreTime = processor.run();
 			assert(!needsMoreTime);
@@ -4876,6 +4878,10 @@ suppressStdErr = true;
     suppressStdErr = doSuppressStdErr;
 
 	Processor processor(engine);
+	processor.run();	// just testing some weird behaviour
+//	const Value TEST_ARGV[1] = { Value(String::newString(heap, "Hello")) };
+//	printFunction.call(engine, processor, 1, TEST_ARGV, &globals);
+//	processor.run();	// just testing some weird behaviour
 
     while (inStream->good()) {
         bool execute = false;
@@ -4959,8 +4965,9 @@ suppressStdErr = true;
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
+               	processor.run();	// just testing some weird behaviour
                 processor.chain(&globalCode, &globalScope, &globals);
-                
+
                 bool done = false;
                 clock_t start = ::clock();
                 do {
@@ -4986,9 +4993,10 @@ suppressStdErr = true;
                     }
                     
                     if (done) {
+                    	processor.run();	// just testing some weird behaviour
                         if (!suppressStdErr) {
                             std::cerr << "\tOn stack: " << (processor.vsp - processor.vstack.begin() + 1) << std::endl;
-                            assert(processor.vsp - processor.vstack.begin() + 1 == 0);
+                            assert(processor.vsp - processor.vstack.begin() == 0);
                             Value v = processor.getResult();
                             std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
                             assert(processor.catchers.empty());
