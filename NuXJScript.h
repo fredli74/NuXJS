@@ -992,8 +992,8 @@ class Processor : public GCItem {
 					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
 							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
 					const CodeWord* returnIP;
-					Scope* scope;			// doesn't change during function execution
-					Object* thisObject; 	// doesn't change during function execution
+					Scope* scope;
+					Object* thisObject;
 				};
 				
 	protected:	struct Catcher {
@@ -1066,6 +1066,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
 					, GET_ENUMERATOR_OP								// stack: object -> enumerator
 					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
+					, FINISHED_OP									// return false to host
 					, OP_COUNT
 				};
 	
@@ -1102,6 +1103,7 @@ public: QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? s
 				Engine& engine;
 	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
+				static const CodeWord FINISHED_CODE_THUNK[1];
 
 public: // FIX : not public, just for some asserts now I think
 				QuickVector<Value> vstack;
