@@ -84,6 +84,7 @@ const String TRUE_STRING("true");
 const String NAN_STRING("NaN");
 const String INFINITY_STRING("Infinity");
 const String MINUS_INFINITY_STRING("-Infinity");
+const String NATIVE_STRING("<native>");
 const String LENGTH_STRING("length");
 const String ARGUMENTS_STRING("arguments");
 const String A_RGUMENTS_STRING("Arguments");
@@ -511,6 +512,7 @@ const String* Value::toString(Heap& heap) const {
 		case NUMBER_TYPE: return String::fromDouble(heap, var.number);
 		case STRING_TYPE: return var.string;
 		case OBJECT_TYPE: return var.object->toString(heap);
+		case NATIVE_TYPE: return &NATIVE_STRING;
 	}
 }
 
@@ -3287,16 +3289,20 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 			white();
 			const Char* b = identifier(true, true);
 			int nativeIndex = 0;
-			do {
-				const char* nativeId = codeDefinition->natives[nativeIndex].identifier;
-				if (nativeId == 0) {
-					error(REFERENCE_ERROR, "Unknown native");
-				}
-				if (strlen(nativeId) == p - b && std::equal(b, p, nativeId)) {
-					break;
-				}
-				++nativeIndex;
-			} while (true);
+			if (codeDefinition->natives != 0) {
+				do {
+					const char* nativeId = codeDefinition->natives[nativeIndex].identifier;
+					if (nativeId == 0) {
+						error(REFERENCE_ERROR, "Unknown native");
+					}
+					if (strlen(nativeId) == p - b && std::equal(b, p, nativeId)) {
+						break;
+					}
+					++nativeIndex;
+				} while (true);
+			} else {
+				error(REFERENCE_ERROR, "Unknown native");
+			}
 			emitWithConstant(Processor::CONST_OP, Value(codeDefinition->natives[nativeIndex].native));
 			expectToken("(", false);
 			functionCall(Processor::CALL_NATIVE_OP);
@@ -4354,28 +4360,6 @@ void Compiler::compile(const String& source) {
 	}
 }
 
-Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	if (argc < 1) return Value::UNDEFINED;
-	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
-
-	Heap& heap = engine.getHeap();
-	const String* sourceCode = argv[0].toString(heap);
-	CodeDefinition* codeDefinition;
-	
-	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
-	 // FIX : .getObject?
-	if (bucket != 0) {
-		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
-	} else {
-		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), 0)); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
-		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
-		compiler.compile(*sourceCode);
-		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
-	}
-	processor.enterEval(codeDefinition, direct);
-	return Value::UNDEFINED;
-}
-
 /* FIX : funny C++11 thing
 #include <functional>
 typedef std::function<Value (Engine&, Processor&, Int32, const Value*, Object*)> NativeFunction;
@@ -4644,6 +4628,35 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
+Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	if (argc < 1) return Value::UNDEFINED;
+	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
+
+	Heap& heap = engine.getHeap();
+	const String* sourceCode = argv[0].toString(heap);
+	CodeDefinition* codeDefinition;
+	
+	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
+	 // FIX : .getObject?
+	if (bucket != 0) {
+		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
+	} else {
+struct NativeSubmatch : public Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Support::submatch(engine, processor, argc, argv, thisObject);
+	}
+};
+static NativeSubmatch nativeSubmatch;
+static const NativeDeclaration testNatives[2] = { { "submatch", &nativeSubmatch }, { 0, 0 } };
+		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), testNatives)); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
+		compiler.compile(*sourceCode);
+		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
+	}
+	processor.enterEval(codeDefinition, direct);
+	return Value::UNDEFINED;
+}
+
 Engine::Engine(Heap& heap) : super(heap), heap(heap), globalScope(0), globals(0), objectPrototype(heap, 0)
 		, functionPrototype(heap), evalFunction(heap, false)
 		, evalDirectFunction(heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
@@ -4714,9 +4727,23 @@ struct NativePow : public Native {
 		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 };
+struct NativeSubstring : public Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Support::substring(engine, processor, argc, argv, thisObject);
+	}
+};
+struct NativeSubmatch : public Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Support::submatch(engine, processor, argc, argv, thisObject);
+	}
+};
 static NativeSin nativeSin;
 static NativePow nativePow;
-static const NativeDeclaration testNatives[3] = { { "sin", &nativeSin }, { "pow", &nativePow }, { 0, 0 } };
+static NativeSubstring nativeSubstring;
+static NativeSubmatch nativeSubmatch;
+static const NativeDeclaration testNatives[5] = { { "sin", &nativeSin }, { "pow", &nativePow }
+		, { "substring", &nativeSubstring }, { "submatch", &nativeSubmatch }, { 0, 0 } };
+
 	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), testNatives));
 	{
 		Compiler compiler(heap, code, Compiler::FOR_EVAL);

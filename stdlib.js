@@ -469,7 +469,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
 		if (end === void 0) end = $Infinity;
 		else if ((end = $toInteger(end)) < 0) end = s.length + end;
-		return $support.substring(s, start, end);
+		return %substring(s, start, end);
 	}),
 /*	split: $unconstructable(function split(separator, limit) {
 		var s = $toString(this);
@@ -485,7 +485,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	substr: $unconstructable(function substr(start, length) {
 		var s = $toString(this);
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
-		return $support.substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
+		return %substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
 	}),
 	substring: $unconstructable(function substring(start, end) {
 		start = $toInteger(start);
@@ -495,7 +495,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 			start = end;
 			end = swap;
 		}
-		return $support.substring($toString(this), start, end);
+		return %substring($toString(this), start, end);
 	}),
 	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
 	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
@@ -1020,7 +1020,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		} else if (literalSequence.length === 2) {
 			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return '%submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -1185,7 +1185,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
 				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+							var backMatchCode = '%submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
