@@ -439,13 +439,13 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	indexOf: $unconstructable(function indexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ((i = $toInteger(pos)) < 0) i = 0;
-		for (; i <= e; ++i) if (%submatch(t, i, s)) return i;
+		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
 	lastIndexOf: $unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ($isNaN(pos = +pos) || (i = $toInteger(pos)) > e) i = e;
-		for (; i >= 0; --i) if (%submatch(t, i, s)) return i;
+		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
 	localeCompare: $unconstructable(function localeCompare(that) {
@@ -469,7 +469,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
 		if (end === void 0) end = $Infinity;
 		else if ((end = $toInteger(end)) < 0) end = s.length + end;
-		return %substring(s, start, end);
+		return $support.substring(s, start, end);
 	}),
 /*	split: $unconstructable(function split(separator, limit) {
 		var s = $toString(this);
@@ -485,7 +485,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	substr: $unconstructable(function substr(start, length) {
 		var s = $toString(this);
 		if ((start = $toInteger(start)) < 0) start = s.length + start;
-		return %substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
+		return $support.substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
 	}),
 	substring: $unconstructable(function substring(start, end) {
 		start = $toInteger(start);
@@ -495,7 +495,7 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 			start = end;
 			end = swap;
 		}
-		return %substring($toString(this), start, end);
+		return $support.substring($toString(this), start, end);
 	}),
 	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
 	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
@@ -1020,7 +1020,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		} else if (literalSequence.length === 2) {
 			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return '%submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -1185,7 +1185,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
 				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = '%submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
@@ -1478,9 +1478,9 @@ $defineProperties(Math, { dontEnum: true }, {
 	log: $unconstructable(function log(v) { return $support.log(+v); }),
 	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
 	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
-	pow: $unconstructable(function pow(x, y) { return %pow(+x, +y); }),
+	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y); }),
 	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))); }),
-	sin: $unconstructable(function sin(v) { return %sin(+v); }),
+	sin: $unconstructable(function sin(v) { return $support.sin(+v); }),
 	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v); }),
 	tan: $unconstructable(function tan(v) { return $support.tan(+v); })
 });

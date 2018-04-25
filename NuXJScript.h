@@ -224,7 +224,6 @@ class String;
 class Object;
 class Function;
 class Engine;
-class Native;
 class Value {
 	friend class Table;
 	
@@ -239,7 +238,6 @@ class Value {
 				explicit Value(double number) : type(NUMBER_TYPE) { var.number = number; }
 				explicit Value(const String* string) : type(STRING_TYPE) { var.string = string; }
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
-				explicit Value(Native* native) : type(NATIVE_TYPE) { var.native = native; }
 				// FIX : Value from (heap and) const char* ?
 	
 				bool isUndefined() const { return type == UNDEFINED_TYPE; }
@@ -252,7 +250,6 @@ class Value {
 				Function* asFunction() const;
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				Object* getObject() const { assert(type == OBJECT_TYPE); return var.object; }
-				Native* getNative() const { assert(type == NATIVE_TYPE); return var.native; }
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
@@ -281,7 +278,6 @@ class Value {
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
-					, NATIVE_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
@@ -291,7 +287,6 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
-					Native* native;
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }
@@ -301,6 +296,7 @@ class Value {
 	
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
+
 
 typedef Byte Flags; // FIX : turn into enum
 const Flags EXISTS_FLAG = 1; // FIX : turn these into enum, that's ok
@@ -368,15 +364,6 @@ class Table {
 class Enumerator;
 class Processor;
 class ScriptObject;
-
-struct Native {
-	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
-};
-
-struct NativeDeclaration {
-	const char* identifier;
-	Native* native;
-};
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
@@ -607,8 +594,45 @@ class Array : public LazyScriptObject<Object> {
 				}
 };
 
-// FIX : share constants in Engine? As it is now, stdlib will have its own constants vs user code for example.
-// Separate from CodeDefinition so that multiple functions can share the same constants (memory optimization).
+/*
+	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
+	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
+*/
+class Function : public Object {
+	public:		typedef Object super;
+	
+				Function() { }
+				Function(Heap& heap) : super(heap) { }
+				virtual Function* asFunction();
+				virtual const String* typeOfString() const;
+				virtual const String* getClassName() const;
+				virtual const String* toString(Heap& heap) const;
+				virtual Value getInternalValue(Heap& heap) const;
+				virtual Object* getPrototype(Engine& engine) const;
+				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
+};
+
+class EvalFunction : public Function {
+	public:		typedef Function super;
+				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
+	protected:	bool direct;
+				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
+				// FIX : or maybe just drop it? KISS you know!
+				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+
+				virtual void gcMark(Heap& heap) const {
+					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
+					functionDefCache.gcMark(heap);
+					super::gcMark(heap);
+				}
+};
+
+// Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
 				Constants(Heap& heap) : super(heap), QuickVector<Value>(&heap) { }
@@ -637,10 +661,8 @@ class CodeDefinition : public Object {
 				const String* getSource() const { return source; }
 				UInt32 getMaxStackDepth() const { return maxStackDepth; }
 
-	// FIX : protected
-				QuickArray<CodeWord> code;
-				UInt32 maxStackDepth;
-	protected:	Constants* const constants;
+	protected:	QuickArray<CodeWord> code;
+				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
 				QuickVector<const String*> argumentNames;
@@ -648,6 +670,7 @@ class CodeDefinition : public Object {
 				const String* selfName;
 				const String* source;
 				UInt32 bloomSet;							// Bloom bits of all local variables, arguments (+ self name and "arguments"). For faster scope resolution.
+				UInt32 maxStackDepth;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(constants);
@@ -663,53 +686,6 @@ class CodeDefinition : public Object {
 #if (VERIFY_STACK_LOGIC)
 	public: QuickVector<int> stackDepths;
 #endif
-};
-
-
-/*
-	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
-	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
-*/
-class CodeDefinition;
-class Function : public Object {
-	public:		typedef Object super;
-	
-				Function(const CodeDefinition* codeDefinition = 0) : codeDefinition(codeDefinition) { }
-				Function(Heap& heap, const CodeDefinition* codeDefinition = 0) : super(heap), codeDefinition(codeDefinition) { }
-				virtual Function* asFunction();
-				virtual const String* typeOfString() const;
-				virtual const String* getClassName() const;
-				virtual const String* toString(Heap& heap) const;
-				virtual Value getInternalValue(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
-				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
-	
-				const CodeDefinition* codeDefinition;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(codeDefinition);
-					super::gcMark(heap);
-				}
-};
-
-class EvalFunction : public Native, public GCItem {
-	public:		typedef Native super;
-				EvalFunction(Heap& heap, bool direct) : GCItem(heap), direct(direct), functionDefCache(&heap) { }
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
-	protected:	bool direct;
-				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
-				// FIX : or maybe just drop it? KISS you know!
-				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
-
-				virtual void gcMark(Heap& heap) const {
-					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
-					functionDefCache.gcMark(heap);
-					GCItem::gcMark(heap);
-				}
 };
 
 class Scope : public GCItem {
@@ -760,9 +736,12 @@ class ScriptFunction : public ExtensibleFunction {
 				const CodeDefinition* getDefinition() const;
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				
+				const CodeDefinition* const codeDefinition;
 				Scope* const closure;
 				
 				virtual void gcMark(Heap& heap) const {
+					heap.mark(codeDefinition);
 					heap.mark(closure);
 					super::gcMark(heap);
 				}
@@ -859,9 +838,8 @@ class FunctionScope : public Scope {
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 				ScriptObject* getDynamicVars(Engine& engine) const;
 
-// FIX : protected
-const UInt32 passedArgumentsCount;
 	protected:	ScriptFunction* const function;
+				const UInt32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
@@ -934,8 +912,6 @@ class Engine : public GCItem {
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
-Function* _evalFunction;
-Function* _evalDirectFunction;
 				double unixEpochTimeDiff;
 	
 	public:		virtual void gcMark(Heap& heap) const {
@@ -953,8 +929,6 @@ Function* _evalDirectFunction;
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
 					heap.mark(createRegExpFunction);
-heap.mark(_evalFunction);
-heap.mark(_evalDirectFunction);
 					super::gcMark(heap);
 				}
 };
@@ -1058,8 +1032,6 @@ class Processor : public GCItem {
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
-, CALL_NATIVE_OP								// operand: n, stack: native (constant), n * args -> return_value
-, BRIDGE_NATIVE_OP
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
 					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
@@ -1178,7 +1150,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor, const NativeDeclaration* nativeDefinitions);
+				Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1319,9 +1291,6 @@ class Compiler : public GCItem {
 					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
-
-const NativeDeclaration* nativeDefinitions;
-
 };
 
 #endif
