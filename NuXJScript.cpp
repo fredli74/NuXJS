@@ -1206,7 +1206,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 CodeDefinition::CodeDefinition(Heap& heap, Constants* constants)
 	: super(heap), code(0, &heap), constants(constants)
 	, nameIndexes(&heap), varNames(&heap), argumentNames(&heap)
-	, name(0), selfName(0), source(0), bloomSet(0)
+	, name(0), selfName(0), source(0), bloomSet(0), maxStackDepth(0)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap)
 #endif
@@ -1862,7 +1862,8 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , 0 },
 	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , 0 },
 	{ CALL_OP                    , "CALL"                    , 0      , OpcodeInfo::POP_OPERAND },
-	{ CALL_NATIVE_OP             , "CALL_NATIVE"             , 0      , OpcodeInfo::POP_OPERAND },
+{ CALL_NATIVE_OP             , "CALL_NATIVE"             , 0      , OpcodeInfo::POP_OPERAND },
+{ BRIDGE_NATIVE_OP			 , "BRIDGE_NATIVE_OP"        , 0      , 0 },
 	{ CALL_METHOD_OP             , "CALL_METHOD"             , -1     , OpcodeInfo::POP_OPERAND },
 	{ CALL_EVAL_OP               , "CALL_EVAL"               , 0      , OpcodeInfo::POP_OPERAND },
 	{ NEW_OP                     , "NEW"                     , +1     , OpcodeInfo::POP_OPERAND },
@@ -2135,12 +2136,12 @@ bool Processor::privateRun() {
 			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 
 			case CALL_OP: {
-				Function* const f = vsp[-im].asFunction();
+				ScriptFunction* const f = (ScriptFunction*)(vsp[-im].asFunction());
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
 				}
-				vsp[-im] = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
+				chain(f, im, vsp - im + 1, engine.getGlobals());
 				vsp -= im;
 				break;
 			}
@@ -2151,7 +2152,7 @@ bool Processor::privateRun() {
 				vsp -= im;
 				break;
 			}
-			
+
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Object* const thisObject = convertToObject(vsp[-im - 1], true);
 				if (thisObject != 0) {
@@ -2174,8 +2175,8 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
 				}
-				if (f == &engine.evalFunction) {
-					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
+				if (f == engine._evalFunction) {
+					f = engine._evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
 				vsp[-im] = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
 				vsp -= im;
@@ -2214,6 +2215,11 @@ bool Processor::privateRun() {
 				Value* returnPointer = vsp - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
 				*returnPointer = engine.createRegExpFunction->call(engine, *this, 2, returnPointer, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				pop(1);
+				break;
+			}
+
+			case BRIDGE_NATIVE_OP: {
+				vsp[0] = constants[im].getNative()->call(engine, *this, reinterpret_cast<FunctionScope*>(scope)->passedArgumentsCount, indexed, thisObject);
 				break;
 			}
 
@@ -4370,12 +4376,28 @@ mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Engin
 }));
 */
 
+template<class F> struct NativeFunctorAdapter : public Native {
+	NativeFunctorAdapter(const F& f) : f(f) { }
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return f(engine, processor, argc, argv, thisObject);
+	}
+	F* f;
+};
+
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
 	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(engine, processor, argc, argv, thisObject);
 	}
 	F* f;
+};
+
+template<class F> struct NativeUnaryMathFunction : public Native {
+	NativeUnaryMathFunction(const F& f) : f(f) { }
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+	}
+	const F* f;
 };
 
 template<class F> struct UnaryMathFunction : public Function {
@@ -4603,7 +4625,7 @@ struct Support {
 
 static struct {
 	String name;
-	UnaryMathFunction<double (double)> func;
+	NativeUnaryMathFunction<double (double)> func;
 } NATIVE_MATH_FUNCTIONS[] = {
 	{ String("acos"), acos }, { String("asin"), asin }, { String("atan"), atan }, { String("cos"), cos },
 	{ String("exp"), exp }, { String("floor"), floor }, { String("log"), log }, { String("sin"), sin },
@@ -4613,7 +4635,7 @@ static struct {
 
 static struct {
 	String name;
-	FunctorAdapter<Value (Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
+	NativeFunctorAdapter<Value (Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
 } SUPPORT_FUNCTIONS[] = {
 	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
@@ -4626,18 +4648,18 @@ static struct {
 	{ String("localTimeDifference"), Support::localTimeDifference }
 };
 
-static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
-static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
+static NativeUnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
+static NativeUnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-static CodeDefinition* createNativeThunk(Heap& heap, Native* native, int argc) {
+static ScriptFunction* createNativeThunk(Heap& heap, Native* native) {
 	Constants* constants = heap.govern(new(heap) Constants(heap));
 	constants->push(Value(native));
 	CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, constants));
-	codeDefinition->code.resize(3);
-	codeDefinition->code[0] = Processor::packInstruction(Processor::CONST_OP, 0);
-	codeDefinition->code[1] = Processor::packInstruction(Processor::CALL_NATIVE_OP, argc);
-	codeDefinition->code[2] = Processor::packInstruction(Processor::RETURN_OP, 0);
-	return codeDefinition;
+	codeDefinition->code.resize(2);
+	codeDefinition->code[0] = Processor::packInstruction(Processor::BRIDGE_NATIVE_OP, 0);
+	codeDefinition->code[1] = Processor::packInstruction(Processor::RETURN_OP, 0);
+	codeDefinition->maxStackDepth = 1; // FiX : really?
+	return heap.govern(new(heap) ScriptFunction(heap, codeDefinition, 0));
 }
 
 Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4675,7 +4697,10 @@ Engine::Engine(Heap& heap) : super(heap), heap(heap), globalScope(0), globals(0)
 		, booleanPrototype(heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(heap, &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(heap, &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
-		, arrayPrototype(heap), unixEpochTimeDiff(0.0) {
+		, arrayPrototype(heap), unixEpochTimeDiff(0.0)
+, _evalFunction(createNativeThunk(heap, &evalFunction))
+, _evalDirectFunction(createNativeThunk(heap, &evalDirectFunction))
+{
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = heap.govern(new(heap) ErrorPrototype(heap, static_cast<ErrorType>(i)));
@@ -4696,16 +4721,16 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
-	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
+	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(_evalFunction), DONT_ENUM_FLAG);
 	ScriptObject* supportObject = heap.govern(new(heap) ScriptObject(heap, &objectPrototype));
 	ScriptObject* prototypesObject = heap.govern(new(heap) ScriptObject(heap, &objectPrototype));
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, Value(String::newString(heap, "prototypes")), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
-		supportObject->setOwnProperty(*this, Value(&SUPPORT_FUNCTIONS[i].name), Value(&SUPPORT_FUNCTIONS[i].func), STANDARD_FLAGS);
+		supportObject->setOwnProperty(*this, Value(&SUPPORT_FUNCTIONS[i].name), Value(createNativeThunk(heap, &SUPPORT_FUNCTIONS[i].func)), STANDARD_FLAGS);
 	}
-	supportObject->setOwnProperty(*this, Value(String::newString(heap, "isNaN")), Value(&IS_NAN_FUNCTION), STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, Value(String::newString(heap, "isFinite")), Value(&IS_FINITE_FUNCTION), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(heap, "isNaN")), Value(createNativeThunk(heap, &IS_NAN_FUNCTION)), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, Value(String::newString(heap, "isFinite")), Value(createNativeThunk(heap, &IS_FINITE_FUNCTION)), STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&UNDEFINED_STRING), Value::UNDEFINED, STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&NAN_STRING), Value::NOT_A_NUMBER, STANDARD_FLAGS);
 	supportObject->setOwnProperty(*this, Value(&INFINITY_STRING), Value::INFINITE_NUMBER, STANDARD_FLAGS);
@@ -4713,7 +4738,7 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	supportObject->setOwnProperty(*this, Value(String::newString(heap, "minNumber")), Value(std::numeric_limits<double>::denorm_min()), STANDARD_FLAGS);
 	
 	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
-		supportObject->setOwnProperty(*this, Value(&NATIVE_MATH_FUNCTIONS[i].name), Value(&NATIVE_MATH_FUNCTIONS[i].func), STANDARD_FLAGS);
+		supportObject->setOwnProperty(*this, Value(&NATIVE_MATH_FUNCTIONS[i].name), Value(createNativeThunk(heap, &NATIVE_MATH_FUNCTIONS[i].func)), STANDARD_FLAGS);
 	}
 	
 	struct { const String* name; Object* object; } PROTOTYPES[] = {
@@ -4828,7 +4853,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 		ioLines.push_back("-");
 	}
 
-	class PrintFunction : public Function {
+	class PrintFunction : public Native {
 		public:		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(engine.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
@@ -4839,7 +4864,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 					}
 	};
 	
-	struct GCFunction : public Function {
+	struct GCFunction : public Native {
 		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 			UInt32 sweptCount = engine.getHeap().gc();
 			return Value(static_cast<Int32>(sweptCount));
@@ -4938,10 +4963,10 @@ suppressStdErr = true;
 	engine.setGlobalObject(&globalScope, &globals);
 	
     PrintFunction printFunction;
-    globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(&printFunction), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(createNativeThunk(heap, &printFunction)), DONT_ENUM_FLAG);
     GCFunction gcFunction;
     const String GC_STRING("gc");
-    globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
+    globals.setOwnProperty(engine, Value(&GC_STRING), Value(createNativeThunk(heap, &gcFunction)), DONT_ENUM_FLAG);
 //globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
 
 	if (loadStdLib) {

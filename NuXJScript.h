@@ -639,6 +639,7 @@ class CodeDefinition : public Object {
 
 	// FIX : protected
 				QuickArray<CodeWord> code;
+				UInt32 maxStackDepth;
 	protected:	Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
@@ -647,7 +648,6 @@ class CodeDefinition : public Object {
 				const String* selfName;
 				const String* source;
 				UInt32 bloomSet;							// Bloom bits of all local variables, arguments (+ self name and "arguments"). For faster scope resolution.
-				UInt32 maxStackDepth;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(constants);
@@ -695,9 +695,9 @@ class Function : public Object {
 				}
 };
 
-class EvalFunction : public Function {
-	public:		typedef Function super;
-				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
+class EvalFunction : public Native, public GCItem {
+	public:		typedef Native super;
+				EvalFunction(Heap& heap, bool direct) : GCItem(heap), direct(direct), functionDefCache(&heap) { }
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
 	protected:	bool direct;
@@ -708,7 +708,7 @@ class EvalFunction : public Function {
 				virtual void gcMark(Heap& heap) const {
 					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
 					functionDefCache.gcMark(heap);
-					super::gcMark(heap);
+					GCItem::gcMark(heap);
 				}
 };
 
@@ -859,8 +859,9 @@ class FunctionScope : public Scope {
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 				ScriptObject* getDynamicVars(Engine& engine) const;
 
+// FIX : protected
+const UInt32 passedArgumentsCount;
 	protected:	ScriptFunction* const function;
-				const UInt32 passedArgumentsCount;
 				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
@@ -933,6 +934,8 @@ class Engine : public GCItem {
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
+Function* _evalFunction;
+Function* _evalDirectFunction;
 				double unixEpochTimeDiff;
 	
 	public:		virtual void gcMark(Heap& heap) const {
@@ -950,6 +953,8 @@ class Engine : public GCItem {
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
 					heap.mark(createRegExpFunction);
+heap.mark(_evalFunction);
+heap.mark(_evalDirectFunction);
 					super::gcMark(heap);
 				}
 };
@@ -1053,7 +1058,8 @@ class Processor : public GCItem {
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
-					, CALL_NATIVE_OP								// operand: n, stack: native (constant), n * args -> return_value
+, CALL_NATIVE_OP								// operand: n, stack: native (constant), n * args -> return_value
+, BRIDGE_NATIVE_OP
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
 					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
