@@ -1203,8 +1203,8 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 /* --- CodeDefinition --- */
 
-CodeDefinition::CodeDefinition(Heap& heap, Constants* constants, const NativeDeclaration* natives)
-	: super(heap), code(0, &heap), constants(constants), natives(natives)
+CodeDefinition::CodeDefinition(Heap& heap, Constants* constants)
+	: super(heap), code(0, &heap), constants(constants)
 	, nameIndexes(&heap), varNames(&heap), argumentNames(&heap)
 	, name(0), selfName(0), source(0), bloomSet(0)
 #if (VERIFY_STACK_LOGIC)
@@ -1417,7 +1417,7 @@ void ExtensibleFunction::createPrototypeObject(Engine& engine, Object* forObject
 /* --- ScriptFunction --- */
 
 ScriptFunction::ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure)
-		: super(heap), codeDefinition(codeDefinition), closure(closure) { }
+		: super(heap), closure(closure) { this->codeDefinition = codeDefinition; }
 
 Value ScriptFunction::getInternalValue(Heap& heap) const { return Value(toString(heap)); }
 
@@ -2686,9 +2686,10 @@ struct Compiler::SemanticScope {
 	QuickVector<BranchPoint> finallys; // source points for finally jsr's
 };
 
-Compiler::Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor)
+Compiler::Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor, const NativeDeclaration* nativeDefinitions)
 		: super(heap), heap(heap), codeDefinition(codeDefinition), compilingFor(compileFor), setupSection(heap, 1)
-		, mainSection(heap, 1), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
+		, mainSection(heap, 1), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0)
+, nativeDefinitions(nativeDefinitions) { }
 
 void Compiler::error(ErrorType errorType, const char* message) {
 	Exception::throwError(heap, errorType, String::newString(heap, message));
@@ -3283,32 +3284,32 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 			break;
 		}
 		
-		case NATIVE_CALL: {
-            assert(!op.primitiveInput); // FIX : let many of these go
-            assert(!op.primitiveOutput);
-			white();
-			const Char* b = identifier(true, true);
-			int nativeIndex = 0;
-			if (codeDefinition->natives != 0) {
-				do {
-					const char* nativeId = codeDefinition->natives[nativeIndex].identifier;
-					if (nativeId == 0) {
-						error(REFERENCE_ERROR, "Unknown native");
-					}
-					if (strlen(nativeId) == p - b && std::equal(b, p, nativeId)) {
-						break;
-					}
-					++nativeIndex;
-				} while (true);
-			} else {
-				error(REFERENCE_ERROR, "Unknown native");
-			}
-			emitWithConstant(Processor::CONST_OP, Value(codeDefinition->natives[nativeIndex].native));
-			expectToken("(", false);
-			functionCall(Processor::CALL_NATIVE_OP);
-            xr = ExpressionResult::PUSHED;
-            break;
+case NATIVE_CALL: {
+assert(!op.primitiveInput); // FIX : let many of these go
+assert(!op.primitiveOutput);
+white();
+const Char* b = identifier(true, true);
+int nativeIndex = 0;
+if (nativeDefinitions != 0) {
+	do {
+		const char* nativeId = nativeDefinitions[nativeIndex].identifier;
+		if (nativeId == 0) {
+			error(REFERENCE_ERROR, "Unknown native");
 		}
+		if (strlen(nativeId) == p - b && std::equal(b, p, nativeId)) {
+			break;
+		}
+		++nativeIndex;
+	} while (true);
+} else {
+	error(REFERENCE_ERROR, "Unknown native");
+}
+emitWithConstant(Processor::CONST_OP, Value(nativeDefinitions[nativeIndex].native));
+expectToken("(", false);
+functionCall(Processor::CALL_NATIVE_OP);
+xr = ExpressionResult::PUSHED;
+break;
+}
 		
 		default: assert(0);
 	}
@@ -3474,8 +3475,8 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.govern(new(heap) CodeDefinition(heap, codeDefinition->constants, codeDefinition->natives));
-	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
+	CodeDefinition* func = heap.govern(new(heap) CodeDefinition(heap, codeDefinition->constants));
+	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION, nativeDefinitions);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
 	}
@@ -4462,8 +4463,8 @@ struct Support {
 		if (argc >= 1) {
 			Heap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
-			CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), 0)); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
-			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
+			CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
+			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION, 0);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
 			return Value(heap.govern(new(heap) ScriptFunction(heap, codeDefinition, engine.getGlobalScope())));
 		}
@@ -4628,6 +4629,17 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
+static CodeDefinition* createNativeThunk(Heap& heap, Native* native, int argc) {
+	Constants* constants = heap.govern(new(heap) Constants(heap));
+	constants->push(Value(native));
+	CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, constants));
+	codeDefinition->code.resize(3);
+	codeDefinition->code[0] = Processor::packInstruction(Processor::CONST_OP, 0);
+	codeDefinition->code[1] = Processor::packInstruction(Processor::CALL_NATIVE_OP, argc);
+	codeDefinition->code[2] = Processor::packInstruction(Processor::RETURN_OP, 0);
+	return codeDefinition;
+}
+
 Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
@@ -4648,8 +4660,8 @@ struct NativeSubmatch : public Native {
 };
 static NativeSubmatch nativeSubmatch;
 static const NativeDeclaration testNatives[2] = { { "submatch", &nativeSubmatch }, { 0, 0 } };
-		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), testNatives)); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
-		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
+		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL, testNatives);
 		compiler.compile(*sourceCode);
 		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
 	}
@@ -4744,9 +4756,9 @@ static NativeSubmatch nativeSubmatch;
 static const NativeDeclaration testNatives[5] = { { "sin", &nativeSin }, { "pow", &nativePow }
 		, { "substring", &nativeSubstring }, { "submatch", &nativeSubmatch }, { 0, 0 } };
 
-	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), testNatives));
+	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap))));
 	{
-		Compiler compiler(heap, code, Compiler::FOR_EVAL);
+		Compiler compiler(heap, code, Compiler::FOR_EVAL, testNatives);
 		compiler.compile(librarySourceCode);
 	}
 	{
@@ -4917,7 +4929,7 @@ suppressStdErr = true;
     Heap heap;
     Engine engine(heap);
     Constants globalConstants(heap);
-    CodeDefinition globalCode(heap, &globalConstants, 0);
+    CodeDefinition globalCode(heap, &globalConstants);
 
     ScriptObject globals(heap, &engine.objectPrototype);
     GlobalScope globalScope(heap, &globals, &globalCode);
@@ -5005,7 +5017,7 @@ suppressStdErr = true;
             }
             
             if (execute) {
-                Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
+                Compiler compiler(heap, &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL), 0);
                 try {
                     compiler.compile(source);
                 }
@@ -5077,7 +5089,7 @@ suppressStdErr = true;
                         if (doTime) {
                             clock_t end = ::clock();
                             const double divisor = (CLOCKS_PER_SEC / 1000.0);
-                            std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << std::endl;
+                            std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << "ms" << std::endl;
                         }
                     }
                 } while (!done);

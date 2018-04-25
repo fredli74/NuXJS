@@ -1,5 +1,19 @@
 var lotsOfStrings = [ ];
 
+function StringBuilder() {
+	var i = 20, b = this.buffers = [ ]; do { b[--i] = ''; } while (i > 0);
+}
+
+StringBuilder.prototype.append = function append(s) {
+	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = ''; }
+}
+
+StringBuilder.prototype.toString = function toString() {
+	var i, b, s = (b = this.buffers)[i = 19];
+	do { s += b[--i]; } while (i > 0);
+	return s;
+}
+
 function XorshiftPRNG2x32(seed0, seed1) {
 	if (seed0 == null) seed0 = 123456789;
 	if (seed1 == null) seed1 = 362436069;
@@ -51,11 +65,26 @@ var prng = new XorshiftPRNG2x32();
 var strings = [ ];
 for (var j = 0; j < 10000; ++j) {
 	var s = '';
-	for (i = prng.nextInt(23); i >= 0; --i) {
-		s += String.fromCharCode(32 + prng.nextInt(127 - 32));
+	if (prng.nextInt(127) === 0) {
+		s = new StringBuilder();
+		for (i = prng.nextInt(1024); i >= 0; --i) {
+			s.append(String.fromCharCode(32 + prng.nextInt(127 - 32)));
+		}
+		s = s.toString();
+		s += s;
+		s += s;
+		s += s;
+		s += 'submatchthis';
+		s += s;
+		s += s;
+	} else {
+		for (i = prng.nextInt(23); i >= 0; --i) {
+			s += String.fromCharCode(32 + prng.nextInt(127 - 32));
+		}
 	}
 	strings[j] = s;
 }
+print("built 10000 strings")
 
 function reTest(re) {
 	var n = 0;
@@ -65,6 +94,6 @@ function reTest(re) {
 	print(re + ": " + n);
 }
 
-// password validation from regexp101.com by christian klemp
-reTest(/^((?=\S*?[A-Z])(?=\S*?[a-z])(?=\S*?[0-9]).{6,})\S$/)
+reTest(/submatchthis/)
+reTest(/^((?=\S*?[A-Z])(?=\S*?[a-z])(?=\S*?[0-9]).{6,})\S$/) // password validation from regexp101.com by christian klemp
 reTest(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[#$%\/()=¿?*+-])(?=(?:([\w\d])\1?(?!\1\1)))(?!(?=.*(palabra1|palabra2|palabraN))).{8,20}$/)

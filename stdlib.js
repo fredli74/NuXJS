@@ -439,13 +439,13 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	indexOf: $unconstructable(function indexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ((i = $toInteger(pos)) < 0) i = 0;
-		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
+		for (; i <= e; ++i) if (%submatch(t, i, s)) return i;
 		return -1;
 	}),
 	lastIndexOf: $unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ($isNaN(pos = +pos) || (i = $toInteger(pos)) > e) i = e;
-		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
+		for (; i >= 0; --i) if (%submatch(t, i, s)) return i;
 		return -1;
 	}),
 	localeCompare: $unconstructable(function localeCompare(that) {

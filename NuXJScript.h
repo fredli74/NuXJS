@@ -607,44 +607,6 @@ class Array : public LazyScriptObject<Object> {
 				}
 };
 
-/*
-	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
-	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
-*/
-class Function : public Object {
-	public:		typedef Object super;
-	
-				Function() { }
-				Function(Heap& heap) : super(heap) { }
-				virtual Function* asFunction();
-				virtual const String* typeOfString() const;
-				virtual const String* getClassName() const;
-				virtual const String* toString(Heap& heap) const;
-				virtual Value getInternalValue(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
-				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
-};
-
-class EvalFunction : public Function {
-	public:		typedef Function super;
-				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
-	protected:	bool direct;
-				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
-				// FIX : or maybe just drop it? KISS you know!
-				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
-
-				virtual void gcMark(Heap& heap) const {
-					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
-					functionDefCache.gcMark(heap);
-					super::gcMark(heap);
-				}
-};
-
 // FIX : share constants in Engine? As it is now, stdlib will have its own constants vs user code for example.
 // Separate from CodeDefinition so that multiple functions can share the same constants (memory optimization).
 class Constants : public GCItem, public QuickVector<Value> {
@@ -663,7 +625,7 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Heap& heap, Constants* constants, const NativeDeclaration* natives);
+				CodeDefinition(Heap& heap, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -675,9 +637,9 @@ class CodeDefinition : public Object {
 				const String* getSource() const { return source; }
 				UInt32 getMaxStackDepth() const { return maxStackDepth; }
 
-	protected:	QuickArray<CodeWord> code;
-				Constants* const constants;
-				const NativeDeclaration* const natives;
+	// FIX : protected
+				QuickArray<CodeWord> code;
+	protected:	Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
 				QuickVector<const String*> argumentNames;
@@ -701,6 +663,53 @@ class CodeDefinition : public Object {
 #if (VERIFY_STACK_LOGIC)
 	public: QuickVector<int> stackDepths;
 #endif
+};
+
+
+/*
+	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
+	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
+*/
+class CodeDefinition;
+class Function : public Object {
+	public:		typedef Object super;
+	
+				Function(const CodeDefinition* codeDefinition = 0) : codeDefinition(codeDefinition) { }
+				Function(Heap& heap, const CodeDefinition* codeDefinition = 0) : super(heap), codeDefinition(codeDefinition) { }
+				virtual Function* asFunction();
+				virtual const String* typeOfString() const;
+				virtual const String* getClassName() const;
+				virtual const String* toString(Heap& heap) const;
+				virtual Value getInternalValue(Heap& heap) const;
+				virtual Object* getPrototype(Engine& engine) const;
+				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
+	
+				const CodeDefinition* codeDefinition;
+
+				virtual void gcMark(Heap& heap) const {
+					heap.mark(codeDefinition);
+					super::gcMark(heap);
+				}
+};
+
+class EvalFunction : public Function {
+	public:		typedef Function super;
+				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
+				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
+	protected:	bool direct;
+				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
+				// FIX : or maybe just drop it? KISS you know!
+				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+
+				virtual void gcMark(Heap& heap) const {
+					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
+					functionDefCache.gcMark(heap);
+					super::gcMark(heap);
+				}
 };
 
 class Scope : public GCItem {
@@ -751,12 +760,9 @@ class ScriptFunction : public ExtensibleFunction {
 				const CodeDefinition* getDefinition() const;
 				
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				
-				const CodeDefinition* const codeDefinition;
 				Scope* const closure;
 				
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(codeDefinition);
 					heap.mark(closure);
 					super::gcMark(heap);
 				}
@@ -1166,7 +1172,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor);
+				Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor, const NativeDeclaration* nativeDefinitions);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1307,6 +1313,9 @@ class Compiler : public GCItem {
 					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
+
+const NativeDeclaration* nativeDefinitions;
+
 };
 
 #endif
