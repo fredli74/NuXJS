@@ -224,6 +224,7 @@ class String;
 class Object;
 class Function;
 class Engine;
+class Native;
 class Value {
 	friend class Table;
 	
@@ -238,6 +239,7 @@ class Value {
 				explicit Value(double number) : type(NUMBER_TYPE) { var.number = number; }
 				explicit Value(const String* string) : type(STRING_TYPE) { var.string = string; }
 				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
+				explicit Value(Native* native) : type(NATIVE_TYPE) { var.native = native; }
 				// FIX : Value from (heap and) const char* ?
 	
 				bool isUndefined() const { return type == UNDEFINED_TYPE; }
@@ -250,6 +252,7 @@ class Value {
 				Function* asFunction() const;
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				Object* getObject() const { assert(type == OBJECT_TYPE); return var.object; }
+				Native* getNative() const { assert(type == NATIVE_TYPE); return var.native; }
 				const String* typeOfString() const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
@@ -278,6 +281,7 @@ class Value {
 					, NUMBER_TYPE
 					, STRING_TYPE
 					, OBJECT_TYPE
+					, NATIVE_TYPE
 				#if !defined(NDEBUG)
 					, BAD_TYPE = 0xBAADBAAD		// Only used when NDEBUG is not defined to detect use of uninitialized values.
 				#endif
@@ -287,6 +291,7 @@ class Value {
 					double number;
 					const String* string;
 					Object* object;
+					Native* native;
 				} var;
 
 				explicit Value(Type type) throw() : type(type) { }
@@ -296,7 +301,6 @@ class Value {
 	
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
-
 
 typedef Byte Flags; // FIX : turn into enum
 const Flags EXISTS_FLAG = 1; // FIX : turn these into enum, that's ok
@@ -364,6 +368,15 @@ class Table {
 class Enumerator;
 class Processor;
 class ScriptObject;
+
+struct Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+};
+
+struct NativeDeclaration {
+	const char* identifier;
+	Native* native;
+};
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
@@ -632,7 +645,8 @@ class EvalFunction : public Function {
 				}
 };
 
-// Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
+// FIX : share constants in Engine? As it is now, stdlib will have its own constants vs user code for example.
+// Separate from CodeDefinition so that multiple functions can share the same constants (memory optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
 				Constants(Heap& heap) : super(heap), QuickVector<Value>(&heap) { }
@@ -649,7 +663,7 @@ class CodeDefinition : public Object {
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Heap& heap, Constants* constants);
+				CodeDefinition(Heap& heap, Constants* constants, const NativeDeclaration* natives);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -663,6 +677,7 @@ class CodeDefinition : public Object {
 
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
+				const NativeDeclaration* const natives;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
 				QuickVector<const String*> argumentNames;
@@ -1032,6 +1047,7 @@ class Processor : public GCItem {
 					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
 					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
 					, CALL_OP										// operand: n, stack: function, n * args -> return_value
+					, CALL_NATIVE_OP								// operand: n, stack: native (constant), n * args -> return_value
 					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
 					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
 					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value

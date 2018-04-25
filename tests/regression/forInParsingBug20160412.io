@@ -57,3 +57,9 @@
 < 3
 < 4
 -
+> x=function() { return { i: 0 } }; var o; for (new x('' in {}).i in [1,2,3]) print('x')
+< x
+< x
+< x
+-
+

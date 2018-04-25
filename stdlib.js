@@ -1478,9 +1478,9 @@ $defineProperties(Math, { dontEnum: true }, {
 	log: $unconstructable(function log(v) { return $support.log(+v); }),
 	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
 	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
-	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y); }),
+	pow: $unconstructable(function pow(x, y) { return %pow(+x, +y); }),
 	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))); }),
-	sin: $unconstructable(function sin(v) { return $support.sin(+v); }),
+	sin: $unconstructable(function sin(v) { return %sin(+v); }),
 	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v); }),
 	tan: $unconstructable(function tan(v) { return $support.tan(+v); })
 });

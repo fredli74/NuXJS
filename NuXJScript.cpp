@@ -540,6 +540,7 @@ bool Value::compareStrictly(const Value& r) const {
 		case NUMBER_TYPE: return var.number == r.var.number;
 		case STRING_TYPE: return var.string->isEqualTo(*r.var.string);
 		case OBJECT_TYPE: return var.object == r.var.object;
+		case NATIVE_TYPE: return var.native == r.var.native;
 	}
 }
 
@@ -1200,8 +1201,9 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 /* --- CodeDefinition --- */
 
-CodeDefinition::CodeDefinition(Heap& heap, Constants* constants)
-	: super(heap), code(0, &heap), constants(constants), nameIndexes(&heap), varNames(&heap), argumentNames(&heap)
+CodeDefinition::CodeDefinition(Heap& heap, Constants* constants, const NativeDeclaration* natives)
+	: super(heap), code(0, &heap), constants(constants), natives(natives)
+	, nameIndexes(&heap), varNames(&heap), argumentNames(&heap)
 	, name(0), selfName(0), source(0), bloomSet(0)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap)
@@ -1858,6 +1860,7 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ REPUSH_2_OP                , "REPUSH_2"                , +2     , 0 },
 	{ POST_SHUFFLE_OP            , "POST_SHUFFLE"            , +1     , 0 },
 	{ CALL_OP                    , "CALL"                    , 0      , OpcodeInfo::POP_OPERAND },
+	{ CALL_NATIVE_OP             , "CALL_NATIVE"             , 0      , OpcodeInfo::POP_OPERAND },
 	{ CALL_METHOD_OP             , "CALL_METHOD"             , -1     , OpcodeInfo::POP_OPERAND },
 	{ CALL_EVAL_OP               , "CALL_EVAL"               , 0      , OpcodeInfo::POP_OPERAND },
 	{ NEW_OP                     , "NEW"                     , +1     , OpcodeInfo::POP_OPERAND },
@@ -2136,6 +2139,13 @@ bool Processor::privateRun() {
 					break;
 				}
 				vsp[-im] = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
+				vsp -= im;
+				break;
+			}
+			
+			case CALL_NATIVE_OP: {
+				Native* const n = vsp[-im].getNative();
+				vsp[-im] = n->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
 				vsp -= im;
 				break;
 			}
@@ -2536,7 +2546,7 @@ static void disassemble(Heap& heap, const CodeDefinition& codeDefinition) {
 enum OperatorType {
 	GROUP, UNARY, BINARY, IN_OPERATOR, ABSTRACT_EQUAL, ASSIGNMENT, COMPOUND_ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC
 	, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL, FUNCTION_CALL, COMMA, VOID_OPERATOR
-	, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF
+	, DELETE_OPERATOR, NEW_OPERATOR, TYPE_OF, NATIVE_CALL
 };
 enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 
@@ -2560,6 +2570,7 @@ const OperatorInfo PRE_OPS[] = {
 	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true, true },
 	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true, true },
 	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP, false, true },
+	{ "%", 0, PREFIX_PREC, RIGHT_TO_LEFT, NATIVE_CALL, Processor::INVALID_OP, false, false },
 	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP, false, true },
 	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP, false, true },
 	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP, false, false },
@@ -3046,6 +3057,8 @@ Compiler::ExpressionResult Compiler::operand(const OperatorInfo& op) {
 }
 
 Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode opcode) {
+	const bool didAcceptInOperator = acceptInOperator;
+	acceptInOperator = true;
 	Int32 count = 0;
 	white();
 	while (!token(")", false)) {
@@ -3063,6 +3076,7 @@ Compiler::ExpressionResult Compiler::functionCall(Processor::Opcode opcode) {
 		++count;
 	}
 	emit(opcode, count);
+	acceptInOperator = didAcceptInOperator;
 	return ExpressionResult(ExpressionResult::PUSHED);
 }
 
@@ -3267,6 +3281,29 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 			break;
 		}
 		
+		case NATIVE_CALL: {
+            assert(!op.primitiveInput); // FIX : let many of these go
+            assert(!op.primitiveOutput);
+			white();
+			const Char* b = identifier(true, true);
+			int nativeIndex = 0;
+			do {
+				const char* nativeId = codeDefinition->natives[nativeIndex].identifier;
+				if (nativeId == 0) {
+					error(REFERENCE_ERROR, "Unknown native");
+				}
+				if (strlen(nativeId) == p - b && std::equal(b, p, nativeId)) {
+					break;
+				}
+				++nativeIndex;
+			} while (true);
+			emitWithConstant(Processor::CONST_OP, Value(codeDefinition->natives[nativeIndex].native));
+			expectToken("(", false);
+			functionCall(Processor::CALL_NATIVE_OP);
+            xr = ExpressionResult::PUSHED;
+            break;
+		}
+		
 		default: assert(0);
 	}
 	return true;
@@ -3385,10 +3422,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			} else {
 				makeRValue(xr, false);
 			}
-			const bool didAcceptInOperator = acceptInOperator;
-			acceptInOperator = true;
 			functionCall(callOp);
-			acceptInOperator = didAcceptInOperator;
             xr = ExpressionResult::PUSHED;
 			break;
 		}
@@ -3434,7 +3468,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
-	CodeDefinition* func = heap.govern(new(heap) CodeDefinition(heap, codeDefinition->constants));
+	CodeDefinition* func = heap.govern(new(heap) CodeDefinition(heap, codeDefinition->constants, codeDefinition->natives));
 	Compiler funcCompiler(heap, func, Compiler::FOR_FUNCTION);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
@@ -4333,7 +4367,7 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 	if (bucket != 0) {
 		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
 	} else {
-		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), 0)); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
 		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
 		compiler.compile(*sourceCode);
 		functionDefCache.update(functionDefCache.insert(sourceCode), Value(codeDefinition));
@@ -4344,17 +4378,12 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 
 /* FIX : funny C++11 thing
 #include <functional>
-
-
 typedef std::function<Value (Engine&, Processor&, Int32, const Value*, Object*)> NativeFunction;
-
-		mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
-		}));
-		
+template<class F> Value newNativeFunction(Heap& heap, const F& f) { return Value(heap.govern(new FunctorAdapter<F>(f))); }
+mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+}));
 */
-
-typedef Value (*NativeFunction)(Engine&, Processor&, Int32, const Value*, Object*);
 
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
@@ -4371,8 +4400,6 @@ template<class F> struct UnaryMathFunction : public Function {
 	}
 	const F* f;
 };
-
-// template<class F> Value newNativeFunction(Heap& heap, const F& f) { return Value(heap.govern(new FunctorAdapter<F>(f))); }
 
 struct Support {
 	static Value getInternalProperty(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4451,7 +4478,7 @@ struct Support {
 		if (argc >= 1) {
 			Heap& heap = engine.getHeap();
 			const String* source = argv[0].toString(heap);
-			CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
+			CodeDefinition* codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), 0)); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap, codeDefinition, Compiler::FOR_FUNCTION);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
 			return Value(heap.govern(new(heap) ScriptFunction(heap, codeDefinition, engine.getGlobalScope())));
@@ -4676,8 +4703,21 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 		prototypesObject->setOwnProperty(*this, Value(&ERROR_NAMES[i]), Value(errorPrototypes[i]), STANDARD_FLAGS);
 	}
 	// FIX : all this boilerplating... build a function object or something instead?
-
-	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap))));
+	
+struct NativeSin : public Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return (argc >= 1 ? Value(sin(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+	}
+};
+struct NativePow : public Native {
+	virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
+	}
+};
+static NativeSin nativeSin;
+static NativePow nativePow;
+static const NativeDeclaration testNatives[3] = { { "sin", &nativeSin }, { "pow", &nativePow }, { 0, 0 } };
+	CodeDefinition* code = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)), testNatives));
 	{
 		Compiler compiler(heap, code, Compiler::FOR_EVAL);
 		compiler.compile(librarySourceCode);
@@ -4850,7 +4890,7 @@ suppressStdErr = true;
     Heap heap;
     Engine engine(heap);
     Constants globalConstants(heap);
-    CodeDefinition globalCode(heap, &globalConstants);
+    CodeDefinition globalCode(heap, &globalConstants, 0);
 
     ScriptObject globals(heap, &engine.objectPrototype);
     GlobalScope globalScope(heap, &globals, &globalCode);
