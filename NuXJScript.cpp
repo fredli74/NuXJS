@@ -1241,7 +1241,7 @@ bool Function::hasInstance(Engine& engine, Processor& processor, Object* object)
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
 		Heap& heap = engine.getHeap();
-		Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "Non-object prototype in instanceof check"));
+		Exception::throwError(heap, TYPE_ERROR, "Non-object prototype in instanceof check");
 		return false;
 	}
 	while ((object = object->getPrototype(engine)) != 0) {
@@ -1327,7 +1327,7 @@ bool Array::setOwnProperty(Engine& engine, const Value& key, const Value& v, Fla
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			Heap& heap = engine.getHeap();
-			Exception::throwError(heap, RANGE_ERROR, String::newString(heap, "Invalid array length")); // FIX : how could we do this without exceptions?
+			Exception::throwError(heap, RANGE_ERROR, "Invalid array length"); // FIX : how could we do this without exceptions?
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1992,10 +1992,6 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 		error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 	}
 	return object;
-}
-
-void Processor::call(const Value& function, UInt32 argc, const Value* argv, Object* thisObject) {
-	
 }
 
 bool Processor::privateRun() {
@@ -2677,9 +2673,7 @@ Compiler::Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor
 		: super(heap), heap(heap), codeDefinition(codeDefinition), compilingFor(compileFor), setupSection(heap, 1)
 		, mainSection(heap, 1), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
-void Compiler::error(ErrorType errorType, const char* message) {
-	Exception::throwError(heap, errorType, String::newString(heap, message));
-}
+void Compiler::error(ErrorType errorType, const char* message) { Exception::throwError(heap, errorType, message); }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (inDeadCode()) {	// unknown stack depth = dead code
@@ -4457,7 +4451,7 @@ struct Support {
 		Heap& heap = engine.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
-			Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "apply / call used on non-function"));
+			Exception::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
 			return Value();
 		} else {
 			Object* newThis = (argc > 1 ? argv[1].toObject(engine, true) : 0);
@@ -4695,17 +4689,17 @@ void Engine::setupStandardLibrary(const String& librarySourceCode) {
 	// FIX : sub v
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveNumber"));
+		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveNumber");
 	}
 	
 	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.toPrimitiveString"));
+		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveString");
 	}
 
 	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, String::newString(heap, "Standard library is missing support.createRegExp"));
+		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.createRegExp");
 	}
 }
 
@@ -4767,7 +4761,7 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 						virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = engine.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
-								Exception::throwError(heap, TYPE_ERROR, String::newString(heap, "Invalid class"));
+								Exception::throwError(heap, TYPE_ERROR, "Invalid class");
 							}
 							const NativeTestObject* me = reinterpret_cast<NativeTestObject*>(thisObject);
 							const double addX = (argc >= 1 ? argv[0].toDouble() : 0.0);
@@ -4800,6 +4794,20 @@ void Engine::setGlobalObject(GlobalScope* globalScope, Object* globals) {
 	};
 	String NativeTestObject::className("NativeTestObject");
 	NativeTestObject::AddFunction NativeTestObject::addFunction;
+
+	class CallbackTest : public Function {
+		public:		virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+						PrintFunction printFunction;
+						for (int i = 0; i < argc; ++i) {
+							Function* f = argv[i].asFunction();
+							if (f == 0) {
+								f = &printFunction;
+							}
+							f->call(engine, processor, 1, &argv[i], thisObject);
+						}
+						return Value::UNDEFINED;
+					}
+	};
 
 int testMain(int argc, const char* argv[]) {
     String source(EMPTY_STRING);
@@ -4857,6 +4865,8 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
+CallbackTest callbackTest;
+globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), Value(&callbackTest), DONT_ENUM_FLAG);
 //globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
 
 	if (loadStdLib) {

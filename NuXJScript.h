@@ -969,6 +969,9 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 	public:		static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
 					throw Exception(heap, Value(heap.govern(new(heap) Error(heap, type, message))));
 				}
+	public:		static void throwError(Heap& heap, ErrorType type, const char* message) {
+					throwError(heap, type, String::newString(heap, message));
+				}
 	public:		Exception(Heap& heap, const Value& value) throw() : value(value) { // FIX : not inline
 					strcpy(sz, "Unknown exception (failed conversion to string)");
 					const String* src = value.toString(heap);
@@ -1076,7 +1079,6 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void call(const Value& function, UInt32 argc, const Value* argv, Object* thisObject);
 				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
