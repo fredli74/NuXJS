@@ -690,21 +690,16 @@ class CodeDefinition : public Object {
 
 class Scope : public GCItem {
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition)
-						: super(heap), vstackArray(parentScope == 0 ? 0 : parentScope->vstackArray)
-						, indexedPointer(parentScope == 0 ? 0 : parentScope->indexedPointer)
-						, parentScope(parentScope), codeDefinition(codeDefinition) { }
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const { assert(parentScope != 0); return parentScope->readVar(engine, name, v); }
-				virtual void writeVar(Engine& engine, const String* name, const Value& v) { assert(parentScope != 0); return parentScope->writeVar(engine, name, v); }
-				virtual bool deleteVar(Engine& engine, const String* key) { assert(parentScope != 0); return parentScope->deleteVar(engine, key); }
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { assert(parentScope != 0); return parentScope->declareVar(engine, name, initValue, dontDelete); }
-				Value* getIndexedPointer() const { return indexedPointer; }
-				QuickArray<Value>* getVStackArray() const { return vstackArray; }
-				Scope* getParentScope() const { return parentScope; }
-				const CodeDefinition* getCodeDefinition() const { return codeDefinition; }
+				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition);
+				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
+				virtual void writeVar(Engine& engine, const String* name, const Value& v);
+				virtual bool deleteVar(Engine& engine, const String* key);
+				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+				Value* getIndexedPointer() const;
+				Scope* getParentScope() const;
+				const CodeDefinition* getCodeDefinition() const;
 	
-	protected:	QuickArray<Value>* vstackArray;
-				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Scope* parentScope;
 				const CodeDefinition* codeDefinition;
 
@@ -802,18 +797,8 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
-class ScopeWithCode : public Scope {
+class GlobalScope : public Scope {
 	public:		typedef Scope super;
-				ScopeWithCode(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition, UInt32 vstackSize);
-	protected:	QuickArray<Value> vstack;
-				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(vstack.begin(), vstack.end());
-					super::gcMark(heap);
-				}
-};
-
-class GlobalScope : public ScopeWithCode {
-	public:		typedef ScopeWithCode super;
 				GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
@@ -841,10 +826,10 @@ class WithScope : public Scope {
 				}
 };
 
-class FunctionScope : public ScopeWithCode {
+class FunctionScope : public Scope {
 	friend class Arguments;
 	
-	public:		typedef ScopeWithCode super;
+	public:		typedef Scope super;
 
 				FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
@@ -855,10 +840,12 @@ class FunctionScope : public ScopeWithCode {
 
 	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
+				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(function);
+					heap.markViaReferences(indexed.begin(), indexed.end());
 					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
@@ -868,8 +855,8 @@ class FunctionScope : public ScopeWithCode {
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDefinition pointer (for constants etc) and it declares deletable vars.
 */
-class EvalScope : public ScopeWithCode {
-	public:		typedef ScopeWithCode super;
+class EvalScope : public Scope {
+	public:		typedef Scope super;
 				EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
@@ -1007,10 +994,9 @@ class Processor : public GCItem {
 
 				struct Frame {
 					Frame() { }
-					Frame(const CodeWord* returnIP, Value* returnVSP, Scope* scope, Object* thisObject)
-							: returnIP(returnIP), returnVSP(returnVSP), scope(scope), thisObject(thisObject) { }
+					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
+							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
 					const CodeWord* returnIP;
-					Value* returnVSP;
 					Scope* scope;
 					Object* thisObject;
 				};
@@ -1108,6 +1094,7 @@ class Processor : public GCItem {
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
+				void reserveVStackSpace(UInt32 maxStackDepth);
 				void reset();
 
 				Engine& engine;
@@ -1116,6 +1103,7 @@ class Processor : public GCItem {
 				static const CodeWord FINISHED_CODE_THUNK[1];
 
 public: // FIX : not public, just for some asserts now I think
+				QuickVector<Value> vstack;
 				QuickVector<Frame> fstack;
 
 				Int32 clockCyclesLeft;
@@ -1123,20 +1111,20 @@ public: // FIX : not public, just for some asserts now I think
 				Scope* scope;
 				Object* thisObject;
 				Value* vsp; // FIX : not public, just for an assert now
-				Value result;
 
 				struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vstackPointer, UInt32 fstackSize)
-							: ip(ip), vstackPointer(vstackPointer), fstackSize(fstackSize) { }
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 fstackSize)
+							: ip(ip), vstackOffset(vstackOffset), fstackSize(fstackSize) { }
 					const CodeWord* ip;
-					Value* vstackPointer;
+					UInt32 vstackOffset;
 					UInt32 fstackSize;
 				};
 
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 				virtual void gcMark(Heap& heap) const {
+					heap.markViaReferences(vstack.begin(), vsp + 1);
 					for (Frame* c = fstack.begin(); c != fstack.end(); ++c) {
 						heap.mark(c->scope);
 						heap.mark(c->thisObject);
@@ -1148,7 +1136,6 @@ public: // FIX : not public, just for some asserts now I think
 				
 				const Value* constants;
 				Value* indexed;
-				QuickArray<Value>* vstackArray;
 };
 
 enum Precedence {
