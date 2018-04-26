@@ -1587,7 +1587,7 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 ScopeWithCode::ScopeWithCode(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition, UInt32 vstackSize)
 		: super(heap, parentScope, codeDefinition), vstack(vstackSize, &heap) {
-	vstackPointer = vstack.begin();
+	vstackArray = &vstack;
 }
 
 /* --- FunctionScope --- */
@@ -1908,9 +1908,9 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { *++vsp = v; }
-void Processor::pop2push1(const Value& v) { *--vsp = v; }
-void Processor::pop(Int32 count) { vsp -= count; }
+void Processor::push(const Value& v) { assert(vsp + 1 < vstackArray->end()); *++vsp = v; }
+void Processor::pop2push1(const Value& v) { assert(vsp >= vstackArray->begin()); *--vsp = v; }
+void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstackArray->begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::updateInternals() {
@@ -1920,14 +1920,14 @@ void Processor::updateInternals() {
 	assert(scope != 0);
 	constants = scope->getCodeDefinition()->getConstantsPointer();
 	indexed = scope->getIndexedPointer();
-	vstackPointer = scope->getVStackPointer();
+	vstackArray = scope->getVStackArray();
 }
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
 	fstack.push(Frame(ip, vsp, scope, thisObject));
 	ip = codeDefinition->getCodePointer();
 	updateInternals();
-	vsp = vstackPointer;
+	vsp = vstackArray->begin();
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1952,7 +1952,7 @@ void Processor::reset() {
 	thisObject = 0;
 	constants = 0;
 	indexed = 0;
-	vstackPointer = 0;
+	vstackArray = 0;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -2121,8 +2121,8 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
 				}
-				vsp[-im] = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
-				vsp -= im;
+				pop(im);
+				vsp[0] = f->call(engine, *this, im, vsp + 1, engine.getGlobals());
 				break;
 			}
 			
@@ -2136,8 +2136,8 @@ bool Processor::privateRun() {
 						error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 						break;
 					}
-					vsp[-im - 1] = f->call(engine, *this, im, vsp - im + 1, thisObject);
-					vsp -= im + 1;
+					pop(im + 1);
+					vsp[0] = f->call(engine, *this, im, vsp + 2, thisObject);
 				}
 				break;
 			}
@@ -2151,8 +2151,8 @@ bool Processor::privateRun() {
 				if (f == &engine.evalFunction) {
 					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
-				vsp[-im] = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
-				vsp -= im;
+				pop(im);
+				vsp[0] = f->call(engine, *this, im, vsp + 1, engine.getGlobals());
 				break;
 			}
 
@@ -2166,9 +2166,9 @@ bool Processor::privateRun() {
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.govern(new(heap) ScriptObject(heap, prototype != 0 ? prototype : &engine.objectPrototype));
-				vsp[-im + 1] = f->construct(engine, *this, im, vsp - im + 1, newObject);
-				vsp[-im + 0] = Value(newObject);
-				vsp -= im - 1;
+				pop(im - 1);
+				vsp[0] = f->construct(engine, *this, im, vsp, newObject);
+				vsp[-1] = Value(newObject);
 				break;
 			}
 			
@@ -2185,9 +2185,8 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				Value* returnPointer = vsp - 1; // Notice that call() will change vsp if it is a script function, so we save this first.
-				*returnPointer = engine.createRegExpFunction->call(engine, *this, 2, returnPointer, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				pop(1);
+				engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals()); // Yeah, this *returnPointer assignment goes to waste if we called a script function (since it returns directly), but so what?
 				break;
 			}
 
@@ -4847,11 +4846,9 @@ suppressStdErr = true;
     CodeDefinition globalCode(heap, &globalConstants);
 
     ScriptObject globals(heap, &engine.objectPrototype);
-    GlobalScope globalScope(heap, &globals, &globalCode);
-    GlobalScope globalScopeCopy(globalScope);
+    GlobalScope _globalScope(heap, &globals, &globalCode);
+	engine.setGlobalObject(&_globalScope, &globals);
 
-	engine.setGlobalObject(&globalScope, &globals);
-	
     PrintFunction printFunction;
     globals.setOwnProperty(engine, Value(&PRINT_STRING), Value(&printFunction), DONT_ENUM_FLAG);
     GCFunction gcFunction;
@@ -4968,6 +4965,8 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                     }
                 }
                	processor.run();	// just testing some weird behaviour
+			    GlobalScope globalScope(heap, &globals, &globalCode);
+				engine.setGlobalObject(&globalScope, &globals);
                 processor.chain(&globalCode, &globalScope, &globals);
 
                 bool done = false;

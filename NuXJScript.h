@@ -691,7 +691,7 @@ class CodeDefinition : public Object {
 class Scope : public GCItem {
 	public:		typedef GCItem super;
 				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition)
-						: super(heap), vstackPointer(parentScope == 0 ? 0 : parentScope->vstackPointer)
+						: super(heap), vstackArray(parentScope == 0 ? 0 : parentScope->vstackArray)
 						, indexedPointer(parentScope == 0 ? 0 : parentScope->indexedPointer)
 						, parentScope(parentScope), codeDefinition(codeDefinition) { }
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const { assert(parentScope != 0); return parentScope->readVar(engine, name, v); }
@@ -699,11 +699,11 @@ class Scope : public GCItem {
 				virtual bool deleteVar(Engine& engine, const String* key) { assert(parentScope != 0); return parentScope->deleteVar(engine, key); }
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) { assert(parentScope != 0); return parentScope->declareVar(engine, name, initValue, dontDelete); }
 				Value* getIndexedPointer() const { return indexedPointer; }
-				Value* getVStackPointer() const { return vstackPointer; }
+				QuickArray<Value>* getVStackArray() const { return vstackArray; }
 				Scope* getParentScope() const { return parentScope; }
 				const CodeDefinition* getCodeDefinition() const { return codeDefinition; }
 	
-	protected:	Value* vstackPointer;
+	protected:	QuickArray<Value>* vstackArray;
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Scope* parentScope;
 				const CodeDefinition* codeDefinition;
@@ -1148,7 +1148,7 @@ public: // FIX : not public, just for some asserts now I think
 				
 				const Value* constants;
 				Value* indexed;
-				Value* vstackPointer;
+				QuickArray<Value>* vstackArray;
 };
 
 enum Precedence {
