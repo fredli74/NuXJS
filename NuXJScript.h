@@ -690,21 +690,29 @@ class CodeDefinition : public Object {
 
 class Scope : public GCItem {
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition);
+				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+						, const CodeDefinition* codeDefinition, const CodeWord* returnIP = 0);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 				Value* getIndexedPointer() const;
-				Scope* getParentScope() const;
+				Scope* getParentLexicalScope() const;
+				Scope* getPreviousDynamicScope() const;
+				Object* getThisObject() const;
+				const CodeWord* getReturnIP() const;
 				const CodeDefinition* getCodeDefinition() const;
 	
-	protected:	Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Scope* parentScope;
-				const CodeDefinition* codeDefinition;
+	protected:	Scope* const previousDynamicScope;
+				Scope* const parentLexicalScope;
+				Object* const thisObject;
+				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				const CodeDefinition* const codeDefinition;
+				const CodeWord* returnIP;
 
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(parentScope);
+					heap.mark(previousDynamicScope);
+					heap.mark(parentLexicalScope);
 					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
@@ -814,7 +822,7 @@ class GlobalScope : public Scope {
 
 class WithScope : public Scope {
 	public:		typedef Scope super;
-				WithScope(Heap& heap, Scope* parentScope, Object* withObject);
+				WithScope(Heap& heap, Scope* currentScope, Object* withObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -831,7 +839,8 @@ class FunctionScope : public Scope {
 	
 	public:		typedef Scope super;
 
-				FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, const CodeWord* returnIP
+						, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -857,7 +866,8 @@ class FunctionScope : public Scope {
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
-				EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
+				EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+						, const CodeDefinition* evalCodeDef, const CodeWord* returnIP);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
 
@@ -870,7 +880,7 @@ class EvalScope : public Scope {
 class CatchScope : public Scope {
 	public:		typedef Scope super;
 
-				CatchScope(Heap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+				CatchScope(Heap& heap, Scope* currentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);

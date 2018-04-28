@@ -1585,32 +1585,37 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 /* --- Scope --- */
 
-Scope::Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition)
-		: super(heap), indexedPointer(parentScope != 0 ? parentScope->indexedPointer : 0)
-		, parentScope(parentScope), codeDefinition(codeDefinition) { }
+Scope::Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+		, const CodeDefinition* codeDefinition, const CodeWord* returnIP)
+		: super(heap), previousDynamicScope(previousDynamicScope), parentLexicalScope(parentLexicalScope)
+		, thisObject(thisObject), indexedPointer(parentLexicalScope != 0 ? parentLexicalScope->indexedPointer : 0)
+		, codeDefinition(codeDefinition), returnIP(returnIP) { }
 
 Flags Scope::readVar(Engine& engine, const String* name, Value* v) const {
-	assert(parentScope != 0);
-	return parentScope->readVar(engine, name, v);
+	assert(parentLexicalScope != 0);
+	return parentLexicalScope->readVar(engine, name, v);
 }
 
 void Scope::writeVar(Engine& engine, const String* name, const Value& v) {
-	assert(parentScope != 0);
-	return parentScope->writeVar(engine, name, v);
+	assert(parentLexicalScope != 0);
+	return parentLexicalScope->writeVar(engine, name, v);
 }
 
 bool Scope::deleteVar(Engine& engine, const String* key) {
-	assert(parentScope != 0);
-	return parentScope->deleteVar(engine, key);
+	assert(parentLexicalScope != 0);
+	return parentLexicalScope->deleteVar(engine, key);
 }
 
 void Scope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
-	assert(parentScope != 0);
-	return parentScope->declareVar(engine, name, initValue, dontDelete);
+	assert(parentLexicalScope != 0);
+	return parentLexicalScope->declareVar(engine, name, initValue, dontDelete);
 }
 
 Value* Scope::getIndexedPointer() const { return indexedPointer; }
-Scope* Scope::getParentScope() const { return parentScope; }
+Scope* Scope::getParentLexicalScope() const { return parentLexicalScope; }
+Scope* Scope::getPreviousDynamicScope() const { return previousDynamicScope; }
+Object* Scope::getThisObject() const { return thisObject; }
+const CodeWord* Scope::getReturnIP() const { return returnIP; }
 const CodeDefinition* Scope::getCodeDefinition() const { return codeDefinition; }
 
 /* --- FunctionScope --- */
@@ -1620,8 +1625,9 @@ static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 ar
 	return codeDefinition->getVarsCount() + std::max(codeDefinition->getArgumentsCount(), argc);
 }
 
-FunctionScope::FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv)
-		: super(heap, function->closure, function->codeDefinition)
+FunctionScope::FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, const CodeWord* returnIP
+		, ScriptFunction* function, UInt32 argc, const Value* argv)
+		: super(heap, previousDynamicScope, function->closure, thisObject, function->codeDefinition, returnIP)
 		, function(function), passedArgumentsCount(argc)
 		, indexed(calcIndexedVariablesSize(function, argc), &heap), dynamicVars(0)
 		, bloomSet(function->codeDefinition->bloomSet) {
@@ -1664,7 +1670,7 @@ Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const
 			return DONT_DELETE_FLAG | READ_ONLY_FLAG | EXISTS_FLAG;
 		}
 	}
-	return parentScope->readVar(engine, name, v);
+	return parentLexicalScope->readVar(engine, name, v);
 }
 
 void FunctionScope::writeVar(Engine& engine, const String* name, const Value& v) {
@@ -1689,7 +1695,7 @@ void FunctionScope::writeVar(Engine& engine, const String* name, const Value& v)
 			return;
 		}
 	}
-	parentScope->writeVar(engine, name, v); // FIX : recursion
+	parentLexicalScope->writeVar(engine, name, v); // FIX : recursion
 }
 
 bool FunctionScope::deleteVar(Engine& engine, const String* name) {
@@ -1710,7 +1716,7 @@ bool FunctionScope::deleteVar(Engine& engine, const String* name) {
 			return false;
 		}
 	}
-	return parentScope->deleteVar(engine, name); // FIX : recursion
+	return parentLexicalScope->deleteVar(engine, name); // FIX : recursion
 }
 
 void FunctionScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
@@ -1730,18 +1736,20 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef) : super(heap, parentScope, evalCodeDef) {
+EvalScope::EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+		, const CodeDefinition* evalCodeDef, const CodeWord* returnIP)
+		: super(heap, previousDynamicScope, parentLexicalScope, thisObject, evalCodeDef, returnIP) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 
 void EvalScope::declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete) {
-	parentScope->declareVar(engine, name, initValue, false);
+	parentLexicalScope->declareVar(engine, name, initValue, false);
 }
 
 /* --- GlobalScope --- */
 
 GlobalScope::GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition)
-		: super(heap, 0, codeDefinition), globalObject(globalObject) {
+		: super(heap, 0, 0, globalObject, codeDefinition, 0), globalObject(globalObject) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1762,8 +1770,9 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 
 /* --- CatchScope --- */
 
-CatchScope::CatchScope(Heap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(heap, parentScope, parentScope->getCodeDefinition()), exceptionName(exceptionName)
+CatchScope::CatchScope(Heap& heap, Scope* currentScope, const String* exceptionName, const Value& exceptionValue)
+		: super(heap, currentScope->getPreviousDynamicScope(), currentScope, currentScope->getThisObject()
+		, currentScope->getCodeDefinition(), currentScope->getReturnIP()), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) { }
 
 Flags CatchScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1771,7 +1780,7 @@ Flags CatchScope::readVar(Engine& engine, const String* name, Value* v) const {
 		*v = exceptionValue;
 		return DONT_DELETE_FLAG | EXISTS_FLAG;
 	} else {
-		return parentScope->readVar(engine, name, v);
+		return parentLexicalScope->readVar(engine, name, v);
 	}
 }
 
@@ -1779,7 +1788,7 @@ void CatchScope::writeVar(Engine& engine, const String* name, const Value& v) {
 	if (name->isEqualTo(*exceptionName)) {
 		exceptionValue = v;
 	} else {
-		parentScope->writeVar(engine, name, v);
+		parentLexicalScope->writeVar(engine, name, v);
 	}
 }
 
@@ -1787,18 +1796,19 @@ bool CatchScope::deleteVar(Engine& engine, const String* name) {
 	if (name->isEqualTo(*exceptionName)) {
 		return false;
 	} else {
-		return parentScope->deleteVar(engine, name);
+		return parentLexicalScope->deleteVar(engine, name);
 	}
 }
 
 /* --- WithScope --- */
 
-WithScope::WithScope(Heap& heap, Scope* parentScope, Object* withObject)
-		: super(heap, parentScope, parentScope->getCodeDefinition()), withObject(withObject) { }
+WithScope::WithScope(Heap& heap, Scope* currentScope, Object* withObject)
+		: super(heap, currentScope->getPreviousDynamicScope(), currentScope, currentScope->getThisObject()
+		, currentScope->getCodeDefinition(), currentScope->getReturnIP()), withObject(withObject) { }
 
 Flags WithScope::readVar(Engine& engine, const String* name, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, Value(name), v);
-	return (flags != NONEXISTENT ? flags : parentScope->readVar(engine, name, v));
+	return (flags != NONEXISTENT ? flags : parentLexicalScope->readVar(engine, name, v));
 }
 
 void WithScope::writeVar(Engine& engine, const String* name, const Value& v) {
@@ -1813,14 +1823,14 @@ void WithScope::writeVar(Engine& engine, const String* name, const Value& v) {
 			return;
 		}
 	}
-	parentScope->writeVar(engine, name, v);
+	parentLexicalScope->writeVar(engine, name, v);
 }
 
 bool WithScope::deleteVar(Engine& engine, const String* name) {
 	Value dummy;
 	Flags findFlags = withObject->getPropertyDeep(engine, Value(name), &dummy);
 	return (findFlags != NONEXISTENT ? withObject->deleteProperty(engine, Value(name))
-			: parentScope->deleteVar(engine, name));
+			: parentLexicalScope->deleteVar(engine, name));
 }
 
 /* --- Processor --- */
@@ -1944,6 +1954,7 @@ void Processor::updateInternals() {
 	thisObject = f.thisObject;
 	scope = f.scope;
 	assert(scope != 0);
+	assert(scope->getThisObject() == thisObject);
 	constants = scope->getCodeDefinition()->getConstantsPointer();
 	indexed = scope->getIndexedPointer();
 }
@@ -1966,13 +1977,13 @@ void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) FunctionScope(heap, func, argc, argv));
+	scope = heap.govern(new(heap) FunctionScope(heap, scope, thisObject, ip, func, argc, argv));
 	chain(func->getDefinition(), scope, thisObject);
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) EvalScope(heap, (directCall ? scope : engine.getGlobalScope()), codeDefinition));
+	scope = heap.govern(new(heap) EvalScope(heap, scope, (directCall ? scope : engine.getGlobalScope()), (directCall ? thisObject : engine.getGlobals()), codeDefinition, ip));
 	chain(codeDefinition, scope, directCall ? thisObject : engine.getGlobals());
 }
 
@@ -2133,7 +2144,9 @@ bool Processor::privateRun() {
 			case GEQ_OP:	pop2push1(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += im; break;
 
-			case JSR_OP:	fstack.push(Frame(ip, scope, thisObject));
+							// FIX : make a new super-class to both with- and catch-scope and re-use here
+			case JSR_OP:	fstack.push(Frame(ip, heap.govern(new(heap) Scope(heap, scope, scope, scope->getThisObject(), scope->getCodeDefinition(), ip)), thisObject));
+							updateInternals();
 							ip += im;
 							break;
 
@@ -2233,6 +2246,9 @@ bool Processor::privateRun() {
 			}
 
 			case RETURN_OP:	{
+				assert(!fstack.empty());
+				assert((fstack.size() == 1 ? 0 : (fstack.end() - 2)->scope) == scope->getPreviousDynamicScope());
+				assert(fstack.back().returnIP == scope->getReturnIP());
 				ip = fstack.back().returnIP;
 				fstack.pop();
 				if (ip == 0) {
@@ -2247,6 +2263,7 @@ bool Processor::privateRun() {
 			case DISCARD_RETURN_OP: {
 				assert(!fstack.empty());
 				fstack.pop();
+				updateInternals();
 				break;
 			}
 			
@@ -2303,6 +2320,7 @@ bool Processor::privateRun() {
 			}
 			
 			case POP_SCOPE_OP: {
+				assert(!fstack.empty());
 				fstack.pop();
 				updateInternals();
 				break;
