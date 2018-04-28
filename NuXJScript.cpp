@@ -1771,7 +1771,7 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 /* --- CatchScope --- */
 
 CatchScope::CatchScope(Heap& heap, Scope* currentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(heap, currentScope->getPreviousDynamicScope(), currentScope, currentScope->getThisObject()
+		: super(heap, currentScope, currentScope, currentScope->getThisObject()
 		, currentScope->getCodeDefinition(), currentScope->getReturnIP()), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) { }
 
@@ -1803,7 +1803,7 @@ bool CatchScope::deleteVar(Engine& engine, const String* name) {
 /* --- WithScope --- */
 
 WithScope::WithScope(Heap& heap, Scope* currentScope, Object* withObject)
-		: super(heap, currentScope->getPreviousDynamicScope(), currentScope, currentScope->getThisObject()
+		: super(heap, currentScope, currentScope, currentScope->getThisObject()
 		, currentScope->getCodeDefinition(), currentScope->getReturnIP()), withObject(withObject) { }
 
 Flags WithScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1900,7 +1900,6 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ NEW_ARRAY_OP               , "NEW_ARRAY"               , +1     , 0 },
 	{ NEW_REG_EXP_OP             , "NEW_REG_EXP"             , -1     , 0 },
 	{ RETURN_OP                  , "RETURN"                  , -1     , OpcodeInfo::TERMINAL },
-	{ DISCARD_RETURN_OP          , "DISCARD_RETURN"          , 0      , 0 },
 	{ THIS_OP                    , "THIS"                    , +1     , 0 },
 	{ VOID_OP                    , "VOID"                    , +1     , 0 },
 	{ DELETE_OP                  , "DELETE"                  , -1     , 0 },
@@ -1928,7 +1927,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 }
 
 Processor::Processor(Engine& engine)
-		: super(engine.getHeap()), engine(engine), fstack(&engine.getHeap()), vstack(&engine.getHeap())
+		: super(engine.getHeap()), engine(engine), vstack(&engine.getHeap())
 		, clockCyclesLeft(0x7FFFFFFF), catchers(&engine.getHeap()) {
 	vstack.push(Value::UNDEFINED);
 	reset();
@@ -1950,13 +1949,10 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vs
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::updateInternals() {
-	Frame& f = fstack.back();
-	thisObject = f.thisObject;
-	scope = f.scope;
 	assert(scope != 0);
-	assert(scope->getThisObject() == thisObject);
 	constants = scope->getCodeDefinition()->getConstantsPointer();
 	indexed = scope->getIndexedPointer();
+	thisObject = scope->getThisObject();
 }
 
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
@@ -1968,8 +1964,8 @@ void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 	vsp = vstack.begin() + vstackOffset - 1;
 }
 
-void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
-	fstack.push(Frame(ip, scope, thisObject));
+void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope) {
+	this->scope = scope;
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 	updateInternals();
@@ -1978,26 +1974,25 @@ void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
 	scope = heap.govern(new(heap) FunctionScope(heap, scope, thisObject, ip, func, argc, argv));
-	chain(func->getDefinition(), scope, thisObject);
+	chain(func->getDefinition(), scope);
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Heap& heap = engine.getHeap();
 	scope = heap.govern(new(heap) EvalScope(heap, scope, (directCall ? scope : engine.getGlobalScope()), (directCall ? thisObject : engine.getGlobals()), codeDefinition, ip));
-	chain(codeDefinition, scope, directCall ? thisObject : engine.getGlobals());
+	chain(codeDefinition, scope);
 }
 
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
 	catchers.resize(0);
-	fstack.resize(0);
 	vstack.resize(1);
 	vsp = vstack.begin();
 	ip = 0;
 	scope = 0;
-	thisObject = 0;
 	constants = 0;
 	indexed = 0;
+	thisObject = 0;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -2008,8 +2003,7 @@ void Processor::throwVirtualException(const Value& exception) {
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	ip = catcher.ip;
 	assert(ip != 0);
-	assert(catcher.fstackSize <= fstack.size());
-	fstack.resize(catcher.fstackSize);
+	scope = catcher.scope;
 	vsp = vstack.begin() + catcher.vstackOffset - 1;
 	push(exception);
 	catchers.pop();
@@ -2145,7 +2139,7 @@ bool Processor::privateRun() {
 			case JMP_OP:	ip += im; break;
 
 							// FIX : make a new super-class to both with- and catch-scope and re-use here
-			case JSR_OP:	fstack.push(Frame(ip, heap.govern(new(heap) Scope(heap, scope, scope, scope->getThisObject(), scope->getCodeDefinition(), ip)), thisObject));
+			case JSR_OP:	scope = heap.govern(new(heap) Scope(heap, scope, scope, scope->getThisObject(), scope->getCodeDefinition(), ip));
 							updateInternals();
 							ip += im;
 							break;
@@ -2246,23 +2240,14 @@ bool Processor::privateRun() {
 			}
 
 			case RETURN_OP:	{
-				assert(!fstack.empty());
-				assert((fstack.size() == 1 ? 0 : (fstack.end() - 2)->scope) == scope->getPreviousDynamicScope());
-				assert(fstack.back().returnIP == scope->getReturnIP());
-				ip = fstack.back().returnIP;
-				fstack.pop();
+				ip = scope->getReturnIP();
+				scope = scope->getPreviousDynamicScope();
 				if (ip == 0) {
-					assert(fstack.empty() && catchers.empty() && vsp == vstack.begin());
+					assert(catchers.empty() && vsp == vstack.begin());
 					reset();
 					return false;
 				}
-				updateInternals();
-				break;
-			}
-			
-			case DISCARD_RETURN_OP: {
-				assert(!fstack.empty());
-				fstack.pop();
+				assert(scope != 0);
 				updateInternals();
 				break;
 			}
@@ -2303,7 +2288,7 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				fstack.push(Frame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject));
+				scope = heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0]));
 				pop(1);
 				updateInternals();
 				break;
@@ -2312,7 +2297,7 @@ bool Processor::privateRun() {
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
-					fstack.push(Frame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject));
+					scope = heap.govern(new(heap) WithScope(heap, scope, o));
 					pop(1);
 					updateInternals();
 				}
@@ -2320,15 +2305,15 @@ bool Processor::privateRun() {
 			}
 			
 			case POP_SCOPE_OP: {
-				assert(!fstack.empty());
-				fstack.pop();
+				scope = scope->getPreviousDynamicScope();
+				assert(scope != 0);
 				updateInternals();
 				break;
 			}
 			
 			case TRY_OP: {
 				assert(vsp + 1 - vstack.begin() >= 0);
-				catchers.push(Catcher(ip + im, static_cast<UInt32>(vsp + 1 - vstack.begin()), fstack.size()));
+				catchers.push(Catcher(ip + im, static_cast<UInt32>(vsp + 1 - vstack.begin()), scope));
 				break;
 			}
 			case TRIED_OP: catchers.pop(); break;
@@ -2691,8 +2676,8 @@ struct Compiler::SemanticScope {
 	Int32 rollback(Compiler& compiler, Int32 rollbackStackDepth, Processor::Opcode popOpcode) {
 		switch (type) {
 			case CATCH_TYPE:
-			case WITH_TYPE: compiler.emit(Processor::POP_SCOPE_OP); break;
-			case FINALLY_TYPE: compiler.emit(Processor::DISCARD_RETURN_OP); break;
+			case WITH_TYPE:
+			case FINALLY_TYPE: compiler.emit(Processor::POP_SCOPE_OP); break;
 			default: break;
 		}
 		switch (type) {
@@ -5025,7 +5010,7 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                     }
                 }
                	processor.run();	// just testing some weird behaviour
-                processor.chain(&globalCode, &globalScope, &globals);
+                processor.chain(&globalCode, &globalScope);
 
                 bool done = false;
                 clock_t start = ::clock();

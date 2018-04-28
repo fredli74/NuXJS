@@ -713,6 +713,7 @@ class Scope : public GCItem {
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(previousDynamicScope);
 					heap.mark(parentLexicalScope);
+					heap.mark(thisObject);
 					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
@@ -1002,15 +1003,6 @@ class Processor : public GCItem {
 	
 	public:		typedef GCItem super;
 
-				struct Frame {
-					Frame() { }
-					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject)
-							: returnIP(returnIP), scope(scope), thisObject(thisObject) { }
-					const CodeWord* returnIP;
-					Scope* scope;
-					Object* thisObject;
-				};
-	
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
 					, CONST_OP										// operand: const_index, stack: -> constant
@@ -1055,7 +1047,6 @@ class Processor : public GCItem {
 					// FIX : should we have an optional pop argument (push back) to RETURN_OP?
 					, RETURN_OP
 					// FIX : maybe we should also have a RETURN_VOID_OP?
-					, DISCARD_RETURN_OP
 					, THIS_OP, VOID_OP								// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
 					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
@@ -1089,7 +1080,7 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
+				void chain(const CodeDefinition* codeDefinition, Scope* scope); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
@@ -1114,31 +1105,26 @@ class Processor : public GCItem {
 
 public: // FIX : not public, just for some asserts now I think
 				QuickVector<Value> vstack;
-				QuickVector<Frame> fstack;
 
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
 				Scope* scope;
-				Object* thisObject;
 				Value* vsp; // FIX : not public, just for an assert now
 
 				struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, UInt32 vstackOffset, UInt32 fstackSize)
-							: ip(ip), vstackOffset(vstackOffset), fstackSize(fstackSize) { }
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, Scope* scope)
+							: ip(ip), vstackOffset(vstackOffset), scope(scope) { }
 					const CodeWord* ip;
 					UInt32 vstackOffset;
-					UInt32 fstackSize;
+					Scope* scope;
 				};
 
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
 
 				virtual void gcMark(Heap& heap) const {
 					heap.markViaReferences(vstack.begin(), vsp + 1);
-					for (Frame* c = fstack.begin(); c != fstack.end(); ++c) {
-						heap.mark(c->scope);
-						heap.mark(c->thisObject);
-					}
+					heap.mark(scope);
 					super::gcMark(heap);
 				}
 
@@ -1146,6 +1132,7 @@ public: // FIX : not public, just for some asserts now I think
 				
 				const Value* constants;
 				Value* indexed;
+				Object* thisObject;
 };
 
 enum Precedence {
