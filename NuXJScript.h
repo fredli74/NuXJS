@@ -660,6 +660,7 @@ class CodeDefinition : public Object {
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 				UInt32 getMaxStackDepth() const { return maxStackDepth; }
+				UInt32 calcVStackSize(UInt32 argc) const;
 
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
@@ -688,10 +689,20 @@ class CodeDefinition : public Object {
 #endif
 };
 
+struct Frame {
+	Frame(Heap& heap, UInt32 vstackSize) : vstack(vstackSize, &heap), vstackBegin(vstack.begin()), vsp(vstack.begin()) { }
+	QuickArray<Value> vstack;
+	Value* vstackBegin;
+	Value* vsp;
+};
+
 class Scope : public GCItem {
+	friend class Processor;
+	
 	public:		typedef GCItem super;
 				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* codeDefinition, const CodeWord* returnIP = 0);
+						, const CodeDefinition* codeDefinition, const CodeWord* returnIP);
+				Scope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -709,12 +720,27 @@ class Scope : public GCItem {
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				const CodeDefinition* const codeDefinition;
 				const CodeWord* returnIP;
-
+public:		Frame* framePointer;
+protected:
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(previousDynamicScope);
 					heap.mark(parentLexicalScope);
 					heap.mark(thisObject);
 					heap.mark(codeDefinition);
+					super::gcMark(heap);
+				}
+};
+
+class CodeScope : public Scope {
+	friend class Processor;
+	
+	public:		typedef Scope super;
+				CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+						, const CodeDefinition* codeDefinition, UInt32 vstackSize, const CodeWord* returnIP);
+				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
+	protected:	Frame frame;
+				virtual void gcMark(Heap& heap) const {
+					heap.markViaReferences(frame.vstack.begin(), frame.vstack.end()); // FIX : vsp + 1);
 					super::gcMark(heap);
 				}
 };
@@ -806,8 +832,8 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
-class GlobalScope : public Scope {
-	public:		typedef Scope super;
+class GlobalScope : public CodeScope {
+	public:		typedef CodeScope super;
 				GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
@@ -835,10 +861,10 @@ class WithScope : public Scope {
 				}
 };
 
-class FunctionScope : public Scope {
+class FunctionScope : public CodeScope {
 	friend class Arguments;
 	
-	public:		typedef Scope super;
+	public:		typedef CodeScope super;
 
 				FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, const CodeWord* returnIP
 						, ScriptFunction* function, UInt32 argc, const Value* argv);
@@ -850,12 +876,10 @@ class FunctionScope : public Scope {
 
 	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
-				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(function);
-					heap.markViaReferences(indexed.begin(), indexed.end());
 					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
@@ -865,8 +889,8 @@ class FunctionScope : public Scope {
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDefinition pointer (for constants etc) and it declares deletable vars.
 */
-class EvalScope : public Scope {
-	public:		typedef Scope super;
+class EvalScope : public CodeScope {
+	public:		typedef CodeScope super;
 				EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* evalCodeDef, const CodeWord* returnIP);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
@@ -1091,11 +1115,10 @@ class Processor : public GCItem {
 				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void pop2push1(const Value& v);
-				void updateInternals();
+				void resume();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
-				void reserveVStackSpace(UInt32 maxStackDepth);
 				void reset();
 
 				Engine& engine;
@@ -1104,7 +1127,6 @@ class Processor : public GCItem {
 				static const CodeWord FINISHED_CODE_THUNK[1];
 
 public: // FIX : not public, just for some asserts now I think
-				QuickVector<Value> vstack;
 
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
@@ -1113,22 +1135,22 @@ public: // FIX : not public, just for some asserts now I think
 
 				struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, UInt32 vstackOffset, Scope* scope)
-							: ip(ip), vstackOffset(vstackOffset), scope(scope) { }
+					Catcher(const CodeWord* ip, Value* vsp, Scope* scope) : ip(ip), vsp(vsp), scope(scope) { }
 					const CodeWord* ip;
-					UInt32 vstackOffset;
+					Value* vsp;
 					Scope* scope;
 				};
 
 				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
+				Value result;
 
 				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(vstack.begin(), vsp + 1);
 					heap.mark(scope);
+					result.gcMark(heap);
 					super::gcMark(heap);
 				}
 
-				// Copies from call stack. Will be gc marked from there.
+				// Copies from scope. Will be gc marked from there.
 				
 				const Value* constants;
 				Value* indexed;

@@ -1210,6 +1210,10 @@ CodeDefinition::CodeDefinition(Heap& heap, Constants* constants)
 	assert(constants != 0);
 }
 
+UInt32 CodeDefinition::calcVStackSize(UInt32 argc) const {
+	return varNames.size() + std::max(argumentNames.size(), argc) + maxStackDepth;
+}
+
 bool CodeDefinition::lookupNameIndex(const String* name, Int32& index) const {
 	const Table::Bucket* bucket = nameIndexes.lookup(name);
 	if (bucket == 0) {
@@ -1588,8 +1592,14 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 Scope::Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 		, const CodeDefinition* codeDefinition, const CodeWord* returnIP)
 		: super(heap), previousDynamicScope(previousDynamicScope), parentLexicalScope(parentLexicalScope)
-		, thisObject(thisObject), indexedPointer(parentLexicalScope != 0 ? parentLexicalScope->indexedPointer : 0)
-		, codeDefinition(codeDefinition), returnIP(returnIP) { }
+		, thisObject(thisObject), indexedPointer((parentLexicalScope != 0 ? parentLexicalScope->indexedPointer : 0))
+		, codeDefinition(codeDefinition), returnIP(returnIP), framePointer(previousDynamicScope != 0 ? previousDynamicScope->framePointer : 0) {
+}
+
+Scope::Scope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition)
+		: super(heap), previousDynamicScope(0), parentLexicalScope(0)
+		, thisObject(thisObject), indexedPointer(0)
+		, codeDefinition(codeDefinition), returnIP(0), framePointer(0) { }
 
 Flags Scope::readVar(Engine& engine, const String* name, Value* v) const {
 	assert(parentLexicalScope != 0);
@@ -1618,25 +1628,34 @@ Object* Scope::getThisObject() const { return thisObject; }
 const CodeWord* Scope::getReturnIP() const { return returnIP; }
 const CodeDefinition* Scope::getCodeDefinition() const { return codeDefinition; }
 
-/* --- FunctionScope --- */
+/* --- CodeScope --- */
 
-static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
-	const CodeDefinition* codeDefinition = function->getDefinition();
-	return codeDefinition->getVarsCount() + std::max(codeDefinition->getArgumentsCount(), argc);
+CodeScope::CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+		, const CodeDefinition* codeDefinition, UInt32 vstackSize, const CodeWord* returnIP)
+		: super(heap, previousDynamicScope, parentLexicalScope, thisObject, codeDefinition, returnIP)
+		, frame(heap, vstackSize) {
+	framePointer = &frame;
 }
+
+CodeScope::CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize)
+		: super(heap, thisObject, codeDefinition), frame(heap, vstackSize) {
+	framePointer = &frame;
+}
+
+/* --- FunctionScope --- */
 
 FunctionScope::FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, const CodeWord* returnIP
 		, ScriptFunction* function, UInt32 argc, const Value* argv)
-		: super(heap, previousDynamicScope, function->closure, thisObject, function->codeDefinition, returnIP)
+		: super(heap, previousDynamicScope, function->closure, thisObject, function->codeDefinition
+				, function->codeDefinition->calcVStackSize(argc), returnIP)
 		, function(function), passedArgumentsCount(argc)
-		, indexed(calcIndexedVariablesSize(function, argc), &heap), dynamicVars(0)
-		, bloomSet(function->codeDefinition->bloomSet) {
-	indexedPointer = indexed.begin() + codeDefinition->getVarsCount();
-	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
+		, dynamicVars(0), bloomSet(function->codeDefinition->bloomSet) {
+	indexedPointer = frame.vstack.begin() + codeDefinition->getVarsCount();
+	frame.vstackBegin = indexedPointer + std::max(codeDefinition->getArgumentsCount(), argc);
+	frame.vsp = frame.vstackBegin;
+	std::fill(frame.vstack.begin(), indexedPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, indexedPointer);
-	if (codeDefinition->getArgumentsCount() > argc) {
-		std::fill(e, indexed.end(), Value::UNDEFINED);
-	}
+	std::fill(e, frame.vstack.end(), Value::UNDEFINED); // FIX : no need to fill to end in the future
 }
 
 ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
@@ -1655,7 +1674,6 @@ Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 			*v = indexedPointer[index];
 			return DONT_DELETE_FLAG | EXISTS_FLAG;
 		}
@@ -1678,7 +1696,6 @@ void FunctionScope::writeVar(Engine& engine, const String* name, const Value& v)
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
 			indexedPointer[index] = v;
 			return;
 		}
@@ -1738,7 +1755,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 
 EvalScope::EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 		, const CodeDefinition* evalCodeDef, const CodeWord* returnIP)
-		: super(heap, previousDynamicScope, parentLexicalScope, thisObject, evalCodeDef, returnIP) {
+		: super(heap, previousDynamicScope, parentLexicalScope, thisObject, evalCodeDef, evalCodeDef->calcVStackSize(0), returnIP) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 
@@ -1749,7 +1766,7 @@ void EvalScope::declareVar(Engine& engine, const String* name, const Value& init
 /* --- GlobalScope --- */
 
 GlobalScope::GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition)
-		: super(heap, 0, 0, globalObject, codeDefinition, 0), globalObject(globalObject) {
+		: super(heap, globalObject, codeDefinition, codeDefinition->calcVStackSize(0)), globalObject(globalObject) {
 	assert(codeDefinition->getVarsCount() == 0);
 }
 Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1927,9 +1944,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 }
 
 Processor::Processor(Engine& engine)
-		: super(engine.getHeap()), engine(engine), vstack(&engine.getHeap())
-		, clockCyclesLeft(0x7FFFFFFF), catchers(&engine.getHeap()) {
-	vstack.push(Value::UNDEFINED);
+		: super(engine.getHeap()), engine(engine), clockCyclesLeft(0x7FFFFFFF), catchers(&engine.getHeap()), result(Value::UNDEFINED) {
 	reset();
 }
 
@@ -1943,42 +1958,36 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
-void Processor::pop2push1(const Value& v) { assert(vsp >= vstack.begin()); *--vsp = v; }
-void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
+void Processor::push(const Value& v) { assert(vsp + 1 < scope->framePointer->vstack.end()); *++vsp = v; }
+void Processor::pop2push1(const Value& v) { assert(vsp >= scope->framePointer->vstackBegin); *--vsp = v; }
+void Processor::pop(Int32 count) { assert(vsp - count + 1 >= scope->framePointer->vstackBegin); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
-void Processor::updateInternals() {
+void Processor::resume() {
 	assert(scope != 0);
 	constants = scope->getCodeDefinition()->getConstantsPointer();
 	indexed = scope->getIndexedPointer();
 	thisObject = scope->getThisObject();
-}
-
-void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
-	const UInt32 vstackOffset = static_cast<UInt32>(vsp + 1 - vstack.begin());
-	const UInt32 requiredSize = vstackOffset + maxStackDepth;
-	if (requiredSize > vstack.size()) {
-		vstack.resize(requiredSize);
-	}
-	vsp = vstack.begin() + vstackOffset - 1;
+	vsp = scope->framePointer->vsp;
+	assert(vsp >= scope->framePointer->vstackBegin - 1 && vsp < scope->framePointer->vstack.end());
 }
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope) {
 	this->scope = scope;
 	ip = codeDefinition->getCodePointer();
-	reserveVStackSpace(codeDefinition->getMaxStackDepth());
-	updateInternals();
+	resume();
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
+assert(scope == 0 || scope->framePointer->vsp == vsp);
 	scope = heap.govern(new(heap) FunctionScope(heap, scope, thisObject, ip, func, argc, argv));
 	chain(func->getDefinition(), scope);
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Heap& heap = engine.getHeap();
+assert(scope == 0 || scope->framePointer->vsp == vsp);
 	scope = heap.govern(new(heap) EvalScope(heap, scope, (directCall ? scope : engine.getGlobalScope()), (directCall ? thisObject : engine.getGlobals()), codeDefinition, ip));
 	chain(codeDefinition, scope);
 }
@@ -1986,8 +1995,7 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
 	catchers.resize(0);
-	vstack.resize(1);
-	vsp = vstack.begin();
+	vsp = 0;
 	ip = 0;
 	scope = 0;
 	constants = 0;
@@ -1996,6 +2004,9 @@ void Processor::reset() {
 }
 
 void Processor::throwVirtualException(const Value& exception) {
+	if (scope != 0) {
+		scope->framePointer->vsp = vsp;
+	}
 	if (catchers.empty()) { // FIX: what exception to throw here?
 		reset();
 		throw Exception(engine.getHeap(), exception);
@@ -2004,10 +2015,10 @@ void Processor::throwVirtualException(const Value& exception) {
 	ip = catcher.ip;
 	assert(ip != 0);
 	scope = catcher.scope;
-	vsp = vstack.begin() + catcher.vstackOffset - 1;
-	push(exception);
 	catchers.pop();
-	updateInternals();
+	scope->framePointer->vsp = catcher.vsp;
+	resume();
+	push(exception);
 }
 
 void Processor::error(ErrorType errorType, const String* message) {
@@ -2025,7 +2036,7 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 
 bool Processor::privateRun() {
 	Heap& heap = engine.getHeap();
-	updateInternals();
+	resume();
 	
 	while (clockCyclesLeft >= 0) {
 		--clockCyclesLeft;
@@ -2086,6 +2097,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
+scope->framePointer->vsp = vsp;
 					engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
@@ -2094,6 +2106,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
+scope->framePointer->vsp = vsp;
 					engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
@@ -2106,6 +2119,7 @@ bool Processor::privateRun() {
 						std::swap(vsp[-1], vsp[0]);
 					}
 					if (vsp[-1].isString() || vsp[-1].isNumber() || vsp[-1].isBoolean()) {
+scope->framePointer->vsp = vsp;
 						engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
 				}
@@ -2139,11 +2153,14 @@ bool Processor::privateRun() {
 			case JMP_OP:	ip += im; break;
 
 							// FIX : make a new super-class to both with- and catch-scope and re-use here
-			case JSR_OP:	scope = heap.govern(new(heap) Scope(heap, scope, scope, scope->getThisObject(), scope->getCodeDefinition(), ip));
-							updateInternals();
-							ip += im;
-							break;
-
+			case JSR_OP: {
+scope->framePointer->vsp = vsp;
+				scope = heap.govern(new(heap) Scope(heap, scope, scope, scope->getThisObject(), scope->getCodeDefinition(), ip));
+				resume();
+				ip += im;
+				break;
+			}
+			
 			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
 			case JF_OP:		ip += (!vsp[0].toBool() ? im : 0); pop(1); break;
 			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += im; else pop(1); break;
@@ -2165,6 +2182,7 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im);
+scope->framePointer->vsp = vsp;
 				vsp[0] = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				break;
 			}
@@ -2182,6 +2200,7 @@ bool Processor::privateRun() {
 					QuickArray<Value> args(im, &heap);
 					std::copy(vsp - im + 1, vsp + 1, args.begin());
 					pop(im + 1);
+scope->framePointer->vsp = vsp;
 					vsp[0] = f->call(engine, *this, args.size(), args.begin(), thisObject);
 				}
 				break;
@@ -2199,6 +2218,7 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im);
+scope->framePointer->vsp = vsp;
 				vsp[0] = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				break;
 			}
@@ -2216,8 +2236,9 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im - 1);
-				vsp[0] = f->construct(engine, *this, args.size(), args.begin(), newObject);
+scope->framePointer->vsp = vsp;
 				vsp[-1] = Value(newObject);
+				vsp[0] = f->construct(engine, *this, args.size(), args.begin(), newObject);
 				break;
 			}
 			
@@ -2234,21 +2255,26 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				vsp[-1] = engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals());
+				const Value patternAndFlags[2] = { vsp[-1], vsp[0] };
 				pop(1);
+scope->framePointer->vsp = vsp;
+				vsp[0] = engine.createRegExpFunction->call(engine, *this, 2, patternAndFlags, engine.getGlobals());
 				break;
 			}
 
 			case RETURN_OP:	{
 				ip = scope->getReturnIP();
+scope->framePointer->vsp = vsp;
 				scope = scope->getPreviousDynamicScope();
 				if (ip == 0) {
-					assert(catchers.empty() && vsp == vstack.begin());
+					result = vsp[0];
+					assert(catchers.empty());
 					reset();
 					return false;
 				}
 				assert(scope != 0);
-				updateInternals();
+				scope->framePointer->vsp[0] = vsp[0];
+				resume();
 				break;
 			}
 			
@@ -2288,32 +2314,35 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				scope = heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0]));
+				const Value exceptionValue = vsp[0];
 				pop(1);
-				updateInternals();
+scope->framePointer->vsp = vsp;
+				scope = heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), exceptionValue));
+				resume();
 				break;
 			}
 			
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
-					scope = heap.govern(new(heap) WithScope(heap, scope, o));
 					pop(1);
-					updateInternals();
+scope->framePointer->vsp = vsp;
+					scope = heap.govern(new(heap) WithScope(heap, scope, o));
+					resume();
 				}
 				break;
 			}
 			
 			case POP_SCOPE_OP: {
+scope->framePointer->vsp = vsp;
 				scope = scope->getPreviousDynamicScope();
 				assert(scope != 0);
-				updateInternals();
+				resume();
 				break;
 			}
 			
 			case TRY_OP: {
-				assert(vsp + 1 - vstack.begin() >= 0);
-				catchers.push(Catcher(ip + im, static_cast<UInt32>(vsp + 1 - vstack.begin()), scope));
+				catchers.push(Catcher(ip + im, vsp, scope));
 				break;
 			}
 			case TRIED_OP: catchers.pop(); break;
@@ -2377,12 +2406,14 @@ bool Processor::privateRun() {
 			default: assert(0);
 		}
 	}
+	if (scope != 0) {
+		scope->framePointer->vsp = vsp;
+	}
 	return true;
 }
 
 Value Processor::getResult() const {
-	assert(ip == 0 && vsp == vstack.begin()); // make sure you've called run() until it returns false
-	return vsp[0];
+	return result;
 }
 
 bool Processor::run() {
@@ -2393,8 +2424,20 @@ bool Processor::run() {
 		return privateRun();
 	}
 	catch (const Exception& x) {
+		if (scope != 0) {
+			scope->framePointer->vsp = vsp;
+		}
 		throwVirtualException(x.getValue());
+		if (scope != 0) {
+			scope->framePointer->vsp = vsp;
+		}
 		return true;
+	}
+	catch (...) {
+		if (scope != 0) {
+			scope->framePointer->vsp = vsp;
+		}
+		throw;
 	}
 }
 
@@ -4890,8 +4933,6 @@ suppressStdErr = true;
 
     ScriptObject globals(heap, &engine.objectPrototype);
     GlobalScope globalScope(heap, &globals, &globalCode);
-    GlobalScope globalScopeCopy(globalScope);
-
 	engine.setGlobalObject(&globalScope, &globals);
 	
     PrintFunction printFunction;
@@ -4901,7 +4942,7 @@ suppressStdErr = true;
     globals.setOwnProperty(engine, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
 CallbackTest callbackTest;
 globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), Value(&callbackTest), DONT_ENUM_FLAG);
-//globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
+globals.setOwnProperty(engine, Value(String::newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);
 
 	if (loadStdLib) {
 		try {
@@ -5009,6 +5050,8 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
+				GlobalScope globalScope(heap, &globals, &globalCode);
+				engine.setGlobalObject(&globalScope, &globals);
                	processor.run();	// just testing some weird behaviour
                 processor.chain(&globalCode, &globalScope);
 
@@ -5039,8 +5082,6 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                     if (done) {
                     	processor.run();	// just testing some weird behaviour
                         if (!suppressStdErr) {
-                            std::cerr << "\tOn stack: " << (processor.vsp - processor.vstack.begin() + 1) << std::endl;
-                            assert(processor.vsp - processor.vstack.begin() == 0);
                             Value v = processor.getResult();
                             std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
                             assert(processor.catchers.empty());
