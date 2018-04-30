@@ -689,20 +689,15 @@ class CodeDefinition : public Object {
 #endif
 };
 
-struct Frame {
-	Frame(Heap& heap, UInt32 vstackSize) : vstack(vstackSize, &heap), vstackBegin(vstack.begin()), vsp(vstack.begin()) { }
-	QuickArray<Value> vstack;
-	Value* vstackBegin;
-	Value* vsp;
-};
+class CodeScope;
 
 class Scope : public GCItem {
 	friend class Processor;
 	
 	public:		typedef GCItem super;
 				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* codeDefinition, const CodeWord* returnIP);
-				Scope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition);
+						, const CodeWord* returnIP);
+				Scope(Heap& heap, Object* thisObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -712,23 +707,14 @@ class Scope : public GCItem {
 				Scope* getPreviousDynamicScope() const;
 				Object* getThisObject() const;
 				const CodeWord* getReturnIP() const;
-				const CodeDefinition* getCodeDefinition() const;
 	
 	protected:	Scope* const previousDynamicScope;
 				Scope* const parentLexicalScope;
 				Object* const thisObject;
+				CodeScope* codeScope;
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				const CodeDefinition* const codeDefinition;
 				const CodeWord* returnIP;
-public:		Frame* framePointer;
-protected:
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(previousDynamicScope);
-					heap.mark(parentLexicalScope);
-					heap.mark(thisObject);
-					heap.mark(codeDefinition);
-					super::gcMark(heap);
-				}
+				virtual void gcMark(Heap& heap) const;
 };
 
 class CodeScope : public Scope {
@@ -738,9 +724,13 @@ class CodeScope : public Scope {
 				CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* codeDefinition, UInt32 vstackSize, const CodeWord* returnIP);
 				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
-	protected:	Frame frame;
+	protected:	const CodeDefinition* const codeDefinition;
+				QuickArray<Value> vstack;
+				Value* vstackBegin;
+				Value* vsp;
 				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(frame.vstack.begin(), frame.vstack.end()); // FIX : vsp + 1);
+					heap.mark(codeDefinition);
+					heap.markViaReferences(vstack.begin(), vsp + 1);
 					super::gcMark(heap);
 				}
 };
@@ -1152,6 +1142,7 @@ public: // FIX : not public, just for some asserts now I think
 
 				// Copies from scope. Will be gc marked from there.
 				
+				CodeScope* codeScope;
 				const Value* constants;
 				Value* indexed;
 				Object* thisObject;
