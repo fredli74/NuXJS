@@ -1959,18 +1959,10 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { assert(vsp + 1 < codeScope->vstack.end()); *++vsp = v; }
-void Processor::pop2push1(const Value& v) { assert(vsp >= codeScope->vstackBegin); *--vsp = v; }
-void Processor::pop(Int32 count) { assert(vsp - count + 1 >= codeScope->vstackBegin); vsp -= count; }
+void Processor::push(const Value& v) { assert((codeScope->vsp) + 1 < codeScope->vstack.end()); *++(codeScope->vsp) = v; }
+void Processor::pop2push1(const Value& v) { assert((codeScope->vsp) >= codeScope->vstackBegin); *--(codeScope->vsp) = v; }
+void Processor::pop(Int32 count) { assert((codeScope->vsp) - count + 1 >= codeScope->vstackBegin); (codeScope->vsp) -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
-
-void Processor::suspend() {
-	if (scope != 0) {
-		assert(codeScope == scope->codeScope);
-		codeScope->ip = ip;
-		codeScope->vsp = vsp;
-	}
-}
 
 void Processor::resume() {
 	assert(scope != 0);
@@ -1978,13 +1970,10 @@ void Processor::resume() {
 	constants = codeScope->codeDefinition->getConstantsPointer();
 	indexed = codeScope->indexedPointer;
 	thisObject = codeScope->thisObject;
-	ip = codeScope->ip;
-	vsp = codeScope->vsp;
-	assert(vsp >= codeScope->vstackBegin - 1 && vsp < codeScope->vstack.end());
+	assert(codeScope->vsp >= codeScope->vstackBegin - 1 && codeScope->vsp < codeScope->vstack.end());
 }
 
 void Processor::chain(CodeScope* scope) {
-	suspend();
 	this->scope = scope;
 	resume();
 }
@@ -2003,8 +1992,6 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
 	catchers.resize(0);
-	vsp = 0;
-	ip = 0;
 	scope = 0;
 	codeScope = 0;
 	constants = 0;
@@ -2013,7 +2000,6 @@ void Processor::reset() {
 }
 
 void Processor::throwVirtualException(const Value& exception) {
-	suspend();
 	if (catchers.empty()) { // FIX: what exception to throw here?
 		reset();
 		throw Exception(engine.getHeap(), exception);
@@ -2021,8 +2007,8 @@ void Processor::throwVirtualException(const Value& exception) {
 	const Catcher& catcher = catchers[catchers.size() - 1];
 	scope = catcher.scope;
 	resume();
-	ip = catcher.ip;
-	vsp = catcher.vsp;
+	codeScope->ip = catcher.ip;
+	codeScope->vsp = catcher.vsp;
 	push(exception);
 	catchers.pop();
 }
@@ -2046,9 +2032,10 @@ bool Processor::privateRun() {
 	
 	while (clockCyclesLeft >= 0) {
 		--clockCyclesLeft;
-		const CodeWord instruction = *ip++;
+		const CodeWord instruction = *(codeScope->ip)++;
 		const Opcode opcode = static_cast<Opcode>(instruction & 255);
 		const Int32 im = static_cast<Int32>(instruction) >> 8;
+		Value*& vsp = codeScope->vsp;
 		switch (opcode) {
 			case CONST_OP:				push(constants[im]); break;
 			case READ_INDEXED_OP:		assert(indexed != 0); push(indexed[im]); break;
@@ -2103,7 +2090,6 @@ bool Processor::privateRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
-					suspend();
 					engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
@@ -2112,7 +2098,6 @@ bool Processor::privateRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
-					suspend();
 					engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 				}
 				break;
@@ -2125,7 +2110,6 @@ bool Processor::privateRun() {
 						std::swap(vsp[-1], vsp[0]);
 					}
 					if (vsp[-1].isString() || vsp[-1].isNumber() || vsp[-1].isBoolean()) {
-						suspend();
 						engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					}
 				}
@@ -2156,20 +2140,19 @@ bool Processor::privateRun() {
 			case LEQ_OP:	pop2push1(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
 			case GT_OP:		pop2push1(Value(vsp[0].isLessThan(vsp[-1]))); break;
 			case GEQ_OP:	pop2push1(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
-			case JMP_OP:	ip += im; break;
+			case JMP_OP:	(codeScope->ip) += im; break;
 
 			case JSR_OP: {
-				suspend();
-				scope = heap.govern(new(heap) SubroutineScope(heap, scope, ip));
+				scope = heap.govern(new(heap) SubroutineScope(heap, scope, (codeScope->ip)));
 				resume();
-				ip += im;
+				(codeScope->ip) += im;
 				break;
 			}
 			
-			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
-			case JF_OP:		ip += (!vsp[0].toBool() ? im : 0); pop(1); break;
-			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += im; else pop(1); break;
-			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += im; else pop(1); break;
+			case JT_OP:		(codeScope->ip) += (vsp[0].toBool() ? im : 0); pop(1); break;
+			case JF_OP:		(codeScope->ip) += (!vsp[0].toBool() ? im : 0); pop(1); break;
+			case JT_OR_POP_OP:	if (vsp[0].toBool()) (codeScope->ip) += im; else pop(1); break;
+			case JF_OR_POP_OP:	if (!vsp[0].toBool()) (codeScope->ip) += im; else pop(1); break;
 
 			case POP_OP:			assert(im >= 0); pop(im); break;
 			case PUSH_BACK_OP:		assert(im >= 0); vsp[-im] = vsp[0]; pop(im); break;
@@ -2187,9 +2170,8 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im);
-				suspend();
 				const Value returnValue = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
-				vsp[0] = returnValue;
+				(codeScope->vsp)[0] = returnValue;
 				break;
 			}
 			
@@ -2206,9 +2188,8 @@ bool Processor::privateRun() {
 					QuickArray<Value> args(im, &heap);
 					std::copy(vsp - im + 1, vsp + 1, args.begin());
 					pop(im + 1);
-					suspend();
 					const Value returnValue = f->call(engine, *this, args.size(), args.begin(), thisObject);
-					vsp[0] = returnValue;
+					(codeScope->vsp)[0] = returnValue;
 				}
 				break;
 			}
@@ -2225,9 +2206,8 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im);
-				suspend();
 				const Value returnValue = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
-				vsp[0] = returnValue;
+				(codeScope->vsp)[0] = returnValue;
 				break;
 			}
 
@@ -2244,10 +2224,9 @@ bool Processor::privateRun() {
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
 				pop(im - 1);
-				suspend();
 				vsp[-1] = Value(newObject);
 				const Value returnValue = f->construct(engine, *this, args.size(), args.begin(), newObject);
-				vsp[0] = returnValue;
+				(codeScope->vsp)[0] = returnValue;
 				break;
 			}
 			
@@ -2266,15 +2245,13 @@ bool Processor::privateRun() {
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
 				const Value patternAndFlags[2] = { vsp[-1], vsp[0] };
 				pop(1);
-				suspend();
 				const Value returnValue = engine.createRegExpFunction->call(engine, *this, 2, patternAndFlags, engine.getGlobals());
-				vsp[0] = returnValue;
+				(codeScope->vsp)[0] = returnValue;
 				break;
 			}
 
 			case RETURN_OP: {
 				const Value returnValue = vsp[0];
-				suspend();
 				scope = scope->previousDynamicScope;
 				if (scope == 0) {
 					result = returnValue;
@@ -2283,13 +2260,13 @@ bool Processor::privateRun() {
 					return false;
 				}
 				resume();
-				vsp[0] = returnValue;
+				(codeScope->vsp)[0] = returnValue;
 				break;
 			}
 			
 			case RETURN_FROM_JSR_OP: {
 				assert(dynamic_cast<SubroutineScope*>(scope) != 0);
-				ip = reinterpret_cast<SubroutineScope*>(scope)->returnIP;
+				(codeScope->ip) = reinterpret_cast<SubroutineScope*>(scope)->returnIP;
 				scope = scope->previousDynamicScope;
 				break;
 			}
@@ -2332,7 +2309,6 @@ bool Processor::privateRun() {
 			case CATCH_SCOPE_OP: {
 				const Value exceptionValue = vsp[0];
 				pop(1);
-				suspend();
 				scope = heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), exceptionValue));
 				resume();
 				break;
@@ -2342,7 +2318,6 @@ bool Processor::privateRun() {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
 					pop(1);
-					suspend();
 					scope = heap.govern(new(heap) WithScope(heap, scope, o));
 					resume();
 				}
@@ -2350,14 +2325,13 @@ bool Processor::privateRun() {
 			}
 			
 			case POP_SCOPE_OP: {
-				suspend();
 				scope = scope->previousDynamicScope;
 				resume();
 				break;
 			}
 			
 			case TRY_OP: {
-				catchers.push(Catcher(ip + im, vsp, scope));
+				catchers.push(Catcher((codeScope->ip) + im, vsp, scope));
 				break;
 			}
 			case TRIED_OP: catchers.pop(); break;
@@ -2412,7 +2386,7 @@ bool Processor::privateRun() {
  				if (name != 0) {
 					vsp[0] = Value(name);
 				} else {
-					ip += im;
+					(codeScope->ip) += im;
 					pop(1);
 				}
 				break;
@@ -2421,7 +2395,6 @@ bool Processor::privateRun() {
 			default: assert(0);
 		}
 	}
-	suspend();
 	return true;
 }
 
@@ -2430,21 +2403,15 @@ Value Processor::getResult() const {
 }
 
 bool Processor::run() {
-	if (ip == 0) {
+	if (scope == 0) {
 		return false;
 	}
 	try {
 		return privateRun();
 	}
 	catch (const Exception& x) {
-		suspend();
 		throwVirtualException(x.getValue());
-		suspend();
 		return true;
-	}
-	catch (...) {
-		suspend();
-		throw;
 	}
 }
 

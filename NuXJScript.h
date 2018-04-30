@@ -1107,7 +1107,6 @@ class Processor : public GCItem {
 				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void pop2push1(const Value& v);
-				void suspend();
 				void resume();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
@@ -1121,9 +1120,7 @@ class Processor : public GCItem {
 public: // FIX : not public, just for some asserts now I think
 
 				Int32 clockCyclesLeft;
-				const CodeWord* ip;
 				Scope* scope;
-				Value* vsp; // FIX : not public, just for an assert now
 
 				struct Catcher {
 					Catcher() { }
