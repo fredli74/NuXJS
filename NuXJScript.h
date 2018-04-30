@@ -695,20 +695,16 @@ class Scope : public GCItem {
 	friend class Processor;
 	
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, const CodeWord* returnIP);
+				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope);
 				Scope(Heap& heap);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-				Scope* getParentLexicalScope() const;
-				Scope* getPreviousDynamicScope() const;
-				const CodeWord* getReturnIP() const;
 	
 	protected:	Scope* const previousDynamicScope;
 				Scope* const parentLexicalScope;
 				CodeScope* codeScope;
-				const CodeWord* returnIP;
 				virtual void gcMark(Heap& heap) const;
 };
 
@@ -717,11 +713,12 @@ class CodeScope : public Scope {
 	
 	public:		typedef Scope super;
 				CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* codeDefinition, UInt32 vstackSize, const CodeWord* returnIP);
+						, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 	protected:	const CodeDefinition* const codeDefinition;
 				QuickArray<Value> vstack;
 				Value* vstackBegin;
+				const CodeWord* ip;
 				Value* vsp;
 				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Object* const thisObject;
@@ -854,8 +851,7 @@ class FunctionScope : public CodeScope {
 	
 	public:		typedef CodeScope super;
 
-				FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, const CodeWord* returnIP
-						, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -880,7 +876,7 @@ class FunctionScope : public CodeScope {
 class EvalScope : public CodeScope {
 	public:		typedef CodeScope super;
 				EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* evalCodeDef, const CodeWord* returnIP);
+						, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
 
@@ -906,6 +902,13 @@ class CatchScope : public Scope {
 					exceptionValue.gcMark(heap);
 					super::gcMark(heap);
 				}
+};
+
+class SubroutineScope : public Scope {
+	friend class Processor;
+	public:		typedef Scope super;
+				SubroutineScope(Heap& heap, Scope* currentScope, const CodeWord* returnIP);
+	protected:	const CodeWord* const returnIP;
 };
 
 // FIX : rename to RunTime?
@@ -1058,6 +1061,7 @@ class Processor : public GCItem {
 					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
 					// FIX : should we have an optional pop argument (push back) to RETURN_OP?
 					, RETURN_OP
+					, RETURN_FROM_JSR_OP
 					// FIX : maybe we should also have a RETURN_VOID_OP?
 					, THIS_OP, VOID_OP								// stack: -> value
 					, DELETE_OP										// stack: object, name -> boolean
@@ -1113,7 +1117,6 @@ class Processor : public GCItem {
 				Engine& engine;
 	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
-				static const CodeWord FINISHED_CODE_THUNK[1];
 
 public: // FIX : not public, just for some asserts now I think
 
