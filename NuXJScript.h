@@ -695,24 +695,19 @@ class Scope : public GCItem {
 	friend class Processor;
 	
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeWord* returnIP);
-				Scope(Heap& heap, Object* thisObject);
+				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, const CodeWord* returnIP);
+				Scope(Heap& heap);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-				Value* getIndexedPointer() const;
 				Scope* getParentLexicalScope() const;
 				Scope* getPreviousDynamicScope() const;
-				Object* getThisObject() const;
 				const CodeWord* getReturnIP() const;
 	
 	protected:	Scope* const previousDynamicScope;
 				Scope* const parentLexicalScope;
-				Object* const thisObject;
 				CodeScope* codeScope;
-				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				const CodeWord* returnIP;
 				virtual void gcMark(Heap& heap) const;
 };
@@ -728,9 +723,12 @@ class CodeScope : public Scope {
 				QuickArray<Value> vstack;
 				Value* vstackBegin;
 				Value* vsp;
+				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Object* const thisObject;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
 					heap.markViaReferences(vstack.begin(), vsp + 1);
+					heap.mark(thisObject);
 					super::gcMark(heap);
 				}
 };
@@ -1094,7 +1092,7 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void chain(const CodeDefinition* codeDefinition, Scope* scope); // FIX : turn into enter global code or what?
+				void chain(CodeScope* scope); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
@@ -1105,6 +1103,7 @@ class Processor : public GCItem {
 				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void pop2push1(const Value& v);
+				void suspend();
 				void resume();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
