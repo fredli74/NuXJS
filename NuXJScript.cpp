@@ -1589,12 +1589,8 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 /* --- Scope --- */
 
-Scope::Scope(Heap& heap, Scope* parentLexicalScope)
-		: super(heap), parentLexicalScope(parentLexicalScope)
-		, codeScope(parentLexicalScope != 0 ? parentLexicalScope->codeScope : 0) {
-}
-
-Scope::Scope(Heap& heap) : super(heap), parentLexicalScope(0), codeScope(0) { }
+Scope::Scope(Heap& heap, Scope* parentLexicalScope) : super(heap), parentLexicalScope(parentLexicalScope) { }
+Scope::Scope(Heap& heap) : super(heap), parentLexicalScope(0) { }
 
 Flags Scope::readVar(Engine& engine, const String* name, Value* v) const {
 	assert(parentLexicalScope != 0);
@@ -1616,32 +1612,24 @@ void Scope::declareVar(Engine& engine, const String* name, const Value& initValu
 	return parentLexicalScope->declareVar(engine, name, initValue, dontDelete);
 }
 
-void Scope::gcMark(Heap& heap) const {
-	heap.mark(parentLexicalScope);
-	heap.mark(codeScope);
-	super::gcMark(heap);
-}
-
 /* --- CodeScope --- */
 
-CodeScope::CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+CodeScope::CodeScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 		, const CodeDefinition* codeDefinition, UInt32 vstackSize)
 		: super(heap, parentLexicalScope)
 		, codeDefinition(codeDefinition), vstack(vstackSize, &heap), vstackBegin(vstack.begin()), ip(codeDefinition->getCodePointer()), vsp(vstack.begin())
-		, thisObject(thisObject), previousDynamicScope(previousDynamicScope) {
-	codeScope = this;
+		, thisObject(thisObject), currentLexicalScope(this), previousDynamicScope(previousDynamicScope) {
 }
 
 CodeScope::CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize)
 		: super(heap), codeDefinition(codeDefinition)
 		, vstack(vstackSize, &heap), vstackBegin(vstack.begin()), ip(codeDefinition->getCodePointer()), vsp(vstack.begin())
-		, thisObject(thisObject), previousDynamicScope(0) {
-	codeScope = this;
+		, thisObject(thisObject), currentLexicalScope(this), previousDynamicScope(0) {
 }
 
-void CodeScope::push(const Value& v) { assert(vsp + 1 < codeScope->vstack.end()); *++vsp = v; }
-void CodeScope::pop2push1(const Value& v) { assert(vsp >= codeScope->vstackBegin); *--vsp = v; }
-void CodeScope::pop(Int32 count) { assert(vsp - count + 1 >= codeScope->vstackBegin); vsp -= count; }
+void CodeScope::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
+void CodeScope::pop2push1(const Value& v) { assert(vsp >= vstackBegin); *--vsp = v; }
+void CodeScope::pop(Int32 count) { assert(vsp - count + 1 >= vstackBegin); vsp -= count; }
 Object* CodeScope::convertToObject(Processor& processor, const Value& v, const bool requestExtensible) {
 	Object* const object = v.toObject(processor.engine, requestExtensible);
 	if (object == 0) {
@@ -1655,7 +1643,6 @@ bool CodeScope::run(Processor& processor) {
 	Engine& engine = processor.engine;
 	Heap& heap = engine.getHeap();
 	const Value* const constants = codeDefinition->getConstantsPointer();
-	Scope* const scope = processor.scope;
 	
 	while (processor.clockCyclesLeft >= 0) {
 		--processor.clockCyclesLeft;
@@ -1669,17 +1656,17 @@ bool CodeScope::run(Processor& processor) {
 			case WRITE_INDEXED_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
 											const String* name = constants[im].getString();
-											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
+											if (currentLexicalScope->readVar(engine, name, ++vsp) == NONEXISTENT) {
 												processor.error(REFERENCE_ERROR, heap.govern(new(heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
 												break;
 											}
 										}
 										break;
 				
-			case WRITE_NAMED_OP:		scope->writeVar(engine, constants[im].getString(), vsp[0]);
+			case WRITE_NAMED_OP:		currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
 										break;
 				
-			case WRITE_NAMED_POP_OP:	scope->writeVar(engine, constants[im].getString(), vsp[0]);
+			case WRITE_NAMED_POP_OP:	currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
 										pop(1);
 										break;
 
@@ -1772,9 +1759,9 @@ bool CodeScope::run(Processor& processor) {
 			case JMP_OP:	ip += im; break;
 
 			case JSR_OP: {
-				processor.scope = heap.govern(new(heap) SubroutineScope(heap, scope, ip));
+				currentLexicalScope = heap.govern(new(heap) SubroutineScope(heap, currentLexicalScope, ip));
 				ip += im;
-				return true;
+				break;
 			}
 			
 			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
@@ -1881,22 +1868,22 @@ bool CodeScope::run(Processor& processor) {
 
 			case RETURN_OP: {
 				const Value returnValue = vsp[0];
-				processor.scope = scope->codeScope->previousDynamicScope;
-				if (processor.scope == 0) {
+				if (previousDynamicScope == 0) {
 					processor.result = returnValue;
 					assert(processor.catchers.empty());
 					processor.reset();
 					return false;
 				}
-				processor.scope->codeScope->vsp[0] = returnValue;
+				previousDynamicScope->vsp[0] = returnValue;
+				processor.currentDynamicScope = previousDynamicScope;
 				return true;
 			}
 			
 			case RETURN_FROM_JSR_OP: {
-				assert(dynamic_cast<SubroutineScope*>(scope) != 0);
-				ip = reinterpret_cast<SubroutineScope*>(scope)->returnIP;
-				processor.scope = scope->parentLexicalScope;
-				return true;
+				assert(dynamic_cast<SubroutineScope*>(currentLexicalScope) != 0);
+				ip = reinterpret_cast<SubroutineScope*>(currentLexicalScope)->returnIP;
+				currentLexicalScope = currentLexicalScope->parentLexicalScope;
+				break;
 			}
 			
 			case THIS_OP: push(Value(thisObject)); break;
@@ -1904,12 +1891,12 @@ bool CodeScope::run(Processor& processor) {
 			
 			case GEN_FUNC_OP: {
 				const Object* o = constants[im].getObject();
-				push(Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), scope)))); // FIX : lose reinterpret_cast ?
+				push(Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), currentLexicalScope)))); // FIX : lose reinterpret_cast ?
 				break;
 			}
 			
 			case DECLARE_OP: {
-				scope->declareVar(engine, constants[im].getString(), vsp[0], true);
+				currentLexicalScope->declareVar(engine, constants[im].getString(), vsp[0], true);
 				pop(1);
 				break;
 			}
@@ -1922,7 +1909,7 @@ bool CodeScope::run(Processor& processor) {
 			}
 			
 			case DELETE_NAMED_OP: {
-				push(Value(scope->deleteVar(engine, constants[im].getString())));
+				push(Value(currentLexicalScope->deleteVar(engine, constants[im].getString())));
 				break;
 			}
 			
@@ -1937,27 +1924,27 @@ bool CodeScope::run(Processor& processor) {
 			case CATCH_SCOPE_OP: {
 				const Value exceptionValue = vsp[0];
 				pop(1);
-				processor.scope = heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), exceptionValue));
-				return true;
+				currentLexicalScope = heap.govern(new(heap) CatchScope(heap, currentLexicalScope, constants[im].getString(), exceptionValue));
+				break;
 			}
 			
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(processor, vsp[0], false);
 				if (o != 0) {
 					pop(1);
-					processor.scope = heap.govern(new(heap) WithScope(heap, scope, o));
-					return true;
+					currentLexicalScope = heap.govern(new(heap) WithScope(heap, currentLexicalScope, o));
+					break;
 				}
 				break;
 			}
 			
 			case POP_SCOPE_OP: {
-				processor.scope = scope->parentLexicalScope;
-				return true;
+				currentLexicalScope = currentLexicalScope->parentLexicalScope;
+				break;
 			}
 			
 			case TRY_OP: {
-				processor.catchers.push(Processor::Catcher(ip + im, vsp, scope));
+				processor.catchers.push(Processor::Catcher(ip + im, vsp, this, currentLexicalScope));
 				break;
 			}
 			case TRIED_OP: processor.catchers.pop(); break;
@@ -1986,7 +1973,7 @@ bool CodeScope::run(Processor& processor) {
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
-				scope->readVar(engine, constants[im].getString(), &v);
+				currentLexicalScope->readVar(engine, constants[im].getString(), &v);
 				push(Value(v.typeOfString()));
 				break;
 			}
@@ -2026,7 +2013,7 @@ bool CodeScope::run(Processor& processor) {
 
 /* --- FunctionScope --- */
 
-FunctionScope::FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, ScriptFunction* function
+FunctionScope::FunctionScope(Heap& heap, CodeScope* previousDynamicScope, Object* thisObject, ScriptFunction* function
 		, UInt32 argc, const Value* argv)
 		: super(heap, previousDynamicScope, function->closure, thisObject
 				, function->codeDefinition, function->codeDefinition->calcVStackSize(argc))
@@ -2135,7 +2122,7 @@ void FunctionScope::declareVar(Engine& engine, const String* name, const Value& 
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+EvalScope::EvalScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 		, const CodeDefinition* evalCodeDef)
 		: super(heap, previousDynamicScope, parentLexicalScope, thisObject, evalCodeDef, evalCodeDef->calcVStackSize(0)) {
 	assert(codeDefinition->getVarsCount() == 0);
@@ -2347,24 +2334,24 @@ std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord) {
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::chain(CodeScope* scope) {
-	this->scope = scope;
+	currentDynamicScope = scope;
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
-	chain(heap.govern(new(heap) FunctionScope(heap, scope, thisObject, func, argc, argv)));
+	chain(heap.govern(new(heap) FunctionScope(heap, currentDynamicScope, thisObject, func, argc, argv)));
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Heap& heap = engine.getHeap();
-	chain(heap.govern(new(heap) EvalScope(heap, scope, (directCall ? scope : engine.getGlobalScope())
-			, (directCall ? scope->codeScope->thisObject : engine.getGlobals()), codeDefinition)));
+	chain(heap.govern(new(heap) EvalScope(heap, currentDynamicScope, (directCall ? currentDynamicScope->currentLexicalScope : engine.getGlobalScope())
+			, (directCall ? currentDynamicScope->thisObject : engine.getGlobals()), codeDefinition)));
 }
 
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
 	catchers.resize(0);
-	scope = 0;
+	currentDynamicScope = 0;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -2373,10 +2360,11 @@ void Processor::throwVirtualException(const Value& exception) {
 		throw Exception(engine.getHeap(), exception);
 	}
 	const Catcher& catcher = catchers[catchers.size() - 1];
-	scope = catcher.scope;
-	scope->codeScope->ip = catcher.ip;
-	scope->codeScope->vsp = catcher.vsp;
-	scope->codeScope->push(exception);
+	currentDynamicScope = catcher.codeScope;
+	currentDynamicScope->currentLexicalScope = catcher.scope;
+	currentDynamicScope->ip = catcher.ip;
+	currentDynamicScope->vsp = catcher.vsp;
+	currentDynamicScope->push(exception);
 	catchers.pop();
 }
 
@@ -2387,7 +2375,7 @@ void Processor::error(ErrorType errorType, const String* message) {
 
 bool Processor::privateRun() {
 	while (clockCyclesLeft >= 0) {
-		if (!scope->codeScope->run(*this)) {
+		if (!currentDynamicScope->run(*this)) {
 			return false;
 		}
 	}
@@ -2399,7 +2387,7 @@ Value Processor::getResult() const {
 }
 
 bool Processor::run() {
-	if (scope == 0) {
+	if (currentDynamicScope == 0) {
 		return false;
 	}
 	try {

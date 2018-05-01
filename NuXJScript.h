@@ -704,15 +704,17 @@ class Scope : public GCItem {
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
 	protected:	Scope* const parentLexicalScope;	// scope chain for variables
-				CodeScope* codeScope;
-				virtual void gcMark(Heap& heap) const;
+				virtual void gcMark(Heap& heap) const {
+					heap.mark(parentLexicalScope);
+					super::gcMark(heap);
+				}
 };
 
 class CodeScope : public Scope {
 	friend class Processor;
 	
 	public:		typedef Scope super;
-				CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+				CodeScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 				bool run(Processor& processor);
@@ -729,11 +731,13 @@ class CodeScope : public Scope {
 				Value* vsp;
 				Value* locals; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Object* const thisObject;
-				Scope* const previousDynamicScope;	// scope chain for function calls
+				Scope* currentLexicalScope;
+				CodeScope* const previousDynamicScope;	// scope chain for function calls
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
 					heap.markViaReferences(vstack.begin(), vsp + 1);
 					heap.mark(thisObject);
+					heap.mark(currentLexicalScope);
 					heap.mark(previousDynamicScope);
 					super::gcMark(heap);
 				}
@@ -860,7 +864,7 @@ class FunctionScope : public CodeScope {
 	
 	public:		typedef CodeScope super;
 
-				FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap& heap, CodeScope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -884,7 +888,7 @@ class FunctionScope : public CodeScope {
 */
 class EvalScope : public CodeScope {
 	public:		typedef CodeScope super;
-				EvalScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+				EvalScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
@@ -1125,13 +1129,14 @@ class Processor : public GCItem {
 public: // FIX : not public, just for some asserts now I think
 
 				Int32 clockCyclesLeft;
-				Scope* scope;
+				CodeScope* currentDynamicScope;
 
 				struct Catcher {
 					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, Scope* scope) : ip(ip), vsp(vsp), scope(scope) { }
+					Catcher(const CodeWord* ip, Value* vsp, CodeScope* codeScope, Scope* scope) : ip(ip), vsp(vsp), codeScope(codeScope), scope(scope) { }
 					const CodeWord* ip;
 					Value* vsp;
+					CodeScope* codeScope;
 					Scope* scope;
 				};
 
@@ -1139,7 +1144,7 @@ public: // FIX : not public, just for some asserts now I think
 				Value result;
 
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(scope);
+					heap.mark(currentDynamicScope);
 					result.gcMark(heap);
 					super::gcMark(heap);
 				}
