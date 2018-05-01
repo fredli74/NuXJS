@@ -665,7 +665,7 @@ class CodeDefinition : public Object {
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
-				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
+				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in LexicalScope.
 				QuickVector<const String*> argumentNames;
 				const String* name;
 				const String* selfName;
@@ -689,34 +689,30 @@ class CodeDefinition : public Object {
 #endif
 };
 
-class CodeScope;
-
-class Scope : public GCItem {
+class LexicalScope : public GCItem {
 	friend class Processor;
-	friend class CodeScope;
+	friend class DynamicScope;
 	
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* parentLexicalScope);
-				Scope(Heap& heap);
+				LexicalScope(Heap& heap, LexicalScope* parentLexicalScope);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
-	protected:	Scope* const parentLexicalScope;	// scope chain for variables
+	protected:	LexicalScope* const parentLexicalScope;	// scope chain for variables
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(parentLexicalScope);
 					super::gcMark(heap);
 				}
 };
 
-class CodeScope : public Scope {
+class DynamicScope : public LexicalScope {
 	friend class Processor;
 	
-	public:		typedef Scope super;
-				CodeScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* codeDefinition, UInt32 vstackSize);
-				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
+	public:		typedef LexicalScope super;
+				DynamicScope(Heap& heap, DynamicScope* previousDynamicScope, LexicalScope* parentLexicalScope
+						, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 				bool run(Processor& processor);
 	
 	protected:	void push(const Value& v);
@@ -731,8 +727,8 @@ class CodeScope : public Scope {
 				Value* vsp;
 				Value* locals; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Object* const thisObject;
-				Scope* currentLexicalScope;
-				CodeScope* const previousDynamicScope;	// scope chain for function calls
+				LexicalScope* currentLexicalScope;
+				DynamicScope* const previousDynamicScope;	// scope chain for function calls
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
 					heap.markViaReferences(vstack.begin(), vsp + 1);
@@ -762,7 +758,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, LexicalScope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -771,7 +767,7 @@ class ScriptFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
 				const CodeDefinition* const codeDefinition;
-				Scope* const closure;
+				LexicalScope* const closure;
 				
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
@@ -830,8 +826,8 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
-class GlobalScope : public CodeScope {
-	public:		typedef CodeScope super;
+class GlobalScope : public DynamicScope {
+	public:		typedef DynamicScope super;
 				GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
@@ -845,9 +841,9 @@ class GlobalScope : public CodeScope {
 				}
 };
 
-class WithScope : public Scope {
-	public:		typedef Scope super;
-				WithScope(Heap& heap, Scope* currentScope, Object* withObject);
+class WithScope : public LexicalScope {
+	public:		typedef LexicalScope super;
+				WithScope(Heap& heap, LexicalScope* currentScope, Object* withObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -859,12 +855,12 @@ class WithScope : public Scope {
 				}
 };
 
-class FunctionScope : public CodeScope {
+class FunctionScope : public DynamicScope {
 	friend class Arguments;
 	
-	public:		typedef CodeScope super;
+	public:		typedef DynamicScope super;
 
-				FunctionScope(Heap& heap, CodeScope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap& heap, DynamicScope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -886,9 +882,9 @@ class FunctionScope : public CodeScope {
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDefinition pointer (for constants etc) and it declares deletable vars.
 */
-class EvalScope : public CodeScope {
-	public:		typedef CodeScope super;
-				EvalScope(Heap& heap, CodeScope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
+class EvalScope : public DynamicScope {
+	public:		typedef DynamicScope super;
+				EvalScope(Heap& heap, DynamicScope* previousDynamicScope, LexicalScope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
@@ -899,10 +895,10 @@ class EvalScope : public CodeScope {
 	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
 	the indexed variables.
 */
-class CatchScope : public Scope {
-	public:		typedef Scope super;
+class CatchScope : public LexicalScope {
+	public:		typedef LexicalScope super;
 
-				CatchScope(Heap& heap, Scope* currentScope, const String* exceptionName, const Value& exceptionValue);
+				CatchScope(Heap& heap, LexicalScope* currentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -917,10 +913,10 @@ class CatchScope : public Scope {
 				}
 };
 
-class SubroutineScope : public Scope {
-	friend class CodeScope;
-	public:		typedef Scope super;
-				SubroutineScope(Heap& heap, Scope* currentScope, const CodeWord* returnIP);
+class SubroutineScope : public LexicalScope {
+	friend class DynamicScope;
+	public:		typedef LexicalScope super;
+				SubroutineScope(Heap& heap, LexicalScope* currentScope, const CodeWord* returnIP);
 	protected:	const CodeWord* const returnIP;
 };
 
@@ -1105,12 +1101,12 @@ const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 // FIX : Processor -> Interpreter
 class Processor : public GCItem {
 	friend class ScriptFunction;
-	friend class CodeScope;
+	friend class DynamicScope;
 	
 	public:		typedef GCItem super;
 
 	public:		Processor(Engine& engine);
-				void chain(CodeScope* scope); // FIX : turn into enter global code or what?
+				void chain(DynamicScope* scope); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
@@ -1119,32 +1115,38 @@ class Processor : public GCItem {
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
 				bool privateRun();
+				void pushCatcher(Int32 catchCodeOffset);
+				void popCatcher();
 				void throwVirtualException(const Value& exception);
 				void reset();
 
 				Engine& engine;
 	
-				static const OpcodeInfo opcodeInfo[OP_COUNT];
-
 public: // FIX : not public, just for some asserts now I think
-
-				Int32 clockCyclesLeft;
-				CodeScope* currentDynamicScope;
-
-				struct Catcher {
-					Catcher() { }
-					Catcher(const CodeWord* ip, Value* vsp, CodeScope* codeScope, Scope* scope) : ip(ip), vsp(vsp), codeScope(codeScope), scope(scope) { }
+				struct Catcher : public GCItem {
+					typedef GCItem super;
+					Catcher(DynamicScope* dynamicScope, LexicalScope* lexicalScope, const CodeWord* ip, Value* vsp, Catcher* nextCatcher);
+					DynamicScope* dynamicScope;
+					LexicalScope* lexicalScope;
 					const CodeWord* ip;
 					Value* vsp;
-					CodeScope* codeScope;
-					Scope* scope;
+					Catcher* nextCatcher;
+					virtual void gcMark(Heap& heap) const {
+						heap.mark(dynamicScope);
+						heap.mark(lexicalScope);
+						heap.mark(nextCatcher);
+						super::gcMark(heap);
+					}
 				};
 
-				QuickVector<Catcher> catchers; // FIX : QuickVector slow? linked list? shrink in gc?
+				Int32 clockCyclesLeft;
+				DynamicScope* currentDynamicScope;
+				Catcher* firstCatcher;
 				Value result;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(currentDynamicScope);
+					heap.mark(firstCatcher);
 					result.gcMark(heap);
 					super::gcMark(heap);
 				}
