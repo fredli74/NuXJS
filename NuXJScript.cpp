@@ -1555,7 +1555,7 @@ Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPro
 
 Value* Arguments::findProperty(const Value& key) const {
 	UInt32 i;
-	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? scope->indexedPointer + i : 0);
+	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? scope->locals + i : 0);
 }
 
 Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
@@ -1567,7 +1567,7 @@ Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) cons
 bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	Value* p = findProperty(key);
 	if (p != 0 && (flags & (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG)) != 0) {
-		deletedArguments[p - scope->indexedPointer] = true;
+		deletedArguments[p - scope->locals] = true;
 		p = 0;
 	}
 	return (p == 0 ? super::setOwnProperty(engine, key, v, flags) : ((void)(*p = v), true));
@@ -1575,7 +1575,7 @@ bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v,
 
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 	const Value* p = findProperty(key);
-    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - scope->indexedPointer] = true));
+    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - scope->locals] = true));
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
@@ -1589,12 +1589,12 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 
 /* --- Scope --- */
 
-Scope::Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope)
-		: super(heap), previousDynamicScope(previousDynamicScope), parentLexicalScope(parentLexicalScope)
-		, codeScope(previousDynamicScope != 0 ? previousDynamicScope->codeScope : 0) {
+Scope::Scope(Heap& heap, Scope* parentLexicalScope)
+		: super(heap), parentLexicalScope(parentLexicalScope)
+		, codeScope(parentLexicalScope != 0 ? parentLexicalScope->codeScope : 0) {
 }
 
-Scope::Scope(Heap& heap) : super(heap), previousDynamicScope(0), parentLexicalScope(0), codeScope(0) { }
+Scope::Scope(Heap& heap) : super(heap), parentLexicalScope(0), codeScope(0) { }
 
 Flags Scope::readVar(Engine& engine, const String* name, Value* v) const {
 	assert(parentLexicalScope != 0);
@@ -1617,7 +1617,6 @@ void Scope::declareVar(Engine& engine, const String* name, const Value& initValu
 }
 
 void Scope::gcMark(Heap& heap) const {
-	heap.mark(previousDynamicScope);
 	heap.mark(parentLexicalScope);
 	heap.mark(codeScope);
 	super::gcMark(heap);
@@ -1627,15 +1626,16 @@ void Scope::gcMark(Heap& heap) const {
 
 CodeScope::CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 		, const CodeDefinition* codeDefinition, UInt32 vstackSize)
-		: super(heap, previousDynamicScope, parentLexicalScope)
+		: super(heap, parentLexicalScope)
 		, codeDefinition(codeDefinition), vstack(vstackSize, &heap), vstackBegin(vstack.begin()), ip(codeDefinition->getCodePointer()), vsp(vstack.begin())
-		, thisObject(thisObject) {
+		, thisObject(thisObject), previousDynamicScope(previousDynamicScope) {
 	codeScope = this;
 }
 
 CodeScope::CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize)
 		: super(heap), codeDefinition(codeDefinition)
-		, vstack(vstackSize, &heap), vstackBegin(vstack.begin()), ip(codeDefinition->getCodePointer()), vsp(vstack.begin()), thisObject(thisObject) {
+		, vstack(vstackSize, &heap), vstackBegin(vstack.begin()), ip(codeDefinition->getCodePointer()), vsp(vstack.begin())
+		, thisObject(thisObject), previousDynamicScope(0) {
 	codeScope = this;
 }
 
@@ -1664,9 +1664,9 @@ bool CodeScope::run(Processor& processor) {
 		const Int32 im = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
 			case CONST_OP:				push(constants[im]); break;
-			case READ_INDEXED_OP:		assert(indexedPointer != 0); push(indexedPointer[im]); break;
-			case WRITE_INDEXED_OP:		assert(indexedPointer != 0); indexedPointer[im] = vsp[0]; break;
-			case WRITE_INDEXED_POP_OP:	assert(indexedPointer != 0); indexedPointer[im] = vsp[0]; pop(1); break;
+			case READ_INDEXED_OP:		assert(locals != 0); push(locals[im]); break;
+			case WRITE_INDEXED_OP:		assert(locals != 0); locals[im] = vsp[0]; break;
+			case WRITE_INDEXED_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
 											const String* name = constants[im].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
@@ -1881,7 +1881,7 @@ bool CodeScope::run(Processor& processor) {
 
 			case RETURN_OP: {
 				const Value returnValue = vsp[0];
-				processor.scope = scope->previousDynamicScope;
+				processor.scope = scope->codeScope->previousDynamicScope;
 				if (processor.scope == 0) {
 					processor.result = returnValue;
 					assert(processor.catchers.empty());
@@ -1895,7 +1895,7 @@ bool CodeScope::run(Processor& processor) {
 			case RETURN_FROM_JSR_OP: {
 				assert(dynamic_cast<SubroutineScope*>(scope) != 0);
 				ip = reinterpret_cast<SubroutineScope*>(scope)->returnIP;
-				processor.scope = scope->previousDynamicScope;
+				processor.scope = scope->parentLexicalScope;
 				return true;
 			}
 			
@@ -1952,7 +1952,7 @@ bool CodeScope::run(Processor& processor) {
 			}
 			
 			case POP_SCOPE_OP: {
-				processor.scope = scope->previousDynamicScope;
+				processor.scope = scope->parentLexicalScope;
 				return true;
 			}
 			
@@ -2032,12 +2032,12 @@ FunctionScope::FunctionScope(Heap& heap, Scope* previousDynamicScope, Object* th
 				, function->codeDefinition, function->codeDefinition->calcVStackSize(argc))
 		, function(function), passedArgumentsCount(argc)
 		, dynamicVars(0), bloomSet(function->codeDefinition->bloomSet) {
-	indexedPointer = vstack.begin() + codeDefinition->getVarsCount();
-	vstackBegin = indexedPointer + std::max(codeDefinition->getArgumentsCount(), argc);
+	locals = vstack.begin() + codeDefinition->getVarsCount();
+	vstackBegin = locals + std::max(codeDefinition->getArgumentsCount(), argc);
 	vsp = vstackBegin;
-	std::fill(vstack.begin(), indexedPointer, Value::UNDEFINED);
-	Value* e = std::copy(argv, argv + argc, indexedPointer);
-	std::fill(e, vstack.end(), Value::UNDEFINED); // FIX : no need to fill to end in the future
+	std::fill(vstack.begin(), locals, Value::UNDEFINED);
+	Value* e = std::copy(argv, argv + argc, locals);
+	std::fill(e, vstackBegin, Value::UNDEFINED); // FIX : no need to fill to end in the future
 }
 
 ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
@@ -2056,7 +2056,7 @@ Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			*v = indexedPointer[index];
+			*v = locals[index];
 			return DONT_DELETE_FLAG | EXISTS_FLAG;
 		}
 		if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
@@ -2078,7 +2078,7 @@ void FunctionScope::writeVar(Engine& engine, const String* name, const Value& v)
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			indexedPointer[index] = v;
+			locals[index] = v;
 			return;
 		}
 		// FIX : make sub that lookup's the bucket, also use in getProperty
@@ -2170,7 +2170,7 @@ void GlobalScope::declareVar(Engine& engine, const String* name, const Value& in
 /* --- CatchScope --- */
 
 CatchScope::CatchScope(Heap& heap, Scope* currentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(heap, currentScope, currentScope), exceptionName(exceptionName)
+		: super(heap, currentScope), exceptionName(exceptionName)
 		, exceptionValue(exceptionValue) { }
 
 Flags CatchScope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -2201,12 +2201,12 @@ bool CatchScope::deleteVar(Engine& engine, const String* name) {
 /* --- SubroutineScope --- */
 
 SubroutineScope::SubroutineScope(Heap& heap, Scope* currentScope, const CodeWord* returnIP)
-		: super(heap, currentScope, currentScope), returnIP(returnIP) { }
+		: super(heap, currentScope), returnIP(returnIP) { }
 
 /* --- WithScope --- */
 
 WithScope::WithScope(Heap& heap, Scope* currentScope, Object* withObject)
-		: super(heap, currentScope, currentScope), withObject(withObject) { }
+		: super(heap, currentScope), withObject(withObject) { }
 
 Flags WithScope::readVar(Engine& engine, const String* name, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(engine, Value(name), v);

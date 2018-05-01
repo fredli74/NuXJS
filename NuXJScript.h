@@ -696,15 +696,14 @@ class Scope : public GCItem {
 	friend class CodeScope;
 	
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope);
+				Scope(Heap& heap, Scope* parentLexicalScope);
 				Scope(Heap& heap);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 	
-	protected:	Scope* const previousDynamicScope;
-				Scope* const parentLexicalScope;
+	protected:	Scope* const parentLexicalScope;	// scope chain for variables
 				CodeScope* codeScope;
 				virtual void gcMark(Heap& heap) const;
 };
@@ -728,12 +727,14 @@ class CodeScope : public Scope {
 				Value* vstackBegin;
 				const CodeWord* ip;
 				Value* vsp;
-				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Value* locals; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				Object* const thisObject;
+				Scope* const previousDynamicScope;	// scope chain for function calls
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
 					heap.markViaReferences(vstack.begin(), vsp + 1);
 					heap.mark(thisObject);
+					heap.mark(previousDynamicScope);
 					super::gcMark(heap);
 				}
 };
