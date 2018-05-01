@@ -1791,11 +1791,8 @@ bool CodeScope::run(Processor& processor) {
 					processor.error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					break;
 				}
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				vsp[-im] = f->call(engine, processor, im, vsp - im + 1, engine.getGlobals());
 				pop(im);
-				const Value returnValue = f->call(engine, processor, args.size(), args.begin(), engine.getGlobals());
-				vsp[0] = returnValue;
 				return true;
 			}
 			
@@ -1809,11 +1806,8 @@ bool CodeScope::run(Processor& processor) {
 						processor.error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 						break;
 					}
-					QuickArray<Value> args(im, &heap);
-					std::copy(vsp - im + 1, vsp + 1, args.begin());
+					vsp[-im - 1] = f->call(engine, processor, im, vsp - im + 1, thisObject);
 					pop(im + 1);
-					const Value returnValue = f->call(engine, processor, args.size(), args.begin(), thisObject);
-					vsp[0] = returnValue;
 					return true;
 				}
 				break;
@@ -1828,11 +1822,8 @@ bool CodeScope::run(Processor& processor) {
 				if (f == &engine.evalFunction) {
 					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				vsp[-im] = f->call(engine, processor, im, vsp - im + 1, engine.getGlobals());
 				pop(im);
-				const Value returnValue = f->call(engine, processor, args.size(), args.begin(), engine.getGlobals());
-				vsp[0] = returnValue;
 				return true;
 			}
 
@@ -1846,12 +1837,9 @@ bool CodeScope::run(Processor& processor) {
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.govern(new(heap) ScriptObject(heap, prototype != 0 ? prototype : &engine.objectPrototype));
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
-				pop(im - 1);
-				vsp[-1] = Value(newObject);
-				const Value returnValue = f->construct(engine, processor, args.size(), args.begin(), newObject);
-				vsp[0] = returnValue;
+				vsp[-im] = Value(newObject);
+				vsp[-im + 1] = f->construct(engine, processor, im, vsp - im + 1, newObject);
+ 				pop(im - 1);
 				return true;
 			}
 			
@@ -1869,9 +1857,8 @@ bool CodeScope::run(Processor& processor) {
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
 				const Value patternAndFlags[2] = { vsp[-1], vsp[0] };
+				vsp[-1] = engine.createRegExpFunction->call(engine, processor, 2, vsp - 1, engine.getGlobals());
 				pop(1);
-				const Value returnValue = engine.createRegExpFunction->call(engine, processor, 2, patternAndFlags, engine.getGlobals());
-				vsp[0] = returnValue;
 				return true;
 			}
 
