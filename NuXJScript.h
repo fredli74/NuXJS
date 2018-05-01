@@ -693,6 +693,7 @@ class CodeScope;
 
 class Scope : public GCItem {
 	friend class Processor;
+	friend class CodeScope;
 	
 	public:		typedef GCItem super;
 				Scope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope);
@@ -715,7 +716,14 @@ class CodeScope : public Scope {
 				CodeScope(Heap& heap, Scope* previousDynamicScope, Scope* parentLexicalScope, Object* thisObject
 						, const CodeDefinition* codeDefinition, UInt32 vstackSize);
 				CodeScope(Heap& heap, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
-	protected:	const CodeDefinition* const codeDefinition;
+				bool run(Processor& processor);
+	
+	protected:	void push(const Value& v);
+				void pop(Int32 count = 1);
+				void pop2push1(const Value& v);
+				Object* convertToObject(Processor& processor, const Value& v, bool requestExtensible);
+
+				const CodeDefinition* const codeDefinition;
 				QuickArray<Value> vstack;
 				Value* vstackBegin;
 				const CodeWord* ip;
@@ -905,7 +913,7 @@ class CatchScope : public Scope {
 };
 
 class SubroutineScope : public Scope {
-	friend class Processor;
+	friend class CodeScope;
 	public:		typedef Scope super;
 				SubroutineScope(Heap& heap, Scope* currentScope, const CodeWord* returnIP);
 	protected:	const CodeWord* const returnIP;
@@ -1012,88 +1020,89 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
+enum Opcode {	// FIX : sort
+	INVALID_OP = -1 // FIX : why?!
+	, CONST_OP										// operand: const_index, stack: -> constant
+	, READ_INDEXED_OP								// operand: local_index, stack: -> value
+	, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+	, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
+	, READ_NAMED_OP									// operand: const_index (name), stack: -> value
+	, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
+	, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
+	, GET_PROPERTY_OP								// stack: object, name -> value
+	, SET_PROPERTY_OP								// stack: object, name, value -> value
+	, SET_PROPERTY_POP_OP							// stack: object, name, value ->
+	, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
+	, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
+	, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
+	, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
+	, INC_OP, DEC_OP								// stack: value -> number
+	, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
+	, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
+	, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
+	, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
+	, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
+	, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
+	, JMP_OP, JSR_OP								// operand: offset
+	, JT_OP, JF_OP									// operand: offset, stack: boolean ->
+	, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
+	, POP_OP										// operand: count, stack: ... ->
+	// FIX : push back is a really bad name, it's really pop back and then push sort of
+	, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
+	, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
+	, SWAP_OP
+	, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
+	, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
+	, CALL_OP										// operand: n, stack: function, n * args -> return_value
+	, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
+	, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
+	, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
+	, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
+	, NEW_OBJECT_OP									// stack: -> object
+	, NEW_ARRAY_OP									// stack: -> array_object
+	, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
+	// FIX : should we have an optional pop argument (push back) to RETURN_OP?
+	, RETURN_OP
+	, RETURN_FROM_JSR_OP
+	// FIX : maybe we should also have a RETURN_VOID_OP?
+	, THIS_OP, VOID_OP								// stack: -> value
+	, DELETE_OP										// stack: object, name -> boolean
+	, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
+	, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
+	, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
+	, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
+	, WITH_SCOPE_OP									// stack: object ->
+	, POP_SCOPE_OP
+	, TRY_OP										// operand: catch_offset
+	, TRIED_OP
+	, THROW_OP										// stack: value ->
+	, IN_OP											// stack: string, object -> boolean
+	, INSTANCE_OF_OP								// stack: object, function -> boolean
+	, TYPEOF_OP										// stack: value -> string
+	, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
+	, GET_ENUMERATOR_OP								// stack: object -> enumerator
+	, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
+	, OP_COUNT
+};
+
+struct OpcodeInfo {
+	enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
+	Opcode opcode;
+	const char* mnemonic;
+	Int32 stackUse;
+	Byte flags;
+};
+
+CodeWord packInstruction(const Opcode opcode, const Int32 operand);
+std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
+const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
+
 // FIX : Processor -> Interpreter
 class Processor : public GCItem {
 	friend class ScriptFunction;
+	friend class CodeScope;
 	
 	public:		typedef GCItem super;
-
-	public:		enum Opcode {	// FIX : sort
-					INVALID_OP = -1 // FIX : why?!
-					, CONST_OP										// operand: const_index, stack: -> constant
-					, READ_INDEXED_OP								// operand: local_index, stack: -> value
-					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
-					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
-					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
-					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
-					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
-					, GET_PROPERTY_OP								// stack: object, name -> value
-					, SET_PROPERTY_OP								// stack: object, name, value -> value
-					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
-					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
-					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
-					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
-					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
-					, INC_OP, DEC_OP								// stack: value -> number
-					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
-					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
-					, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
-					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
-					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
-					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
-					, JMP_OP, JSR_OP								// operand: offset
-					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
-					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
-					, POP_OP										// operand: count, stack: ... ->
-					// FIX : push back is a really bad name, it's really pop back and then push sort of
-					, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
-					, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
-					, SWAP_OP
-					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
-					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
-					, CALL_OP										// operand: n, stack: function, n * args -> return_value
-					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
-					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
-					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
-					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
-					, NEW_OBJECT_OP									// stack: -> object
-					, NEW_ARRAY_OP									// stack: -> array_object
-					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
-					// FIX : should we have an optional pop argument (push back) to RETURN_OP?
-					, RETURN_OP
-					, RETURN_FROM_JSR_OP
-					// FIX : maybe we should also have a RETURN_VOID_OP?
-					, THIS_OP, VOID_OP								// stack: -> value
-					, DELETE_OP										// stack: object, name -> boolean
-					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
-					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
-					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
-					, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
-					, WITH_SCOPE_OP									// stack: object ->
-					, POP_SCOPE_OP
-					, TRY_OP										// operand: catch_offset
-					, TRIED_OP
-					, THROW_OP										// stack: value ->
-					, IN_OP											// stack: string, object -> boolean
-					, INSTANCE_OF_OP								// stack: object, function -> boolean
-					, TYPEOF_OP										// stack: value -> string
-					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
-					, GET_ENUMERATOR_OP								// stack: object -> enumerator
-					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
-					, OP_COUNT
-				};
-	
-				struct OpcodeInfo {
-					enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
-					Opcode opcode;
-					const char* mnemonic;
-					Int32 stackUse;
-					Byte flags;
-				};
-	
-				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
-				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
-				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
 				void chain(CodeScope* scope); // FIX : turn into enter global code or what?
@@ -1104,13 +1113,8 @@ class Processor : public GCItem {
 
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
-				void push(const Value& v);
-				void pop(Int32 count = 1);
-				void pop2push1(const Value& v);
-				void resume();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
-				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reset();
 
 				Engine& engine;
@@ -1138,13 +1142,6 @@ public: // FIX : not public, just for some asserts now I think
 					result.gcMark(heap);
 					super::gcMark(heap);
 				}
-
-				// Copies from scope. Will be gc marked from there.
-				
-				CodeScope* codeScope;
-				const Value* constants;
-				Value* indexed;
-				Object* thisObject;
 };
 
 enum Precedence {
@@ -1189,20 +1186,20 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(Heap& heap, Int32 initialStackDepth)
-							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
+							: code(&heap), lastEmitted(INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap)
 #endif
 							 { }
-					void emit(Processor::Opcode opcode, Int32 operand);
+					void emit(Opcode opcode, Int32 operand);
 					void insertSection(const CodeSection& section);
 					bool inDeadCode() const { return stackDepth == DEAD_CODE_STACK_DEPTH; }
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
 	QuickVector<Int32> stackDepths;
 #endif
-					Processor::Opcode lastEmitted;
+					Opcode lastEmitted;
 					const Int32 initialStackDepth;
 					Int32 stackDepth;
 					Int32 maxStackDepth;
@@ -1218,18 +1215,18 @@ class Compiler : public GCItem {
 				};
 
 				void error(ErrorType errorType, const char* message);
-				void emit(Processor::Opcode opcode, Int32 operand = 0);
+				void emit(Opcode opcode, Int32 operand = 0);
 				CodeSection* changeSection(CodeSection* newOutputSection);
 				void insertSection(const CodeSection& section);
 				UInt32 addConstant(const Value& constant);
-				void emitWithConstant(Processor::Opcode opcode, const Value& constant);
-				BranchPoint emitForwardBranch(Processor::Opcode opcode);
+				void emitWithConstant(Opcode opcode, const Value& constant);
+				BranchPoint emitForwardBranch(Opcode opcode);
 				void completeForwardBranch(const BranchPoint& point);
 				void completeForwardBranches(const BranchPoint* begin, const BranchPoint* end);
 				BranchPoint markBackwardBranch();
-				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
+				void emitBackwardBranch(Opcode opcode, const BranchPoint& point);
 	
-				Processor::Opcode evalPopOpcode() const;
+				Opcode evalPopOpcode() const;
 				ExpressionResult safeKeep(); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
@@ -1242,7 +1239,7 @@ class Compiler : public GCItem {
 				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
-				ExpressionResult functionCall(Processor::Opcode opcode);
+				ExpressionResult functionCall(Opcode opcode);
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
