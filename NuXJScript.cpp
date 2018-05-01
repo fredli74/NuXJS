@@ -498,6 +498,9 @@ bool Value::toArrayIndex(UInt32& index) const {
 			}
 			return p == e;
 		}
+	#if !defined(NDEBUG)
+		case BAD_TYPE: assert(0);
+	#endif
 		default: return false;
 	}
 }
@@ -566,6 +569,9 @@ bool Value::isEqualTo(const Value& r) const {
 			case NUMBER_TYPE: return (r.type == BOOLEAN_TYPE && var.number == (r.var.boolean ? 1.0 : 0.0));
 			case STRING_TYPE: return (r.type >= BOOLEAN_TYPE && stringToDouble(*var.string)
 					== (r.type == BOOLEAN_TYPE ? (r.var.boolean ? 1.0 : 0.0) : r.var.number));
+		#if !defined(NDEBUG)
+			case BAD_TYPE: assert(0);
+		#endif
 			default: return false;
 		}
 	}
@@ -608,6 +614,9 @@ void Value::gcMark(Heap& heap) const {
 	switch (type) {
 		case STRING_TYPE: heap.mark(var.string); break;
 		case OBJECT_TYPE: heap.mark(var.object); break;
+	#if !defined(NDEBUG)
+		case BAD_TYPE: assert(0);
+	#endif
 		default: break;
 	}
 }
@@ -2024,7 +2033,7 @@ FunctionScope::FunctionScope(Heap& heap, CodeScope* previousDynamicScope, Object
 	vsp = vstackBegin;
 	std::fill(vstack.begin(), locals, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, locals);
-	std::fill(e, vstackBegin, Value::UNDEFINED); // FIX : no need to fill to end in the future
+	std::fill(e, vstackBegin + 1, Value::UNDEFINED); // vstackBegin + 1 to set current vstack entry to undefined (current vstack entry must be valid)
 }
 
 ScriptObject* FunctionScope::getDynamicVars(Engine& engine) const {
@@ -2136,6 +2145,7 @@ void EvalScope::declareVar(Engine& engine, const String* name, const Value& init
 
 GlobalScope::GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition)
 		: super(heap, globalObject, codeDefinition, codeDefinition->calcVStackSize(0)), globalObject(globalObject) {
+	vstack[0] = Value::UNDEFINED; // current vstack entry must be valid
 	assert(codeDefinition->getVarsCount() == 0);
 }
 Flags GlobalScope::readVar(Engine& engine, const String* name, Value* v) const {
