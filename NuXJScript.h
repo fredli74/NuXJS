@@ -1125,7 +1125,8 @@ class Processor : public GCItem {
 public: // FIX : not public, just for some asserts now I think
 				struct Catcher : public GCItem {
 					typedef GCItem super;
-					Catcher(DynamicScope* dynamicScope, LexicalScope* lexicalScope, const CodeWord* ip, Value* vsp, Catcher* nextCatcher);
+					Catcher(DynamicScope* dynamicScope, LexicalScope* lexicalScope, const CodeWord* ip, Value* vsp
+							, Catcher* nextCatcher);
 					DynamicScope* dynamicScope;
 					LexicalScope* lexicalScope;
 					const CodeWord* ip;

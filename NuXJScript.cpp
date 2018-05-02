@@ -1629,6 +1629,7 @@ DynamicScope::DynamicScope(Heap& heap, DynamicScope* previousDynamicScope, Lexic
 void DynamicScope::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
 void DynamicScope::pop2push1(const Value& v) { assert(vsp >= vstackBegin); *--vsp = v; }
 void DynamicScope::pop(Int32 count) { assert(vsp - count + 1 >= vstackBegin); vsp -= count; }
+
 Object* DynamicScope::convertToObject(Processor& processor, const Value& v, const bool requestExtensible) {
 	Object* const object = v.toObject(processor.engine, requestExtensible);
 	if (object == 0) {
@@ -1636,7 +1637,6 @@ Object* DynamicScope::convertToObject(Processor& processor, const Value& v, cons
 	}
 	return object;
 }
-
 
 bool DynamicScope::run(Processor& processor) {
 	Engine& engine = processor.engine;
@@ -1653,21 +1653,26 @@ bool DynamicScope::run(Processor& processor) {
 			case READ_INDEXED_OP:		assert(locals != 0); push(locals[im]); break;
 			case WRITE_INDEXED_OP:		assert(locals != 0); locals[im] = vsp[0]; break;
 			case WRITE_INDEXED_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(1); break;
-			case READ_NAMED_OP:			{
-											const String* name = constants[im].getString();
-											if (currentLexicalScope->readVar(engine, name, ++vsp) == NONEXISTENT) {
-												processor.error(REFERENCE_ERROR, heap.govern(new(heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
-												break;
-											}
-										}
-										break;
+			
+			case READ_NAMED_OP: {
+				const String* name = constants[im].getString();
+				if (currentLexicalScope->readVar(engine, name, ++vsp) == NONEXISTENT) {
+					processor.error(REFERENCE_ERROR, heap.govern(new(heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
+					break;
+				}
+				break;
+			}
+	
+			case WRITE_NAMED_OP: {
+				currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
+				break;
+			}
 				
-			case WRITE_NAMED_OP:		currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
-										break;
-				
-			case WRITE_NAMED_POP_OP:	currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
-										pop(1);
-										break;
+			case WRITE_NAMED_POP_OP: {
+				currentLexicalScope->writeVar(engine, constants[im].getString(), vsp[0]);
+				pop(1);
+				break;
+			}
 
 			case GET_PROPERTY_OP: {
 				const Object* o = convertToObject(processor, vsp[-1], false);
@@ -1717,7 +1722,7 @@ bool DynamicScope::run(Processor& processor) {
 				break;
 			}
 				
-			case PRE_EQ_OP:
+			case PRE_EQ_OP: {
 				// FIX : doesn't feel totally efficient this...
 				if (vsp[-1].isObject() != vsp[0].isObject()) {
 					if (vsp[-1].isObject()) {
@@ -1729,6 +1734,7 @@ bool DynamicScope::run(Processor& processor) {
 					}
 				}
 				break;
+			}
 
 			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
 			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
@@ -1763,10 +1769,10 @@ bool DynamicScope::run(Processor& processor) {
 				break;
 			}
 			
-			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
-			case JF_OP:		ip += (!vsp[0].toBool() ? im : 0); pop(1); break;
-			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += im; else pop(1); break;
-			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += im; else pop(1); break;
+			case JT_OP:				ip += (vsp[0].toBool() ? im : 0); pop(1); break;
+			case JF_OP:				ip += (!vsp[0].toBool() ? im : 0); pop(1); break;
+			case JT_OR_POP_OP:		if (vsp[0].toBool()) ip += im; else pop(1); break;
+			case JF_OR_POP_OP:		if (!vsp[0].toBool()) ip += im; else pop(1); break;
 
 			case POP_OP:			assert(im >= 0); pop(im); break;
 			case PUSH_BACK_OP:		assert(im >= 0); vsp[-im] = vsp[0]; pop(im); break;
@@ -1875,7 +1881,8 @@ bool DynamicScope::run(Processor& processor) {
 			
 			case GEN_FUNC_OP: {
 				const Object* o = constants[im].getObject();
-				push(Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), currentLexicalScope)))); // FIX : lose reinterpret_cast ?
+				assert(dynamic_cast<const CodeDefinition*>(o) != 0);
+				push(Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), currentLexicalScope))));
 				break;
 			}
 			
@@ -1972,7 +1979,8 @@ bool DynamicScope::run(Processor& processor) {
 			
 			case NEXT_PROPERTY_OP: {
 				Object* o = vsp[0].getObject();
-				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName(); // FIX : lose reinterpret_cast<Enumerator*> ?
+				assert(dynamic_cast<Enumerator*>(o) != 0);
+				const String* name = reinterpret_cast<Enumerator*>(o)->nextPropertyName();
  				if (name != 0) {
 					vsp[0] = Value(name);
 				} else {
@@ -4350,9 +4358,9 @@ Value EvalFunction::call(Engine& engine, Processor& processor, UInt32 argc, cons
 	CodeDefinition* codeDefinition;
 	
 	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
-	 // FIX : .getObject?
 	if (bucket != 0) {
-		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().asObject());
+		assert(dynamic_cast<CodeDefinition*>(bucket->getValue().getObject()) != 0);
+		codeDefinition = reinterpret_cast<CodeDefinition*>(bucket->getValue().getObject());
 	} else {
 		codeDefinition = heap.govern(new(heap) CodeDefinition(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
 		Compiler compiler(heap, codeDefinition, Compiler::FOR_EVAL);
