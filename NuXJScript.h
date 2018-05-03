@@ -660,12 +660,11 @@ class CodeDefinition : public Object {
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 				UInt32 getMaxStackDepth() const { return maxStackDepth; }
-				UInt32 calcVStackSize(UInt32 argc) const;
 
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
-				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in LexicalScope.
+				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
 				QuickVector<const String*> argumentNames;
 				const String* name;
 				const String* selfName;
@@ -689,52 +688,24 @@ class CodeDefinition : public Object {
 #endif
 };
 
-class LexicalScope : public GCItem {
-	friend class Processor;
-	friend class DynamicScope;
-	
+class Scope : public GCItem {
 	public:		typedef GCItem super;
-				LexicalScope(Heap& heap, LexicalScope* parentLexicalScope);
+				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+				Value* getIndexedPointer() const;
+				Scope* getParentScope() const;
+				const CodeDefinition* getCodeDefinition() const;
 	
-	protected:	LexicalScope* const parentLexicalScope;	// scope chain for variables
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(parentLexicalScope);
-					super::gcMark(heap);
-				}
-};
-
-class DynamicScope : public LexicalScope {
-	friend class Processor;
-	
-	public:		typedef LexicalScope super;
-				DynamicScope(Heap& heap, DynamicScope* previousDynamicScope, LexicalScope* parentLexicalScope
-						, Object* thisObject, const CodeDefinition* codeDefinition, UInt32 vstackSize);
-				bool run(Processor& processor);
-	
-	protected:	void push(const Value& v);
-				void pop(Int32 count = 1);
-				void pop2push1(const Value& v);
-				Object* convertToObject(Processor& processor, const Value& v, bool requestExtensible);
-
+	protected:	Scope* const parentScope;
+				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				const CodeDefinition* const codeDefinition;
-				QuickArray<Value> vstack;
-				Value* vstackBegin;
-				const CodeWord* ip;
-				Value* vsp;
-				Value* locals; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				Object* const thisObject;
-				LexicalScope* currentLexicalScope;
-				DynamicScope* const previousDynamicScope;	// scope chain for function calls
+
 				virtual void gcMark(Heap& heap) const {
+					heap.mark(parentScope);
 					heap.mark(codeDefinition);
-					heap.markViaReferences(vstack.begin(), vsp + 1);
-					heap.mark(thisObject);
-					heap.mark(currentLexicalScope);
-					heap.mark(previousDynamicScope);
 					super::gcMark(heap);
 				}
 };
@@ -758,7 +729,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, LexicalScope* closure);
+				ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -767,7 +738,7 @@ class ScriptFunction : public ExtensibleFunction {
 	protected:	virtual void constructCompleteObject(Engine& engine) const;
 				
 				const CodeDefinition* const codeDefinition;
-				LexicalScope* const closure;
+				Scope* const closure;
 				
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(codeDefinition);
@@ -826,8 +797,8 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Engine& engine) const;
 };
 
-class GlobalScope : public DynamicScope {
-	public:		typedef DynamicScope super;
+class GlobalScope : public Scope {
+	public:		typedef Scope super;
 				GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
@@ -841,9 +812,9 @@ class GlobalScope : public DynamicScope {
 				}
 };
 
-class WithScope : public LexicalScope {
-	public:		typedef LexicalScope super;
-				WithScope(Heap& heap, LexicalScope* currentScope, Object* withObject);
+class WithScope : public Scope {
+	public:		typedef Scope super;
+				WithScope(Heap& heap, Scope* parentScope, Object* withObject);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -855,12 +826,12 @@ class WithScope : public LexicalScope {
 				}
 };
 
-class FunctionScope : public DynamicScope {
+class FunctionScope : public Scope {
 	friend class Arguments;
 	
-	public:		typedef DynamicScope super;
+	public:		typedef Scope super;
 
-				FunctionScope(Heap& heap, DynamicScope* previousDynamicScope, Object* thisObject, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -869,10 +840,12 @@ class FunctionScope : public DynamicScope {
 
 	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
+				QuickArray<Value> indexed; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(function);
+					heap.markViaReferences(indexed.begin(), indexed.end());
 					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
@@ -882,10 +855,9 @@ class FunctionScope : public DynamicScope {
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
 	codeDefinition pointer (for constants etc) and it declares deletable vars.
 */
-class EvalScope : public DynamicScope {
-	public:		typedef DynamicScope super;
-				EvalScope(Heap& heap, DynamicScope* previousDynamicScope, LexicalScope* parentLexicalScope, Object* thisObject
-						, const CodeDefinition* evalCodeDef);
+class EvalScope : public Scope {
+	public:		typedef Scope super;
+				EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
 };
 
@@ -895,10 +867,10 @@ class EvalScope : public DynamicScope {
 	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
 	the indexed variables.
 */
-class CatchScope : public LexicalScope {
-	public:		typedef LexicalScope super;
+class CatchScope : public Scope {
+	public:		typedef Scope super;
 
-				CatchScope(Heap& heap, LexicalScope* currentScope, const String* exceptionName, const Value& exceptionValue);
+				CatchScope(Heap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
@@ -911,13 +883,6 @@ class CatchScope : public LexicalScope {
 					exceptionValue.gcMark(heap);
 					super::gcMark(heap);
 				}
-};
-
-class SubroutineScope : public LexicalScope {
-	friend class DynamicScope;
-	public:		typedef LexicalScope super;
-				SubroutineScope(Heap& heap, LexicalScope* currentScope, const CodeWord* returnIP);
-	protected:	const CodeWord* const returnIP;
 };
 
 // FIX : rename to RunTime?
@@ -1021,92 +986,90 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
-enum Opcode {	// FIX : sort
-	INVALID_OP = -1 // FIX : why?!
-	, CONST_OP										// operand: const_index, stack: -> constant
-	, READ_INDEXED_OP								// operand: local_index, stack: -> value
-	, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
-	, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
-	, READ_NAMED_OP									// operand: const_index (name), stack: -> value
-	, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
-	, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
-	, GET_PROPERTY_OP								// stack: object, name -> value
-	, SET_PROPERTY_OP								// stack: object, name, value -> value
-	, SET_PROPERTY_POP_OP							// stack: object, name, value ->
-	, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
-	, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
-	, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
-	, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
-	, INC_OP, DEC_OP								// stack: value -> number
-	, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
-	, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
-	, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
-	, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
-	, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
-	, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
-	, JMP_OP, JSR_OP								// operand: offset
-	, JT_OP, JF_OP									// operand: offset, stack: boolean ->
-	, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
-	, POP_OP										// operand: count, stack: ... ->
-	// FIX : push back is a really bad name, it's really pop back and then push sort of
-	, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
-	, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
-	, SWAP_OP
-	, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
-	, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
-	, CALL_OP										// operand: n, stack: function, n * args -> return_value
-	, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
-	, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
-	, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
-	, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
-	, NEW_OBJECT_OP									// stack: -> object
-	, NEW_ARRAY_OP									// stack: -> array_object
-	, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
-	// FIX : should we have an optional pop argument (push back) to RETURN_OP?
-	, RETURN_OP
-	, RETURN_FROM_JSR_OP
-	// FIX : maybe we should also have a RETURN_VOID_OP?
-	, THIS_OP, VOID_OP								// stack: -> value
-	, DELETE_OP										// stack: object, name -> boolean
-	, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
-	, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
-	, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
-	, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
-	, WITH_SCOPE_OP									// stack: object ->
-	, POP_SCOPE_OP
-	, TRY_OP										// operand: catch_offset
-	, TRIED_OP
-	, THROW_OP										// stack: value ->
-	, IN_OP											// stack: string, object -> boolean
-	, INSTANCE_OF_OP								// stack: object, function -> boolean
-	, TYPEOF_OP										// stack: value -> string
-	, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
-	, GET_ENUMERATOR_OP								// stack: object -> enumerator
-	, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
-	, OP_COUNT
-};
-
-struct OpcodeInfo {
-	enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
-	Opcode opcode;
-	const char* mnemonic;
-	Int32 stackUse;
-	Byte flags;
-};
-
-CodeWord packInstruction(const Opcode opcode, const Int32 operand);
-std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
-const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
-
 // FIX : Processor -> Interpreter
 class Processor : public GCItem {
 	friend class ScriptFunction;
-	friend class DynamicScope;
 	
 	public:		typedef GCItem super;
+	
+	public:		enum Opcode {	// FIX : sort
+					INVALID_OP = -1 // FIX : why?!
+					, CONST_OP										// operand: const_index, stack: -> constant
+					, READ_INDEXED_OP								// operand: local_index, stack: -> value
+					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
+					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
+					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
+					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
+					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
+					, GET_PROPERTY_OP								// stack: object, name -> value
+					, SET_PROPERTY_OP								// stack: object, name, value -> value
+					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
+					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
+					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
+					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
+					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
+					, INC_OP, DEC_OP								// stack: value -> number
+					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
+					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
+					, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
+					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
+					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
+					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
+					, JMP_OP, JSR_OP								// operand: offset
+					, JT_OP, JF_OP									// operand: offset, stack: boolean ->
+					, JT_OR_POP_OP, JF_OR_POP_OP					// operand: offset, stack: boolean ->				// only pops when not jumping, for logical and/or instructions
+					, POP_OP										// operand: count, stack: ... ->
+					// FIX : push back is a really bad name, it's really pop back and then push sort of
+					, PUSH_BACK_OP									// operand: count, stack: ..., back -> back
+					, REPUSH_OP										// operand: offset, stack: ..., value, ... -> ..., value, ..., value
+					, SWAP_OP
+					, REPUSH_2_OP									// stack: value_1, value_2 -> value_1, value_2, value_1, value_2	// used for duplicating property reference with assignment operators like += etc
+					, POST_SHUFFLE_OP								// stack: object, name, value -> value, object, name, value			// used for special post inc/dec logic on properties (see code)
+					, CALL_OP										// operand: n, stack: function, n * args -> return_value
+					, CALL_METHOD_OP								// operand: n, stack: object, name, n * args -> return_value
+					, CALL_EVAL_OP									// operand: n, stack: function, n * args -> return_value			// special eval call is required because of need to differentiate direct or indirect call to eval
+					, NEW_OP										// operand: n, stack: constructor object, n * args -> new_object, return_value
+					, NEW_RESULT_OP									// stack: new_object, return_value -> new_this value
+					, NEW_OBJECT_OP									// stack: -> object
+					, NEW_ARRAY_OP									// stack: -> array_object
+					, NEW_REG_EXP_OP								// stack: pattern_string, flags_string -> regexp_object
+					// FIX : should we have an optional pop argument (push back) to RETURN_OP?
+					, RETURN_OP
+					// FIX : maybe we should also have a RETURN_VOID_OP?
+					, THIS_OP, VOID_OP								// stack: -> value
+					, DELETE_OP										// stack: object, name -> boolean
+					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
+					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
+					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
+					, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
+					, WITH_SCOPE_OP									// stack: object ->
+					, POP_SCOPE_OP
+					, TRY_OP										// operand: catch_offset
+					, TRIED_OP
+					, THROW_OP										// stack: value ->
+					, IN_OP											// stack: string, object -> boolean
+					, INSTANCE_OF_OP								// stack: object, function -> boolean
+					, TYPEOF_OP										// stack: value -> string
+					, TYPEOF_NAMED_OP								// operand: const_index (name), stack: -> string
+					, GET_ENUMERATOR_OP								// stack: object -> enumerator
+					, NEXT_PROPERTY_OP								// operand: exit_loop_offset, stack: enumerator -> string (unless end of loop)
+					, OP_COUNT
+				};
+	
+				struct OpcodeInfo {
+					enum { TERMINAL = 1, POP_OPERAND = 2, POP_ON_BRANCH = 4, NO_POP_ON_BRANCH = 8 };
+					Opcode opcode;
+					const char* mnemonic;
+					Int32 stackUse;
+					Byte flags;
+				};
+	
+				static CodeWord packInstruction(const Opcode opcode, const Int32 operand);
+				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
+				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Engine& engine);
-				void chain(DynamicScope* scope); // FIX : turn into enter global code or what?
+				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
@@ -1114,43 +1077,73 @@ class Processor : public GCItem {
 
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
+				void push(const Value& v);
+				void pop(Int32 count = 1);
+				void pop2push1(const Value& v);
+				void updateInternals();
 				bool privateRun();
-				void pushCatcher(Int32 catchCodeOffset);
-				void popCatcher();
 				void throwVirtualException(const Value& exception);
+				Object* convertToObject(const Value& v, bool requestExtensible);
+				void reserveVStackSpace(UInt32 maxStackDepth);
 				void reset();
 
 				Engine& engine;
 	
+				static const OpcodeInfo opcodeInfo[OP_COUNT];
+
 public: // FIX : not public, just for some asserts now I think
+				struct Frame : public GCItem {
+					typedef GCItem super;
+					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject, Frame* previousFrame)
+							: returnIP(returnIP), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
+					const CodeWord* const returnIP;
+					Scope* const scope;
+					Object* const thisObject;
+					Frame* const previousFrame;
+					virtual void gcMark(Heap& heap) const {
+						heap.mark(scope);
+						heap.mark(thisObject);
+						heap.mark(previousFrame);
+						super::gcMark(heap);
+					}
+				};
+
 				struct Catcher : public GCItem {
 					typedef GCItem super;
-					Catcher(DynamicScope* dynamicScope, LexicalScope* lexicalScope, const CodeWord* ip, Value* vsp
-							, Catcher* nextCatcher);
-					DynamicScope* dynamicScope;
-					LexicalScope* lexicalScope;
-					const CodeWord* ip;
-					Value* vsp;
-					Catcher* nextCatcher;
+					Catcher(const CodeWord* ip, UInt32 vstackOffset, Frame* frame, Catcher* nextCatcher)
+							: ip(ip), vstackOffset(vstackOffset), frame(frame), nextCatcher(nextCatcher) { }
+					const CodeWord* const ip;
+					UInt32 const vstackOffset;
+					Frame* const frame;
+					Catcher* const nextCatcher;
 					virtual void gcMark(Heap& heap) const {
-						heap.mark(dynamicScope);
-						heap.mark(lexicalScope);
+						heap.mark(frame);
 						heap.mark(nextCatcher);
 						super::gcMark(heap);
 					}
 				};
 
-				Int32 clockCyclesLeft;
-				DynamicScope* currentDynamicScope;
+				QuickVector<Value> vstack;
+
+				Frame* currentFrame;
 				Catcher* firstCatcher;
-				Value result;
+				Int32 clockCyclesLeft;
+				const CodeWord* ip;
+				Scope* scope;
+				Object* thisObject;
+				Value* vsp; // FIX : not public, just for an assert now
 
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(currentDynamicScope);
+					heap.markViaReferences(vstack.begin(), vsp + 1);
+					heap.mark(currentFrame);
 					heap.mark(firstCatcher);
-					result.gcMark(heap);
 					super::gcMark(heap);
 				}
+
+				// Copies from call stack. Will be gc marked from there.
+				
+				const Value* constants;
+				Value* indexed;
 };
 
 enum Precedence {
@@ -1195,20 +1188,20 @@ class Compiler : public GCItem {
 	
 				struct CodeSection {
 					CodeSection(Heap& heap, Int32 initialStackDepth)
-							: code(&heap), lastEmitted(INVALID_OP), initialStackDepth(initialStackDepth)
+							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth)
 #if (VERIFY_STACK_LOGIC)
 	, stackDepths(&heap)
 #endif
 							 { }
-					void emit(Opcode opcode, Int32 operand);
+					void emit(Processor::Opcode opcode, Int32 operand);
 					void insertSection(const CodeSection& section);
 					bool inDeadCode() const { return stackDepth == DEAD_CODE_STACK_DEPTH; }
 					QuickVector<CodeWord> code;
 #if (VERIFY_STACK_LOGIC)
 	QuickVector<Int32> stackDepths;
 #endif
-					Opcode lastEmitted;
+					Processor::Opcode lastEmitted;
 					const Int32 initialStackDepth;
 					Int32 stackDepth;
 					Int32 maxStackDepth;
@@ -1224,18 +1217,18 @@ class Compiler : public GCItem {
 				};
 
 				void error(ErrorType errorType, const char* message);
-				void emit(Opcode opcode, Int32 operand = 0);
+				void emit(Processor::Opcode opcode, Int32 operand = 0);
 				CodeSection* changeSection(CodeSection* newOutputSection);
 				void insertSection(const CodeSection& section);
 				UInt32 addConstant(const Value& constant);
-				void emitWithConstant(Opcode opcode, const Value& constant);
-				BranchPoint emitForwardBranch(Opcode opcode);
+				void emitWithConstant(Processor::Opcode opcode, const Value& constant);
+				BranchPoint emitForwardBranch(Processor::Opcode opcode);
 				void completeForwardBranch(const BranchPoint& point);
 				void completeForwardBranches(const BranchPoint* begin, const BranchPoint* end);
 				BranchPoint markBackwardBranch();
-				void emitBackwardBranch(Opcode opcode, const BranchPoint& point);
+				void emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point);
 	
-				Opcode evalPopOpcode() const;
+				Processor::Opcode evalPopOpcode() const;
 				ExpressionResult safeKeep(); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
 				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
@@ -1248,7 +1241,7 @@ class Compiler : public GCItem {
 				void functionReturn();
 
 				ExpressionResult operand(const OperatorInfo& op);
-				ExpressionResult functionCall(Opcode opcode);
+				ExpressionResult functionCall(Processor::Opcode opcode);
 				Value stringOrNumberConstant();
 				ExpressionResult arrayInitialiser();
 				ExpressionResult objectInitialiser();
