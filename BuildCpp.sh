@@ -13,7 +13,7 @@ elif [ "$1" == "release" ]; then
 	OPTIONS="-Os -DNDEBUG -fno-rtti"
 	shift
 else
-	OPTIONS="-Os -DNDEBUG -fno-rtti"
+	OPTIONS="-O2 -DNDEBUG -fno-rtti"
 fi
 
 if [ "$1" == "64" ]; then

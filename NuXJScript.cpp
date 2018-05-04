@@ -1254,10 +1254,6 @@ bool Function::hasInstance(Processor& processor, Object* object) const {
 	return false;
 }
 
-Value Function::callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return call(processor, argc, argv, (thisObject == 0 ? processor.getRuntime().getGlobals() : thisObject));
-}
-
 /* --- Array --- */
 
 Array::Array(Heap& heap) : super(heap), length(0), denseVector(&heap) { }
@@ -1432,15 +1428,6 @@ const String* ScriptFunction::toString(Heap& heap) const {
 Value ScriptFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.chain(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
-}
-
-Value ScriptFunction::callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	Processor syncProcessor(processor.getRuntime());
-	syncProcessor.chain(this, argc, argv, (thisObject == 0 ? processor.getRuntime().getGlobals() : thisObject) /* FIX : sub */);
-	while (syncProcessor.run()) {
-		;
-	}
-	return syncProcessor.getResult();
 }
 
 void ScriptFunction::constructCompleteObject(Runtime& rt) const {
@@ -1944,12 +1931,11 @@ void Processor::pop(Int32 count) { assert(sp - count + 1 >= stack.begin()); sp -
 void Processor::resetTimeOut(Int32 clockCycles) { cyclesLeft = clockCycles; }
 
 void Processor::chain(const Code* code, Scope* scope, Object* thisObject) {
-	Heap& heap = rt.getHeap();
 	// We could grow stack here *but* then existing pointers into the stack might become invalid and we would need to copy arguments for native calls somewhere (e.g. to C++ stack).
 	if (sp + code->getMaxStackDepth() > stack.end()) {
 		error(RANGE_ERROR, &STACK_OVERFLOW_STRING);
 	} else {
-		currentFrame = heap.govern(new(heap) Frame(ip, code, scope, thisObject, currentFrame));
+		pushFrame(code, scope, (thisObject == 0 ? rt.getGlobals() : thisObject));
 		ip = code->getCodeWords();
 	}
 }
@@ -1972,6 +1958,11 @@ void Processor::reset() {
 	firstCatcher = 0;
 	ip = 0;
 	sp = stack.begin();
+}
+
+void Processor::pushFrame(const Code* code, Scope* scope, Object* thisObject) {
+	Heap& heap = rt.getHeap();
+	currentFrame = heap.govern(new(heap) Frame(ip, code, scope, thisObject, currentFrame));
 }
 
 void Processor::popFrame() {
@@ -2087,7 +2078,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toNumberFunction->call(*this, 1, sp, rt.getGlobals());
+					rt.toNumberFunction->call(*this, 1, sp);
 					return true;
 				}
 				break;
@@ -2096,7 +2087,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toStringFunction->call(*this, 1, sp, rt.getGlobals());
+					rt.toStringFunction->call(*this, 1, sp);
 					return true;
 				}
 				break;
@@ -2109,7 +2100,7 @@ bool Processor::privateRun() {
 						std::swap(sp[-1], sp[0]);
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
-						rt.toNumberFunction->call(*this, 1, sp, rt.getGlobals());
+						rt.toNumberFunction->call(*this, 1, sp);
 						return true;
 					}
 				}
@@ -2142,9 +2133,8 @@ bool Processor::privateRun() {
 			case GEQ_OP:	pop2push1(Value(sp[0].isLessThanOrEqualTo(sp[-1]))); break;
 			case JMP_OP:	ip += im; break;
 
-							// FIX : make a new super-class to both with- and catch-scope and re-use here
 			case JSR_OP: {
-				currentFrame = heap.govern(new(heap) Frame(ip, code, scope, thisObject, currentFrame));
+				pushFrame(code, scope, thisObject);
 				ip += im;
 				return true;
 			}
@@ -2167,24 +2157,24 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					return true;
 				}
-				sp[-im] = f->call(*this, im, sp - im + 1, rt.getGlobals());
+				sp[-im] = f->call(*this, im, sp - im + 1);
 				pop(im);
 				return true;
 			}
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
-				Object* const thisObject = convertToObject(sp[-im - 1], true);
-				if (thisObject == 0) {
+				Object* const o = convertToObject(sp[-im - 1], true);
+				if (o == 0) {
 					return true;
 				}
 				Value v(Value::UNDEFINED);
 				Function* f;
 				const Value& name = sp[-im];
-				if (thisObject->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+				if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					return true;
 				}
-				sp[-(im + 1)] = f->call(*this, im, sp - im + 1, thisObject);
+				sp[-(im + 1)] = f->call(*this, im, sp - im + 1, o);
 				pop(im + 1);
 				return true;
 			}
@@ -2198,7 +2188,7 @@ bool Processor::privateRun() {
 				if (f == &rt.evalFunction) {
 					f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
-				sp[-im] = f->call(*this, im, sp - im + 1, rt.getGlobals());
+				sp[-im] = f->call(*this, im, sp - im + 1);
 				pop(im);
 				return true;
 			}
@@ -2232,7 +2222,7 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				sp[-1] = rt.createRegExpFunction->call(*this, 2, sp - 1, rt.getGlobals());
+				sp[-1] = rt.createRegExpFunction->call(*this, 2, sp - 1);
 				pop(1);
 				return true;
 			}
@@ -2288,7 +2278,7 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				currentFrame = heap.govern(new(heap) Frame(0, code, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), sp[0])), thisObject, currentFrame));
+				pushFrame(code, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), sp[0])), thisObject);
 				pop(1);
 				return true;
 			}
@@ -2298,7 +2288,7 @@ bool Processor::privateRun() {
 				if (o == 0) {
 					return true;
 				}
-				currentFrame = heap.govern(new(heap) Frame(0, code, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
+				pushFrame(code, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject);
 				pop(1);
 				return true;
 			}
@@ -2371,7 +2361,7 @@ bool Processor::privateRun() {
 				}
 				break;
 			}
-				
+			
 			default: assert(0);
 		}
 	}
@@ -4511,7 +4501,7 @@ struct Support {
 			}
 			// FIX : we copy all arguments once to args, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
-			return callFunction->call(processor, args.size(), args.begin(), (newThis == 0 ? rt.getGlobals() : newThis));
+			return callFunction->call(processor, args.size(), args.begin(), newThis);
 		}
 	}
 	
@@ -4659,6 +4649,15 @@ Runtime::Runtime(Heap& heap) : super(heap), heap(heap), globalScope(heap), globa
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = heap.govern(new(heap) ErrorPrototype(heap, static_cast<ErrorType>(i)));
 	}
+}
+
+Value Runtime::callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
+	Processor processor(*this);
+	function->call(processor, argc, argv, thisObject);
+	while (processor.run()) {
+		;
+	}
+	return processor.getResult();
 }
 
 // FIX : make this optional by including default toNumberFunction etc that throws (or should they return something?)
@@ -4847,7 +4846,7 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 							if (f == 0) {
 								f = &printFunction;
 							}
-							f->callSync(processor, 1, &argv[i]);
+							processor.getRuntime().callSync(f, 1, &argv[i]);
 						}
 						return Value::UNDEFINED;
 					}

@@ -609,12 +609,11 @@ class Function : public Object {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
-				virtual Value callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0);
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
 				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Processor& processor, Object* object) const;
 
 				// FIX : protected, rename to execute?
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
 };
 
 class EvalFunction : public Function {
@@ -732,7 +731,6 @@ class ScriptFunction : public ExtensibleFunction {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Value callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				const Code* getCode() const;
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -891,6 +889,7 @@ class Runtime : public GCItem {
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getCommonConstants() { return &commonConstants; }
+				Value callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
 
 	protected:	Heap& heap;
 				GlobalScope globalScope;
@@ -1076,6 +1075,7 @@ class Processor : public GCItem {
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reset();
+				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
 				void popFrame();
 				void popCatcher();
 
