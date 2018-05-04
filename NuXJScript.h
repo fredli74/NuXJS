@@ -1080,7 +1080,6 @@ class Processor : public GCItem {
 				void push(const Value& v);
 				void pop(Int32 count = 1);
 				void pop2push1(const Value& v);
-				void updateInternals();
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
@@ -1093,15 +1092,31 @@ class Processor : public GCItem {
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
+
+				struct Stack : public GCItem, public QuickArray<Value> {
+					typedef GCItem super;
+					typedef QuickArray<Value> QArray;
+					Stack(Heap& heap, UInt32 size) : super(heap), QArray(size, &heap), vsp(begin()) { assert(size > 0); vsp[0] = Value::UNDEFINED;
+				std::fill(begin(), end(), Value::UNDEFINED);
+					}
+					Value* vsp;
+					virtual void gcMark(Heap& heap) const {
+						heap.markViaReferences(begin(), end() /*vsp + 1*/);
+						super::gcMark(heap);
+					}
+				};
+	
 				struct Frame : public GCItem {
 					typedef GCItem super;
-					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject, Frame* previousFrame)
-							: returnIP(returnIP), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
+					Frame(const CodeWord* returnIP, Stack* stack, Scope* scope, Object* thisObject, Frame* previousFrame)
+							: returnIP(returnIP), stack(stack), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
 					const CodeWord* const returnIP;
+					Stack* const stack;
 					Scope* const scope;
 					Object* const thisObject;
 					Frame* const previousFrame;
 					virtual void gcMark(Heap& heap) const {
+						heap.mark(stack);
 						heap.mark(scope);
 						heap.mark(thisObject);
 						heap.mark(previousFrame);
@@ -1124,7 +1139,7 @@ public: // FIX : not public, just for some asserts now I think
 					}
 				};
 
-				QuickVector<Value> vstack;
+				Stack vstack;
 
 				Frame* currentFrame;
 				Catcher* firstCatcher;
@@ -1133,7 +1148,6 @@ public: // FIX : not public, just for some asserts now I think
 				Value* vsp; // FIX : not public, just for an assert now
 
 				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(vstack.begin(), vsp + 1);
 					heap.mark(currentFrame);
 					heap.mark(firstCatcher);
 					super::gcMark(heap);

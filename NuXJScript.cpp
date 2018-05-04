@@ -1913,8 +1913,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(Engine& engine) : super(engine.getHeap()), engine(engine), currentFrame(0), firstCatcher(0), vstack(&engine.getHeap()), clockCyclesLeft(0x7FFFFFFF) {
-	vstack.push(Value::UNDEFINED);
+Processor::Processor(Engine& engine) : super(engine.getHeap()), engine(engine), currentFrame(0), firstCatcher(0), vstack(engine.getHeap(), 10000), clockCyclesLeft(0x7FFFFFFF) {
 	reset();
 }
 
@@ -1933,9 +1932,6 @@ void Processor::pop2push1(const Value& v) { assert(vsp >= vstack.begin()); *--vs
 void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
-void Processor::updateInternals() {
-}
-
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 	const UInt32 vstackOffset = static_cast<UInt32>(vsp + 1 - vstack.begin());
 	const UInt32 requiredSize = vstackOffset + maxStackDepth;
@@ -1947,9 +1943,9 @@ void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
 	Heap& heap = engine.getHeap();
-	currentFrame = heap.govern(new(heap) Frame(ip, scope, thisObject, currentFrame));
+	currentFrame = heap.govern(new(heap) Frame(ip, &vstack, scope, thisObject, currentFrame));
 	ip = codeDefinition->getCodePointer();
-	reserveVStackSpace(codeDefinition->getMaxStackDepth());
+//	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1967,7 +1963,6 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
-	vstack.resize(1);
 	vsp = vstack.begin();
 	currentFrame = 0;
 	firstCatcher = 0;
@@ -2133,7 +2128,7 @@ bool Processor::privateRun() {
 
 							// FIX : make a new super-class to both with- and catch-scope and re-use here
 			case JSR_OP: {
-				currentFrame = heap.govern(new(heap) Frame(ip, scope, thisObject, currentFrame));
+				currentFrame = heap.govern(new(heap) Frame(ip, &vstack, scope, thisObject, currentFrame));
 				ip += im;
 				return true;
 			}
@@ -2287,7 +2282,7 @@ bool Processor::privateRun() {
 			}
 			
 			case CATCH_SCOPE_OP: {
-				currentFrame = heap.govern(new(heap) Frame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
+				currentFrame = heap.govern(new(heap) Frame(0, &vstack, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
 				pop(1);
 				return true;
 			}
@@ -2295,7 +2290,7 @@ bool Processor::privateRun() {
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o != 0) {
-					currentFrame = heap.govern(new(heap) Frame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
+					currentFrame = heap.govern(new(heap) Frame(0, &vstack, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
 					pop(1);
 					return true;
 				}
