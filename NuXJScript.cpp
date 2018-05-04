@@ -1254,6 +1254,10 @@ bool Function::hasInstance(Processor& processor, Object* object) const {
 	return false;
 }
 
+Value Function::callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return call(processor, argc, argv, (thisObject == 0 ? processor.getRuntime().getGlobals() : thisObject));
+}
+
 /* --- Array --- */
 
 Array::Array(Heap& heap) : super(heap), length(0), denseVector(&heap) { }
@@ -1428,6 +1432,15 @@ const String* ScriptFunction::toString(Heap& heap) const {
 Value ScriptFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.chain(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
+}
+
+Value ScriptFunction::callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	Processor syncProcessor(processor.getRuntime());
+	syncProcessor.chain(this, argc, argv, (thisObject == 0 ? processor.getRuntime().getGlobals() : thisObject) /* FIX : sub */);
+	while (syncProcessor.run()) {
+		;
+	}
+	return syncProcessor.getResult();
 }
 
 void ScriptFunction::constructCompleteObject(Runtime& rt) const {
@@ -1962,8 +1975,16 @@ void Processor::reset() {
 }
 
 void Processor::popFrame() {
+	assert(currentFrame != 0);
 	Frame* killMe = currentFrame;
 	currentFrame = currentFrame->previousFrame;
+	delete killMe;
+}
+
+void Processor::popCatcher() {
+	assert(firstCatcher != 0);
+	Catcher* killMe = firstCatcher;
+	firstCatcher = firstCatcher->nextCatcher;
 	delete killMe;
 }
 
@@ -1977,9 +1998,7 @@ void Processor::throwVirtualException(const Value& exception) {
 	currentFrame = firstCatcher->frame;
 	sp = firstCatcher->sp;
 	push(exception);
-	Catcher* killMe = firstCatcher;
-	firstCatcher = firstCatcher->nextCatcher;
-	delete killMe;
+	popCatcher();
 }
 
 void Processor::error(ErrorType errorType, const String* message) {
@@ -2130,10 +2149,10 @@ bool Processor::privateRun() {
 				return true;
 			}
 
-			case JT_OP:		ip += (sp[0].toBool() ? im : 0); pop(1); break;
-			case JF_OP:		ip += (!sp[0].toBool() ? im : 0); pop(1); break;
-			case JT_OR_POP_OP:	if (sp[0].toBool()) ip += im; else pop(1); break;
-			case JF_OR_POP_OP:	if (!sp[0].toBool()) ip += im; else pop(1); break;
+			case JT_OP:				ip += (sp[0].toBool() ? im : 0); pop(1); break;
+			case JF_OP:				ip += (!sp[0].toBool() ? im : 0); pop(1); break;
+			case JT_OR_POP_OP:		if (sp[0].toBool()) ip += im; else pop(1); break;
+			case JF_OR_POP_OP:		if (!sp[0].toBool()) ip += im; else pop(1); break;
 
 			case POP_OP:			assert(im >= 0); pop(im); break;
 			case PUSH_BACK_OP:		assert(im >= 0); sp[-im] = sp[0]; pop(im); break;
@@ -2293,7 +2312,7 @@ bool Processor::privateRun() {
 				firstCatcher = heap.govern(new(heap) Catcher(ip + im, sp, currentFrame, firstCatcher));
 				break;
 			}
-			case TRIED_OP: assert(firstCatcher != 0); firstCatcher = firstCatcher->nextCatcher; break;
+			case TRIED_OP: popCatcher(); break;
 			case THROW_OP: throwVirtualException(sp[0]); return true;
 			case IN_OP: {
 				const Object* o = sp[0].asObject();
@@ -4828,7 +4847,7 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 							if (f == 0) {
 								f = &printFunction;
 							}
-							f->call(processor, 1, &argv[i], thisObject);
+							f->callSync(processor, 1, &argv[i]);
 						}
 						return Value::UNDEFINED;
 					}

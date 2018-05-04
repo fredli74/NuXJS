@@ -609,10 +609,12 @@ class Function : public Object {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
-				// FIX : all Runtime& rt, Processor& processor -> Processor& processor only... rt can be accessed anyhow
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Processor& processor, Object* object) const;
+
+				// FIX : protected, rename to execute?
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
 };
 
 class EvalFunction : public Function {
@@ -730,6 +732,7 @@ class ScriptFunction : public ExtensibleFunction {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value callSync(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				const Code* getCode() const;
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -1074,6 +1077,7 @@ class Processor : public GCItem {
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reset();
 				void popFrame();
+				void popCatcher();
 
 				Runtime& rt;
 	
