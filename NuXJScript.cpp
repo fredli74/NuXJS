@@ -2007,7 +2007,7 @@ bool Processor::privateRun() {
 	const Value* constants = scope->getCodeDefinition()->getConstantsPointer();
 	Value* locals = scope->getLocalsPointer();
 	Object* thisObject = currentFrame->thisObject;
-	Value*& vsp = currentFrame->stack->vsp;
+	Value* vsp = currentFrame->stack->vsp;
 
 	while (clockCyclesLeft >= 0) {
 		--clockCyclesLeft;
@@ -2023,6 +2023,7 @@ bool Processor::privateRun() {
 											const String* name = constants[im].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
 												error(REFERENCE_ERROR, heap.govern(new(heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
+												currentFrame->stack->vsp = vsp;
 												return true;
 											}
 										}
@@ -2038,6 +2039,7 @@ bool Processor::privateRun() {
 			case GET_PROPERTY_OP: {
 				const Object* o = convertToObject(vsp[-1], false);
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
@@ -2050,6 +2052,7 @@ bool Processor::privateRun() {
 			case SET_PROPERTY_OP: {
 				Object* o = convertToObject(vsp[-2], false);
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
@@ -2061,6 +2064,7 @@ bool Processor::privateRun() {
 			case SET_PROPERTY_POP_OP: {
 				Object* o = convertToObject(vsp[-2], false);
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
@@ -2071,6 +2075,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
+					currentFrame->stack->vsp = vsp;
 					engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					return true;
 				}
@@ -2080,6 +2085,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
+					currentFrame->stack->vsp = vsp;
 					engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 					return true;
 				}
@@ -2093,6 +2099,7 @@ bool Processor::privateRun() {
 						std::swap(vsp[-1], vsp[0]);
 					}
 					if (vsp[-1].isString() || vsp[-1].isNumber() || vsp[-1].isBoolean()) {
+						currentFrame->stack->vsp = vsp;
 						engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
 						return true;
 					}
@@ -2130,6 +2137,7 @@ bool Processor::privateRun() {
 			case JSR_OP: {
 				currentFrame = heap.govern(new(heap) Frame(ip, currentFrame->stack, scope, thisObject, currentFrame));
 				ip += im;
+				currentFrame->stack->vsp = vsp;
 				return true;
 			}
 
@@ -2149,19 +2157,21 @@ bool Processor::privateRun() {
 				Function* const f = vsp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				Frame* wasFrame = currentFrame;
+				const Value result = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
 				pop(vsp, im);
-				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
+				wasFrame->stack->vsp = vsp;
 				return true;
 			}
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Object* const thisObject = convertToObject(vsp[-im - 1], true);
 				if (thisObject == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				Value v(Value::UNDEFINED);
@@ -2169,13 +2179,14 @@ bool Processor::privateRun() {
 				const Value& name = vsp[-im];
 				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				Frame* wasFrame = currentFrame;
+				const Value result = f->call(engine, *this, im, vsp - im + 1, thisObject);
 				pop(vsp, im + 1);
-				const Value result = f->call(engine, *this, args.size(), args.begin(), thisObject);
 				vsp[0] = result;
+				wasFrame->stack->vsp = vsp;
 				return true;
 			}
 			
@@ -2183,16 +2194,17 @@ bool Processor::privateRun() {
 				Function* f = vsp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				if (f == &engine.evalFunction) {
 					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				Frame* wasFrame = currentFrame;
+				const Value result = f->call(engine, *this, im, vsp - im + 1, engine.getGlobals());
 				pop(vsp, im);
-				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
+				wasFrame->stack->vsp = vsp;
 				return true;
 			}
 
@@ -2200,18 +2212,19 @@ bool Processor::privateRun() {
 				Function* f = vsp[-im].asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) { // FIX : sub
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				Value v(Value::UNDEFINED);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.govern(new(heap) ScriptObject(heap, prototype != 0 ? prototype : &engine.objectPrototype));
-				QuickArray<Value> args(im, &heap);
-				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				Frame* wasFrame = currentFrame;
+				const Value result = f->construct(engine, *this, im, vsp - im + 1, newObject);
 				pop(vsp, im - 1);
-				const Value result = f->construct(engine, *this, args.size(), args.begin(), newObject);
 				vsp[0] = result;
 				vsp[-1] = Value(newObject);
+				wasFrame->stack->vsp = vsp;
 				return true;
 			}
 			
@@ -2228,14 +2241,17 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
+				Frame* wasFrame = currentFrame;
 				const Value result = engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals());
 				vsp[-1] = result;
-				--vsp; // can't use pop because assert uses currentFrame
+				pop(vsp, 1);
+				wasFrame->stack->vsp = vsp;
 				return true;
 			}
 
 			case RETURN_OP:	{
 				const Value returnValue = vsp[0];
+				currentFrame->stack->vsp = vsp;
 				ip = currentFrame->returnIP;
 				if (ip == 0) {
 					assert(firstCatcher == 0 && vsp == currentFrame->stack->begin());
@@ -2281,6 +2297,7 @@ bool Processor::privateRun() {
 			case DELETE_OP: {
 				Object* o = convertToObject(vsp[-1], true);
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				pop2push1(vsp, Value(o->deleteProperty(engine, vsp[0])));
@@ -2290,21 +2307,25 @@ bool Processor::privateRun() {
 			case CATCH_SCOPE_OP: {
 				currentFrame = heap.govern(new(heap) Frame(0, currentFrame->stack, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
 				pop(vsp, 1);
+				currentFrame->stack->vsp = vsp;
 				return true;
 			}
 			
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				currentFrame = heap.govern(new(heap) Frame(0, currentFrame->stack, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
 				pop(vsp, 1);
+				currentFrame->stack->vsp = vsp;
 				return true;
 			}
 			
 			case POP_FRAME_OP: {
 				popFrame();
+				currentFrame->stack->vsp = vsp;
 				return true;
 			}
 			
@@ -2313,11 +2334,12 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRIED_OP: assert(firstCatcher != 0); firstCatcher = firstCatcher->nextCatcher; break;
-			case THROW_OP: throwVirtualException(vsp[0]); return true;
+			case THROW_OP: currentFrame->stack->vsp = vsp; throwVirtualException(vsp[0]); return true;
 			case IN_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(CANNOT_USE_IN_OPERATOR_STRING, *vsp[0].toString(heap), &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				Value dummy;
@@ -2329,6 +2351,7 @@ bool Processor::privateRun() {
 				Function* f = vsp[0].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[0].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				vsp[-1] = Value(f->hasInstance(engine, *this, vsp[-1].asObject()));
@@ -2348,6 +2371,7 @@ bool Processor::privateRun() {
 				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
 				if (o == 0) {
+					currentFrame->stack->vsp = vsp;
 					return true;
 				}
 				Enumerator* enumerator = &EMPTY_ENUMERATOR;
@@ -2375,6 +2399,7 @@ bool Processor::privateRun() {
 			default: assert(0);
 		}
 	}
+	currentFrame->stack->vsp = vsp;
 	return true;
 }
 

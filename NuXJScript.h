@@ -1078,7 +1078,7 @@ class Processor : public GCItem {
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
 				void push(Value*& vsp, const Value& v);
-				void pop(Value*& vsp, Int32 count = 1);
+				void pop(Value*& vsp, Int32 count);
 				void pop2push1(Value*& vsp, const Value& v);
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
