@@ -223,7 +223,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 class String;
 class Object;
 class Function;
-class Engine;
+class Runtime;
 class Value {
 	friend class Table;
 	
@@ -256,7 +256,7 @@ class Value {
 				bool toArrayIndex(UInt32& index) const;	// returns false if value is outside valid array index range (0..2^32-1)
 				double toDouble() const;
 				const String* toString(Heap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
-				Object* toObject(Engine& engine, bool requestExtensible) const; // FIX : I don't like that we involved engine here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
+				Object* toObject(Runtime& rt, bool requestExtensible) const; // FIX : I don't like that we involved runtime here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
 				bool isEqualTo(const String& s) const;
@@ -377,21 +377,21 @@ class Object : public GCItem {
 				virtual const String* getClassName() const;				// Default returns "Object".
 				virtual const String* toString(Heap& heap) const; 		// this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				virtual Value getInternalValue(Heap& heap) const;		// Used by the standard library to retrieve internal value for wrappers (Number, String etc), source code for functions and parser function for RegExp. Default returns Value::UNDEFINED.
-				virtual Object* getPrototype(Engine& engine) const;		// Default returns the Object prototype.
+				virtual Object* getPrototype(Runtime& rt) const;		// Default returns the Object prototype.
 
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;					// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
-				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
-				virtual bool deleteProperty(Engine& engine, const Value& key);									// Default returns false.
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;								// Default returns an empty enumerator.
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;					// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
+				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
+				virtual bool deleteProperty(Runtime& rt, const Value& key);									// Default returns false.
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;								// Default returns an empty enumerator.
 
 				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				// FIX : or maybe drop them, we now check with getOwnProperty
-				bool hasOwnProperty(Engine& engine, const Value& key) const; // checks via getOwnProperty()
-				bool isOwnPropertyEnumerable(Engine& engine, const Value& key) const;
-				Flags getPropertyDeep(Engine& engine, const Value& key, Value* v) const; // searches prototype chain
-				Value getPropertyDeep(Engine& engine, const char* s) const; // helper function
-				bool setPropertyDeep(Engine& engine, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
+				bool hasOwnProperty(Runtime& rt, const Value& key) const; // checks via getOwnProperty()
+				bool isOwnPropertyEnumerable(Runtime& rt, const Value& key) const;
+				Flags getPropertyDeep(Runtime& rt, const Value& key, Value* v) const; // searches prototype chain
+				Value getPropertyDeep(Runtime& rt, const char* s) const; // helper function
+				bool setPropertyDeep(Runtime& rt, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
 };
 
 class Enumerator : public Object {
@@ -428,9 +428,9 @@ class String : public Object, public QuickArray<Char> {
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 				virtual Value getInternalValue(Heap& heap) const { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
@@ -469,10 +469,10 @@ class StringListEnumerator : public Enumerator {
 
 class JoiningEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				JoiningEnumerator(Engine& engine, Enumerator* leftEnumerator, const Object* rightObject);
+				JoiningEnumerator(Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject);
 				virtual const String* nextPropertyName();
 
-	protected:	Engine& engine;
+	protected:	Runtime& rt;
 				Enumerator* const leftEnumerator;
 				const Object* const rightObject;
 				Enumerator* const rightEnumerator;
@@ -489,12 +489,12 @@ class ScriptObject : public Object {
 	public:		typedef Object super;
 				
 				ScriptObject(Heap& heap, Object* prototype);
-				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 				Table& accessProperties();
 				
 	protected:	Table properties;
@@ -530,10 +530,10 @@ class StringWrapper : public ScriptObject {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
 	protected:	const String* const wrapped;
 				virtual void gcMark(Heap& heap) const {
@@ -547,7 +547,7 @@ class StringWrapper : public ScriptObject {
 	
 	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
 	2) Memory: until the user accesses or adds properties, LazyScriptObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
-	3) Doesn't require an Engine or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
+	3) Doesn't require an Runtime or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
 		// TODO: this object could actually own an auto_ptr to the complete object since that object should *never* be referenced to from elsewhere. Saving GC time. But they would still not be thread-safe to make static.
 
 	This class is a template so this concept can be used with different super classes.
@@ -555,13 +555,13 @@ class StringWrapper : public ScriptObject {
 template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyScriptObject(Heap& heap) : super(heap), completeObject(0) { }
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
-	protected:	virtual void constructCompleteObject(Engine& engine) const = 0;
-				ScriptObject* getCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const = 0;
+				ScriptObject* getCompleteObject(Runtime& rt) const;
 				mutable ScriptObject* completeObject;
 
 				virtual void gcMark(Heap& heap) const {
@@ -575,16 +575,16 @@ class Array : public LazyScriptObject<Object> {
 	
 				Array(Heap& heap);
 				virtual const String* getClassName() const;
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Runtime& rt) const;
 				// FIX : toString too?
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool updateProperty(Engine& engine, const Value& key, const Value& v);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				void sliceDenseVector(Engine& engine, const Value& key);
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
+				void sliceDenseVector(Runtime& rt, const Value& key);
 				UInt32 length;
 				QuickVector<Value> denseVector;
 				virtual void gcMark(Heap& heap) const {
@@ -608,20 +608,20 @@ class Function : public Object {
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				// FIX : all Engine& engine, Processor& processor -> Processor& processor only... engine can be accessed anyhow
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
-				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Engine& engine, Processor& processor, Object* object) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				// FIX : all Runtime& rt, Processor& processor -> Processor& processor only... rt can be accessed anyhow
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
 };
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				// FIX : move down to Engine so that we share with eval direct, *but* Engine should be a GCItem then I think
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				// FIX : move down to Runtime so that we share with eval direct, *but* Runtime should be a GCItem then I think
 	protected:	bool direct;
-				// FIX : share cache (in Engine) between evalFunction and evalDirectFunction, oh, and share with new function as well
+				// FIX : share cache (in Runtime) between evalFunction and evalDirectFunction, oh, and share with new function as well
 				// FIX : or maybe just drop it? KISS you know!
 				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
@@ -632,7 +632,7 @@ class EvalFunction : public Function {
 				}
 };
 
-// Separate from CodeDefinition so that multiple functions can share the same constants (purely optimization).
+// Separate from Code so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
 				Constants(Heap& heap) : super(heap), QuickVector<Value>(&heap) { }
@@ -643,19 +643,19 @@ class Constants : public GCItem, public QuickVector<Value> {
 };
 
 // This is an Object so that we can store it as a constant and also in Table
-class CodeDefinition : public Object {
+class Code : public Object {
 	friend class FunctionScope;
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
 				
-				CodeDefinition(Heap& heap, Constants* constants);
+				Code(Heap& heap, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
 				const String* getLocalName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
 				const Value* getConstantsPointer() const { return constants->begin(); }
-				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
+				const CodeWord* getCodeWords() const { return code.begin(); }
 				UInt32 getCodeSize() const { return code.size(); }
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
@@ -690,22 +690,19 @@ class CodeDefinition : public Object {
 
 class Scope : public GCItem {
 	public:		typedef GCItem super;
-				Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition);
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual void writeVar(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+				Scope(Heap& heap, Scope* parentScope);
+				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+				virtual bool deleteVar(Runtime& rt, const String* key);
+				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 				Value* getLocalsPointer() const;
 				Scope* getParentScope() const;
-				const CodeDefinition* getCodeDefinition() const;
 	
 	protected:	Scope* const parentScope;
 				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
-				const CodeDefinition* const codeDefinition;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(parentScope);
-					heap.mark(codeDefinition);
 					super::gcMark(heap);
 				}
 };
@@ -713,15 +710,15 @@ class Scope : public GCItem {
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
 				ExtensibleFunction(Heap& heap) : super(heap) { }
-	protected:	void createPrototypeObject(Engine& engine, Object* forObject, bool dontEnumPrototype) const;
+	protected:	void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				FunctionPrototypeFunction(Heap& heap) : super(heap) { }
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Object* getPrototype(Engine& engine) const;
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Object* getPrototype(Runtime& rt) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 };
 
 class ScriptFunction : public ExtensibleFunction {
@@ -729,19 +726,19 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(Heap& heap, const CodeDefinition* codeDefinition, Scope* closure);
+				ScriptFunction(Heap& heap, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				const CodeDefinition* getDefinition() const;
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				const Code* getCode() const;
 				
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				
-				const CodeDefinition* const codeDefinition;
+				const Code* const code;
 				Scope* const closure;
 				
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(codeDefinition);
+					heap.mark(code);
 					heap.mark(closure);
 					super::gcMark(heap);
 				}
@@ -750,10 +747,10 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				SpecialConstructorFunction(Heap& heap, Function* regularFunction, Function* constructorFunction);
-				virtual Value call(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				Function* const regularFunction;
 				Function* const constructorFunction;
 
@@ -774,12 +771,12 @@ class Error : public LazyScriptObject<Object> {
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const; // error type name
-				virtual Object* getPrototype(Engine& engine) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
 				
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
-				void updateReflection(Engine& engine);
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
+				void updateReflection(Runtime& rt);
 				
 				const ErrorType errorType;
 				const String* name; // may get updated by script code
@@ -794,30 +791,24 @@ class Error : public LazyScriptObject<Object> {
 class ErrorPrototype : public Error {
 	public:		typedef Error super;
 				ErrorPrototype(Heap& heap, ErrorType type);
-				virtual Object* getPrototype(Engine& engine) const;
+				virtual Object* getPrototype(Runtime& rt) const;
 };
 
 class GlobalScope : public Scope {
 	public:		typedef Scope super;
-				GlobalScope(Heap& heap, Object* globalObject, const CodeDefinition* codeDefinition);
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual void writeVar(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-	
-	protected:	Object* const globalObject;
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(globalObject);
-					super::gcMark(heap);
-				}
+				GlobalScope(Heap& heap);
+				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+				virtual bool deleteVar(Runtime& rt, const String* key);
+				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 };
 
 class WithScope : public Scope {
 	public:		typedef Scope super;
 				WithScope(Heap& heap, Scope* parentScope, Object* withObject);
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual void writeVar(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteVar(Engine& engine, const String* key);
+				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+				virtual bool deleteVar(Runtime& rt, const String* key);
 
 	protected:	Object* withObject;
 				virtual void gcMark(Heap& heap) const {
@@ -832,11 +823,11 @@ class FunctionScope : public Scope {
 	public:		typedef Scope super;
 
 				FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv);
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual void writeVar(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteVar(Engine& engine, const String* key);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-				ScriptObject* getDynamicVars(Engine& engine) const;
+				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+				virtual bool deleteVar(Runtime& rt, const String* key);
+				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
+				ScriptObject* getDynamicVars(Runtime& rt) const;
 
 	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
@@ -853,12 +844,12 @@ class FunctionScope : public Scope {
 
 /*
 	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-	codeDefinition pointer (for constants etc) and it declares deletable vars.
+	code pointer (for constants etc) and it declares deletable vars.
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
-				EvalScope(Heap& heap, Scope* parentScope, const CodeDefinition* evalCodeDef);
-				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
+				EvalScope(Heap& heap, Scope* parentScope);
+				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 };
 
 /*
@@ -871,9 +862,9 @@ class CatchScope : public Scope {
 	public:		typedef Scope super;
 
 				CatchScope(Heap& heap, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
-				virtual Flags readVar(Engine& engine, const String* name, Value* v) const;
-				virtual void writeVar(Engine& engine, const String* name, const Value& v);
-				virtual bool deleteVar(Engine& engine, const String* key);
+				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+				virtual bool deleteVar(Runtime& rt, const String* key);
 
 	protected:	const String* exceptionName;
 				Value exceptionValue;
@@ -886,20 +877,19 @@ class CatchScope : public Scope {
 };
 
 const UInt32 DEFAULT_STACK_SIZE = 1024;
-// FIX : rename to RunTime?
-class Engine : public GCItem {
+class Runtime : public GCItem {
 	public:		typedef GCItem super;
-				Engine(Heap& heap);
-				void setGlobalObject(GlobalScope* globalScope, Object* globals);
+				Runtime(Heap& heap);
+				void setGlobalObject(Object* globals);
 				void setStackSize(UInt32 stackSize);
 				UInt32 getStackSize() const;
 				void setupStandardLibrary(const String& librarySourceCode);
 				Heap& getHeap() const { return heap; }
-				Object* getGlobals() const { return globals; }
-				GlobalScope* getGlobalScope() const { return globalScope; }
+				Object* getGlobals() const { assert(globals != 0); return globals; }
+				GlobalScope* getGlobalScope() { return &globalScope; }
 
 	protected:	Heap& heap;
-				GlobalScope* globalScope;
+				GlobalScope globalScope;
 				Object* globals;
 				UInt32 stackSize;
 	
@@ -919,7 +909,7 @@ class Engine : public GCItem {
 				double unixEpochTimeDiff;
 	
 	public:		virtual void gcMark(Heap& heap) const {
-					heap.mark(globalScope);
+					heap.mark(&globalScope);
 					heap.mark(globals);
 					heap.mark(&objectPrototype);
 					heap.mark(&functionPrototype);
@@ -943,13 +933,13 @@ class Arguments : public LazyScriptObject<Object> {
 				Arguments(Heap& heap, FunctionScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
-				virtual Object* getPrototype(Engine& engine) const;
-				virtual Flags getOwnProperty(Engine& engine, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Engine& engine, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Engine& engine) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
+				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
-	protected:	virtual void constructCompleteObject(Engine& engine) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				Value* findProperty(const Value& key) const;
 				FunctionScope* const scope;
 				UInt32 const argumentsCount;
@@ -964,7 +954,7 @@ class Arguments : public LazyScriptObject<Object> {
 /* 
 FIX: idea, have a simpler and therefore safer (no mem-alloc) Exception type and convert to full value string on demand instead?
 class Exception : public std::exception {
-	public:		virtual Value createValue(Engine& engine) = 0;
+	public:		virtual Value createValue(Runtime& rt) = 0;
 };
 */
 
@@ -1072,9 +1062,9 @@ class Processor : public GCItem {
 				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
-	public:		Processor(Engine& engine);
-				void chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
-				void enterEval(const CodeDefinition* codeDefinition, bool directCall);
+	public:		Processor(Runtime& rt);
+				void chain(const Code* code, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
+				void enterEval(const Code* code, bool directCall);
 				void resetTimeOut(Int32 clockCycles);
 				bool run();
 				Value getResult() const;
@@ -1090,20 +1080,22 @@ class Processor : public GCItem {
 				void reset();
 				void popFrame();
 
-				Engine& engine;
+				Runtime& rt;
 	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
 				struct Frame : public GCItem {
 					typedef GCItem super;
-					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject, Frame* previousFrame)
-							: returnIP(returnIP), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
+					Frame(const CodeWord* returnIP, const Code* code, Scope* scope, Object* thisObject, Frame* previousFrame)
+							: returnIP(returnIP), code(code), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
 					const CodeWord* const returnIP;
+					const Code* const code;
 					Scope* const scope;
 					Object* const thisObject;
 					Frame* const previousFrame;
 					virtual void gcMark(Heap& heap) const {
+						heap.mark(code);
 						heap.mark(scope);
 						heap.mark(thisObject);
 						heap.mark(previousFrame);
@@ -1113,10 +1105,10 @@ public: // FIX : not public, just for some asserts now I think
 	
 				struct Catcher : public GCItem {
 					typedef GCItem super;
-					Catcher(const CodeWord* ip, Value* vsp, Frame* frame, Catcher* nextCatcher)
-							: ip(ip), vsp(vsp), frame(frame), nextCatcher(nextCatcher) { }
+					Catcher(const CodeWord* ip, Value* sp, Frame* frame, Catcher* nextCatcher)
+							: ip(ip), sp(sp), frame(frame), nextCatcher(nextCatcher) { }
 					const CodeWord* const ip;
-					Value* const vsp;
+					Value* const sp;
 					Frame* const frame;
 					Catcher* const nextCatcher;
 					virtual void gcMark(Heap& heap) const {
@@ -1130,11 +1122,11 @@ public: // FIX : not public, just for some asserts now I think
 				Catcher* firstCatcher;
 				Int32 cyclesLeft;
 				const CodeWord* ip;
-				Value* vsp;
+				Value* sp;
 				QuickArray<Value> stack;
 
 				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(stack.begin(), vsp + 1);
+					heap.markViaReferences(stack.begin(), sp + 1);
 					heap.mark(currentFrame);
 					heap.mark(firstCatcher);
 					super::gcMark(heap);
@@ -1155,7 +1147,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(Heap& heap, CodeDefinition* codeDefinition, Target compileFor);
+				Compiler(Heap& heap, Code* code, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1282,7 +1274,7 @@ class Compiler : public GCItem {
 				const Char* identifier(bool required, bool acceptReservedKeywords);
 
 				Heap& heap; // FIX : necessary?
-				CodeDefinition* const codeDefinition;
+				Code* const code;
 				const Target compilingFor;
 				CodeSection setupSection; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				CodeSection mainSection;
@@ -1293,7 +1285,7 @@ class Compiler : public GCItem {
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
 
 				virtual void gcMark(Heap& heap) const {
-					heap.mark(codeDefinition);
+					heap.mark(code);
 					super::gcMark(heap);
 				}
 };
