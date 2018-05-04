@@ -1143,7 +1143,7 @@ const String* StringWrapper::toString(Heap& heap) const { return wrapped; }
 Value StringWrapper::getInternalValue(Heap& heap) const { return Value(wrapped); }
 
 Flags StringWrapper::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
-	Flags flags = wrapped->getOwnProperty(engine, key, v);;
+	Flags flags = wrapped->getOwnProperty(engine, key, v);
 	return (flags != NONEXISTENT ? flags : super::getOwnProperty(engine, key, v));
 }
 
@@ -1913,7 +1913,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(Engine& engine) : super(engine.getHeap()), engine(engine), currentFrame(0), firstCatcher(0), vstack(engine.getHeap(), 10000), clockCyclesLeft(0x7FFFFFFF) {
+Processor::Processor(Engine& engine) : super(engine.getHeap()), engine(engine), currentFrame(0), firstCatcher(0), result(Value::UNDEFINED), clockCyclesLeft(0x7FFFFFFF) {
 	reset();
 }
 
@@ -1927,25 +1927,22 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 	return std::make_pair(static_cast<Opcode>(codeWord & 255), static_cast<Int32>(codeWord) >> 8);
 }
 
-void Processor::push(const Value& v) { assert(vsp + 1 < vstack.end()); *++vsp = v; }
-void Processor::pop2push1(const Value& v) { assert(vsp >= vstack.begin()); *--vsp = v; }
-void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vsp -= count; }
+void Processor::push(Value*& vsp, const Value& v) { assert(vsp + 1 < currentFrame->stack->end()); *++vsp = v; }
+void Processor::pop2push1(Value*& vsp, const Value& v) { assert(vsp >= currentFrame->stack->begin()); *--vsp = v; }
+void Processor::pop(Value*& vsp, Int32 count) { assert(vsp - count + 1 >= currentFrame->stack->begin()); vsp -= count; }
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
-
-void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
-	const UInt32 vstackOffset = static_cast<UInt32>(vsp + 1 - vstack.begin());
-	const UInt32 requiredSize = vstackOffset + maxStackDepth;
-	if (requiredSize > vstack.size()) {
-		vstack.resize(requiredSize);
-	}
-	vsp = vstack.begin() + vstackOffset - 1;
-}
 
 void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object* thisObject) {
 	Heap& heap = engine.getHeap();
-	currentFrame = heap.govern(new(heap) Frame(ip, &vstack, scope, thisObject, currentFrame));
+	Stack* stack = (currentFrame != 0 ? currentFrame->stack : 0);
+	const UInt32 maxStackDepth = codeDefinition->getMaxStackDepth();
+	if (stack == 0 || stack->vsp + maxStackDepth >= stack->end()) {
+		const UInt32 newSize = std::max(maxStackDepth, (stack == 0 ? 64 : stack->size() * 2));
+//		std::cerr << "new stack of size " << newSize << std::endl;
+		stack = heap.govern(new(heap) Stack(heap, newSize));
+	}
+	currentFrame = heap.govern(new(heap) Frame(ip, stack, scope, thisObject, currentFrame));
 	ip = codeDefinition->getCodePointer();
-//	reserveVStackSpace(codeDefinition->getMaxStackDepth());
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1963,7 +1960,6 @@ void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall)
 
 void Processor::reset() {
 	clockCyclesLeft = 0x7FFFFFFF;
-	vsp = vstack.begin();
 	currentFrame = 0;
 	firstCatcher = 0;
 	ip = 0;
@@ -1983,8 +1979,8 @@ void Processor::throwVirtualException(const Value& exception) {
 	ip = firstCatcher->ip;
 	assert(ip != 0);
 	currentFrame = firstCatcher->frame;
-	vsp = vstack.begin() + firstCatcher->vstackOffset - 1;
-	push(exception);
+	currentFrame->stack->vsp = firstCatcher->vsp;
+	push(currentFrame->stack->vsp, exception);
 	Catcher* killMe = firstCatcher;
 	firstCatcher = firstCatcher->nextCatcher;
 	delete killMe;
@@ -2011,6 +2007,7 @@ bool Processor::privateRun() {
 	const Value* constants = scope->getCodeDefinition()->getConstantsPointer();
 	Value* locals = scope->getLocalsPointer();
 	Object* thisObject = currentFrame->thisObject;
+	Value*& vsp = currentFrame->stack->vsp;
 
 	while (clockCyclesLeft >= 0) {
 		--clockCyclesLeft;
@@ -2018,15 +2015,15 @@ bool Processor::privateRun() {
 		const Opcode opcode = static_cast<Opcode>(instruction & 255);
 		const Int32 im = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
-			case CONST_OP:				push(constants[im]); break;
-			case READ_LOCAL_OP:			assert(locals != 0); push(locals[im]); break;
+			case CONST_OP:				push(vsp, constants[im]); break;
+			case READ_LOCAL_OP:			assert(locals != 0); push(vsp, locals[im]); break;
 			case WRITE_LOCAL_OP:		assert(locals != 0); locals[im] = vsp[0]; break;
-			case WRITE_LOCAL_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(1); break;
+			case WRITE_LOCAL_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(vsp, 1); break;
 			case READ_NAMED_OP:			{
 											const String* name = constants[im].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
 												error(REFERENCE_ERROR, heap.govern(new(heap) String(*name, IS_NOT_DEFINED_STRING, &heap)));
-												break;
+												return true;
 											}
 										}
 										break;
@@ -2035,36 +2032,39 @@ bool Processor::privateRun() {
 										break;
 				
 			case WRITE_NAMED_POP_OP:	scope->writeVar(engine, constants[im].getString(), vsp[0]);
-										pop(1);
+										pop(vsp, 1);
 										break;
 
 			case GET_PROPERTY_OP: {
 				const Object* o = convertToObject(vsp[-1], false);
-				if (o != 0) {
-					if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
-						vsp[-1] = Value::UNDEFINED;
-					}
-					pop(1);
+				if (o == 0) {
+					return true;
 				}
+				if (o->getPropertyDeep(engine, vsp[0], vsp - 1) == NONEXISTENT) {
+					vsp[-1] = Value::UNDEFINED;
+				}
+				pop(vsp, 1);
 				break;
 			}
 			
 			case SET_PROPERTY_OP: {
 				Object* o = convertToObject(vsp[-2], false);
-				if (o != 0) {
-					o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-					vsp[-2] = vsp[0];
-					pop(2);
+				if (o == 0) {
+					return true;
 				}
+				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+				vsp[-2] = vsp[0];
+				pop(vsp, 2);
 				break;
 			}
 			
 			case SET_PROPERTY_POP_OP: {
 				Object* o = convertToObject(vsp[-2], false);
-				if (o != 0) {
-					o->setPropertyDeep(engine, vsp[-1], vsp[0]);
-					pop(3);
+				if (o == 0) {
+					return true;
 				}
+				o->setPropertyDeep(engine, vsp[-1], vsp[0]);
+				pop(vsp, 3);
 				break;
 			}
 
@@ -2101,59 +2101,59 @@ bool Processor::privateRun() {
 
 			case INC_OP:	vsp[0] = Value(vsp[0].toDouble() + 1.0); break;
 			case DEC_OP:	vsp[0] = Value(vsp[0].toDouble() - 1.0); break;
-			case ADD_OP:	pop2push1(vsp[-1].add(heap, vsp[0])); break;
-			case SUB_OP:	pop2push1(Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
-			case MUL_OP:	pop2push1(Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
-			case DIV_OP:	pop2push1(Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
-			case MOD_OP:	pop2push1(Value(modulo(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
-			case OR_OP:		pop2push1(Value(vsp[-1].toInt() | vsp[0].toInt())); break;
-			case XOR_OP:	pop2push1(Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
-			case AND_OP:	pop2push1(Value(vsp[-1].toInt() & vsp[0].toInt())); break;
-			case SHL_OP:	pop2push1(Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
-			case SHR_OP:	pop2push1(Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
-			case USHR_OP:	pop2push1(Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
+			case ADD_OP:	pop2push1(vsp, vsp[-1].add(heap, vsp[0])); break;
+			case SUB_OP:	pop2push1(vsp, Value(vsp[-1].toDouble() - vsp[0].toDouble())); break;
+			case MUL_OP:	pop2push1(vsp, Value(vsp[-1].toDouble() * vsp[0].toDouble())); break;
+			case DIV_OP:	pop2push1(vsp, Value(vsp[-1].toDouble() / vsp[0].toDouble())); break;
+			case MOD_OP:	pop2push1(vsp, Value(modulo(vsp[-1].toDouble(), vsp[0].toDouble()))); break;
+			case OR_OP:		pop2push1(vsp, Value(vsp[-1].toInt() | vsp[0].toInt())); break;
+			case XOR_OP:	pop2push1(vsp, Value(vsp[-1].toInt() ^ vsp[0].toInt())); break;
+			case AND_OP:	pop2push1(vsp, Value(vsp[-1].toInt() & vsp[0].toInt())); break;
+			case SHL_OP:	pop2push1(vsp, Value(vsp[-1].toInt() << ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case SHR_OP:	pop2push1(vsp, Value(vsp[-1].toInt() >> ((UInt32)vsp[0].toInt() & 0x1F))); break;
+			case USHR_OP:	pop2push1(vsp, Value(((UInt32)(vsp[-1].toInt()) >> ((UInt32)vsp[0].toInt() & 0x1F)))); break;
 			case PLUS_OP:	vsp[0] = Value(vsp[0].toDouble()); break;
 			case MINUS_OP:	vsp[0] = Value(-vsp[0].toDouble()); break;
 			case INV_OP:	vsp[0] = Value(~vsp[0].toInt()); break;
 			case NOT_OP:	vsp[0] = Value(!vsp[0].toBool()); break;
-			case X_EQ_OP:	pop2push1(Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
-			case X_NEQ_OP:	pop2push1(Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
-			case EQ_OP:		pop2push1(Value(vsp[-1].isEqualTo(vsp[0]))); break;
-			case NEQ_OP:	pop2push1(Value(!vsp[-1].isEqualTo(vsp[0]))); break;
-			case LT_OP:		pop2push1(Value(vsp[-1].isLessThan(vsp[0]))); break;
-			case LEQ_OP:	pop2push1(Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
-			case GT_OP:		pop2push1(Value(vsp[0].isLessThan(vsp[-1]))); break;
-			case GEQ_OP:	pop2push1(Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
+			case X_EQ_OP:	pop2push1(vsp, Value(vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case X_NEQ_OP:	pop2push1(vsp, Value(!vsp[-1].isStrictlyEqualTo(vsp[0]))); break;
+			case EQ_OP:		pop2push1(vsp, Value(vsp[-1].isEqualTo(vsp[0]))); break;
+			case NEQ_OP:	pop2push1(vsp, Value(!vsp[-1].isEqualTo(vsp[0]))); break;
+			case LT_OP:		pop2push1(vsp, Value(vsp[-1].isLessThan(vsp[0]))); break;
+			case LEQ_OP:	pop2push1(vsp, Value(vsp[-1].isLessThanOrEqualTo(vsp[0]))); break;
+			case GT_OP:		pop2push1(vsp, Value(vsp[0].isLessThan(vsp[-1]))); break;
+			case GEQ_OP:	pop2push1(vsp, Value(vsp[0].isLessThanOrEqualTo(vsp[-1]))); break;
 			case JMP_OP:	ip += im; break;
 
 							// FIX : make a new super-class to both with- and catch-scope and re-use here
 			case JSR_OP: {
-				currentFrame = heap.govern(new(heap) Frame(ip, &vstack, scope, thisObject, currentFrame));
+				currentFrame = heap.govern(new(heap) Frame(ip, currentFrame->stack, scope, thisObject, currentFrame));
 				ip += im;
 				return true;
 			}
 
-			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
-			case JF_OP:		ip += (!vsp[0].toBool() ? im : 0); pop(1); break;
-			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += im; else pop(1); break;
-			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += im; else pop(1); break;
+			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(vsp, 1); break;
+			case JF_OP:		ip += (!vsp[0].toBool() ? im : 0); pop(vsp, 1); break;
+			case JT_OR_POP_OP:	if (vsp[0].toBool()) ip += im; else pop(vsp, 1); break;
+			case JF_OR_POP_OP:	if (!vsp[0].toBool()) ip += im; else pop(vsp, 1); break;
 
-			case POP_OP:			assert(im >= 0); pop(im); break;
-			case PUSH_BACK_OP:		assert(im >= 0); vsp[-im] = vsp[0]; pop(im); break;
-			case REPUSH_OP:			assert(im <= 0); push(vsp[im]); break;
+			case POP_OP:			assert(im >= 0); pop(vsp, im); break;
+			case PUSH_BACK_OP:		assert(im >= 0); vsp[-im] = vsp[0]; pop(vsp, im); break;
+			case REPUSH_OP:			assert(im <= 0); push(vsp, vsp[im]); break;
 			case SWAP_OP:			std::swap(vsp[-1], vsp[0]); break;
-			case REPUSH_2_OP:		push(vsp[-1]); push(vsp[-1]); break;
-			case POST_SHUFFLE_OP:	push(vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
+			case REPUSH_2_OP:		push(vsp, vsp[-1]); push(vsp, vsp[-1]); break;
+			case POST_SHUFFLE_OP:	push(vsp, vsp[0]); vsp[-1] = vsp[-2]; vsp[-2] = vsp[-3]; vsp[-3] = vsp[0]; break;
 
 			case CALL_OP: {
 				Function* const f = vsp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
+					return true;
 				}
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
-				pop(im);
+				pop(vsp, im);
 				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
 				return true;
@@ -2161,36 +2161,36 @@ bool Processor::privateRun() {
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Object* const thisObject = convertToObject(vsp[-im - 1], true);
-				if (thisObject != 0) {
-					Value v(Value::UNDEFINED);
-					Function* f;
-					const Value& name = vsp[-im];
-					if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
-						error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-						break;
-					}
-					QuickArray<Value> args(im, &heap);
-					std::copy(vsp - im + 1, vsp + 1, args.begin());
-					pop(im + 1);
-					const Value result = f->call(engine, *this, args.size(), args.begin(), thisObject);
-					vsp[0] = result;
+				if (thisObject == 0) {
 					return true;
 				}
-				break;
+				Value v(Value::UNDEFINED);
+				Function* f;
+				const Value& name = vsp[-im];
+				if (thisObject->getPropertyDeep(engine, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+					error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
+					return true;
+				}
+				QuickArray<Value> args(im, &heap);
+				std::copy(vsp - im + 1, vsp + 1, args.begin());
+				pop(vsp, im + 1);
+				const Value result = f->call(engine, *this, args.size(), args.begin(), thisObject);
+				vsp[0] = result;
+				return true;
 			}
 			
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
 				Function* f = vsp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
+					return true;
 				}
 				if (f == &engine.evalFunction) {
 					f = &engine.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
-				pop(im);
+				pop(vsp, im);
 				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
 				return true;
@@ -2200,7 +2200,7 @@ bool Processor::privateRun() {
 				Function* f = vsp[-im].asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
 				if (f == 0) { // FIX : sub
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
+					return true;
 				}
 				Value v(Value::UNDEFINED);
 				f->getPropertyDeep(engine, Value(&PROTOTYPE_STRING), &v);
@@ -2208,93 +2208,99 @@ bool Processor::privateRun() {
 				Object* newObject = heap.govern(new(heap) ScriptObject(heap, prototype != 0 ? prototype : &engine.objectPrototype));
 				QuickArray<Value> args(im, &heap);
 				std::copy(vsp - im + 1, vsp + 1, args.begin());
-				pop(im - 1);
+				pop(vsp, im - 1);
 				const Value result = f->construct(engine, *this, args.size(), args.begin(), newObject);
 				vsp[0] = result;
 				vsp[-1] = Value(newObject);
 				return true;
 			}
 			
-			case NEW_RESULT_OP: pop2push1(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
+			case NEW_RESULT_OP: pop2push1(vsp, vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
 			
 			case NEW_OBJECT_OP: {
-				push(Value(heap.govern(new(heap) ScriptObject(heap, &engine.objectPrototype))));
+				push(vsp, Value(heap.govern(new(heap) ScriptObject(heap, &engine.objectPrototype))));
 				break;
 			}
 			
 			case NEW_ARRAY_OP: {
-				push(Value(heap.govern(new(heap) Array(heap))));
+				push(vsp, Value(heap.govern(new(heap) Array(heap))));
 				break;
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				const Value result = engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals());;
+				const Value result = engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals());
 				vsp[-1] = result;
-				pop(1);
+				--vsp; // can't use pop because assert uses currentFrame
 				return true;
 			}
 
 			case RETURN_OP:	{
+				const Value returnValue = vsp[0];
 				ip = currentFrame->returnIP;
-				popFrame();
 				if (ip == 0) {
-					assert(currentFrame == 0 && firstCatcher == 0 && vsp == vstack.begin());
+					assert(firstCatcher == 0 && vsp == currentFrame->stack->begin());
+					result = returnValue;
 					reset();
 					return false;
+				} else {
+					popFrame();
+					assert(currentFrame != 0);
+					currentFrame->stack->vsp[0] = returnValue;
+					return true;
 				}
-				return true;
 			}
 			
-			case THIS_OP: push(Value(thisObject)); break;
-			case VOID_OP: push(Value::UNDEFINED); break;
+			case THIS_OP: push(vsp, Value(thisObject)); break;
+			case VOID_OP: push(vsp, Value::UNDEFINED); break;
 			
 			case GEN_FUNC_OP: {
 				const Object* o = constants[im].getObject();
 				assert(dynamic_cast<const CodeDefinition*>(o) != 0);
-				push(Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), scope))));
+				push(vsp, Value(heap.govern(new(heap) ScriptFunction(heap, reinterpret_cast<const CodeDefinition*>(o), scope))));
 				break;
 			}
 			
 			case DECLARE_OP: {
 				scope->declareVar(engine, constants[im].getString(), vsp[0], true);
-				pop(1);
+				pop(vsp, 1);
 				break;
 			}
 			
 			case ADD_PROPERTY_OP: {
 				Object* o = vsp[-1].getObject();
 				o->setOwnProperty(engine, constants[im], vsp[0], STANDARD_FLAGS);
-				pop(1);
+				pop(vsp, 1);
 				break;
 			}
 			
 			case DELETE_NAMED_OP: {
-				push(Value(scope->deleteVar(engine, constants[im].getString())));
+				push(vsp, Value(scope->deleteVar(engine, constants[im].getString())));
 				break;
 			}
 			
 			case DELETE_OP: {
 				Object* o = convertToObject(vsp[-1], true);
-				if (o != 0) {
-					pop2push1(Value(o->deleteProperty(engine, vsp[0])));
+				if (o == 0) {
+					return true;
 				}
+				pop2push1(vsp, Value(o->deleteProperty(engine, vsp[0])));
 				break;
 			}
 			
 			case CATCH_SCOPE_OP: {
-				currentFrame = heap.govern(new(heap) Frame(0, &vstack, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
-				pop(1);
+				currentFrame = heap.govern(new(heap) Frame(0, currentFrame->stack, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
+				pop(vsp, 1);
 				return true;
 			}
 			
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(vsp[0], false);
-				if (o != 0) {
-					currentFrame = heap.govern(new(heap) Frame(0, &vstack, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
-					pop(1);
+				if (o == 0) {
 					return true;
 				}
-				break;
+				currentFrame = heap.govern(new(heap) Frame(0, currentFrame->stack, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
+				pop(vsp, 1);
+				return true;
 			}
 			
 			case POP_FRAME_OP: {
@@ -2303,8 +2309,7 @@ bool Processor::privateRun() {
 			}
 			
 			case TRY_OP: {
-				assert(vsp + 1 - vstack.begin() >= 0);
-				firstCatcher = heap.govern(new(heap) Catcher(ip + im, static_cast<UInt32>(vsp + 1 - vstack.begin()), currentFrame, firstCatcher));
+				firstCatcher = heap.govern(new(heap) Catcher(ip + im, vsp, currentFrame, firstCatcher));
 				break;
 			}
 			case TRIED_OP: assert(firstCatcher != 0); firstCatcher = firstCatcher->nextCatcher; break;
@@ -2313,28 +2318,28 @@ bool Processor::privateRun() {
 				const Object* o = vsp[0].asObject();
 				if (o == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(CANNOT_USE_IN_OPERATOR_STRING, *vsp[0].toString(heap), &heap)));
-					break;
+					return true;
 				}
 				Value dummy;
 				vsp[-1] = Value(o->getPropertyDeep(engine, vsp[-1], &dummy) != NONEXISTENT);
-				pop(1);
+				pop(vsp, 1);
 				break;
 			}
 			case INSTANCE_OF_OP: {
 				Function* f = vsp[0].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*vsp[0].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
-					break;
+					return true;
 				}
 				vsp[-1] = Value(f->hasInstance(engine, *this, vsp[-1].asObject()));
-				pop(1);
+				pop(vsp, 1);
 				break;
 			}
 			case TYPEOF_OP: vsp[0] = Value(vsp[0].typeOfString()); break;
 			case TYPEOF_NAMED_OP: {
 				Value v(Value::UNDEFINED);
 				scope->readVar(engine, constants[im].getString(), &v);
-				push(Value(v.typeOfString()));
+				push(vsp, Value(v.typeOfString()));
 				break;
 			}
 			
@@ -2342,14 +2347,15 @@ bool Processor::privateRun() {
 				const Object* o = convertToObject(vsp[0], false);
 				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
-				if (o != 0) {
-					Enumerator* enumerator = &EMPTY_ENUMERATOR;
-					do {
-						enumerator = heap.govern(new(heap) JoiningEnumerator(engine, enumerator, o));
-						o = o->getPrototype(engine);
-					} while (o != 0);
-					vsp[0] = Value(enumerator);
+				if (o == 0) {
+					return true;
 				}
+				Enumerator* enumerator = &EMPTY_ENUMERATOR;
+				do {
+					enumerator = heap.govern(new(heap) JoiningEnumerator(engine, enumerator, o));
+					o = o->getPrototype(engine);
+				} while (o != 0);
+				vsp[0] = Value(enumerator);
 				break;
 			}
 			
@@ -2361,7 +2367,7 @@ bool Processor::privateRun() {
 					vsp[0] = Value(name);
 				} else {
 					ip += im;
-					pop(1);
+					pop(vsp, 1);
 				}
 				break;
 			}
@@ -2373,8 +2379,8 @@ bool Processor::privateRun() {
 }
 
 Value Processor::getResult() const {
-	assert(ip == 0 && vsp == vstack.begin()); // make sure you've called run() until it returns false
-	return vsp[0];
+	assert(ip == 0 && currentFrame == 0); // make sure you've called run() until it returns false
+	return result;
 }
 
 bool Processor::run() {
@@ -4553,7 +4559,7 @@ struct Support {
 				return Value((*s)[static_cast<UInt32>(d)]);
 			}
 		}
-		return Value::NOT_A_NUMBER;;
+		return Value::NOT_A_NUMBER;
 	}
 
 	static Value substring(Engine& engine, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -5018,7 +5024,7 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                     {
                         long beforeSize = static_cast<long>(heap.size());
                         UInt32 sweptCount = heap.gc();
-                        long nowSize = static_cast<long>(heap.size());;
+                        long nowSize = static_cast<long>(heap.size());
                         if (!suppressStdErr) {
                             std::cerr << "\tGC rate: " << gcRate << std::endl;
                             std::cerr << "\tGC swept: " << sweptCount << std::endl;
@@ -5037,8 +5043,6 @@ globals.setOwnProperty(engine, Value(String::newString(heap, "callbackTest")), V
                     if (done) {
                     	processor.run();	// just testing some weird behaviour
                         if (!suppressStdErr) {
-                            std::cerr << "\tOn stack: " << (processor.vsp - processor.vstack.begin() + 1) << std::endl;
-                            assert(processor.vsp - processor.vstack.begin() == 0);
                             Value v = processor.getResult();
                             std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
                             assert(processor.firstCatcher == 0);

@@ -1077,13 +1077,12 @@ class Processor : public GCItem {
 
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
-				void push(const Value& v);
-				void pop(Int32 count = 1);
-				void pop2push1(const Value& v);
+				void push(Value*& vsp, const Value& v);
+				void pop(Value*& vsp, Int32 count = 1);
+				void pop2push1(Value*& vsp, const Value& v);
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
-				void reserveVStackSpace(UInt32 maxStackDepth);
 				void reset();
 				void popFrame();
 
@@ -1096,12 +1095,13 @@ public: // FIX : not public, just for some asserts now I think
 				struct Stack : public GCItem, public QuickArray<Value> {
 					typedef GCItem super;
 					typedef QuickArray<Value> QArray;
-					Stack(Heap& heap, UInt32 size) : super(heap), QArray(size, &heap), vsp(begin()) { assert(size > 0); vsp[0] = Value::UNDEFINED;
-				std::fill(begin(), end(), Value::UNDEFINED);
+					Stack(Heap& heap, UInt32 size) : super(heap), QArray(size, &heap), vsp(begin()) {
+						assert(size > 0);
+						vsp[0] = Value::UNDEFINED;
 					}
 					Value* vsp;
 					virtual void gcMark(Heap& heap) const {
-						heap.markViaReferences(begin(), end() /*vsp + 1*/);
+						heap.markViaReferences(begin(), vsp + 1);
 						super::gcMark(heap);
 					}
 				};
@@ -1109,7 +1109,8 @@ public: // FIX : not public, just for some asserts now I think
 				struct Frame : public GCItem {
 					typedef GCItem super;
 					Frame(const CodeWord* returnIP, Stack* stack, Scope* scope, Object* thisObject, Frame* previousFrame)
-							: returnIP(returnIP), stack(stack), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
+							: returnIP(returnIP), stack(stack), scope(scope), thisObject(thisObject)
+							, previousFrame(previousFrame) { }
 					const CodeWord* const returnIP;
 					Stack* const stack;
 					Scope* const scope;
@@ -1123,13 +1124,13 @@ public: // FIX : not public, just for some asserts now I think
 						super::gcMark(heap);
 					}
 				};
-
+	
 				struct Catcher : public GCItem {
 					typedef GCItem super;
-					Catcher(const CodeWord* ip, UInt32 vstackOffset, Frame* frame, Catcher* nextCatcher)
-							: ip(ip), vstackOffset(vstackOffset), frame(frame), nextCatcher(nextCatcher) { }
+					Catcher(const CodeWord* ip, Value* vsp, Frame* frame, Catcher* nextCatcher)
+							: ip(ip), vsp(vsp), frame(frame), nextCatcher(nextCatcher) { }
 					const CodeWord* const ip;
-					UInt32 const vstackOffset;
+					Value* const vsp;
 					Frame* const frame;
 					Catcher* const nextCatcher;
 					virtual void gcMark(Heap& heap) const {
@@ -1139,13 +1140,11 @@ public: // FIX : not public, just for some asserts now I think
 					}
 				};
 
-				Stack vstack;
-
 				Frame* currentFrame;
 				Catcher* firstCatcher;
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
-				Value* vsp; // FIX : not public, just for an assert now
+				Value result;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(currentFrame);
