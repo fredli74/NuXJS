@@ -469,8 +469,8 @@ double Value::toDouble() const {
 
 // TODO : toInt32 and toUInt32
 Int32 Value::toInt() const { // FIX : could be faster without toDouble I thinkus
-	double v = toDouble();
-	int i = static_cast<Int32>(v);
+	const double v = toDouble();
+	const Int32 i = static_cast<Int32>(v);
 	if (i == v) { // FIX : <2^32 but with decimals will now go via slow fmod, right? unneccessary
 		return i;
 	} else if (!isFinite(v)) {
@@ -1551,7 +1551,7 @@ Object* Arguments::getPrototype(Engine& engine) const { return &engine.objectPro
 
 Value* Arguments::findProperty(const Value& key) const {
 	UInt32 i;
-	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? scope->getIndexedPointer() + i : 0);
+	return (key.toArrayIndex(i) && i < argumentsCount && !deletedArguments[i] ? scope->getLocalsPointer() + i : 0);
 }
 
 Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) const {
@@ -1563,7 +1563,7 @@ Flags Arguments::getOwnProperty(Engine& engine, const Value& key, Value* v) cons
 bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v, Flags flags) {
 	Value* p = findProperty(key);
 	if (p != 0 && (flags & (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG)) != 0) {
-		deletedArguments[p - scope->getIndexedPointer()] = true;
+		deletedArguments[p - scope->getLocalsPointer()] = true;
 		p = 0;
 	}
 	return (p == 0 ? super::setOwnProperty(engine, key, v, flags) : ((void)(*p = v), true));
@@ -1571,7 +1571,7 @@ bool Arguments::setOwnProperty(Engine& engine, const Value& key, const Value& v,
 
 bool Arguments::deleteProperty(Engine& engine, const Value& key) {
 	const Value* p = findProperty(key);
-    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - scope->getIndexedPointer()] = true));
+    return (p == 0 ? super::deleteProperty(engine, key) : (deletedArguments[p - scope->getLocalsPointer()] = true));
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Engine& engine) const {
@@ -1586,7 +1586,7 @@ void Arguments::constructCompleteObject(Engine& engine) const {
 /* --- Scope --- */
 
 Scope::Scope(Heap& heap, Scope* parentScope, const CodeDefinition* codeDefinition)
-		: super(heap), parentScope(parentScope), indexedPointer(parentScope != 0 ? parentScope->indexedPointer : 0)
+		: super(heap), parentScope(parentScope), localsPointer(parentScope != 0 ? parentScope->localsPointer : 0)
 		, codeDefinition(codeDefinition) { }
 
 Flags Scope::readVar(Engine& engine, const String* name, Value* v) const {
@@ -1609,25 +1609,25 @@ void Scope::declareVar(Engine& engine, const String* name, const Value& initValu
 	return parentScope->declareVar(engine, name, initValue, dontDelete);
 }
 
-Value* Scope::getIndexedPointer() const { return indexedPointer; }
+Value* Scope::getLocalsPointer() const { return localsPointer; }
 Scope* Scope::getParentScope() const { return parentScope; }
 const CodeDefinition* Scope::getCodeDefinition() const { return codeDefinition; }
 
 /* --- FunctionScope --- */
 
-static UInt32 calcIndexedVariablesSize(const ScriptFunction* function, UInt32 argc) {
+static UInt32 calcLocalsVariablesSize(const ScriptFunction* function, UInt32 argc) {
 	const CodeDefinition* codeDefinition = function->getDefinition();
 	return codeDefinition->getVarsCount() + std::max(codeDefinition->getArgumentsCount(), argc);
 }
 
 FunctionScope::FunctionScope(Heap& heap, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: super(heap, function->closure, function->codeDefinition), function(function), passedArgumentsCount(argc)
-		, indexed(calcIndexedVariablesSize(function, argc), &heap), dynamicVars(0), bloomSet(function->codeDefinition->bloomSet) {
-	indexedPointer = indexed.begin() + codeDefinition->getVarsCount();
-	std::fill(indexed.begin(), indexedPointer, Value::UNDEFINED);
-	Value* e = std::copy(argv, argv + argc, indexedPointer);
+		, locals(calcLocalsVariablesSize(function, argc), &heap), dynamicVars(0), bloomSet(function->codeDefinition->bloomSet) {
+	localsPointer = locals.begin() + codeDefinition->getVarsCount();
+	std::fill(locals.begin(), localsPointer, Value::UNDEFINED);
+	Value* e = std::copy(argv, argv + argc, localsPointer);
 	if (codeDefinition->getArgumentsCount() > argc) {
-		std::fill(e, indexed.end(), Value::UNDEFINED);
+		std::fill(e, locals.end(), Value::UNDEFINED);
 	}
 }
 
@@ -1647,8 +1647,8 @@ Flags FunctionScope::readVar(Engine& engine, const String* name, Value* v) const
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-			*v = indexedPointer[index];
+			assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
+			*v = localsPointer[index];
 			return DONT_DELETE_FLAG | EXISTS_FLAG;
 		}
 		if (dynamicVars != 0 || name->isEqualTo(ARGUMENTS_STRING)) {
@@ -1670,8 +1670,8 @@ void FunctionScope::writeVar(Engine& engine, const String* name, const Value& v)
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
 		if (codeDefinition->lookupNameIndex(name, index)) {
-			assert(indexed.begin() <= indexedPointer + index && indexedPointer + index < indexed.end());
-			indexedPointer[index] = v;
+			assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
+			localsPointer[index] = v;
 			return;
 		}
 		// FIX : make sub that lookup's the bucket, also use in getProperty
@@ -1828,9 +1828,9 @@ const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
 // This list must be in enum order
 const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ CONST_OP                   , "CONST"                   , +1     , 0 },
-	{ READ_INDEXED_OP            , "READ_INDEXED"            , +1     , 0 },
-	{ WRITE_INDEXED_OP           , "WRITE_INDEXED"           , 0      , 0 },
-	{ WRITE_INDEXED_POP_OP       , "WRITE_INDEXED_POP"       , -1     , 0 },
+	{ READ_LOCAL_OP              , "READ_LOCAL"              , +1     , 0 },
+	{ WRITE_LOCAL_OP             , "WRITE_LOCAL"             , 0      , 0 },
+	{ WRITE_LOCAL_POP_OP         , "WRITE_LOCAL_POP"         , -1     , 0 },
 	{ READ_NAMED_OP              , "READ_NAMED"              , 1      , 0 },
 	{ WRITE_NAMED_OP             , "WRITE_NAMED"             , 0      , 0 },
 	{ WRITE_NAMED_POP_OP         , "WRITE_NAMED_POP"         , -1     , 0 },
@@ -1895,7 +1895,7 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ DECLARE_OP                 , "DECLARE"                 , -1     , 0 },
 	{ CATCH_SCOPE_OP             , "CATCH_SCOPE"             , -1     , 0 },
 	{ WITH_SCOPE_OP              , "WITH_SCOPE"              , -1     , 0 },
-	{ POP_SCOPE_OP               , "POP_SCOPE"               , 0      , 0 },
+	{ POP_FRAME_OP               , "POP_FRAME"               , 0      , 0 },
 	{ TRY_OP                     , "TRY"                     , 0      , OpcodeInfo::NO_POP_ON_BRANCH },
 	{ TRIED_OP                   , "TRIED"                   , 0      , 0 },
 	{ THROW_OP                   , "THROW"                   , -1     , OpcodeInfo::TERMINAL },
@@ -1934,12 +1934,6 @@ void Processor::pop(Int32 count) { assert(vsp - count + 1 >= vstack.begin()); vs
 void Processor::resetTimeOut(Int32 clockCycles) { clockCyclesLeft = clockCycles; }
 
 void Processor::updateInternals() {
-	assert(currentFrame != 0);
-	thisObject = currentFrame->thisObject;
-	scope = currentFrame->scope;
-	assert(scope != 0);
-	constants = scope->getCodeDefinition()->getConstantsPointer();
-	indexed = scope->getIndexedPointer();
 }
 
 void Processor::reserveVStackSpace(UInt32 maxStackDepth) {
@@ -1956,19 +1950,19 @@ void Processor::chain(const CodeDefinition* codeDefinition, Scope* scope, Object
 	currentFrame = heap.govern(new(heap) Frame(ip, scope, thisObject, currentFrame));
 	ip = codeDefinition->getCodePointer();
 	reserveVStackSpace(codeDefinition->getMaxStackDepth());
-	updateInternals();
 }
 
 void Processor::chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) FunctionScope(heap, func, argc, argv));
-	chain(func->getDefinition(), scope, thisObject);
+	chain(func->getDefinition(), heap.govern(new(heap) FunctionScope(heap, func, argc, argv)), thisObject);
 }
 
 void Processor::enterEval(const CodeDefinition* codeDefinition, bool directCall) {
 	Heap& heap = engine.getHeap();
-	scope = heap.govern(new(heap) EvalScope(heap, (directCall ? scope : engine.getGlobalScope()), codeDefinition));
-	chain(codeDefinition, scope, directCall ? thisObject : engine.getGlobals());
+	assert(!directCall || currentFrame != 0); // FIX : what to do with global scope?
+	chain(codeDefinition, heap.govern(new(heap) EvalScope(heap
+			, (directCall ? currentFrame->scope : engine.getGlobalScope()), codeDefinition))
+			, directCall ? currentFrame->thisObject : engine.getGlobals());
 }
 
 void Processor::reset() {
@@ -1978,10 +1972,12 @@ void Processor::reset() {
 	currentFrame = 0;
 	firstCatcher = 0;
 	ip = 0;
-	scope = 0;
-	thisObject = 0;
-	constants = 0;
-	indexed = 0;
+}
+
+void Processor::popFrame() {
+	Frame* killMe = currentFrame;
+	currentFrame = currentFrame->previousFrame;
+	delete killMe;
 }
 
 void Processor::throwVirtualException(const Value& exception) {
@@ -1994,8 +1990,9 @@ void Processor::throwVirtualException(const Value& exception) {
 	currentFrame = firstCatcher->frame;
 	vsp = vstack.begin() + firstCatcher->vstackOffset - 1;
 	push(exception);
+	Catcher* killMe = firstCatcher;
 	firstCatcher = firstCatcher->nextCatcher;
-	updateInternals();
+	delete killMe;
 }
 
 void Processor::error(ErrorType errorType, const String* message) {
@@ -2013,8 +2010,13 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 
 bool Processor::privateRun() {
 	Heap& heap = engine.getHeap();
-	updateInternals();
-	
+	assert(currentFrame != 0);
+	Scope* scope = currentFrame->scope;
+	assert(scope != 0);
+	const Value* constants = scope->getCodeDefinition()->getConstantsPointer();
+	Value* locals = scope->getLocalsPointer();
+	Object* thisObject = currentFrame->thisObject;
+
 	while (clockCyclesLeft >= 0) {
 		--clockCyclesLeft;
 		const CodeWord instruction = *ip++;
@@ -2022,9 +2024,9 @@ bool Processor::privateRun() {
 		const Int32 im = static_cast<Int32>(instruction) >> 8;
 		switch (opcode) {
 			case CONST_OP:				push(constants[im]); break;
-			case READ_INDEXED_OP:		assert(indexed != 0); push(indexed[im]); break;
-			case WRITE_INDEXED_OP:		assert(indexed != 0); indexed[im] = vsp[0]; break;
-			case WRITE_INDEXED_POP_OP:	assert(indexed != 0); indexed[im] = vsp[0]; pop(1); break;
+			case READ_LOCAL_OP:			assert(locals != 0); push(locals[im]); break;
+			case WRITE_LOCAL_OP:		assert(locals != 0); locals[im] = vsp[0]; break;
+			case WRITE_LOCAL_POP_OP:	assert(locals != 0); locals[im] = vsp[0]; pop(1); break;
 			case READ_NAMED_OP:			{
 											const String* name = constants[im].getString();
 											if (scope->readVar(engine, name, ++vsp) == NONEXISTENT) {
@@ -2075,6 +2077,7 @@ bool Processor::privateRun() {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
 					engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					return true;
 				}
 				break;
 			}
@@ -2083,6 +2086,7 @@ bool Processor::privateRun() {
 				const Object* o = vsp[0].asObject();
 				if (o != 0) {
 					engine.toStringFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+					return true;
 				}
 				break;
 			}
@@ -2095,6 +2099,7 @@ bool Processor::privateRun() {
 					}
 					if (vsp[-1].isString() || vsp[-1].isNumber() || vsp[-1].isBoolean()) {
 						engine.toNumberFunction->call(engine, *this, 1, vsp, engine.getGlobals());
+						return true;
 					}
 				}
 				break;
@@ -2129,9 +2134,8 @@ bool Processor::privateRun() {
 							// FIX : make a new super-class to both with- and catch-scope and re-use here
 			case JSR_OP: {
 				currentFrame = heap.govern(new(heap) Frame(ip, scope, thisObject, currentFrame));
-				updateInternals();
 				ip += im;
-				break;
+				return true;
 			}
 
 			case JT_OP:		ip += (vsp[0].toBool() ? im : 0); pop(1); break;
@@ -2157,7 +2161,7 @@ bool Processor::privateRun() {
 				pop(im);
 				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
-				break;
+				return true;
 			}
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
@@ -2175,6 +2179,7 @@ bool Processor::privateRun() {
 					pop(im + 1);
 					const Value result = f->call(engine, *this, args.size(), args.begin(), thisObject);
 					vsp[0] = result;
+					return true;
 				}
 				break;
 			}
@@ -2193,7 +2198,7 @@ bool Processor::privateRun() {
 				pop(im);
 				const Value result = f->call(engine, *this, args.size(), args.begin(), engine.getGlobals());
 				vsp[0] = result;
-				break;
+				return true;
 			}
 
 			case NEW_OP: {
@@ -2212,7 +2217,7 @@ bool Processor::privateRun() {
 				const Value result = f->construct(engine, *this, args.size(), args.begin(), newObject);
 				vsp[0] = result;
 				vsp[-1] = Value(newObject);
-				break;
+				return true;
 			}
 			
 			case NEW_RESULT_OP: pop2push1(vsp[0].isObject() ? vsp[0] : vsp[-1]); break;
@@ -2231,19 +2236,18 @@ bool Processor::privateRun() {
 				const Value result = engine.createRegExpFunction->call(engine, *this, 2, vsp - 1, engine.getGlobals());;
 				vsp[-1] = result;
 				pop(1);
-				break;
+				return true;
 			}
 
 			case RETURN_OP:	{
 				ip = currentFrame->returnIP;
-				currentFrame = currentFrame->previousFrame;
+				popFrame();
 				if (ip == 0) {
 					assert(currentFrame == 0 && firstCatcher == 0 && vsp == vstack.begin());
 					reset();
 					return false;
 				}
-				updateInternals();
-				break;
+				return true;
 			}
 			
 			case THIS_OP: push(Value(thisObject)); break;
@@ -2285,8 +2289,7 @@ bool Processor::privateRun() {
 			case CATCH_SCOPE_OP: {
 				currentFrame = heap.govern(new(heap) Frame(0, heap.govern(new(heap) CatchScope(heap, scope, constants[im].getString(), vsp[0])), thisObject, currentFrame));
 				pop(1);
-				updateInternals();
-				break;
+				return true;
 			}
 			
 			case WITH_SCOPE_OP: {
@@ -2294,15 +2297,14 @@ bool Processor::privateRun() {
 				if (o != 0) {
 					currentFrame = heap.govern(new(heap) Frame(0, heap.govern(new(heap) WithScope(heap, scope, o)), thisObject, currentFrame));
 					pop(1);
-					updateInternals();
+					return true;
 				}
 				break;
 			}
 			
-			case POP_SCOPE_OP: {
-				currentFrame = currentFrame->previousFrame;
-				updateInternals();
-				break;
+			case POP_FRAME_OP: {
+				popFrame();
+				return true;
 			}
 			
 			case TRY_OP: {
@@ -2311,7 +2313,7 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRIED_OP: assert(firstCatcher != 0); firstCatcher = firstCatcher->nextCatcher; break;
-			case THROW_OP: throwVirtualException(vsp[0]); break;
+			case THROW_OP: throwVirtualException(vsp[0]); return true;
 			case IN_OP: {
 				const Object* o = vsp[0].asObject();
 				if (o == 0) {
@@ -2385,12 +2387,17 @@ bool Processor::run() {
 		return false;
 	}
 	try {
-		return privateRun();
+		while (clockCyclesLeft >= 0) {
+			if (!privateRun()) {
+				return false;
+			}
+		}
 	}
 	catch (const Exception& x) {
 		throwVirtualException(x.getValue());
 		return true;
 	}
+	return true;
 }
 
 static int recursiveStackCheck(const CodeDefinition& codeDefinition, QuickArray<Int32>& stackDepths
@@ -2521,11 +2528,11 @@ static void disassemble(Heap& heap, const CodeDefinition& codeDefinition) {
 				std::cerr << " @" << target;
 				break;
 			}
-			case Processor::READ_INDEXED_OP:
-			case Processor::WRITE_INDEXED_OP:
-			case Processor::WRITE_INDEXED_POP_OP: {
+			case Processor::READ_LOCAL_OP:
+			case Processor::WRITE_LOCAL_OP:
+			case Processor::WRITE_LOCAL_POP_OP: {
 				const Int32 index = operand;
-				const String* name = codeDefinition.getIndexedName(index);
+				const String* name = codeDefinition.getLocalName(index);
 				if (name != 0) std::wcerr << L" $" << name->toStdString();
 				std::wcerr << L" (" << index << L")";
 				break;
@@ -2672,7 +2679,7 @@ struct Compiler::SemanticScope {
 		switch (type) {
 			case CATCH_TYPE:
 			case WITH_TYPE:
-			case FINALLY_TYPE: compiler.emit(Processor::POP_SCOPE_OP); break;
+			case FINALLY_TYPE: compiler.emit(Processor::POP_FRAME_OP); break;
 			default: break;
 		}
 		switch (type) {
@@ -2721,7 +2728,7 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (opcode == Processor::POP_OP && operand == 1) {
 		Processor::Opcode replacementOpcode = Processor::INVALID_OP;
 		switch (lastEmitted) {
-			case Processor::WRITE_INDEXED_OP: replacementOpcode = Processor::WRITE_INDEXED_POP_OP; break;
+			case Processor::WRITE_LOCAL_OP: replacementOpcode = Processor::WRITE_LOCAL_POP_OP; break;
 			case Processor::WRITE_NAMED_OP: replacementOpcode = Processor::WRITE_NAMED_POP_OP; break;
 			case Processor::SET_PROPERTY_OP: replacementOpcode = Processor::SET_PROPERTY_POP_OP; break;
 			case Processor::REPUSH_OP:
@@ -2999,7 +3006,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		case ExpressionResult::PUSHED_PRIMITIVE: return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::NONE: emit(Processor::VOID_OP); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 		case ExpressionResult::CONSTANT: emitWithConstant(Processor::CONST_OP, xr.v); return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
-		case ExpressionResult::INDEXED: emit(Processor::READ_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::LOCAL: emit(Processor::READ_LOCAL_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::READ_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::GET_PROPERTY_OP); break;
 		case ExpressionResult::SAFEKEPT: emit(Processor::REPUSH_OP, xr.v.toInt() - currentSection->stackDepth + 1); break;
@@ -3036,7 +3043,7 @@ void Compiler::returnSafeKept(const ExpressionResult& xr) {
 Compiler::ExpressionResult Compiler::makeAssignment(const ExpressionResult& xr) {
 	switch (xr.t) {
 		default: error(REFERENCE_ERROR, "Illegal l-value"); // FIX : ECMA like the word "reference"
-		case ExpressionResult::INDEXED: emit(Processor::WRITE_INDEXED_OP, xr.v.toInt()); break;
+		case ExpressionResult::LOCAL: emit(Processor::WRITE_LOCAL_OP, xr.v.toInt()); break;
 		case ExpressionResult::NAMED: emitWithConstant(Processor::WRITE_NAMED_OP, xr.v); break;
 		case ExpressionResult::PROPERTY: emit(Processor::SET_PROPERTY_OP); break;
 	}
@@ -3257,7 +3264,7 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
 				case ExpressionResult::PUSHED_PRIMITIVE: emit(Processor::POP_OP, 1); /* fall through */
 				case ExpressionResult::NONE:
 				case ExpressionResult::CONSTANT: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(true)); break;
-				case ExpressionResult::INDEXED: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
+				case ExpressionResult::LOCAL: xr = ExpressionResult(ExpressionResult::CONSTANT, Value(false)); break;
 				case ExpressionResult::NAMED: emitWithConstant(Processor::DELETE_NAMED_OP, xr.v); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
 				case ExpressionResult::PROPERTY: emit(Processor::DELETE_OP); xr = ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE); break;
 				default: assert(0);
@@ -3560,7 +3567,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 							if (bucket != 0) {
 								const Int32 index = bucket->getIndexValue();
 								if (index != CATCH_PARAMETER) {
-									xr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+									xr = ExpressionResult(ExpressionResult::LOCAL, Value(index));
 									break;
 								}
 							}
@@ -3621,7 +3628,7 @@ Compiler::ExpressionResult Compiler::declareIdentifier(const String* name, bool 
 			codeDefinition->bloomSet |= name->createBloomCode();
 		}
 		if (withScopeCounter == 0 && index != CATCH_PARAMETER) {
-			lxr = ExpressionResult(ExpressionResult::INDEXED, Value(index));
+			lxr = ExpressionResult(ExpressionResult::LOCAL, Value(index));
 		}
 	}
 	if (func) {
@@ -3764,7 +3771,7 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 		statement(&withScope, &withScope);
 		--withScopeCounter;
 	}
-	emit(Processor::POP_SCOPE_OP);
+	emit(Processor::POP_FRAME_OP);
 }
 
 void Compiler::breakStatement(SemanticScope* currentScope) {
@@ -4041,7 +4048,7 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 		{
 			SemanticScope catchScope(heap, SemanticScope::CATCH_TYPE, currentSection->stackDepth, currentScope);
 			block(&catchScope);
-			emit(Processor::POP_SCOPE_OP);
+			emit(Processor::POP_FRAME_OP);
 			catchScope.finallys.push(emitForwardBranch(Processor::JSR_OP));
 			catchEndPoint = emitForwardBranch(Processor::JMP_OP);
 			allFinallys.insert(allFinallys.end(), catchScope.finallys.begin(), catchScope.finallys.end());

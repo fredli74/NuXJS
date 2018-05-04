@@ -653,7 +653,7 @@ class CodeDefinition : public Object {
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
-				const String* getIndexedName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
+				const String* getLocalName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
 				const Value* getConstantsPointer() const { return constants->begin(); }
 				const CodeWord* getCodePointer() const { return (code.empty() ? 0 : code.begin()); }
 				UInt32 getCodeSize() const { return code.size(); }
@@ -664,7 +664,7 @@ class CodeDefinition : public Object {
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
-				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "indexed" array in Scope.
+				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "locals" array in Scope.
 				QuickVector<const String*> argumentNames;
 				const String* name;
 				const String* selfName;
@@ -695,12 +695,12 @@ class Scope : public GCItem {
 				virtual void writeVar(Engine& engine, const String* name, const Value& v);
 				virtual bool deleteVar(Engine& engine, const String* key);
 				virtual void declareVar(Engine& engine, const String* name, const Value& initValue, bool dontDelete);
-				Value* getIndexedPointer() const;
+				Value* getLocalsPointer() const;
 				Scope* getParentScope() const;
 				const CodeDefinition* getCodeDefinition() const;
 	
 	protected:	Scope* const parentScope;
-				Value* indexedPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
 				const CodeDefinition* const codeDefinition;
 
 				virtual void gcMark(Heap& heap) const {
@@ -840,12 +840,12 @@ class FunctionScope : public Scope {
 
 	protected:	ScriptFunction* const function;
 				const UInt32 passedArgumentsCount;
-				QuickArray<Value> indexed; // Includes variables and arguments.
+				QuickArray<Value> locals; // Includes variables and arguments.
 				mutable ScriptObject* dynamicVars;
 				UInt32 bloomSet;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(function);
-					heap.markViaReferences(indexed.begin(), indexed.end());
+					heap.markViaReferences(locals.begin(), locals.end());
 					heap.mark(dynamicVars);
 					super::gcMark(heap);
 				}
@@ -865,7 +865,7 @@ class EvalScope : public Scope {
 	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
 	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
 	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
-	the indexed variables.
+	the locals variables.
 */
 class CatchScope : public Scope {
 	public:		typedef Scope super;
@@ -995,9 +995,9 @@ class Processor : public GCItem {
 	public:		enum Opcode {	// FIX : sort
 					INVALID_OP = -1 // FIX : why?!
 					, CONST_OP										// operand: const_index, stack: -> constant
-					, READ_INDEXED_OP								// operand: local_index, stack: -> value
-					, WRITE_INDEXED_OP								// operand: local_index, stack: value -> value
-					, WRITE_INDEXED_POP_OP							// operand: local_index, stack: value ->
+					, READ_LOCAL_OP									// operand: local_index, stack: -> value
+					, WRITE_LOCAL_OP								// operand: local_index, stack: value -> value
+					, WRITE_LOCAL_POP_OP							// operand: local_index, stack: value ->
 					, READ_NAMED_OP									// operand: const_index (name), stack: -> value
 					, WRITE_NAMED_OP								// operand: const_index (name), stack: value -> value
 					, WRITE_NAMED_POP_OP							// operand: const_index (name), stack: value ->
@@ -1040,10 +1040,10 @@ class Processor : public GCItem {
 					, DELETE_OP										// stack: object, name -> boolean
 					, DELETE_NAMED_OP								// operand: const_index (name) -> boolean
 					, GEN_FUNC_OP									// operand: const_index (function), stack: -> function
-					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_INDEXED_OP).
+					, DECLARE_OP									// operand: const_index (name), stack: function|undefined ->		// only used by eval code to declare vars and functions (non-eval code sets all this up on entry and using WRITE_LOCAL_OP).
 					, CATCH_SCOPE_OP								// operand: const_index for exception variable name, stack: value ->
 					, WITH_SCOPE_OP									// stack: object ->
-					, POP_SCOPE_OP
+					, POP_FRAME_OP
 					, TRY_OP										// operand: catch_offset
 					, TRIED_OP
 					, THROW_OP										// stack: value ->
@@ -1086,6 +1086,7 @@ class Processor : public GCItem {
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reserveVStackSpace(UInt32 maxStackDepth);
 				void reset();
+				void popFrame();
 
 				Engine& engine;
 	
@@ -1129,8 +1130,6 @@ public: // FIX : not public, just for some asserts now I think
 				Catcher* firstCatcher;
 				Int32 clockCyclesLeft;
 				const CodeWord* ip;
-				Scope* scope;
-				Object* thisObject;
 				Value* vsp; // FIX : not public, just for an assert now
 
 				virtual void gcMark(Heap& heap) const {
@@ -1139,11 +1138,6 @@ public: // FIX : not public, just for some asserts now I think
 					heap.mark(firstCatcher);
 					super::gcMark(heap);
 				}
-
-				// Copies from call stack. Will be gc marked from there.
-				
-				const Value* constants;
-				Value* indexed;
 };
 
 enum Precedence {
@@ -1172,7 +1166,7 @@ class Compiler : public GCItem {
 						, PUSHED			// arbitrary value on stack
 						, PUSHED_PRIMITIVE	// primitive value on stack
 						, CONSTANT			// constant (and primitive) value on stack
-						, INDEXED			// arbitrary value in indexed variable
+						, LOCAL				// arbitrary value in local variable
 						, NAMED				// arbitrary value in named variable
 						, PROPERTY			// arbitrary value in object property
 						, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
