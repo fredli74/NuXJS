@@ -610,15 +610,15 @@ class Function : public Object {
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
 				// FIX : all Runtime& rt, Processor& processor -> Processor& processor only... rt can be accessed anyhow
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
-				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) = 0;
+				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Processor& processor, Object* object) const;
 };
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(Heap& heap, bool direct) : super(heap), direct(direct), functionDefCache(&heap) { }
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Runtime so that we share with eval direct, *but* Runtime should be a GCItem then I think
 	protected:	bool direct;
 				// FIX : share cache (in Runtime) between evalFunction and evalDirectFunction, oh, and share with new function as well
@@ -716,7 +716,7 @@ class ExtensibleFunction : public LazyScriptObject<Function> {
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				FunctionPrototypeFunction(Heap& heap) : super(heap) { }
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Runtime& rt) const;
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 };
@@ -729,7 +729,7 @@ class ScriptFunction : public ExtensibleFunction {
 				ScriptFunction(Heap& heap, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				const Code* getCode() const;
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -747,8 +747,8 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				SpecialConstructorFunction(Heap& heap, Function* regularFunction, Function* constructorFunction);
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				Function* const regularFunction;
@@ -887,10 +887,12 @@ class Runtime : public GCItem {
 				Heap& getHeap() const { return heap; }
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
+				Constants* getCommonConstants() { return &commonConstants; }
 
 	protected:	Heap& heap;
 				GlobalScope globalScope;
 				Object* globals;
+				Constants commonConstants;
 				UInt32 stackSize;
 	
 	// FIX : public? v
@@ -909,17 +911,8 @@ class Runtime : public GCItem {
 				double unixEpochTimeDiff;
 	
 	public:		virtual void gcMark(Heap& heap) const {
-					heap.mark(&globalScope);
 					heap.mark(globals);
-					heap.mark(&objectPrototype);
-					heap.mark(&functionPrototype);
-					heap.mark(&booleanPrototype);
-					heap.mark(&numberPrototype);
-					heap.mark(&stringPrototype);
-					heap.mark(&arrayPrototype);
 					heap.markViaPointers(errorPrototypes + 0, errorPrototypes + ERROR_TYPE_COUNT);
-					heap.mark(&evalFunction);
-					heap.mark(&evalDirectFunction);
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
 					heap.mark(createRegExpFunction);
@@ -1063,6 +1056,8 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Runtime& rt);
+				Runtime& getRuntime() const { return rt; }
+				Heap& getHeap() const { return rt.getHeap(); }
 				void chain(const Code* code, Scope* scope, Object* thisObject); // FIX : turn into enter global code or what?
 				void enterEval(const Code* code, bool directCall);
 				void resetTimeOut(Int32 clockCycles);

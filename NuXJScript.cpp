@@ -1229,15 +1229,16 @@ const String* Function::toString(Heap& heap) const { return &NATIVE_FUNCTION_STR
 Value Function::getInternalValue(Heap& heap) const { return Value(&NATIVE_FUNCTION_STRING); }
 Object* Function::getPrototype(Runtime& rt) const { return &rt.functionPrototype; }
 
-Value Function::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return call(rt, processor, argc, argv, thisObject);
+Value Function::construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return call(processor, argc, argv, thisObject);
 }
 
-bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) const {
+bool Function::hasInstance(Processor& processor, Object* object) const {
 	if (object == 0) {
 		return false;
 	}
 	Value v(Value::UNDEFINED);
+	Runtime& rt = processor.getRuntime();
 	getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
@@ -1424,7 +1425,7 @@ const String* ScriptFunction::toString(Heap& heap) const {
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value ScriptFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value ScriptFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.chain(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
 }
@@ -1442,18 +1443,18 @@ SpecialConstructorFunction::SpecialConstructorFunction(Heap& heap, Function* reg
 	assert(regularFunction != 0);
 }
 
-Value SpecialConstructorFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return regularFunction->call(rt, processor, argc, argv, thisObject);
+Value SpecialConstructorFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return regularFunction->call(processor, argc, argv, thisObject);
 }
 
-Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value SpecialConstructorFunction::construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (constructorFunction == 0) {
 		Value v;
-		regularFunction->getPropertyDeep(rt, Value(&NAME_STRING), &v);
-		Heap& heap = rt.getHeap();
+		regularFunction->getPropertyDeep(processor.getRuntime(), Value(&NAME_STRING), &v);
+		Heap& heap = processor.getHeap();
 		Exception::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 	}
-	return constructorFunction->call(rt, processor, argc, argv, thisObject);
+	return constructorFunction->call(processor, argc, argv, thisObject);
 }
 
 void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
@@ -1475,7 +1476,7 @@ void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
 
 /* --- FunctionPrototypeFunction --- */
 
-Value FunctionPrototypeFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value FunctionPrototypeFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return Value::UNDEFINED;
 }
 
@@ -2067,7 +2068,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toNumberFunction->call(rt, *this, 1, sp, rt.getGlobals());
+					rt.toNumberFunction->call(*this, 1, sp, rt.getGlobals());
 					return true;
 				}
 				break;
@@ -2076,7 +2077,7 @@ bool Processor::privateRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toStringFunction->call(rt, *this, 1, sp, rt.getGlobals());
+					rt.toStringFunction->call(*this, 1, sp, rt.getGlobals());
 					return true;
 				}
 				break;
@@ -2089,7 +2090,7 @@ bool Processor::privateRun() {
 						std::swap(sp[-1], sp[0]);
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
-						rt.toNumberFunction->call(rt, *this, 1, sp, rt.getGlobals());
+						rt.toNumberFunction->call(*this, 1, sp, rt.getGlobals());
 						return true;
 					}
 				}
@@ -2147,7 +2148,7 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					return true;
 				}
-				sp[-im] = f->call(rt, *this, im, sp - im + 1, rt.getGlobals());
+				sp[-im] = f->call(*this, im, sp - im + 1, rt.getGlobals());
 				pop(im);
 				return true;
 			}
@@ -2164,7 +2165,7 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*name.toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					return true;
 				}
-				sp[-(im + 1)] = f->call(rt, *this, im, sp - im + 1, thisObject);
+				sp[-(im + 1)] = f->call(*this, im, sp - im + 1, thisObject);
 				pop(im + 1);
 				return true;
 			}
@@ -2178,7 +2179,7 @@ bool Processor::privateRun() {
 				if (f == &rt.evalFunction) {
 					f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 				}
-				sp[-im] = f->call(rt, *this, im, sp - im + 1, rt.getGlobals());
+				sp[-im] = f->call(*this, im, sp - im + 1, rt.getGlobals());
 				pop(im);
 				return true;
 			}
@@ -2193,7 +2194,7 @@ bool Processor::privateRun() {
 				f->getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
 				Object* prototype = v.asObject();
 				Object* newObject = heap.govern(new(heap) ScriptObject(heap, prototype != 0 ? prototype : &rt.objectPrototype));
-				sp[-(im - 1)] = f->construct(rt, *this, im, sp - im + 1, newObject);
+				sp[-(im - 1)] = f->construct(*this, im, sp - im + 1, newObject);
 				sp[-(im - 1) - 1] = Value(newObject);
 				pop(im - 1);
 				return true;
@@ -2212,7 +2213,7 @@ bool Processor::privateRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				sp[-1] = rt.createRegExpFunction->call(rt, *this, 2, sp - 1, rt.getGlobals());
+				sp[-1] = rt.createRegExpFunction->call(*this, 2, sp - 1, rt.getGlobals());
 				pop(1);
 				return true;
 			}
@@ -2311,7 +2312,7 @@ bool Processor::privateRun() {
 					error(TYPE_ERROR, heap.govern(new(heap) String(*sp[0].toString(heap), IS_NOT_A_FUNCTION_STRING, &heap)));
 					return true;
 				}
-				sp[-1] = Value(f->hasInstance(rt, *this, sp[-1].asObject()));
+				sp[-1] = Value(f->hasInstance(*this, sp[-1].asObject()));
 				pop(1);
 				break;
 			}
@@ -4331,11 +4332,11 @@ void Compiler::compile(const String& source) {
 	}
 }
 
-Value EvalFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value EvalFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) return Value::UNDEFINED;
 	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) return argv[0]; // FIX : better way to check type without involving typeOfString?
 
-	Heap& heap = rt.getHeap();
+	Heap& heap = processor.getHeap();
 	const String* sourceCode = argv[0].toString(heap);
 	Code* code;
 	
@@ -4357,7 +4358,7 @@ Value EvalFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const V
 /* FIX : funny C++11 thing
 #include <functional>
 template<class F> Value newNativeFunction(Heap& heap, const F& f) { return Value(heap.govern(new FunctorAdapter<F>(f))); }
-mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 }));
 */
@@ -4366,44 +4367,45 @@ typedef Value (*NativeFunction)(Runtime&, Processor&, Int32, const Value*, Objec
 
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
-	virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return f(rt, processor, argc, argv, thisObject);
+	virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return f(processor, argc, argv, thisObject);
 	}
 	F* f;
 };
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
-	virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F* f;
 };
 
 struct Support {
-	static Value getInternalProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value getInternalProperty(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
-				const String* s = argv[1].toString(rt.getHeap());
+				const String* s = argv[1].toString(processor.getHeap());
 				if (s->isEqualTo(PROTOTYPE_STRING)) {
-					Object* p = o->getPrototype(rt);
+					Object* p = o->getPrototype(processor.getRuntime());
 					return (p == 0 ? Value::NUL : Value(p));
 				} else if (s->isEqualTo(CLASS_STRING)) {
 					return Value(o->getClassName());
 				} else if (s->isEqualTo(VALUE_STRING)) {
-					return o->getInternalValue(rt.getHeap());
+					return o->getInternalValue(processor.getHeap());
 				}
 			}
 		}
 		return Value::UNDEFINED;
 	}
 
-	static Value createWrapper(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value createWrapper(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
-			Heap& heap = rt.getHeap();
+			Heap& heap = processor.getHeap();
 			const String* const className = argv[0].toString(heap);
 			const Value internalValue = argv[1];
+			Runtime& rt = processor.getRuntime();
 			Object* prototype = (argc >= 3 ? argv[2].toObject(rt, false) : 0);
 			if (prototype == 0) {
 				prototype = &rt.objectPrototype;
@@ -4427,24 +4429,24 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value specialConstructor(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value specialConstructor(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
 				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
-				Heap& heap = rt.getHeap();
+				Heap& heap = processor.getHeap();
 				return Value(heap.govern(new(heap) SpecialConstructorFunction(heap, regularFunction, constructorFunction)));
 			}
 		}
 		return Value::UNDEFINED;
 	}
 
-	static Value defineProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value defineProperty(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		bool success = false;
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
-				success = o->setOwnProperty(rt, argv[1], (argc >= 3 ? argv[2] : Value::UNDEFINED)
+				success = o->setOwnProperty(processor.getRuntime(), argv[1], (argc >= 3 ? argv[2] : Value::UNDEFINED)
 						, (argc >= 4 && argv[3].toBool() ? READ_ONLY_FLAG : 0)
 						| (argc >= 5 && argv[4].toBool() ? DONT_ENUM_FLAG : 0)
 						| (argc >= 6 && argv[5].toBool() ? DONT_DELETE_FLAG : 0));
@@ -4453,25 +4455,26 @@ struct Support {
 		return Value(success);
 	}
 
-	static Value compileFunction(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value compileFunction(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
-			Heap& heap = rt.getHeap();
+			Heap& heap = processor.getHeap();
 			const String* source = argv[0].toString(heap);
 			Code* code = heap.govern(new(heap) Code(heap, heap.govern(new(heap) Constants(heap)))); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap, code, Compiler::FOR_FUNCTION);
 			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
-			return Value(heap.govern(new(heap) ScriptFunction(heap, code, rt.getGlobalScope())));
+			return Value(heap.govern(new(heap) ScriptFunction(heap, code, processor.getRuntime().getGlobalScope())));
 		}
 		return Value::UNDEFINED;
 	}
 
-	static Value callWithArgs(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Heap& heap = rt.getHeap();
+	static Value callWithArgs(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Heap& heap = processor.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
 			Exception::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
 			return Value();
 		} else {
+			Runtime& rt = processor.getRuntime();
 			Object* newThis = (argc > 1 ? argv[1].toObject(rt, true) : 0);
 			QuickArray<Value> args(0, &heap);
 			Object* arrayObject = (argc > 2 ? argv[2].toObject(rt, false) : 0);
@@ -4489,38 +4492,40 @@ struct Support {
 			}
 			// FIX : we copy all arguments once to args, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
-			return callFunction->call(rt, processor, args.size(), args.begin(), (newThis == 0 ? rt.getGlobals() : newThis));
+			return callFunction->call(processor, args.size(), args.begin(), (newThis == 0 ? rt.getGlobals() : newThis));
 		}
 	}
 	
-	static Value hasOwnProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value hasOwnProperty(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Runtime& rt = processor.getRuntime();
 		Object* object = (argc >= 2 ? argv[0].toObject(rt, false) : 0);
 		return (object != 0 ? Value(object->hasOwnProperty(rt, argv[1])) : Value(false));
 	}
 
-	static Value isPropertyEnumerable(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value isPropertyEnumerable(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Runtime& rt = processor.getRuntime();
 		Object* object = (argc >= 2 ? argv[0].toObject(rt, false) : 0);
 		return (object != 0 ? Value(object->isOwnPropertyEnumerable(rt, argv[1])) : Value(false));
 	}
 
-	static Value fromCharCode(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value fromCharCode(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
-		Heap& heap = rt.getHeap();
+		Heap& heap = processor.getHeap();
 		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(heap.govern(new(heap) String(&c, &c + 1, &heap))));
 	}
 
-	static Value atan2(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value atan2(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 2 ? Value(std::atan2(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 
-	static Value pow(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value pow(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 
-	static Value parseFloat(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value parseFloat(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Value result = Value::NOT_A_NUMBER;
 		if (argc >= 1) {
-			const String* s = argv[0].toString(rt.getHeap());
+			const String* s = argv[0].toString(processor.getHeap());
 			const Char* e = s->end();
 			const Char* b = eatStringWhite(s->begin(), e);
 			double d = 0.0;
@@ -4531,9 +4536,9 @@ struct Support {
 		return result;
 	}
 
-	static Value charCodeAt(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value charCodeAt(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
-			const String* s = argv[0].toString(rt.getHeap());
+			const String* s = argv[0].toString(processor.getHeap());
 			const double d = nanToZero(argv[1].toDouble());
 			if (-1.0 < d && d < s->size()) {
 				return Value((*s)[static_cast<UInt32>(d)]);
@@ -4542,16 +4547,16 @@ struct Support {
 		return Value::NOT_A_NUMBER;
 	}
 
-	static Value substring(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value substring(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Value result(&EMPTY_STRING);
 		if (argc >= 3) {
-			const String* s = argv[0].toString(rt.getHeap());
+			const String* s = argv[0].toString(processor.getHeap());
 			const double l = s->size();
 			const double from = std::max(nanToZero(argv[1].toDouble()), 0.0);
 			const double to = std::min(nanToZero(argv[2].toDouble()), l);
 			if (from < to && from < l && to >= 1.0) {
 				const Char* b = s->begin();
-				Heap& heap = rt.getHeap();
+				Heap& heap = processor.getHeap();
 				return Value(from < 1.0 && to >= l ? s
 						: heap.govern(new(heap) String(b + static_cast<UInt32>(from), b + static_cast<UInt32>(to), &heap)));
 			}
@@ -4559,11 +4564,11 @@ struct Support {
 		return Value(&EMPTY_STRING);
 	}
 
-	static Value submatch(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value submatch(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 3) {
-			const String* const text = argv[0].toString(rt.getHeap());
+			const String* const text = argv[0].toString(processor.getHeap());
 			const Int32 offset = argv[1].toInt();
-			const String* const match = argv[2].toString(rt.getHeap());
+			const String* const match = argv[2].toString(processor.getHeap());
 			const UInt32 matchSize = match->size();
 			if (offset + matchSize <= text->size()
 					&& std::equal(text->begin() + offset, text->begin() + offset + matchSize, match->begin())) {
@@ -4573,12 +4578,12 @@ struct Support {
 		return Value(false);
 	}
 
-	static Value getCurrentTime(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return Value(time(0) * 1000.0 + rt.unixEpochTimeDiff);
+	static Value getCurrentTime(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return Value(time(0) * 1000.0 + processor.getRuntime().unixEpochTimeDiff);
 	}
 
-	static Value localTimeDifference(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		const time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - rt.unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
+	static Value localTimeDifference(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		const time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - processor.getRuntime().unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
 		const struct tm localTM = *localtime(&t);
 		const struct tm utcTM = *gmtime(&t);
 		struct tm newTM;
@@ -4607,7 +4612,7 @@ static struct {
 
 static struct {
 	String name;
-	FunctorAdapter<Value (Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
+	FunctorAdapter<Value (Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
 } SUPPORT_FUNCTIONS[] = {
 	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
@@ -4623,7 +4628,8 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-Runtime::Runtime(Heap& heap) : super(heap), heap(heap), globalScope(heap), globals(0), stackSize(DEFAULT_STACK_SIZE)
+Runtime::Runtime(Heap& heap) : super(heap), heap(heap), globalScope(heap), globals(0), commonConstants(heap)
+		, stackSize(DEFAULT_STACK_SIZE)
 		, objectPrototype(heap, 0), functionPrototype(heap), evalFunction(heap, false)
 		, evalDirectFunction(heap, true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(heap, &B_OOLEAN_STRING, Value(false), &objectPrototype)
@@ -4683,7 +4689,7 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 	}
 	// FIX : all this boilerplating... build a function object or something instead?
 
-	Code* code = heap.govern(new(heap) Code(heap, heap.govern(new(heap) Constants(heap))));
+	Code* code = heap.govern(new(heap) Code(heap, &commonConstants));
 	{
 		Compiler compiler(heap, code, Compiler::FOR_EVAL);
 		compiler.compile(librarySourceCode);
@@ -4697,7 +4703,7 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 		Function* f = v.asFunction();
 		if (f != 0) {
 			Value argv[1] = { Value(supportObject) };
-			f->call(*this, processor, 1, argv, getGlobals());
+			f->call(processor, 1, argv, getGlobals());
 			needsMoreTime = processor.run();
 			assert(!needsMoreTime);
 		}
@@ -4757,8 +4763,8 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 	}
 
 	class PrintFunction : public Function {
-		public:		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-						const String* s = (argc >= 1 ? argv[0].toString(rt.getHeap()) : &EMPTY_STRING);
+		public:		virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+						const String* s = (argc >= 1 ? argv[0].toString(processor.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						if (interactive) {
 							pushIOLines('<', *s);
@@ -4768,8 +4774,8 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 	};
 	
 	struct GCFunction : public Function {
-		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			UInt32 sweptCount = rt.getHeap().gc();
+		virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+			UInt32 sweptCount = processor.getHeap().gc();
 			return Value(static_cast<Int32>(sweptCount));
 		}
 	};
@@ -4777,8 +4783,8 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 	class NativeTestObject : public Object {
 		protected:	struct AddFunction : public Function {
 						typedef Function super;
-						virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-							Heap& heap = rt.getHeap();
+						virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+							Heap& heap = processor.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
 								Exception::throwError(heap, TYPE_ERROR, "Invalid class");
 							}
@@ -4815,14 +4821,14 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 	NativeTestObject::AddFunction NativeTestObject::addFunction;
 
 	class CallbackTest : public Function {
-		public:		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		public:		virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						PrintFunction printFunction;
 						for (int i = 0; i < argc; ++i) {
 							Function* f = argv[i].asFunction();
 							if (f == 0) {
 								f = &printFunction;
 							}
-							f->call(rt, processor, 1, &argv[i], thisObject);
+							f->call(processor, 1, &argv[i], thisObject);
 						}
 						return Value::UNDEFINED;
 					}
@@ -4870,8 +4876,7 @@ suppressStdErr = true;
      std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
     Heap heap;
     Runtime rt(heap);
-    Constants globalConstants(heap);
-    Code globalCode(heap, &globalConstants);
+    Code globalCode(heap, rt.getCommonConstants());
 
     ScriptObject globals(heap, &rt.objectPrototype);
 	rt.setGlobalObject(&globals);
@@ -4906,7 +4911,7 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
 	Processor processor(rt);
 	processor.run();	// just testing some weird behaviour
 //	const Value TEST_ARGV[1] = { Value(String::newString(heap, "Hello")) };
-//	printFunction.call(rt, processor, 1, TEST_ARGV, &globals);
+//	printFunction.call(processor, 1, TEST_ARGV, &globals);
 //	processor.run();	// just testing some weird behaviour
 	
     while (inStream->good()) {
@@ -4987,7 +4992,8 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     throw;
                 }
                 if (!suppressStdErr) {
-                    for (const Value* p = globalConstants.begin(); p != globalConstants.end(); ++p) {
+                	const Constants* const consts = rt.getCommonConstants();
+                    for (const Value* p = consts->begin(); p != consts->end(); ++p) {
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }
                 }
