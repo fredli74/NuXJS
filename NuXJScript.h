@@ -885,11 +885,14 @@ class CatchScope : public Scope {
 				}
 };
 
+const UInt32 DEFAULT_STACK_SIZE = 1024;
 // FIX : rename to RunTime?
 class Engine : public GCItem {
 	public:		typedef GCItem super;
 				Engine(Heap& heap);
 				void setGlobalObject(GlobalScope* globalScope, Object* globals);
+				void setStackSize(UInt32 stackSize);
+				UInt32 getStackSize() const;
 				void setupStandardLibrary(const String& librarySourceCode);
 				Heap& getHeap() const { return heap; }
 				Object* getGlobals() const { return globals; }
@@ -898,6 +901,7 @@ class Engine : public GCItem {
 	protected:	Heap& heap;
 				GlobalScope* globalScope;
 				Object* globals;
+				UInt32 stackSize;
 	
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
@@ -1077,9 +1081,9 @@ class Processor : public GCItem {
 
 	protected:	void chain(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
-				void push(Value*& vsp, const Value& v);
-				void pop(Value*& vsp, Int32 count);
-				void pop2push1(Value*& vsp, const Value& v);
+				void push(const Value& v);
+				void pop(Int32 count);
+				void pop2push1(const Value& v);
 				bool privateRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
@@ -1091,33 +1095,15 @@ class Processor : public GCItem {
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 public: // FIX : not public, just for some asserts now I think
-
-				struct Stack : public GCItem, public QuickArray<Value> {
-					typedef GCItem super;
-					typedef QuickArray<Value> QArray;
-					Stack(Heap& heap, UInt32 size) : super(heap), QArray(size, &heap), vsp(begin()) {
-						assert(size > 0);
-						vsp[0] = Value::UNDEFINED;
-					}
-					Value* vsp;
-					virtual void gcMark(Heap& heap) const {
-						heap.markViaReferences(begin(), vsp + 1);
-						super::gcMark(heap);
-					}
-				};
-	
 				struct Frame : public GCItem {
 					typedef GCItem super;
-					Frame(const CodeWord* returnIP, Stack* stack, Scope* scope, Object* thisObject, Frame* previousFrame)
-							: returnIP(returnIP), stack(stack), scope(scope), thisObject(thisObject)
-							, previousFrame(previousFrame) { }
+					Frame(const CodeWord* returnIP, Scope* scope, Object* thisObject, Frame* previousFrame)
+							: returnIP(returnIP), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
 					const CodeWord* const returnIP;
-					Stack* const stack;
 					Scope* const scope;
 					Object* const thisObject;
 					Frame* const previousFrame;
 					virtual void gcMark(Heap& heap) const {
-						heap.mark(stack);
 						heap.mark(scope);
 						heap.mark(thisObject);
 						heap.mark(previousFrame);
@@ -1142,11 +1128,13 @@ public: // FIX : not public, just for some asserts now I think
 
 				Frame* currentFrame;
 				Catcher* firstCatcher;
-				Int32 clockCyclesLeft;
+				Int32 cyclesLeft;
 				const CodeWord* ip;
-				Value result;
+				Value* vsp;
+				QuickArray<Value> stack;
 
 				virtual void gcMark(Heap& heap) const {
+					heap.markViaReferences(stack.begin(), vsp + 1);
 					heap.mark(currentFrame);
 					heap.mark(firstCatcher);
 					super::gcMark(heap);
