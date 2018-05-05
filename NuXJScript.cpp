@@ -3987,11 +3987,10 @@ void Compiler::block(SemanticScope* scope) {
 void Compiler::tryStatement(SemanticScope* currentScope) {
 	white();
 
-/* FIX : drop if we keep the reserve-one-element-for-return-on-stack-solution
+/* FIX : I thought we could drop if we keep the reserve-one-element-for-return-on-stack-solution, but rethrower needs a place to safe-keep its throw value and this is here*/
 	if (compilingFor != FOR_EVAL) { // space holder for return value so that we can break out of finallys (with the same stack pop count) regardless if try scope returns a value or not
 		emit(Processor::VOID_OP, 0);
 	}
-*/
 
 	QuickVector<BranchPoint> allFinallys(&heap);
 	BranchPoint catchPoint;
@@ -4082,11 +4081,10 @@ void Compiler::tryStatement(SemanticScope* currentScope) {
 	completeForwardBranch(tryEndPoint);
 	completeForwardBranch(catchEndPoint);
 
-/* FIX : drop if we keep the reserve-one-element-for-return-on-stack-solution
+/* FIX : I thought we could drop if we keep the reserve-one-element-for-return-on-stack-solution */
 	if (compilingFor != FOR_EVAL) { // pop return space holder
 		emit(Processor::POP_OP, 1);
 	}
-*/
 }
 
 /*
@@ -5097,5 +5095,5 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
 }
 
 int main(int argc, const char* argv[]) {
-    testMain(argc, argv);
+    return testMain(argc, argv);
 }
