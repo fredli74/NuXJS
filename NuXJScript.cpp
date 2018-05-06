@@ -2698,7 +2698,7 @@ struct Compiler::SemanticScope {
 
 Compiler::Compiler(Heap& heap, Code* code, Target compileFor)
 		: super(heap), heap(heap), code(code), compilingFor(compileFor), setupSection(heap, 1)
-		, mainSection(heap, 1), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
+		, mainSection(heap, 1), b(0), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
 void Compiler::error(ErrorType errorType, const char* message) { Exception::throwError(heap, errorType, message); }
 
@@ -4237,6 +4237,7 @@ void Compiler::statementList(SemanticScope* currentScope) {
 
 const Char* Compiler::compile(const Char* b, const Char* e) {
 	changeSection(&mainSection);
+	this->b = b;
 	p = b;
 	this->e = e;
 	acceptInOperator = true;
@@ -4336,6 +4337,20 @@ void Compiler::compile(const String& source) {
 	white();
 	if (!eof()) {
 		error(SYNTAX_ERROR, "Syntax error"); // FIX : better error?
+	}
+}
+
+void Compiler::getStopLineAndColumnNumbers(int& lineNumber, int& columnNumber) const {
+	lineNumber = 1;
+	columnNumber = 1;
+	const Char* stopPoint = getStopPoint();
+	for (const Char* q = b; q < stopPoint; ++q) {
+		assert(q != e);
+		if (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 3, *q) != LINE_TERMINATORS + 3) {
+			++lineNumber;
+			columnNumber = 0;
+		}
+		++columnNumber;
 	}
 }
 
@@ -4984,20 +4999,13 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     compiler.compile(source);
                 }
                 catch (const Exception&) {
-                    int lineNumber = 1;
-                    const Char* stopPoint = compiler.getStopPoint();
-                    const Char* p = source.begin();
-                    while (p < stopPoint) {
-                        assert(p != source.end());
-                        if (std::find(LINE_TERMINATORS, LINE_TERMINATORS + 3, *p) != LINE_TERMINATORS + 3) {
-                            ++lineNumber;
-                        }
-                        ++p;
-                    }
+                	int lineNumber;
+                	int columnNumber;
+                	compiler.getStopLineAndColumnNumbers(lineNumber, columnNumber);
                     std::wstring ws;
                     {
                         std::wstringstream ss;
-                        ss << std::wstring(L"!!!! Line: ") << lineNumber;
+                        ss << L"!!!! Line: " << lineNumber << ", column: " << columnNumber;
                         ws = ss.str();
                     }
                     std::wcout << ws << std::endl;
@@ -5008,10 +5016,10 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     throw;
                 }
                 if (!suppressStdErr) {
-                	const Constants* const consts = rt.getCommonConstants();
+/*                	const Constants* const consts = rt.getCommonConstants();
                     for (const Value* p = consts->begin(); p != consts->end(); ++p) {
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
-                    }
+                    }*/
                 }
                	processor.run();	// just testing some weird behaviour
                 processor.chain(&globalCode, rt.getGlobalScope(), &globals);

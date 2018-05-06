@@ -612,8 +612,6 @@ class Function : public Object {
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
 				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Processor& processor, Object* object) const;
-
-				// FIX : protected, rename to execute?
 };
 
 class EvalFunction : public Function {
@@ -1151,6 +1149,7 @@ class Compiler : public GCItem {
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
 				const Char* getStopPoint() const { return p; }
+				void getStopLineAndColumnNumbers(int& lineNumber, int& columnNumber) const;
 
 	protected:	struct ExpressionResult {
 					enum Type {
@@ -1277,6 +1276,7 @@ class Compiler : public GCItem {
 				const Target compilingFor;
 				CodeSection setupSection; // function declarations (and vars in eval code), inserted at top of function when finalizing
 				CodeSection mainSection;
+				const Char* b;
 				const Char* p;
 				const Char* e;
 				CodeSection* currentSection;
