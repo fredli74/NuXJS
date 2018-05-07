@@ -636,22 +636,22 @@ String::String(const char* s) : QArray(static_cast<UInt32>(strlen(s)), 0), hash(
 	createBloomCode();
 }
 
-String::String(GCItemList& list, const Char* b, const Char* e) : super(list), QArray(static_cast<UInt32>(e - b), &list.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const Char* b, const Char* e) : super(gcList), QArray(static_cast<UInt32>(e - b), &gcList.getHeap()), hash(0), bloom(0) {
 	std::copy(b, e, begin());
 }
 
-String::String(GCItemList& list, const String& l, const String& r) : super(list), QArray(l.size() + r.size(), &list.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const String& l, const String& r) : super(gcList), QArray(l.size() + r.size(), &gcList.getHeap()), hash(0), bloom(0) {
 	Char* e = std::copy(l.begin(), l.end(), begin());
 	std::copy(r.begin(), r.end(), e);
 }
 
-String::String(GCItemList& list, const wchar_t* s) : super(list), QArray(static_cast<UInt32>(wcslen(s)), &list.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const wchar_t* s) : super(gcList), QArray(static_cast<UInt32>(wcslen(s)), &gcList.getHeap()), hash(0), bloom(0) {
 	std::copy(s, s + size(), begin());
 	calcHash();
 	createBloomCode();
 }
 
-String::String(GCItemList& list, const char* s) : super(list), QArray(static_cast<UInt32>(strlen(s)), &list.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const char* s) : super(gcList), QArray(static_cast<UInt32>(strlen(s)), &gcList.getHeap()), hash(0), bloom(0) {
 	std::copy(s, s + size(), begin());
 	calcHash();
 	createBloomCode();
@@ -766,27 +766,31 @@ const String* String::fromDouble(Heap& heap, double d) {
 
 /* --- GCItem --- */
 
+void GCItem::operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(ptr) - 1; ::operator delete(p, *p); }
+void GCItem::operator delete(void* ptr, Heap& heap) { ::operator delete(reinterpret_cast<Heap**>(ptr) - 1, &heap); }
+GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
+GCItem::GCItem(GCList& gcList) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { gcList.claim(this); }
+GCItem& GCItem::operator=(const GCItem& copy) throw() { return *this; }
+void GCItem::gcMark(Heap& heap) const { }
+GCItem::~GCItem() { if (_gcList != 0) { _gcList->relinquish(this); } }
+
 void* GCItem::operator new(size_t n, Heap& heap) {
 	Heap** p = reinterpret_cast<Heap**>(::operator new(sizeof (Heap*) + n, &heap));
 	*p = &heap;
 	return p + 1;
 }
 
-void GCItem::operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(ptr) - 1; ::operator delete(p, *p); }
-void GCItem::operator delete(void* ptr, Heap& heap) { ::operator delete(reinterpret_cast<Heap**>(ptr) - 1, &heap); }
-GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
-GCItem::GCItem(GCItemList& list) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { list.claim(this); }
-GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { if (copy._gcList != 0) { copy._gcList->claim(this); } }
-GCItem& GCItem::operator=(const GCItem& copy) throw() { return *this; }
-Heap* GCItem::getGCHeap() const { return (_gcList == 0 ? 0 : &_gcList->heap); }
-void GCItem::gcMark(Heap& heap) const { }
-GCItem::~GCItem() { if (_gcList != 0) { _gcList->relinquish(this); } }
+GCItem::GCItem(const GCItem& copy) throw() : _gcList(0), _gcPrev(this), _gcNext(this) {
+	if (copy._gcList != 0) {
+		copy._gcList->claim(this);
+	}
+}
 
-/* --- GCItemList --- */
+/* --- GCList --- */
 
-GCItemList::GCItemList(Heap& heap) : heap(heap), count(0) { }
+GCList::GCList(Heap& heap) : heap(heap), count(0) { }
 
-void GCItemList::relinquish(GCItem* item) throw() {
+void GCList::relinquish(GCItem* item) throw() {
 	assert(item->_gcList == this);
 	assert(count > 0);	// If this assert triggers it could mean that you've forgot to root a GCItem and it has been both garbage collected and destructed (e.g. by going out of scope).
 	--count;
@@ -795,7 +799,7 @@ void GCItemList::relinquish(GCItem* item) throw() {
 	item->_gcNext->_gcPrev = item->_gcPrev;
 }
 
-void GCItemList::claim(GCItem* item) throw() {
+void GCList::claim(GCItem* item) throw() {
 	if (item->_gcList != 0) {
 		item->_gcList->relinquish(item);
 	}
@@ -807,7 +811,7 @@ void GCItemList::claim(GCItem* item) throw() {
 	++count;
 }
 
-UInt32 GCItemList::deleteAll() throw() {
+UInt32 GCList::deleteAll() throw() {
 	const UInt32 n = count;
 	for (const GCItem* i = _gcNext->_gcNext; i != _gcNext; i = i->_gcNext) {
 		assert(i->_gcPrev->_gcList == this);
@@ -817,7 +821,7 @@ UInt32 GCItemList::deleteAll() throw() {
 	return n;
 }
 
-GCItemList::~GCItemList() {
+GCList::~GCList() {
 	deleteAll();
 }
 
@@ -1096,7 +1100,7 @@ UInt32 Table::rebuild(UInt32 newSize) {
 
 /* --- ScriptObject --- */
 
-ScriptObject::ScriptObject(GCItemList& list, Object* prototype) : super(list), properties(&list.getHeap()), prototype(prototype) { }
+ScriptObject::ScriptObject(GCList& gcList, Object* prototype) : super(gcList), properties(&gcList.getHeap()), prototype(prototype) { }
 
 Object* ScriptObject::getPrototype(Runtime& rt) const { return prototype; }
 Table& ScriptObject::accessProperties() { return properties; }
@@ -1140,8 +1144,8 @@ Enumerator* ScriptObject::getPropertyEnumerator(Runtime& rt) const {
 
 /* --- WrapperObject --- */
 
-WrapperObject::WrapperObject(GCItemList& list, const String* className, const Value& value, Object* prototype)
-	: super(list, prototype), className(className), wrapped(value) {
+WrapperObject::WrapperObject(GCList& gcList, const String* className, const Value& value, Object* prototype)
+	: super(gcList, prototype), className(className), wrapped(value) {
 }
 
 const String* WrapperObject::getClassName() const { return className; }
@@ -1149,8 +1153,8 @@ Value WrapperObject::getInternalValue(Heap& heap) const { return wrapped; }
 
 /* --- StringWrapper --- */
 
-StringWrapper::StringWrapper(GCItemList& list, const String* string, Object* prototype)
-		: super(list, prototype), wrapped(string) { }
+StringWrapper::StringWrapper(GCList& gcList, const String* string, Object* prototype)
+		: super(gcList, prototype), wrapped(string) { }
 const String* StringWrapper::getClassName() const { return &S_TRING_STRING; }
 const String* StringWrapper::toString(Heap& heap) const { return wrapped; }
 Value StringWrapper::getInternalValue(Heap& heap) const { return Value(wrapped); }
@@ -1182,13 +1186,13 @@ Enumerator* StringWrapper::getPropertyEnumerator(Runtime& rt) const {
 
 /* --- RangeEnumerator --- */
 
-RangeEnumerator::RangeEnumerator(GCItemList& list, Int32 from, Int32 count) : super(list), heap(list.getHeap()), index(from), to(from + count) { }
+RangeEnumerator::RangeEnumerator(GCList& gcList, Int32 from, Int32 count) : super(gcList), heap(gcList.getHeap()), index(from), to(from + count) { }
 const String* RangeEnumerator::nextPropertyName() { return (index >= to ? 0 : String::fromInt(heap, index++)); }
 
 /* --- StringListEnumerator --- */
 
-StringListEnumerator::StringListEnumerator(GCItemList& list, UInt32 initialCapacity)
-		: super(list), stringList(&list.getHeap()), nextIndex(0) {
+StringListEnumerator::StringListEnumerator(GCList& gcList, UInt32 initialCapacity)
+		: super(gcList), stringList(&gcList.getHeap()), nextIndex(0) {
 	stringList.reserve(initialCapacity);
 }
 void StringListEnumerator::add(const String* s) { stringList.push(s); }
@@ -1196,8 +1200,8 @@ const String* StringListEnumerator::nextPropertyName() { return (nextIndex < str
 
 /* --- JoiningEnumerator --- */
 
-JoiningEnumerator::JoiningEnumerator(GCItemList& list, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject)
-		: super(list), rt(rt), leftEnumerator(leftEnumerator), rightObject(rightObject)
+JoiningEnumerator::JoiningEnumerator(GCList& gcList, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject)
+		: super(gcList), rt(rt), leftEnumerator(leftEnumerator), rightObject(rightObject)
 		, rightEnumerator(rightObject->getPropertyEnumerator(rt)) {
 }
 
@@ -1216,11 +1220,12 @@ const String* JoiningEnumerator::nextPropertyName() {
 
 /* --- Code --- */
 
-Code::Code(GCItemList& list, Constants* constants)
-	: super(list), code(0, &list.getHeap()), constants(constants), nameIndexes(&list.getHeap()), varNames(&list.getHeap()), argumentNames(&list.getHeap())
-	, name(0), selfName(0), source(0), bloomSet(0), maxStackDepth(0)
+Code::Code(GCList& gcList, Constants* constants)
+	: super(gcList), code(0, &gcList.getHeap()), constants(constants), nameIndexes(&gcList.getHeap())
+	, varNames(&gcList.getHeap()), argumentNames(&gcList.getHeap()), name(0), selfName(0), source(0), bloomSet(0)
+	, maxStackDepth(0)
 #if (VERIFY_STACK_LOGIC)
-	, stackDepths(&list.getHeap())
+	, stackDepths(&gcList.getHeap())
 #endif
 {
 	assert(constants != 0);
@@ -1271,7 +1276,7 @@ bool Function::hasInstance(Processor& processor, Object* object) const {
 
 /* --- Array --- */
 
-Array::Array(GCItemList& list) : super(list), length(0), denseVector(&list.getHeap()) { }
+Array::Array(GCList& gcList) : super(gcList), length(0), denseVector(&gcList.getHeap()) { }
 
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
 
@@ -1382,8 +1387,7 @@ void Array::constructCompleteObject(Runtime& rt) const { }
 Enumerator* Array::getPropertyEnumerator(Runtime& rt) const {
 	Heap& heap = rt.getHeap();
 	Enumerator* rangeEnumerator = new(heap) RangeEnumerator(heap.managed(), 0, denseVector.size());
-	return (completeObject == 0 ? rangeEnumerator
-			: new(heap) JoiningEnumerator(heap.managed(), rt, rangeEnumerator, completeObject));
+	return (completeObject == 0 ? rangeEnumerator : new(heap) JoiningEnumerator(heap.managed(), rt, rangeEnumerator, completeObject));
 }
 
 /* --- LazyScriptObject --- */
@@ -1424,8 +1428,8 @@ void ExtensibleFunction::createPrototypeObject(Runtime& rt, Object* forObject, b
 
 /* --- ScriptFunction --- */
 
-ScriptFunction::ScriptFunction(GCItemList& list, const Code* code, Scope* closure)
-		: super(list), code(code), closure(closure) { }
+ScriptFunction::ScriptFunction(GCList& gcList, const Code* code, Scope* closure)
+		: super(gcList), code(code), closure(closure) { }
 
 Value ScriptFunction::getInternalValue(Heap& heap) const { return Value(toString(heap)); }
 const Code* ScriptFunction::getCode() const { return code; }
@@ -1448,8 +1452,8 @@ void ScriptFunction::constructCompleteObject(Runtime& rt) const {
 
 /* --- SpecialConstructorFunction --- */
 
-SpecialConstructorFunction::SpecialConstructorFunction(GCItemList& list, Function* regularFunction, Function* constructorFunction)
-		: super(list), regularFunction(regularFunction), constructorFunction(constructorFunction) {
+SpecialConstructorFunction::SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction)
+		: super(gcList), regularFunction(regularFunction), constructorFunction(constructorFunction) {
 	assert(regularFunction != 0);
 }
 
@@ -1499,8 +1503,8 @@ void FunctionPrototypeFunction::constructCompleteObject(Runtime& rt) const {
 
 /* --- Error --- */
 
-Error::Error(GCItemList& list, ErrorType type, const String* message)
-		: super(list), errorType(type), name(&ERROR_NAMES[errorType]), message(message) {
+Error::Error(GCList& gcList, ErrorType type, const String* message)
+		: super(gcList), errorType(type), name(&ERROR_NAMES[errorType]), message(message) {
 	assert(0 <= errorType && errorType < ERROR_TYPE_COUNT);
 }
 
@@ -1538,7 +1542,7 @@ void Error::constructCompleteObject(Runtime& rt) const {
 
 /* --- ErrorPrototype --- */
 
-ErrorPrototype::ErrorPrototype(GCItemList& list, ErrorType type) : super(list, type) { }
+ErrorPrototype::ErrorPrototype(GCList& gcList, ErrorType type) : super(gcList, type) { }
 
 Object* ErrorPrototype::getPrototype(Runtime& rt) const {
 	return (errorType == GENERIC_ERROR ? static_cast<Object*>(&rt.objectPrototype)
@@ -1547,8 +1551,8 @@ Object* ErrorPrototype::getPrototype(Runtime& rt) const {
 
 /* --- Arguments --- */
 
-Arguments::Arguments(GCItemList& list, FunctionScope* scope, UInt32 argumentsCount)
-		: super(list), scope(scope), argumentsCount(argumentsCount), deletedArguments(argumentsCount, &list.getHeap()) {
+Arguments::Arguments(GCList& gcList, FunctionScope* scope, UInt32 argumentsCount)
+		: super(gcList), scope(scope), argumentsCount(argumentsCount), deletedArguments(argumentsCount, &gcList.getHeap()) {
 	std::fill(deletedArguments.begin(), deletedArguments.end(), false);
 }
 
@@ -1596,8 +1600,8 @@ void Arguments::constructCompleteObject(Runtime& rt) const {
 
 /* --- Scope --- */
 
-Scope::Scope(GCItemList& list, Scope* parentScope)
-		: super(list), parentScope(parentScope), localsPointer(parentScope != 0 ? parentScope->localsPointer : 0) { }
+Scope::Scope(GCList& gcList, Scope* parentScope)
+		: super(gcList), parentScope(parentScope), localsPointer(parentScope != 0 ? parentScope->localsPointer : 0) { }
 
 Flags Scope::readVar(Runtime& rt, const String* name, Value* v) const {
 	assert(parentScope != 0);
@@ -1629,9 +1633,9 @@ static UInt32 calcLocalsSize(const ScriptFunction* function, UInt32 argc) {
 	return code->getVarsCount() + std::max(code->getArgumentsCount(), argc);
 }
 
-FunctionScope::FunctionScope(GCItemList& list, ScriptFunction* function, UInt32 argc, const Value* argv)
-		: super(list, function->closure), function(function), passedArgumentsCount(argc)
-		, locals(calcLocalsSize(function, argc), &list.getHeap()), dynamicVars(0), bloomSet(function->code->bloomSet) {
+FunctionScope::FunctionScope(GCList& gcList, ScriptFunction* function, UInt32 argc, const Value* argv)
+		: super(gcList, function->closure), function(function), passedArgumentsCount(argc)
+		, locals(calcLocalsSize(function, argc), &gcList.getHeap()), dynamicVars(0), bloomSet(function->code->bloomSet) {
 	const Code* code = function->getCode();
 	localsPointer = locals.begin() + code->getVarsCount();
 	std::fill(locals.begin(), localsPointer, Value::UNDEFINED);
@@ -1741,7 +1745,7 @@ void FunctionScope::declareVar(Runtime& rt, const String* name, const Value& ini
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(GCItemList& list, Scope* parentScope) : super(list, parentScope) { }
+EvalScope::EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
 
 void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	parentScope->declareVar(rt, name, initValue, false);
@@ -1749,7 +1753,7 @@ void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initVal
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(GCItemList& list) : super(list, 0) { }
+GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { }
 Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	return rt.getGlobals()->getPropertyDeep(rt, Value(name), v);
 }
@@ -1768,8 +1772,8 @@ void GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initV
 
 /* --- CatchScope --- */
 
-CatchScope::CatchScope(GCItemList& list, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(list, parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
+CatchScope::CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
+		: super(gcList, parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
 
 Flags CatchScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	if (name->isEqualTo(*exceptionName)) {
@@ -1798,7 +1802,7 @@ bool CatchScope::deleteVar(Runtime& rt, const String* name) {
 
 /* --- WithScope --- */
 
-WithScope::WithScope(GCItemList& list, Scope* parentScope, Object* withObject) : super(list, parentScope), withObject(withObject) { }
+WithScope::WithScope(GCList& gcList, Scope* parentScope, Object* withObject) : super(gcList, parentScope), withObject(withObject) { }
 
 Flags WithScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	Flags flags = withObject->getPropertyDeep(rt, Value(name), v);
@@ -1919,7 +1923,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(GCItemList& list, Runtime& rt) : super(list), rt(rt), currentFrame(0), firstCatcher(0)
+Processor::Processor(GCList& gcList, Runtime& rt) : super(gcList), rt(rt), currentFrame(0), firstCatcher(0)
 		, cyclesLeft(0x7FFFFFFF), stack(rt.getStackSize(), &rt.getHeap()) {
 	stack[0] = Value::UNDEFINED;
 	reset();
@@ -2714,8 +2718,8 @@ struct Compiler::SemanticScope {
 	QuickVector<BranchPoint> finallys; // source points for finally jsr's
 };
 
-Compiler::Compiler(GCItemList& list, Code* code, Target compileFor)
-		: super(list), heap(list.getHeap()), code(code), compilingFor(compileFor), setupSection(heap, 1)
+Compiler::Compiler(GCList& gcList, Code* code, Target compileFor)
+		: super(gcList), heap(gcList.getHeap()), code(code), compilingFor(compileFor), setupSection(heap, 1)
 		, mainSection(heap, 1), b(0), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
 void Compiler::error(ErrorType errorType, const char* message) { Exception::throwError(heap, errorType, message); }
@@ -4676,9 +4680,10 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-Runtime::Runtime(GCItemList& list) : super(list), heap(list.getHeap()), globalScope(heap.roots()), globals(0), sharedConstants(heap.roots())
-		, stackSize(DEFAULT_STACK_SIZE), objectPrototype(heap.roots(), 0), functionPrototype(heap.roots()), evalFunction(heap.roots(), false)
-		, evalDirectFunction(heap.roots(), true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
+Runtime::Runtime(GCList& gcList) : super(gcList), heap(gcList.getHeap()), globalScope(heap.roots()), globals(0)
+		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), objectPrototype(heap.roots(), 0)
+		, functionPrototype(heap.roots()), evalFunction(heap.roots(), false), evalDirectFunction(heap.roots(), true)
+		, toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(heap.roots(), &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(heap.roots(), &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
@@ -4852,7 +4857,7 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 					};
 
 		public:		typedef Object super;
-					NativeTestObject(GCItemList& list, double x, double y) : super(list), x(x), y(y) { }
+					NativeTestObject(GCList& gcList, double x, double y) : super(gcList), x(x), y(y) { }
 					virtual const String* getClassName() const { return &className; };
 					virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 						if (key.isEqualTo(String("x"))) { *v = Value(x); return EXISTS_FLAG | READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG; };
