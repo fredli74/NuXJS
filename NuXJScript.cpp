@@ -1601,7 +1601,8 @@ void Arguments::constructCompleteObject(Runtime& rt) const {
 /* --- Scope --- */
 
 Scope::Scope(GCList& gcList, Scope* parentScope)
-		: super(gcList), parentScope(parentScope), localsPointer(parentScope != 0 ? parentScope->localsPointer : 0) { }
+		: super(gcList), parentScope(parentScope), localsPointer(parentScope != 0 ? parentScope->localsPointer : 0)
+		, deleteOnPop(true) { }
 
 Flags Scope::readVar(Runtime& rt, const String* name, Value* v) const {
 	assert(parentScope != 0);
@@ -1623,8 +1624,12 @@ void Scope::declareVar(Runtime& rt, const String* name, const Value& initValue, 
 	return parentScope->declareVar(rt, name, initValue, dontDelete);
 }
 
-Value* Scope::getLocalsPointer() const { return localsPointer; }
-Scope* Scope::getParentScope() const { return parentScope; }
+void Scope::makeClosure() {
+	for (Scope* s = this; s->deleteOnPop; s = s->parentScope) {
+		s->deleteOnPop = false;
+		assert(s->parentScope != 0);
+	}
+}
 
 /* --- FunctionScope --- */
 
@@ -1647,6 +1652,7 @@ FunctionScope::FunctionScope(GCList& gcList, ScriptFunction* function, UInt32 ar
 
 ScriptObject* FunctionScope::getDynamicVars(Runtime& rt) const {
 	if (dynamicVars == 0) {
+		const_cast<FunctionScope*>(this)->makeClosure(); // FIX : const casts!
 		Heap& heap = rt.getHeap();
 		dynamicVars = new(heap) ScriptObject(heap.managed(), 0);
 		dynamicVars->setOwnProperty(rt, Value(&ARGUMENTS_STRING)
@@ -1753,7 +1759,7 @@ void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initVal
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { }
+GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
 Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	return rt.getGlobals()->getPropertyDeep(rt, Value(name), v);
 }
@@ -1990,6 +1996,7 @@ void Processor::pushFrame(const Code* code, Scope* scope, Object* thisObject) {
 void Processor::popFrame() {
 	assert(currentFrame != 0);
 	Frame* killMe = currentFrame;
+	currentFrame->scope->leave();
 	currentFrame = currentFrame->previousFrame;
 	delete killMe;
 }
@@ -2156,6 +2163,7 @@ bool Processor::privateRun() {
 			case JMP_OP:	ip += im; break;
 
 			case JSR_OP: {
+				scope->makeClosure(); // FIX : only to prevent popping it since it is shared by two frames, feels wrong
 				pushFrame(code, scope, thisObject);
 				ip += im;
 				return true;
@@ -2251,12 +2259,12 @@ bool Processor::privateRun() {
 
 			case RETURN_OP:	{
 				ip = currentFrame->returnIP;
+				popFrame();
 				if (ip == 0) {
 					assert(firstCatcher == 0 && sp == stack.begin());
 					reset();
 					return false;
 				} else {
-					popFrame();
 					assert(currentFrame != 0);
 					return true;
 				}
@@ -2268,6 +2276,7 @@ bool Processor::privateRun() {
 			case GEN_FUNC_OP: {
 				const Object* o = constants[im].getObject();
 				assert(dynamic_cast<const Code*>(o) != 0);
+				scope->makeClosure();
 				push(Value(new(heap) ScriptFunction(heap.managed(), reinterpret_cast<const Code*>(o), scope)));
 				break;
 			}

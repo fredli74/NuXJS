@@ -72,6 +72,7 @@ class GCList : public GCItem {
 	
 	public:		GCList(Heap& heap);
 				Heap& getHeap() const throw() { return heap; }
+				bool owns(GCItem* item) throw() { return item->_gcList == this; } // FIX : drop?
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 				UInt32 deleteAll() throw();
@@ -374,8 +375,6 @@ class ScriptObject;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	
-				Object() { }
-				Object(GCList& gcList) : super(gcList) { }				// Automatically include on `list`.
 				virtual Function* asFunction();							// Default returns 0. (Functions returns this.)
 				virtual const String* typeOfString() const;				// Default reutrns "object". (Strings and functions override.)
 				virtual const String* getClassName() const;				// Default returns "Object".
@@ -396,14 +395,18 @@ class Object : public GCItem {
 				Flags getPropertyDeep(Runtime& rt, const Value& key, Value* v) const; // searches prototype chain
 				Value getPropertyDeep(Runtime& rt, const char* s) const; // helper function
 				bool setPropertyDeep(Runtime& rt, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
+
+	protected:	Object() { }
+				Object(GCList& gcList) : super(gcList) { }				// Automatically include on `list`.
 };
 
 class Enumerator : public Object {
 	public:		typedef Object super;
-				Enumerator() { }
-				Enumerator(GCList& gcList) : super(gcList) { }
 				virtual Enumerator* asEnumerator() { return this; }
 				virtual const String* nextPropertyName() = 0;
+
+	protected:	Enumerator() { }
+				Enumerator(GCList& gcList) : super(gcList) { }
 };
 
 /*
@@ -610,8 +613,6 @@ class Array : public LazyScriptObject<Object> {
 class Function : public Object {
 	public:		typedef Object super;
 	
-				Function() { }
-				Function(GCList& gcList) : super(gcList) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -621,6 +622,9 @@ class Function : public Object {
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
 				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Processor& processor, Object* object) const;
+
+	protected:	Function() { }
+				Function(GCList& gcList) : super(gcList) { }
 };
 
 class EvalFunction : public Function {
@@ -703,11 +707,14 @@ class Scope : public GCItem {
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
 				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
-				Value* getLocalsPointer() const;
-				Scope* getParentScope() const;
+				Value* getLocalsPointer() const { return localsPointer; }
+				Scope* getParentScope() const { return parentScope; }
+				void makeClosure();
+				void leave() { if (deleteOnPop) { delete this; } }
 	
 	protected:	Scope* const parentScope;
 				Value* localsPointer; // Pointer is offset so that negative indexes addresses local variables and positive indexes addresses arguments.
+				bool deleteOnPop;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(parentScope);
@@ -802,6 +809,7 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Runtime& rt) const;
 };
 
+// FIX : private class in runtime?
 class GlobalScope : public Scope {
 	public:		typedef Scope super;
 				GlobalScope(GCList& gcList);
