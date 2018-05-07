@@ -51,7 +51,7 @@ class GCItem {
 				static void operator delete(void* ptr, Heap& heap);
 	
 	protected:	GCItem() throw();
-				GCItem(GCList& list) throw();
+				GCItem(GCList& gcList) throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
 				virtual void gcMark(Heap& heap) const;
@@ -375,7 +375,7 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	
 				Object() { }
-				Object(GCList& list) : super(list) { }				// Automatically include on `list`.
+				Object(GCList& gcList) : super(gcList) { }				// Automatically include on `list`.
 				virtual Function* asFunction();							// Default returns 0. (Functions returns this.)
 				virtual const String* typeOfString() const;				// Default reutrns "object". (Strings and functions override.)
 				virtual const String* getClassName() const;				// Default returns "Object".
@@ -401,7 +401,7 @@ class Object : public GCItem {
 class Enumerator : public Object {
 	public:		typedef Object super;
 				Enumerator() { }
-				Enumerator(GCList& list) : super(list) { }
+				Enumerator(GCList& gcList) : super(gcList) { }
 				virtual Enumerator* asEnumerator() { return this; }
 				virtual const String* nextPropertyName() = 0;
 };
@@ -429,11 +429,11 @@ class String : public Object, public QuickArray<Char> {
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
 				explicit String(const char* s);								// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
 				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
-				String(GCList& list);
-				String(GCList& list, const Char* b, const Char* e);		// Create string from begin to end pointers.
-				String(GCList& list, const String& l, const String& r);	// Create string by concatenating two strings.
-				String(GCList& list, const char* s);					// Create string from constant 8-bit string. Will also generate hash and bloom code.
-				String(GCList& list, const wchar_t* s);
+				String(GCList& gcList);
+				String(GCList& gcList, const Char* b, const Char* e);		// Create string from begin to end pointers.
+				String(GCList& gcList, const String& l, const String& r);	// Create string by concatenating two strings.
+				String(GCList& gcList, const char* s);						// Create string from constant 8-bit string. Will also generate hash and bloom code.
+				String(GCList& gcList, const wchar_t* s);
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
@@ -453,7 +453,7 @@ class String : public Object, public QuickArray<Char> {
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				RangeEnumerator(GCList& list, Int32 from, Int32 count);
+				RangeEnumerator(GCList& gcList, Int32 from, Int32 count);
 				virtual const String* nextPropertyName();
 				
 	protected:	Heap& heap;
@@ -463,7 +463,7 @@ class RangeEnumerator : public Enumerator {
 
 class StringListEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				StringListEnumerator(GCList& list, UInt32 initialCapacity);
+				StringListEnumerator(GCList& gcList, UInt32 initialCapacity);
 				void add(const String* s);
 				virtual const String* nextPropertyName();
 
@@ -478,7 +478,7 @@ class StringListEnumerator : public Enumerator {
 
 class JoiningEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
-				JoiningEnumerator(GCList& list, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject);
+				JoiningEnumerator(GCList& gcList, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject);
 				virtual const String* nextPropertyName();
 
 	protected:	Runtime& rt;
@@ -497,7 +497,7 @@ class JoiningEnumerator : public Enumerator {
 class ScriptObject : public Object {
 	public:		typedef Object super;
 				
-				ScriptObject(GCList& list, Object* prototype);
+				ScriptObject(GCList& gcList, Object* prototype);
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
@@ -519,7 +519,7 @@ class ScriptObject : public Object {
 // fix : good candidate for a lazy object
 class WrapperObject : public ScriptObject {
 	public:		typedef ScriptObject super;
-				WrapperObject(GCList& list, const String* className, const Value& value, Object* prototype);
+				WrapperObject(GCList& gcList, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual Value getInternalValue(Heap& heap) const;
 	protected:	const String* const className;
@@ -534,7 +534,7 @@ class WrapperObject : public ScriptObject {
 // FIX : a lot like a LazyScriptObject, would be good to merge somehow... Or at least, I want to have a safe compiler mechanism to make sure I always override *all* property accessor when doing things like this?!
 class StringWrapper : public ScriptObject {
 	public:		typedef ScriptObject super;
-				StringWrapper(GCList& list, const String* string, Object* prototype);
+				StringWrapper(GCList& gcList, const String* string, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
@@ -563,7 +563,7 @@ class StringWrapper : public ScriptObject {
 */
 template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
-				LazyScriptObject(GCList& list) : super(list), completeObject(0) { }
+				LazyScriptObject(GCList& gcList) : super(gcList), completeObject(0) { }
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
 				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
 				virtual bool deleteProperty(Runtime& rt, const Value& key);
@@ -582,7 +582,7 @@ template<class SUPER> class LazyScriptObject : public SUPER {
 class Array : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
 	
-				Array(GCList& list);
+				Array(GCList& gcList);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Runtime& rt) const;
 				// FIX : toString too?
@@ -611,7 +611,7 @@ class Function : public Object {
 	public:		typedef Object super;
 	
 				Function() { }
-				Function(GCList& list) : super(list) { }
+				Function(GCList& gcList) : super(gcList) { }
 				virtual Function* asFunction();
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -625,7 +625,7 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(GCList& list, bool direct) : super(list), direct(direct), functionDefCache(&list.getHeap()) { }
+				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct), functionDefCache(&gcList.getHeap()) { }
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				// FIX : move down to Runtime so that we share with eval direct, *but* Runtime should be a GCItem then I think
 	protected:	bool direct;
@@ -643,7 +643,7 @@ class EvalFunction : public Function {
 // Separate from Code so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
-				Constants(GCList& list) : super(list), QuickVector<Value>(&list.getHeap()) { }
+				Constants(GCList& gcList) : super(gcList), QuickVector<Value>(&gcList.getHeap()) { }
 	protected:	virtual void gcMark(Heap& heap) const {
 					heap.markViaReferences(begin(), end());
 					super::gcMark(heap);
@@ -657,7 +657,7 @@ class Code : public Object {
 	
 	public:		typedef Object super;
 				
-				Code(GCList& list, Constants* constants);
+				Code(GCList& gcList, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
@@ -698,7 +698,7 @@ class Code : public Object {
 
 class Scope : public GCItem {
 	public:		typedef GCItem super;
-				Scope(GCList& list, Scope* parentScope);
+				Scope(GCList& gcList, Scope* parentScope);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
@@ -717,13 +717,13 @@ class Scope : public GCItem {
 
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
-				ExtensibleFunction(GCList& list) : super(list) { }
+				ExtensibleFunction(GCList& gcList) : super(gcList) { }
 	protected:	void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				FunctionPrototypeFunction(GCList& list) : super(list) { }
+				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Runtime& rt) const;
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -734,7 +734,7 @@ class ScriptFunction : public ExtensibleFunction {
 	
 	public:		typedef ExtensibleFunction super;
 				
-				ScriptFunction(GCList& list, const Code* code, Scope* closure);
+				ScriptFunction(GCList& gcList, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
@@ -754,7 +754,7 @@ class ScriptFunction : public ExtensibleFunction {
 
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
-				SpecialConstructorFunction(GCList& list, Function* regularFunction, Function* constructorFunction);
+				SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
@@ -798,13 +798,13 @@ class Error : public LazyScriptObject<Object> {
 
 class ErrorPrototype : public Error {
 	public:		typedef Error super;
-				ErrorPrototype(GCList& list, ErrorType type);
+				ErrorPrototype(GCList& gcList, ErrorType type);
 				virtual Object* getPrototype(Runtime& rt) const;
 };
 
 class GlobalScope : public Scope {
 	public:		typedef Scope super;
-				GlobalScope(GCList& list);
+				GlobalScope(GCList& gcList);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
@@ -813,7 +813,7 @@ class GlobalScope : public Scope {
 
 class WithScope : public Scope {
 	public:		typedef Scope super;
-				WithScope(GCList& list, Scope* parentScope, Object* withObject);
+				WithScope(GCList& gcList, Scope* parentScope, Object* withObject);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
@@ -830,7 +830,7 @@ class FunctionScope : public Scope {
 	
 	public:		typedef Scope super;
 
-				FunctionScope(GCList& list, ScriptFunction* function, UInt32 argc, const Value* argv);
+				FunctionScope(GCList& gcList, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
@@ -856,7 +856,7 @@ class FunctionScope : public Scope {
 */
 class EvalScope : public Scope {
 	public:		typedef Scope super;
-				EvalScope(GCList& list, Scope* parentScope);
+				EvalScope(GCList& gcList, Scope* parentScope);
 				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 };
 
@@ -869,7 +869,7 @@ class EvalScope : public Scope {
 class CatchScope : public Scope {
 	public:		typedef Scope super;
 
-				CatchScope(GCList& list, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+				CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 				virtual bool deleteVar(Runtime& rt, const String* key);
@@ -887,7 +887,7 @@ class CatchScope : public Scope {
 const UInt32 DEFAULT_STACK_SIZE = 1024;
 class Runtime : public GCItem {
 	public:		typedef GCItem super;
-				Runtime(GCList& list);
+				Runtime(GCList& gcList);
 				void setGlobalObject(Object* globals);
 				void setStackSize(UInt32 stackSize);
 				UInt32 getStackSize() const;
@@ -932,7 +932,7 @@ class Runtime : public GCItem {
 class Arguments : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
 
-				Arguments(GCList& list, FunctionScope* scope, UInt32 argumentsCount);
+				Arguments(GCList& gcList, FunctionScope* scope, UInt32 argumentsCount);
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
@@ -1064,7 +1064,7 @@ class Processor : public GCItem {
 				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
-	public:		Processor(GCList& list, Runtime& rt);
+	public:		Processor(GCList& gcList, Runtime& rt);
 				Runtime& getRuntime() const { return rt; }
 				Heap& getHeap() const { return rt.getHeap(); }
 				void execGlobal(const Code* code);
@@ -1095,8 +1095,8 @@ class Processor : public GCItem {
 public: // FIX : not public, just for some asserts now I think
 				struct Frame : public GCItem {
 					typedef GCItem super;
-					Frame(GCList& list, const CodeWord* returnIP, const Code* code, Scope* scope, Object* thisObject, Frame* previousFrame)
-							: super(list), returnIP(returnIP), code(code), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
+					Frame(GCList& gcList, const CodeWord* returnIP, const Code* code, Scope* scope, Object* thisObject, Frame* previousFrame)
+							: super(gcList), returnIP(returnIP), code(code), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
 					const CodeWord* const returnIP;
 					const Code* const code;
 					Scope* const scope;
@@ -1113,8 +1113,8 @@ public: // FIX : not public, just for some asserts now I think
 	
 				struct Catcher : public GCItem {
 					typedef GCItem super;
-					Catcher(GCList& list, const CodeWord* ip, Value* sp, Frame* frame, Catcher* nextCatcher)
-							: super(list), ip(ip), sp(sp), frame(frame), nextCatcher(nextCatcher) { }
+					Catcher(GCList& gcList, const CodeWord* ip, Value* sp, Frame* frame, Catcher* nextCatcher)
+							: super(gcList), ip(ip), sp(sp), frame(frame), nextCatcher(nextCatcher) { }
 					const CodeWord* const ip;
 					Value* const sp;
 					Frame* const frame;
@@ -1155,7 +1155,7 @@ class Compiler : public GCItem {
 				
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
-				Compiler(GCList& list, Code* code, Target compileFor);
+				Compiler(GCList& gcList, Code* code, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
