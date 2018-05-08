@@ -742,8 +742,8 @@ const String* String::concat(Heap& heap, const String& l, const String& r) { ret
 const String* String::fromInt(Heap& heap, Int32 i) {
 	Char buffer[32];
 	return (i >= -QUICK_CONSTANTS_INTEGERS_RANGE && i <= QUICK_CONSTANTS_INTEGERS_RANGE)
-		 ? &QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
-		 : new(heap) String(heap.managed(), intToString(buffer, i), buffer + 32);
+		 	? &QUICK_CONSTANTS.integers[i + QUICK_CONSTANTS_INTEGERS_RANGE]
+		 	: new(heap) String(heap.managed(), intToString(buffer, i), buffer + 32);
 }
 
 const String* String::fromDouble(Heap& heap, double d) {
@@ -2224,7 +2224,7 @@ bool Processor::privateRun() {
 			}
 
 			case NEW_OP: {
-				Function* f = sp[-im].asFunction(); // fix: move this logic into f->construct, which means the NEW_RESULT_OP should be a chained function instead
+				Function* f = sp[-im].asFunction();
 				if (f == 0) { // FIX : sub
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
 					return true;
@@ -2261,7 +2261,7 @@ bool Processor::privateRun() {
 				ip = currentFrame->returnIP;
 				popFrame();
 				if (ip == 0) {
-					assert(firstCatcher == 0 && sp == stack.begin());
+					assert(currentFrame == 0 && firstCatcher == 0 && sp == stack.begin());
 					reset();
 					return false;
 				} else {
@@ -5068,15 +5068,56 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
 
                 bool done = false;
                 clock_t start = ::clock();
-                long lastGCSize = static_cast<long>(heap.size());
+                long lastGCSize = 1;//static_cast<long>(heap.size());
                 int gcCounter = gcRate;
                 do {
 				#if 0
+                    processor.resetTimeOut(std::min<int>(heap.count() * 100, 16*1024*1024));
+                    done = !processor.run();
+                    {
+                        long beforeSize = static_cast<long>(heap.size());
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());
+                        if (!suppressStdErr) {
+                            std::cerr << "\tGC counter: " << gcCounter << std::endl;
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
+                    }
+				#elif 0
+                    processor.resetTimeOut(1024);
+                    done = !processor.run();
+					long nowCount = static_cast<long>(heap.count());
+					--gcCounter;
+					if (done || nowCount >= lastGCSize * 4 /*|| gcCounter <= 0*/) {
+                        long beforeSize = static_cast<long>(heap.size());
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());
+						lastGCSize = heap.count();
+                        if (!suppressStdErr) {
+                            std::cerr << "\tGC counter: " << gcCounter << std::endl;
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
+/*                        if (autoGCRate) {
+                            if (beforeSize - nowSize >= 8L * 1024 * 1024 && gcRate >= 3) {
+                                gcRate /= 3;
+                            } else if (gcRate < 16 * 1024 * 1024) {
+                                gcRate *= 2;
+                            }
+                        }*/
+                   		gcCounter = 1024;
+                    }
+				#elif 0
                     processor.resetTimeOut(1024);
                     done = !processor.run();
 					long nowSize = static_cast<long>(heap.size());
 					--gcCounter;
-					if (done || nowSize - lastGCSize >= 64L * 1024 * 1024 || gcCounter <= 0) {
+					if (done || nowSize >= lastGCSize * 4 /*|| gcCounter <= 0*/) {
                         long beforeSize = static_cast<long>(heap.size());
                         UInt32 sweptCount = heap.gc();
                         long nowSize = static_cast<long>(heap.size());
@@ -5088,14 +5129,36 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                             std::cerr << "\tGC kept: " << heap.count() << std::endl;
                             std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
                         }
+/*                        if (autoGCRate) {
+                            if (beforeSize - nowSize >= 8L * 1024 * 1024 && gcRate >= 3) {
+                                gcRate /= 3;
+                            } else if (gcRate < 16 * 1024 * 1024) {
+                                gcRate *= 2;
+                            }
+                        }*/
+                   		gcCounter = 1024;
+                    }
+				#elif 1
+                    processor.resetTimeOut(gcRate);
+                    done = !processor.run();
+					{
+                        long beforeSize = static_cast<long>(heap.size());
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());
+						lastGCSize = nowSize;
+                        if (!suppressStdErr) {
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
                         if (autoGCRate) {
-                            if (beforeSize - nowSize >= 64L * 1024 * 1024 && gcRate >= 4) {
+                            if (sweptCount >= heap.count() / 2 && gcRate > 256) {
                                 gcRate /= 2;
                             } else if (gcRate < 16 * 1024 * 1024) {
                                 gcRate *= 2;
                             }
                         }
-                   		gcCounter = gcRate;
                     }
 				#else
                     processor.resetTimeOut(gcRate);
@@ -5120,7 +5183,7 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                         }
                     }
 				#endif
-                    
+
                     if (done) {
                     	processor.run();	// just testing some weird behaviour
                         if (!suppressStdErr) {

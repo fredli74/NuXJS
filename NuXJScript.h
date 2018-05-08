@@ -368,7 +368,6 @@ class Table {
 
 class Enumerator;
 class Processor;
-class ScriptObject;
 
 // FIX : rename Object to something else, like AbstractObject, but AbstractObject sounds a bit like pure virtual abstract which isn't what it is, it's more like internal primitive object (which isn't good either cause primitive is something else in JS)
 // InternalObject ?
