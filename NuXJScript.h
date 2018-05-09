@@ -75,7 +75,7 @@ class GCList : public GCItem {
 				bool owns(GCItem* item) throw() { return item->_gcList == this; } // FIX : drop?
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
-				UInt32 deleteAll() throw();
+				void deleteAll() throw();
 				~GCList();
 
 	protected:	Heap& heap;
@@ -97,7 +97,8 @@ class Heap {
 				void purgePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
 				size_t size() const;
 				UInt32 count() const;
-				UInt32 gc();
+				void autoGC();
+				void gc();
 				void mark(const GCItem* item) {
 					if (item != 0 && item->_gcList == currentList) {
 						newList->claim(const_cast<GCItem*>(item));
@@ -112,6 +113,7 @@ class Heap {
 	protected:	static int calcPoolIndex(size_t size);
 				void* pooled[MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY];
 				size_t allocated;
+				size_t gcThreshold;
 				GCList managedListA;
 				GCList managedListB;
 				GCList rootList;
@@ -302,6 +304,16 @@ class Value {
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
+class ValueWrapper : public GCItem {
+	public:		typedef GCItem super;
+				ValueWrapper(GCList& list, const Value& value) : super(list), value(value) { }
+				Value getValue() const { return value; }
+	protected:	Value value;
+				virtual void gcMark(Heap& heap) const {
+					value.gcMark(heap);
+					super::gcMark(heap);
+				}
+};
 
 typedef Byte Flags; // FIX : turn into enum
 const Flags EXISTS_FLAG = 1; // FIX : turn these into enum, that's ok
@@ -628,19 +640,9 @@ class Function : public Object {
 
 class EvalFunction : public Function {
 	public:		typedef Function super;
-				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct), functionDefCache(&gcList.getHeap()) { }
+				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
 				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				// FIX : move down to Runtime so that we share with eval direct, *but* Runtime should be a GCItem then I think
 	protected:	bool direct;
-				// FIX : share cache (in Runtime) between evalFunction and evalDirectFunction, oh, and share with new function as well
-				// FIX : or maybe just drop it? KISS you know!
-				mutable Table functionDefCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
-
-				virtual void gcMark(Heap& heap) const {
-					functionDefCache = Table(&heap); // Yeah we just empty everything on each gc sweep
-					functionDefCache.gcMark(heap);
-					super::gcMark(heap);
-				}
 };
 
 // Separate from Code so that multiple functions can share the same constants (purely optimization).
@@ -903,7 +905,10 @@ class Runtime : public GCItem {
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
+				// FIX : name? sync?
 				Value callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
+				Value evalSync(const String* sourceCode);
+				Code* compileEvalCode(const String* sourceCode);
 
 	protected:	Heap& heap;
 				GlobalScope globalScope;
@@ -925,13 +930,16 @@ class Runtime : public GCItem {
 				Function* toStringFunction;
 				Function* createRegExpFunction;
 				double unixEpochTimeDiff;
-	
+				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+
 	public:		virtual void gcMark(Heap& heap) const {
 					heap.mark(globals);
 					heap.markViaPointers(errorPrototypes + 0, errorPrototypes + ERROR_TYPE_COUNT);
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
 					heap.mark(createRegExpFunction);
+					evalCodeCache = Table(&heap); // Yeah we just empty everything on each gc sweep
+					evalCodeCache.gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -989,7 +997,9 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
-// FIX : Processor -> Interpreter
+// FIX : Processor -> Interpreter?
+
+const int CYCLES_PER_RUN = 1024;
 class Processor : public GCItem {
 	friend class ScriptFunction;
 	
@@ -1074,32 +1084,27 @@ class Processor : public GCItem {
 	public:		Processor(GCList& gcList, Runtime& rt);
 				Runtime& getRuntime() const { return rt; }
 				Heap& getHeap() const { return rt.getHeap(); }
-				void execGlobal(const Code* code);
-				void execEvalGlobal(const Code* code);
-				void execEvalLocal(const Code* code);
-				void execFunction(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject = 0);
-				void resetTimeOut(Int32 clockCycles);
+				void enterGlobalCode(const Code* code);
+				void enterEvalCode(const Code* code, bool local = false);
+				void enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				bool run();
 				Value getResult() const;
 
-	protected:	void exec(const Code* code, Scope* scope, Object* thisObject);
+	protected:	void enter(const Code* code, Scope* scope, Object* thisObject);
 				void error(ErrorType errorType, const String* message = 0);
 				void push(const Value& v);
 				void pop(Int32 count);
 				void pop2push1(const Value& v);
-				bool privateRun();
+				void innerRun();
 				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reset();
 				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
 				void popFrame();
 				void popCatcher();
-
-				Runtime& rt;
 	
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
-public: // FIX : not public, just for some asserts now I think
 				struct Frame : public GCItem {
 					typedef GCItem super;
 					Frame(GCList& gcList, const CodeWord* returnIP, const Code* code, Scope* scope, Object* thisObject, Frame* previousFrame)
@@ -1133,9 +1138,11 @@ public: // FIX : not public, just for some asserts now I think
 					}
 				};
 
+				Runtime& rt;
+				Heap& heap;
+				int cyclesLeft;
 				Frame* currentFrame;
 				Catcher* firstCatcher;
-				Int32 cyclesLeft;
 				const CodeWord* ip;
 				Value* sp;
 				QuickArray<Value> stack;

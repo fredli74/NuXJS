@@ -40,6 +40,8 @@ if (revs.n == 0) append(@revs, '');
 if (PLATFORM === 'UNIX') {
 	defaults(@exe, (if (!doRevRange) 'build/Release/NuXJScript -s' else './NuXJScript -s'));
 	TIME_COMMAND_FORMAT = '(time -p {exe} benchmarks/{fn} >{outPath}) 2>{timePath}';
+// FIX : option to support this:
+//	TIME_COMMAND_FORMAT = '{exe} benchmarks/{fn} >{outPath} 2>{timePath}';
 	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp';
 	parseTimeOutput = function { a = $1; tokenize($0, >append(a, $0)); }
 } else if (PLATFORM == 'WINDOWS') {

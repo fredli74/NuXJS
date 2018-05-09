@@ -811,14 +811,12 @@ void GCList::claim(GCItem* item) throw() {
 	++count;
 }
 
-UInt32 GCList::deleteAll() throw() {
-	const UInt32 n = count;
+void GCList::deleteAll() throw() {
 	for (const GCItem* i = _gcNext->_gcNext; i != _gcNext; i = i->_gcNext) {
 		assert(i->_gcPrev->_gcList == this);
 		delete i->_gcPrev;
 	}
 	assert(_gcPrev == _gcNext && _gcPrev == this);
-	return n;
 }
 
 GCList::~GCList() {
@@ -827,8 +825,8 @@ GCList::~GCList() {
 
 /* --- Heap --- */
 
-Heap::Heap() : allocated(0), managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
-		, newList(&managedListB) {
+Heap::Heap() : allocated(0), gcThreshold(0), managedListA(*this), managedListB(*this), rootList(*this)
+		, currentList(&managedListA), newList(&managedListB) {
 	std::fill(pooled + 0, pooled + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
 }
 
@@ -878,7 +876,7 @@ void Heap::deallocateArray(void *ptr) { return deallocate(ptr); }
 UInt32 Heap::count() const { return currentList->count; }
 size_t Heap::size() const { return allocated; }
 
-UInt32 Heap::gc() {
+void Heap::gc() {
 	for (const GCItem* item = rootList._gcNext; item != &rootList; item = item->_gcNext) {
 		item->gcMark(*this);
 	}
@@ -886,7 +884,14 @@ UInt32 Heap::gc() {
 		item->gcMark(*this);
 	}
 	std::swap(currentList, newList);
-	return newList->deleteAll();
+	newList->deleteAll();
+}
+
+void Heap::autoGC() {
+	if (allocated >= gcThreshold) {
+		gc();
+		gcThreshold = allocated * 2;
+	}
 }
 
 void Heap::purgePooled() {
@@ -1440,7 +1445,7 @@ const String* ScriptFunction::toString(Heap& heap) const {
 }
 
 Value ScriptFunction::call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	processor.execFunction(this, argc, argv, thisObject);
+	processor.enterFunctionCode(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
 }
 
@@ -1929,8 +1934,8 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(GCList& gcList, Runtime& rt) : super(gcList), rt(rt), currentFrame(0), firstCatcher(0)
-		, cyclesLeft(0x7FFFFFFF), stack(rt.getStackSize(), &rt.getHeap()) {
+Processor::Processor(GCList& gcList, Runtime& rt) : super(gcList), rt(rt), heap(rt.getHeap()), currentFrame(0)
+		, firstCatcher(0), stack(rt.getStackSize(), &heap) {
 	stack[0] = Value::UNDEFINED;
 	reset();
 }
@@ -1948,9 +1953,8 @@ std::pair<Processor::Opcode, Int32> Processor::unpackInstruction(const CodeWord 
 void Processor::push(const Value& v) { assert(sp + 1 < stack.end()); *++sp = v; }
 void Processor::pop2push1(const Value& v) { assert(sp >= stack.begin()); *--sp = v; }
 void Processor::pop(Int32 count) { assert(sp - count + 1 >= stack.begin()); sp -= count; }
-void Processor::resetTimeOut(Int32 clockCycles) { cyclesLeft = clockCycles; }
 
-void Processor::exec(const Code* code, Scope* scope, Object* thisObject) {
+void Processor::enter(const Code* code, Scope* scope, Object* thisObject) {
 	// We could grow stack here *but* then existing pointers into the stack might become invalid and we would need to copy arguments for native calls somewhere (e.g. to C++ stack).
 	if (sp + code->getMaxStackDepth() > stack.end()) {
 		error(RANGE_ERROR, &STACK_OVERFLOW_STRING);
@@ -1960,28 +1964,23 @@ void Processor::exec(const Code* code, Scope* scope, Object* thisObject) {
 	}
 }
 
-void Processor::execGlobal(const Code* code) {
-	exec(code, rt.getGlobalScope(), rt.getGlobals());
+void Processor::enterGlobalCode(const Code* code) {
+	enter(code, rt.getGlobalScope(), rt.getGlobals());
 }
 
-void Processor::execEvalGlobal(const Code* code) {
-	Heap& heap = rt.getHeap();
-	exec(code, new(heap) EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobals());
+void Processor::enterEvalCode(const Code* code, bool local) {
+	if (local && currentFrame != 0) {
+		enter(code, new(heap) EvalScope(heap.managed(), currentFrame->scope), currentFrame->thisObject);
+	} else {
+		enter(code, new(heap) EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobals());
+	}
 }
 
-void Processor::execEvalLocal(const Code* code) {
-	assert(currentFrame != 0); // FIX : what to do with global scope?
-	Heap& heap = rt.getHeap();
-	exec(code, new(heap) EvalScope(heap.managed(), currentFrame->scope), currentFrame->thisObject);
-}
-
-void Processor::execFunction(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
-	Heap& heap = rt.getHeap();
-	exec(func->getCode(), new(heap) FunctionScope(heap.managed(), func, argc, argv), thisObject);
+void Processor::enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
+	enter(func->getCode(), new(heap) FunctionScope(heap.managed(), func, argc, argv), thisObject);
 }
 
 void Processor::reset() {
-	cyclesLeft = 0x7FFFFFFF;
 	currentFrame = 0;
 	firstCatcher = 0;
 	ip = 0;
@@ -1989,7 +1988,6 @@ void Processor::reset() {
 }
 
 void Processor::pushFrame(const Code* code, Scope* scope, Object* thisObject) {
-	Heap& heap = rt.getHeap();
 	currentFrame = new(heap) Frame(heap.managed(), ip, code, scope, thisObject, currentFrame);
 }
 
@@ -2011,7 +2009,7 @@ void Processor::popCatcher() {
 void Processor::throwVirtualException(const Value& exception) {
 	if (firstCatcher == 0) { // FIX: what exception to throw here?
 		reset();
-		throw Exception(rt.getHeap(), exception);
+		throw Exception(heap, exception);
 	}
 	ip = firstCatcher->ip;
 	assert(ip != 0);
@@ -2022,7 +2020,6 @@ void Processor::throwVirtualException(const Value& exception) {
 }
 
 void Processor::error(ErrorType errorType, const String* message) {
-	Heap& heap = rt.getHeap();
 	throwVirtualException(Value(new(heap) Error(heap.managed(), errorType, message)));
 }
 
@@ -2034,8 +2031,7 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 	return object;
 }
 
-bool Processor::privateRun() {
-	Heap& heap = rt.getHeap();
+void Processor::innerRun() {
 	assert(currentFrame != 0);
 	Scope* scope = currentFrame->scope;
 	assert(scope != 0);
@@ -2045,8 +2041,7 @@ bool Processor::privateRun() {
 	Value* locals = scope->getLocalsPointer();
 	Object* thisObject = currentFrame->thisObject;
 
-	while (cyclesLeft >= 0) {
-		--cyclesLeft;
+	while (--cyclesLeft >= 0) {
 		const CodeWord instruction = *ip++;
 		const Opcode opcode = static_cast<Opcode>(instruction & 255);
 		const Int32 im = static_cast<Int32>(instruction) >> 8;
@@ -2055,26 +2050,21 @@ bool Processor::privateRun() {
 			case READ_LOCAL_OP:			assert(locals != 0); push(locals[im]); break;
 			case WRITE_LOCAL_OP:		assert(locals != 0); locals[im] = sp[0]; break;
 			case WRITE_LOCAL_POP_OP:	assert(locals != 0); locals[im] = sp[0]; pop(1); break;
-			case READ_NAMED_OP:			{
-											const String* name = constants[im].getString();
-											if (scope->readVar(rt, name, ++sp) == NONEXISTENT) {
-												error(REFERENCE_ERROR, new(heap) String(heap.managed(), *name, IS_NOT_DEFINED_STRING));
-												return true;
-											}
-										}
-										break;
-									
-			case WRITE_NAMED_OP:		scope->writeVar(rt, constants[im].getString(), sp[0]);
-										break;
-				
-			case WRITE_NAMED_POP_OP:	scope->writeVar(rt, constants[im].getString(), sp[0]);
-										pop(1);
-										break;
+			case READ_NAMED_OP: {
+				const String* name = constants[im].getString();
+				if (scope->readVar(rt, name, ++sp) == NONEXISTENT) {
+					error(REFERENCE_ERROR, new(heap) String(heap.managed(), *name, IS_NOT_DEFINED_STRING));
+					return;
+				}
+			}
+			break;
+			case WRITE_NAMED_OP:		scope->writeVar(rt, constants[im].getString(), sp[0]); break;
+			case WRITE_NAMED_POP_OP:	scope->writeVar(rt, constants[im].getString(), sp[0]); pop(1); break;
 
 			case GET_PROPERTY_OP: {
 				const Object* o = convertToObject(sp[-1], false);
 				if (o == 0) {
-					return true;
+					return;
 				}
 				if (o->getPropertyDeep(rt, sp[0], sp - 1) == NONEXISTENT) {
 					sp[-1] = Value::UNDEFINED;
@@ -2086,7 +2076,7 @@ bool Processor::privateRun() {
 			case SET_PROPERTY_OP: {
 				Object* o = convertToObject(sp[-2], false);
 				if (o == 0) {
-					return true;
+					return;
 				}
 				o->setPropertyDeep(rt, sp[-1], sp[0]);
 				sp[-2] = sp[0];
@@ -2097,7 +2087,7 @@ bool Processor::privateRun() {
 			case SET_PROPERTY_POP_OP: {
 				Object* o = convertToObject(sp[-2], false);
 				if (o == 0) {
-					return true;
+					return;
 				}
 				o->setPropertyDeep(rt, sp[-1], sp[0]);
 				pop(3);
@@ -2108,7 +2098,7 @@ bool Processor::privateRun() {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
 					rt.toNumberFunction->call(*this, 1, sp);
-					return true;
+					return;
 				}
 				break;
 			}
@@ -2117,7 +2107,7 @@ bool Processor::privateRun() {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
 					rt.toStringFunction->call(*this, 1, sp);
-					return true;
+					return;
 				}
 				break;
 			}
@@ -2130,7 +2120,7 @@ bool Processor::privateRun() {
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
 						rt.toNumberFunction->call(*this, 1, sp);
-						return true;
+						return;
 					}
 				}
 				break;
@@ -2166,7 +2156,7 @@ bool Processor::privateRun() {
 				scope->makeClosure(); // FIX : only to prevent popping it since it is shared by two frames, feels wrong
 				pushFrame(code, scope, thisObject);
 				ip += im;
-				return true;
+				return;
 			}
 
 			case JT_OP:				ip += (sp[0].toBool() ? im : 0); pop(1); break;
@@ -2185,58 +2175,57 @@ bool Processor::privateRun() {
 				Function* const f = sp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-					return true;
+				} else {
+					sp[-im] = f->call(*this, im, sp - im + 1);
+					pop(im);
 				}
-				sp[-im] = f->call(*this, im, sp - im + 1);
-				pop(im);
-				return true;
+				return;
 			}
 			
 			case CALL_METHOD_OP: { // FIX : share more with the others...
 				Object* const o = convertToObject(sp[-im - 1], true);
-				if (o == 0) {
-					return true;
+				if (o != 0) {
+					Value v(Value::UNDEFINED);
+					Function* f;
+					const Value& name = sp[-im];
+					if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+						error(TYPE_ERROR, new(heap) String(heap.managed(), *name.toString(heap), IS_NOT_A_FUNCTION_STRING));
+					} else {
+						sp[-(im + 1)] = f->call(*this, im, sp - im + 1, o);
+						pop(im + 1);
+					}
 				}
-				Value v(Value::UNDEFINED);
-				Function* f;
-				const Value& name = sp[-im];
-				if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
-					error(TYPE_ERROR, new(heap) String(heap.managed(), *name.toString(heap), IS_NOT_A_FUNCTION_STRING));
-					return true;
-				}
-				sp[-(im + 1)] = f->call(*this, im, sp - im + 1, o);
-				pop(im + 1);
-				return true;
+				return;
 			}
 			
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
 				Function* f = sp[-im].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-					return true;
+				} else {
+					if (f == &rt.evalFunction) {
+						f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
+					}
+					sp[-im] = f->call(*this, im, sp - im + 1);
+					pop(im);
 				}
-				if (f == &rt.evalFunction) {
-					f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
-				}
-				sp[-im] = f->call(*this, im, sp - im + 1);
-				pop(im);
-				return true;
+				return;
 			}
 
 			case NEW_OP: {
 				Function* f = sp[-im].asFunction();
 				if (f == 0) { // FIX : sub
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-					return true;
+				} else {
+					Value v(Value::UNDEFINED);
+					f->getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
+					Object* prototype = v.asObject();
+					Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
+					sp[-(im - 1)] = f->construct(*this, im, sp - im + 1, newObject);
+					sp[-(im - 1) - 1] = Value(newObject);
+					pop(im - 1);
 				}
-				Value v(Value::UNDEFINED);
-				f->getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
-				Object* prototype = v.asObject();
-				Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
-				sp[-(im - 1)] = f->construct(*this, im, sp - im + 1, newObject);
-				sp[-(im - 1) - 1] = Value(newObject);
-				pop(im - 1);
-				return true;
+				return;
 			}
 			
 			case NEW_RESULT_OP: pop2push1(sp[0].isObject() ? sp[0] : sp[-1]); break;
@@ -2254,20 +2243,13 @@ bool Processor::privateRun() {
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
 				sp[-1] = rt.createRegExpFunction->call(*this, 2, sp - 1);
 				pop(1);
-				return true;
+				return;
 			}
 
 			case RETURN_OP:	{
 				ip = currentFrame->returnIP;
 				popFrame();
-				if (ip == 0) {
-					assert(currentFrame == 0 && firstCatcher == 0 && sp == stack.begin());
-					reset();
-					return false;
-				} else {
-					assert(currentFrame != 0);
-					return true;
-				}
+				return;
 			}
 			
 			case THIS_OP: push(Value(thisObject)); break;
@@ -2302,7 +2284,7 @@ bool Processor::privateRun() {
 			case DELETE_OP: {
 				Object* o = convertToObject(sp[-1], true);
 				if (o == 0) {
-					return true;
+					return;
 				}
 				pop2push1(Value(o->deleteProperty(rt, sp[0])));
 				break;
@@ -2311,22 +2293,21 @@ bool Processor::privateRun() {
 			case CATCH_SCOPE_OP: {
 				pushFrame(code, new(heap) CatchScope(heap.managed(), scope, constants[im].getString(), sp[0]), thisObject);
 				pop(1);
-				return true;
+				return;
 			}
 			
 			case WITH_SCOPE_OP: {
 				Object* o = convertToObject(sp[0], false);
-				if (o == 0) {
-					return true;
+				if (o != 0) {
+					pushFrame(code, new(heap) WithScope(heap.managed(), scope, o), thisObject);
+					pop(1);
 				}
-				pushFrame(code, new(heap) WithScope(heap.managed(), scope, o), thisObject);
-				pop(1);
-				return true;
+				return;
 			}
 			
 			case POP_FRAME_OP: {
 				popFrame();
-				return true;
+				return;
 			}
 			
 			case TRY_OP: {
@@ -2334,12 +2315,12 @@ bool Processor::privateRun() {
 				break;
 			}
 			case TRIED_OP: popCatcher(); break;
-			case THROW_OP: throwVirtualException(sp[0]); return true;
+			case THROW_OP: throwVirtualException(sp[0]); return;
 			case IN_OP: {
 				const Object* o = sp[0].asObject();
 				if (o == 0) {
 					error(TYPE_ERROR, new(heap) String(heap.managed(), CANNOT_USE_IN_OPERATOR_STRING, *sp[0].toString(heap)));
-					return true;
+					return;
 				}
 				Value dummy;
 				sp[-1] = Value(o->getPropertyDeep(rt, sp[-1], &dummy) != NONEXISTENT);
@@ -2350,7 +2331,7 @@ bool Processor::privateRun() {
 				Function* f = sp[0].asFunction();
 				if (f == 0) {
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[0].toString(heap), IS_NOT_A_FUNCTION_STRING));
-					return true;
+					return;
 				}
 				sp[-1] = Value(f->hasInstance(*this, sp[-1].asObject()));
 				pop(1);
@@ -2369,7 +2350,7 @@ bool Processor::privateRun() {
 				// FIX : this is awesome and all, but it *will* become recursive nextPropertyName() calls, and recursive C++ is baaad for sandboxing
 				// FIX : also, I don't like the order: prototypes are first (not that it matters much though)
 				if (o == 0) {
-					return true;
+					return;
 				}
 				Enumerator* enumerator = &EMPTY_ENUMERATOR;
 				do {
@@ -2396,7 +2377,6 @@ bool Processor::privateRun() {
 			default: assert(0);
 		}
 	}
-	return true;
 }
 
 Value Processor::getResult() const {
@@ -2405,21 +2385,16 @@ Value Processor::getResult() const {
 }
 
 bool Processor::run() {
-	if (ip == 0) {
-		return false;
-	}
-	try {
-		while (cyclesLeft >= 0) {
-			if (!privateRun()) {
-				return false;
-			}
+	cyclesLeft = CYCLES_PER_RUN;
+	while (ip != 0 && cyclesLeft >= 0) {
+		try {
+			innerRun();
+		}
+		catch (const Exception& x) {
+			throwVirtualException(x.getValue());
 		}
 	}
-	catch (const Exception& x) {
-		throwVirtualException(x.getValue());
-		return true;
-	}
-	return true;
+	return (ip != 0);
 }
 
 static int recursiveStackCheck(const Code& code, QuickArray<Int32>& stackDepths
@@ -4395,24 +4370,7 @@ Value EvalFunction::call(Processor& processor, UInt32 argc, const Value* argv, O
 
 	Heap& heap = processor.getHeap();
 	const String* sourceCode = argv[0].toString(heap);
-	Code* code;
-	
-	const Table::Bucket* bucket = functionDefCache.lookup(sourceCode);
-	if (bucket != 0) {
-		Object* o = bucket->getValue().getObject();
-		assert(dynamic_cast<Code*>(o) != 0);
-		code = reinterpret_cast<Code*>(o);
-	} else {
-		code = new(heap) Code(heap.managed(), new(heap) Constants(heap.managed())); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
-		Compiler compiler(heap.roots(), code, Compiler::FOR_EVAL);
-		compiler.compile(*sourceCode);
-		functionDefCache.update(functionDefCache.insert(sourceCode), Value(code));
-	}
-	if (direct) {
-		processor.execEvalLocal(code);
-	} else {
-		processor.execEvalGlobal(code);
-	}
+	processor.enterEvalCode(processor.getRuntime().compileEvalCode(sourceCode), direct);
 	return Value::UNDEFINED;
 }
 
@@ -4696,7 +4654,8 @@ Runtime::Runtime(GCList& gcList) : super(gcList), heap(gcList.getHeap()), global
 		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(heap.roots(), &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(heap.roots(), &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
-		, arrayPrototype(heap.roots()), unixEpochTimeDiff(0.0) {
+		, arrayPrototype(heap.roots()), unixEpochTimeDiff(0.0)
+		, evalCodeCache(&heap) {
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));
@@ -4707,9 +4666,33 @@ Value Runtime::callSync(Function* function, UInt32 argc, const Value* argv, Obje
 	Processor processor(heap.roots(), *this);
 	function->call(processor, argc, argv, thisObject);
 	while (processor.run()) {
-		;
+		heap.autoGC();
 	}
 	return processor.getResult();
+}
+
+Value Runtime::evalSync(const String* sourceCode) {
+	Processor processor(heap.roots(), *this);
+	processor.enterEvalCode(compileEvalCode(sourceCode));
+	while (processor.run()) {
+		heap.autoGC();
+	}
+	return processor.getResult();
+}
+
+Code* Runtime::compileEvalCode(const String* sourceCode) {
+	const Table::Bucket* bucket = evalCodeCache.lookup(sourceCode);
+	if (bucket != 0) {
+		Object* o = bucket->getValue().getObject();
+		assert(dynamic_cast<Code*>(o) != 0);
+		return reinterpret_cast<Code*>(o);
+	} else {
+		Code* code = new(heap) Code(heap.managed(), new(heap) Constants(heap.managed())); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
+		Compiler compiler(heap.roots(), code, Compiler::FOR_EVAL);
+		compiler.compile(*sourceCode);
+		evalCodeCache.update(evalCodeCache.insert(sourceCode), Value(code));
+		return code;
+	}
 }
 
 // FIX : make this optional by including default toNumberFunction etc that throws (or should they return something?)
@@ -4729,6 +4712,7 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
 	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
+	const ValueWrapper protectedSupportObject(heap.roots(), Value(supportObject));
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, Value(String::newString(heap, "prototypes")), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
@@ -4757,27 +4741,9 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		prototypesObject->setOwnProperty(*this, Value(&ERROR_NAMES[i]), Value(errorPrototypes[i]), STANDARD_FLAGS);
 	}
-	// FIX : all this boilerplating... build a function object or something instead?
-
-	Code* code = new(heap) Code(heap.managed(), &sharedConstants);
-	{
-		Compiler compiler(heap.roots(), code, Compiler::FOR_EVAL);
-		compiler.compile(librarySourceCode);
-	}
-	{
-		Processor processor(heap.roots(), *this);
-		processor.execEvalGlobal(code);
-		bool needsMoreTime = processor.run();
-		assert(!needsMoreTime);
-		Value v = processor.getResult();
-		Function* f = v.asFunction();
-		if (f != 0) {
-			Value argv[1] = { Value(supportObject) };
-			f->call(processor, 1, argv, getGlobals());
-			needsMoreTime = processor.run();
-			assert(!needsMoreTime);
-		}
-	}
+	const ValueWrapper func(heap.roots(), evalSync(&librarySourceCode));
+	Value argv[1] = { protectedSupportObject.getValue() };
+	callSync(func.getValue().asFunction(), 1, argv);
 	heap.gc();
 
 	// FIX : sub v
@@ -4808,6 +4774,26 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 #include <fstream>
 #include <memory>
 #include <vector>
+
+#if (NED_WINDOWS)
+#error fix
+long getCPUSecs() {
+	::FILETIME creationTime;
+	::FILETIME exitTime;
+	::FILETIME kernelTime;
+	::FILETIME userTime;
+	BOOL success = ::GetProcessTimes(::GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime);
+	assert(success);
+	return ((static_cast<tInt64>(userTime.dwHighDateTime) << 32) | userTime.dwLowDateTime) / 10000000;
+}
+#else
+double getCPUSecs() {
+	rusage rus;
+	int res = getrusage(RUSAGE_SELF, &rus);
+	assert(res == 0);
+	return rus.ru_utime.tv_sec + rus.ru_utime.tv_usec / 1000000.0;
+}
+#endif
 
 	bool interactive = true;
 
@@ -4845,8 +4831,8 @@ UInt32 Runtime::getStackSize() const { return stackSize; }
 	
 	struct GCFunction : public Function {
 		virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			UInt32 sweptCount = processor.getHeap().gc();
-			return Value(static_cast<Int32>(sweptCount));
+			processor.getHeap().gc();
+			return Value::UNDEFINED;
 		}
 	};
 
@@ -4912,6 +4898,7 @@ int testMain(int argc, const char* argv[]) {
     std::wistream* inStream = &std::wcin;
     bool doTime = false;
     int gcRate = 256;
+    size_t peakMemory = 0;
     bool autoGCRate = true;
 	bool doSuppressStdErr = false;
 	bool loadStdLib = true;
@@ -5064,17 +5051,27 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     }*/
                 }
                	processor.run();	// just testing some weird behaviour
-                processor.execGlobal(&globalCode);
+                processor.enterGlobalCode(&globalCode);
 
                 bool done = false;
-                clock_t start = ::clock();
+                double start = getCPUSecs();
                 long lastGCSize = 1;//static_cast<long>(heap.size());
                 int gcCounter = gcRate;
+                double totalProcessorTime = 0.0;
+                double totalProcessorCycles = 0.0;
+                double memoryPerCycle = -1.0;
+				double garbagePerCycle = -1.0;
                 do {
-				#if 0
-                    processor.resetTimeOut(std::min<int>(heap.count() * 100, 16*1024*1024));
+                #if 1
+                    done = !processor.run();
+					heap.autoGC();
+                   	peakMemory = std::max<long>(peakMemory, heap.size());
+				#elif 0
+                    processor.resetTimeOut(gcRate);
                     done = !processor.run();
                     {
+                    	peakMemory = std::max<long>(peakMemory, heap.size());
+                    	gcRate = std::min<int>(heap.count() * 10, 64*1024*1024);
                         long beforeSize = static_cast<long>(heap.size());
                         UInt32 sweptCount = heap.gc();
                         long nowSize = static_cast<long>(heap.size());
@@ -5138,11 +5135,50 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                         }*/
                    		gcCounter = 1024;
                     }
+				#elif 0
+                    processor.resetTimeOut(gcRate);
+                    done = !processor.run();
+					{
+                    	peakMemory = std::max<long>(peakMemory, heap.size());
+                        long beforeSize = static_cast<long>(heap.size());
+                        long wasCount = heap.count();
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());
+                        double newMemoryPerCycle = static_cast<double>(beforeSize - lastGCSize) / gcRate;
+                        double newGarbagePerCycle = static_cast<double>(beforeSize - nowSize) / gcRate;
+                        if (memoryPerCycle < 0) {
+                        	memoryPerCycle = newMemoryPerCycle;
+                        	garbagePerCycle = newGarbagePerCycle;
+						} else {
+							memoryPerCycle += (newMemoryPerCycle - memoryPerCycle) * 0.1;
+							garbagePerCycle += (newGarbagePerCycle - garbagePerCycle) * 0.1;
+						}
+						lastGCSize = beforeSize;
+						
+                        if (!suppressStdErr) {
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
+                        if (autoGCRate) {
+                        	int newGCRate = static_cast<int>((nowSize + memoryPerCycle) / garbagePerCycle);
+                        	newGCRate = std::min(std::max(newGCRate, 256), 16*1024*1024);
+                        	gcRate = newGCRate;
+                            /*if ((beforeSize - nowSize) >= beforeSize / 2 && gcRate > 256) {
+                                gcRate /= 2;
+                            } else if (gcRate < 128 * 1024 * 1024) {
+                                gcRate *= 2;
+                            }*/
+                        }
+                    }
 				#elif 1
                     processor.resetTimeOut(gcRate);
                     done = !processor.run();
 					{
+                    	peakMemory = std::max<long>(peakMemory, heap.size());
                         long beforeSize = static_cast<long>(heap.size());
+                        long wasCount = heap.count();
                         UInt32 sweptCount = heap.gc();
                         long nowSize = static_cast<long>(heap.size());
 						lastGCSize = nowSize;
@@ -5153,29 +5189,67 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                             std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
                         }
                         if (autoGCRate) {
-                            if (sweptCount >= heap.count() / 2 && gcRate > 256) {
+                            if ((beforeSize - nowSize) >= beforeSize / 2 && gcRate > 256) {
                                 gcRate /= 2;
-                            } else if (gcRate < 16 * 1024 * 1024) {
+                            } else if (gcRate < 128 * 1024 * 1024) {
+                                gcRate *= 2;
+                            }
+                        }
+                    }
+				#elif 0
+                    processor.resetTimeOut(gcRate);
+                    done = !processor.run();
+					{
+                    	peakMemory = std::max<long>(peakMemory, heap.size());
+                        long beforeSize = static_cast<long>(heap.size());
+                        long wasCount = heap.count();
+                        UInt32 sweptCount = heap.gc();
+                        long nowSize = static_cast<long>(heap.size());
+						lastGCSize = nowSize;
+                        if (!suppressStdErr) {
+                            std::cerr << "\tGC rate: " << gcRate << std::endl;
+                            std::cerr << "\tGC swept: " << sweptCount << std::endl;
+                            std::cerr << "\tGC kept: " << heap.count() << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                        }
+                        if (autoGCRate) {
+                            if (beforeSize > 256 * 1024 * 1024 && gcRate > 256) {
+                                gcRate /= 2;
+                            } else if (gcRate < 64 * 1024 * 1024) {
                                 gcRate *= 2;
                             }
                         }
                     }
 				#else
                     processor.resetTimeOut(gcRate);
+                    const double processorStart = getCPUSecs();
                     done = !processor.run();
+                    const double processorEnd = getCPUSecs();
+                    totalProcessorTime += processorEnd - processorStart;
+                    totalProcessorCycles = gcRate;
 					{
+	                  	peakMemory = std::max<long>(peakMemory, heap.size());
                         long beforeSize = static_cast<long>(heap.size());
+                        long beforeCount = static_cast<long>(heap.count());
+                        const double gcStart = getCPUSecs();
                         UInt32 sweptCount = heap.gc();
-                        long nowSize = static_cast<long>(heap.size());
-						lastGCSize = nowSize;
+                        const double gcEnd = getCPUSecs();
+                        long afterSize = static_cast<long>(heap.size());
+                        long afterCount = static_cast<long>(heap.count());
+                        assert(sweptCount == beforeCount - afterCount);
+						lastGCSize = afterSize;
                         if (!suppressStdErr) {
                             std::cerr << "\tGC rate: " << gcRate << std::endl;
                             std::cerr << "\tGC swept: " << sweptCount << std::endl;
                             std::cerr << "\tGC kept: " << heap.count() << std::endl;
-                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << nowSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                            std::cerr << "\tGC time: " << (gcEnd - gcStart) << std::endl;
+                            std::cerr << "\tGC time / object: " << ((gcEnd - gcStart) / beforeCount) << std::endl;
+                            std::cerr << "\tGC time / live: " << ((gcEnd - gcStart) / afterCount) << std::endl;
+                            std::cerr << "\tHeap size: " << beforeSize / (1024.0 * 1024.0) << "MiB -> " << afterSize / (1024.0 * 1024.0) << "MiB" << std::endl;
+                            std::cerr << "\tProcessor time / cycle: " << totalProcessorTime / totalProcessorCycles << std::endl;
                         }
                         if (autoGCRate) {
-                            if (beforeSize - nowSize >= 128L * 1024 * 1024) {
+                            if (beforeSize - afterSize >= 128L * 1024 * 1024) {
                                 gcRate = 256;
                             } else if (gcRate < 16 * 1024 * 1024) {
                                 gcRate *= 2;
@@ -5184,20 +5258,19 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     }
 				#endif
 
-                    if (done) {
-                    	processor.run();	// just testing some weird behaviour
-                        if (!suppressStdErr) {
-                            Value v = processor.getResult();
-                            std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
-                            assert(processor.firstCatcher == 0);
-                        }
-                        if (doTime) {
-                            clock_t end = ::clock();
-                            const double divisor = (CLOCKS_PER_SEC / 1000.0);
-                            std::cout << "\ttime: " << (static_cast<double>(end - start) / divisor) << "ms" << std::endl;
-                        }
-                    }
                 } while (!done);
+
+				processor.run();	// just testing some weird behaviour
+				if (!suppressStdErr) {
+					Value v = processor.getResult();
+					std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+				}
+				if (doTime) {
+					double end = getCPUSecs();
+					std::cerr << (end - start) << "s" << std::endl;
+					std::cerr << peakMemory / (1024.0 * 1024.0) << "MiB" << std::endl;
+				}
+
                 source = EMPTY_STRING;
             }
         }

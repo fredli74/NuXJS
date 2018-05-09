@@ -1374,7 +1374,7 @@ var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp
 		template.source = pattern;
 		var key, func;
 		if (!(func = $regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
-			$regExpCache[key] = func = $evalThere($compileRegExp(pattern, template.ignoreCase, template.multiline));
+			$regExpCache[key] = func = $evalThere(c=$compileRegExp(pattern, template.ignoreCase, template.multiline));
 		}
 		var re = $support.createWrapper('RegExp', func, $regExpPrototype);
 		$defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
