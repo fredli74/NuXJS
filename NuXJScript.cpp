@@ -104,6 +104,7 @@ const String IS_NOT_A_FUNCTION_STRING(" is not a function");
 const String IS_NOT_DEFINED_STRING(" is not defined");
 const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
 const String STACK_OVERFLOW_STRING("Stack overflow");
+const String TIME_OUT_STRING("Time out");
 const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	String("Error"), String("EvalError"), String("RangeError"), String("ReferenceError"), String("SyntaxError")
 	, String("TypeError"), String("URIError")
@@ -825,8 +826,8 @@ GCList::~GCList() {
 
 /* --- Heap --- */
 
-Heap::Heap() : allocated(0), gcThreshold(0), managedListA(*this), managedListB(*this), rootList(*this)
-		, currentList(&managedListA), newList(&managedListB) {
+Heap::Heap() : allocated(0), managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
+		, newList(&managedListB) {
 	std::fill(pooled + 0, pooled + MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY, (void*)(0));
 }
 
@@ -885,13 +886,6 @@ void Heap::gc() {
 	}
 	std::swap(currentList, newList);
 	newList->deleteAll();
-}
-
-void Heap::autoGC() {
-	if (allocated >= gcThreshold) {
-		gc();
-		gcThreshold = allocated * 2;
-	}
 }
 
 void Heap::purgePooled() {
@@ -1268,7 +1262,7 @@ bool Function::hasInstance(Processor& processor, Object* object) const {
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
 		Heap& heap = rt.getHeap();
-		Exception::throwError(heap, TYPE_ERROR, "Non-object prototype in instanceof check");
+		ScriptException::throwError(heap, TYPE_ERROR, "Non-object prototype in instanceof check");
 		return false;
 	}
 	while ((object = object->getPrototype(rt)) != 0) {
@@ -1352,7 +1346,7 @@ bool Array::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags 
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
 			Heap& heap = rt.getHeap();
-			Exception::throwError(heap, RANGE_ERROR, "Invalid array length"); // FIX : how could we do this without exceptions?
+			ScriptException::throwError(heap, RANGE_ERROR, "Invalid array length"); // FIX : how could we do this without exceptions?
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1471,7 +1465,7 @@ Value SpecialConstructorFunction::construct(Processor& processor, UInt32 argc, c
 		Value v;
 		regularFunction->getPropertyDeep(processor.getRuntime(), Value(&NAME_STRING), &v);
 		Heap& heap = processor.getHeap();
-		Exception::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
+		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 	}
 	return constructorFunction->call(processor, argc, argv, thisObject);
 }
@@ -1934,8 +1928,8 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	return opcodeInfo[opcode];
 }
 
-Processor::Processor(GCList& gcList, Runtime& rt) : super(gcList), rt(rt), heap(rt.getHeap()), currentFrame(0)
-		, firstCatcher(0), stack(rt.getStackSize(), &heap) {
+Processor::Processor(Runtime& rt) : super(rt.heap.roots()), rt(rt), heap(rt.heap), currentFrame(0), firstCatcher(0)
+		, stack(rt.stackSize, &heap) {
 	stack[0] = Value::UNDEFINED;
 	reset();
 }
@@ -2009,7 +2003,7 @@ void Processor::popCatcher() {
 void Processor::throwVirtualException(const Value& exception) {
 	if (firstCatcher == 0) { // FIX: what exception to throw here?
 		reset();
-		throw Exception(heap, exception);
+		throw ScriptException(heap, exception);
 	}
 	ip = firstCatcher->ip;
 	assert(ip != 0);
@@ -2379,18 +2373,18 @@ void Processor::innerRun() {
 	}
 }
 
-Value Processor::getResult() const {
+GCValue Processor::getResult() const {
 	assert(ip == 0 && sp == stack.begin()); // make sure you've called run() until it returns false
-	return sp[0];
+	return GCValue(heap, sp[0]);
 }
 
-bool Processor::run() {
-	cyclesLeft = CYCLES_PER_RUN;
+bool Processor::run(Int32 maxCycles) {
+	cyclesLeft = maxCycles;
 	while (ip != 0 && cyclesLeft >= 0) {
 		try {
 			innerRun();
 		}
-		catch (const Exception& x) {
+		catch (const ScriptException& x) {
 			throwVirtualException(x.getValue());
 		}
 	}
@@ -2706,7 +2700,7 @@ Compiler::Compiler(GCList& gcList, Code* code, Target compileFor)
 		: super(gcList), heap(gcList.getHeap()), code(code), compilingFor(compileFor), setupSection(heap, 1)
 		, mainSection(heap, 1), b(0), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
 
-void Compiler::error(ErrorType errorType, const char* message) { Exception::throwError(heap, errorType, message); }
+void Compiler::error(ErrorType errorType, const char* message) { ScriptException::throwError(heap, errorType, message); }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (inDeadCode()) {	// unknown stack depth = dead code
@@ -4369,8 +4363,8 @@ Value EvalFunction::call(Processor& processor, UInt32 argc, const Value* argv, O
 	}
 
 	Heap& heap = processor.getHeap();
-	const String* sourceCode = argv[0].toString(heap);
-	processor.enterEvalCode(processor.getRuntime().compileEvalCode(sourceCode), direct);
+	const String* expression = argv[0].toString(heap);
+	processor.enterEvalCode(processor.getRuntime().compileEvalCode(expression), direct);
 	return Value::UNDEFINED;
 }
 
@@ -4490,7 +4484,7 @@ struct Support {
 		Heap& heap = processor.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
-			Exception::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
+			ScriptException::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
 			return Value();
 		} else {
 			Runtime& rt = processor.getRuntime();
@@ -4647,10 +4641,11 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
-Runtime::Runtime(GCList& gcList) : super(gcList), heap(gcList.getHeap()), globalScope(heap.roots()), globals(0)
-		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), objectPrototype(heap.roots(), 0)
-		, functionPrototype(heap.roots()), evalFunction(heap.roots(), false), evalDirectFunction(heap.roots(), true)
-		, toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
+Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globals(0)
+		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
+		, timeOut(0), memoryCap(MAX_MEMORY_CAP)
+		, gcThreshold(0), objectPrototype(heap.roots(), 0), functionPrototype(heap.roots()), evalFunction(heap.roots(), false)
+		, evalDirectFunction(heap.roots(), true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, Value(false), &objectPrototype)
 		, numberPrototype(heap.roots(), &N_UMBER_STRING, Value(0.0), &objectPrototype)
 		, stringPrototype(heap.roots(), &S_TRING_STRING, Value(&EMPTY_STRING), &objectPrototype)
@@ -4660,28 +4655,58 @@ Runtime::Runtime(GCList& gcList) : super(gcList), heap(gcList.getHeap()), global
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));
 	}
+	globals = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 }
 
-Value Runtime::callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
-	Processor processor(heap.roots(), *this);
+void Runtime::autoGC() {
+	if (heap.size() >= gcThreshold) {
+		heap.gc();
+		gcThreshold = std::min(heap.size() * 2, memoryCap);
+		if (heap.size() >= memoryCap) {
+			throw Exception("Out of memory");
+		}
+	}
+}
+
+void Runtime::checkTimeOut() {
+	if (checkTimeOutCounter != 0 && --checkTimeOutCounter == 0) {
+		checkTimeOutCounter = CHECK_TIMEOUT_INTERVAL;
+		if (static_cast<long>(clock()) - static_cast<long>(timeOut) >= 0) {
+			throw Exception("Time out");
+		}
+	}
+}
+
+GCValue Runtime::runIndefinitely(Processor& processor) {
+	while (processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC)) {
+		autoGC();
+		checkTimeOut();
+	}
+	return processor.getResult();
+}
+
+GCValue Runtime::callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
+	if (callNestCounter >= MAX_CALL_RECURSION) {
+		ScriptException::throwError(heap, RANGE_ERROR, &STACK_OVERFLOW_STRING); // FIX : other string?
+	}
+	struct NestCounter {
+		NestCounter(Runtime& rt) : rt(rt) { ++rt.callNestCounter; };
+		~NestCounter() { --rt.callNestCounter; };
+		Runtime& rt;
+	} nestCounter(*this);
+	Processor processor(*this);
 	function->call(processor, argc, argv, thisObject);
-	while (processor.run()) {
-		heap.autoGC();
-	}
-	return processor.getResult();
+	return runIndefinitely(processor);
 }
 
-Value Runtime::evalSync(const String* sourceCode) {
-	Processor processor(heap.roots(), *this);
-	processor.enterEvalCode(compileEvalCode(sourceCode));
-	while (processor.run()) {
-		heap.autoGC();
-	}
-	return processor.getResult();
+GCValue Runtime::evalSync(const String* expression) {
+	Processor processor(*this);
+	processor.enterEvalCode(compileEvalCode(expression));
+	return runIndefinitely(processor);
 }
 
-Code* Runtime::compileEvalCode(const String* sourceCode) {
-	const Table::Bucket* bucket = evalCodeCache.lookup(sourceCode);
+Code* Runtime::compileEvalCode(const String* expression) {
+	const Table::Bucket* bucket = evalCodeCache.lookup(expression);
 	if (bucket != 0) {
 		Object* o = bucket->getValue().getObject();
 		assert(dynamic_cast<Code*>(o) != 0);
@@ -4689,8 +4714,8 @@ Code* Runtime::compileEvalCode(const String* sourceCode) {
 	} else {
 		Code* code = new(heap) Code(heap.managed(), new(heap) Constants(heap.managed())); // Notice: doesn't share constants with anyone else, so they will be nicely erased when this temporary function gets purged.
 		Compiler compiler(heap.roots(), code, Compiler::FOR_EVAL);
-		compiler.compile(*sourceCode);
-		evalCodeCache.update(evalCodeCache.insert(sourceCode), Value(code));
+		compiler.compile(*expression);
+		evalCodeCache.update(evalCodeCache.insert(expression), Value(code));
 		return code;
 	}
 }
@@ -4712,7 +4737,7 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 	globals->setOwnProperty(*this, Value(&EVAL_STRING), Value(&evalFunction), DONT_ENUM_FLAG);
 	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
-	const ValueWrapper protectedSupportObject(heap.roots(), Value(supportObject));
+	const GCValue protectedSupportObject(heap, supportObject);
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, Value(String::newString(heap, "prototypes")), Value(prototypesObject), STANDARD_FLAGS);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
@@ -4741,35 +4766,33 @@ void Runtime::setupStandardLibrary(const String& librarySourceCode) {
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		prototypesObject->setOwnProperty(*this, Value(&ERROR_NAMES[i]), Value(errorPrototypes[i]), STANDARD_FLAGS);
 	}
-	const ValueWrapper func(heap.roots(), evalSync(&librarySourceCode));
-	Value argv[1] = { protectedSupportObject.getValue() };
-	callSync(func.getValue().asFunction(), 1, argv);
+	const GCValue func = evalSync(&librarySourceCode);
+	Value argv[1] = { protectedSupportObject };
+	callSync(func.asFunction(), 1, argv);
 	heap.gc();
 
 	// FIX : sub v
 	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveNumber");
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveNumber");
 	}
 	
 	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveString");
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveString");
 	}
 
 	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
-		Exception::throwError(heap, GENERIC_ERROR, "Standard library is missing support.createRegExp");
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.createRegExp");
 	}
 }
 
-void Runtime::setGlobalObject(Object* globals) {
-	assert(heap.belongs(globals));
-	this->globals = globals;
-}
-
-void Runtime::setStackSize(UInt32 stackSize) { this->stackSize = stackSize; }
-UInt32 Runtime::getStackSize() const { return stackSize; }
+void Runtime::setGlobalObject(Object* globalObject) { globals = globalObject; }
+void Runtime::setStackSize(UInt32 maxValuesOnStack) { stackSize = maxValuesOnStack; }
+void Runtime::setMemoryCap(size_t maxBytesUsed) { memoryCap = maxBytesUsed; }
+void Runtime::resetTimeOut(Int32 timeOutSeconds) { timeOut = clock() + timeOutSeconds * CLOCKS_PER_SEC; checkTimeOutCounter = CHECK_TIMEOUT_INTERVAL; }
+void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
 
 #include <fstream>
 #include <memory>
@@ -4842,7 +4865,7 @@ double getCPUSecs() {
 						virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = processor.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
-								Exception::throwError(heap, TYPE_ERROR, "Invalid class");
+								ScriptException::throwError(heap, TYPE_ERROR, "Invalid class");
 							}
 							const NativeTestObject* me = reinterpret_cast<NativeTestObject*>(thisObject);
 							const double addX = (argc >= 1 ? argv[0].toDouble() : 0.0);
@@ -4933,10 +4956,14 @@ suppressStdErr = true;
      std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
      std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
     Heap heap;
-    Runtime rt(heap.roots());
+    Runtime rt(heap);
+//    std::wcout << rt.evalSync(String::newString(heap, "s = 0; for (i = 0; i < 100; ++i) s += i; s")).toString(heap)->toStdString().c_str() << std::endl;
+    rt.setMemoryCap(512 * 1024 * 1024);
 
-    ScriptObject globals(heap.roots(), &rt.objectPrototype);
+ /*   ScriptObject globals(heap.roots(), &rt.objectPrototype);
 	rt.setGlobalObject(&globals);
+	*/
+	Object& globals = *rt.getGlobals();
 	
     PrintFunction printFunction;
     globals.setOwnProperty(rt, Value(&PRINT_STRING), Value(&printFunction), DONT_ENUM_FLAG);
@@ -4966,8 +4993,8 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
 	}
     suppressStdErr = doSuppressStdErr;
 
-	Processor processor(heap.roots(), rt);
-	processor.run();	// just testing some weird behaviour
+	Processor processor(rt);
+	processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
 //	const Value TEST_ARGV[1] = { Value(String::newString(heap, "Hello")) };
 //	printFunction.call(processor, 1, TEST_ARGV, &globals);
 //	processor.run();	// just testing some weird behaviour
@@ -5050,20 +5077,22 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                         std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
                     }*/
                 }
-               	processor.run();	// just testing some weird behaviour
+               	processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
                 processor.enterGlobalCode(&globalCode);
 
                 bool done = false;
+			    rt.resetTimeOut(60);
                 double start = getCPUSecs();
                 do {
-                    done = !processor.run();
-					heap.autoGC();
+                    done = !processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);
+					rt.autoGC();
+					rt.checkTimeOut();
                    	peakMemory = std::max<long>(peakMemory, heap.size());
                 } while (!done);
 
-				processor.run();	// just testing some weird behaviour
+				processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
 				if (!suppressStdErr) {
-					Value v = processor.getResult();
+					GCValue v = processor.getResult();
 					std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
 				}
 				if (doTime) {
@@ -5075,7 +5104,7 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                 source = EMPTY_STRING;
             }
         }
-        catch (const Exception& x) {
+        catch (const ScriptException& x) {
             source = EMPTY_STRING;
             std::wstring ws = x.getValue().toString(heap)->toStdString();
             ws = L"!!!! " + ws;
@@ -5088,7 +5117,7 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
         }
         catch (const std::exception& x) {
             source = EMPTY_STRING;
-            std::cout << x.what() << std::endl;
+            std::cout << "!!!! " << x.what() << std::endl;
             if (!interactive) {
                 return 1;
             } else {

@@ -97,7 +97,6 @@ class Heap {
 				void purgePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
 				size_t size() const;
 				UInt32 count() const;
-				void autoGC();
 				void gc();
 				void mark(const GCItem* item) {
 					if (item != 0 && item->_gcList == currentList) {
@@ -106,14 +105,11 @@ class Heap {
 				}
 				template<class T> void markViaPointers(T begin, T end) { for (T it = begin; it != end; ++it) mark(*it); } // FIX : is this good with two of them? one is for Value etc (they used to have markIn(heap), but now have gcMark() like GCItem)
 				template<class T> void markViaReferences(T begin, T end) { for (T it = begin; it != end; ++it) it->gcMark(*this); }
-				// FIX : used extremely rarely, keep?
-				bool belongs(const GCItem* item) { return (item != 0 && (item->_gcList == currentList || item->_gcList == newList || item->_gcList == &rootList)); }
 				virtual ~Heap();
 	
 	protected:	static int calcPoolIndex(size_t size);
 				void* pooled[MAX_POOLED_SIZE / POOL_SIZE_GRANULARITY];
 				size_t allocated;
-				size_t gcThreshold;
 				GCList managedListA;
 				GCList managedListB;
 				GCList rootList;
@@ -239,12 +235,12 @@ class Value {
 						: type(BAD_TYPE)
 				#endif
 						{ }
-				explicit Value(bool boolean) : type(BOOLEAN_TYPE) { var.boolean = boolean; }
-				explicit Value(Int32 number) : type(NUMBER_TYPE) { var.number = number; }
-				explicit Value(UInt32 number) : type(NUMBER_TYPE) { var.number = number; }
-				explicit Value(double number) : type(NUMBER_TYPE) { var.number = number; }
-				explicit Value(const String* string) : type(STRING_TYPE) { var.string = string; }
-				explicit Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
+				Value(bool boolean) : type(BOOLEAN_TYPE) { var.boolean = boolean; }
+				Value(Int32 number) : type(NUMBER_TYPE) { var.number = number; }
+				Value(UInt32 number) : type(NUMBER_TYPE) { var.number = number; }
+				Value(double number) : type(NUMBER_TYPE) { var.number = number; }
+				Value(const String* string) : type(STRING_TYPE) { var.string = string; }
+				Value(Object* object) : type(OBJECT_TYPE) { var.object = object; }
 				// FIX : Value from (heap and) const char* ?
 	
 				bool isUndefined() const { return type == UNDEFINED_TYPE; }
@@ -304,13 +300,12 @@ class Value {
 	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
-class ValueWrapper : public GCItem {
+// FIX : is it dangerous with this type of cast? can upcast array GCValue* to Value*
+class GCValue : public GCItem, public Value {
 	public:		typedef GCItem super;
-				ValueWrapper(GCList& list, const Value& value) : super(list), value(value) { }
-				Value getValue() const { return value; }
-	protected:	Value value;
-				virtual void gcMark(Heap& heap) const {
-					value.gcMark(heap);
+				GCValue(Heap& heap, const Value& value) : super(heap.roots()), Value(value) { }
+	protected:	virtual void gcMark(Heap& heap) const {
+					Value::gcMark(heap);
 					super::gcMark(heap);
 				}
 };
@@ -894,27 +889,43 @@ class CatchScope : public Scope {
 };
 
 const UInt32 DEFAULT_STACK_SIZE = 1024;
+const UInt32 STANDARD_CYCLES_BETWEEN_AUTO_GC = 1024;
+const UInt32 MAX_CALL_RECURSION = 1024;
+const Int32 CHECK_TIMEOUT_INTERVAL = 1024;
+const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 class Runtime : public GCItem {
+	friend class Processor;
+	
 	public:		typedef GCItem super;
-				Runtime(GCList& gcList);
+				Runtime(Heap& heap);
 				void setGlobalObject(Object* globals);
-				void setStackSize(UInt32 stackSize);
-				UInt32 getStackSize() const;
+				void setStackSize(UInt32 maxValuesOnStack);
+				void setMemoryCap(size_t maxBytesUsed);
+				void resetTimeOut(Int32 timeOutSeconds);
+				void noTimeOut();
 				void setupStandardLibrary(const String& librarySourceCode);
 				Heap& getHeap() const { return heap; }
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
 				// FIX : name? sync?
-				Value callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
-				Value evalSync(const String* sourceCode);
-				Code* compileEvalCode(const String* sourceCode);
+				GCValue callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
+				GCValue evalSync(const String* expression);
+				GCValue runIndefinitely(Processor& processor);
+				Code* compileEvalCode(const String* expression);
+				void checkTimeOut();
+				void autoGC();
 
 	protected:	Heap& heap;
 				GlobalScope globalScope;
 				Object* globals;
 				Constants sharedConstants;
 				UInt32 stackSize;
+				UInt32 callNestCounter;
+				Int32 checkTimeOutCounter;
+				clock_t timeOut;
+				size_t memoryCap;
+				size_t gcThreshold;
 	
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
@@ -977,29 +988,36 @@ class Exception : public std::exception {
 
 // FIX : test with very short max sz length
 class Exception : public std::exception { // FIX : runtime_error instead?
-	public:		static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
-					throw Exception(heap, Value(new(heap) Error(heap.managed(), type, message)));
+	public:		Exception(const char* s) throw() { strcpy(sz, s); }
+				virtual const char* what() const throw() { return sz; }
+				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
+	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
+};
+
+class ScriptException : public Exception {
+	public:		typedef Exception super;
+	
+				static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
+					throw ScriptException(heap, Value(new(heap) Error(heap.managed(), type, message)));
 				}
-	public:		static void throwError(Heap& heap, ErrorType type, const char* message) {
+	
+				static void throwError(Heap& heap, ErrorType type, const char* message) {
 					throwError(heap, type, String::newString(heap, message));
 				}
-	public:		Exception(Heap& heap, const Value& value) throw() : value(value) { // FIX : not inline
-					strcpy(sz, "Unknown exception (failed conversion to string)");
+	
+				ScriptException(Heap& heap, const Value& value) throw()
+						: super("Unknown exception (failed conversion to string)"), value(value) { // FIX : not inline
 					const String* src = value.toString(heap);
 					const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
 					*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 				}
 				const Value& getValue() const { return value; }
-				virtual const char* what() const throw() { return sz; }													// what() is for compatibility only and has a length limitation. Use getValue() and convert to string to get the full length unicode exception string.
-				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
-
+	
 	protected:	Value value;
-	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
 // FIX : Processor -> Interpreter?
 
-const int CYCLES_PER_RUN = 1024;
 class Processor : public GCItem {
 	friend class ScriptFunction;
 	
@@ -1081,22 +1099,22 @@ class Processor : public GCItem {
 				static std::pair<Opcode, Int32> unpackInstruction(const CodeWord codeWord);
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
-	public:		Processor(GCList& gcList, Runtime& rt);
+	public:		Processor(Runtime& rt);
 				Runtime& getRuntime() const { return rt; }
 				Heap& getHeap() const { return rt.getHeap(); }
 				void enterGlobalCode(const Code* code);
 				void enterEvalCode(const Code* code, bool local = false);
 				void enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject = 0);
-				bool run();
-				Value getResult() const;
+				void throwVirtualException(const Value& exception);
+				void error(ErrorType errorType, const String* message = 0);
+				bool run(Int32 maxCycles);
+				GCValue getResult() const;
 
 	protected:	void enter(const Code* code, Scope* scope, Object* thisObject);
-				void error(ErrorType errorType, const String* message = 0);
 				void push(const Value& v);
 				void pop(Int32 count);
 				void pop2push1(const Value& v);
 				void innerRun();
-				void throwVirtualException(const Value& exception);
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				void reset();
 				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
