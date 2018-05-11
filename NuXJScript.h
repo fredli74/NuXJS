@@ -450,11 +450,13 @@ class String : public Object, public QuickArray<Char> {
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 				virtual Value getInternalValue(Heap& heap) const { return Value(this); }
+				UInt32 length() const { assert(size() > 0); return size() - 1; }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
 				std::wstring toStdString() const;
 				UInt32 createBloomCode() const;
+				bool empty() const { return size() == 1; }
 
 	protected:	mutable UInt32 bloom;
 				mutable UInt32 hash;
@@ -1009,7 +1011,7 @@ class ScriptException : public Exception {
 						: super("Unknown exception (failed conversion to string)"), value(value) { // FIX : not inline
 					const String* src = value.toString(heap);
 					const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
-					*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
+					*std::copy(src->begin(), (src->length() < l ? src->end() - 1 : src->begin() + l), sz) = 0;
 				}
 				const Value& getValue() const { return value; }
 	

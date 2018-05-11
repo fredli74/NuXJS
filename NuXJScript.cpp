@@ -418,7 +418,7 @@ static const Char* eatStringWhite(const Char* p, const Char* e) {
 static double stringToDouble(const String& s) {
 	double v = 0.0;
 	const Char* p = s.begin();
-	const Char* e = s.end();
+	const Char* e = s.end() - 1;
 	p = eatStringWhite(p, e);
 	if (p != e && *p == '0' && p + 1 != e && (p[1] == 'x' || p[1] == 'X')) {
 		UInt32 u;
@@ -490,7 +490,7 @@ bool Value::toArrayIndex(UInt32& index) const {
 			return index == var.number;
 		}
 		case STRING_TYPE: {
-			const Char* const e = var.string->end();
+			const Char* const e = var.string->end() - 1;
 			const Char* p = var.string->begin();
 			if (*p == '0') {
 				index = 0;
@@ -621,39 +621,45 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
-String::String() : QArray(0, 0), hash(2166136261), bloom(0x10000020) {
+String::String() : QArray(1, 0), hash(2166136261), bloom(0x10000020) {
+	*begin() = 0;
 	assert(String("").calcHash() == hash && String("").createBloomCode() == bloom);
 }
 
-String::String(const Char* b, const Char* e) : QArray(static_cast<UInt32>(e - b), 0), hash(0), bloom(0) {
-	std::copy(b, e, begin());
+String::String(const Char* b, const Char* e) : QArray(static_cast<UInt32>(e - b + 1), 0), hash(0), bloom(0) {
+	*std::copy(b, e, begin()) = 0;
 	calcHash();
 	createBloomCode();
 }
 
-String::String(const char* s) : QArray(static_cast<UInt32>(strlen(s)), 0), hash(0), bloom(0) {
+String::String(const char* s) : QArray(static_cast<UInt32>(strlen(s) + 1), 0), hash(0), bloom(0) {
 	std::copy(s, s + size(), begin());
+	assert(end()[-1] == 0);
 	calcHash();
 	createBloomCode();
 }
 
-String::String(GCList& gcList, const Char* b, const Char* e) : super(gcList), QArray(static_cast<UInt32>(e - b), &gcList.getHeap()), hash(0), bloom(0) {
-	std::copy(b, e, begin());
+String::String(GCList& gcList, const Char* b, const Char* e) : super(gcList), QArray(static_cast<UInt32>(e - b + 1), &gcList.getHeap()), hash(0), bloom(0) {
+	*std::copy(b, e, begin()) = 0;
 }
 
-String::String(GCList& gcList, const String& l, const String& r) : super(gcList), QArray(l.size() + r.size(), &gcList.getHeap()), hash(0), bloom(0) {
-	Char* e = std::copy(l.begin(), l.end(), begin());
+String::String(GCList& gcList, const String& l, const String& r) : super(gcList), QArray(l.length() + r.length() + 1, &gcList.getHeap()), hash(0), bloom(0) {
+	assert(l.size() >= 1 && r.size() >= 1);
+	Char* e = std::copy(l.begin(), l.end() - 1, begin());
 	std::copy(r.begin(), r.end(), e);
+	assert(end()[-1] == 0);
 }
 
-String::String(GCList& gcList, const wchar_t* s) : super(gcList), QArray(static_cast<UInt32>(wcslen(s)), &gcList.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const wchar_t* s) : super(gcList), QArray(static_cast<UInt32>(wcslen(s) + 1), &gcList.getHeap()), hash(0), bloom(0) {
 	std::copy(s, s + size(), begin());
+	assert(end()[-1] == 0);
 	calcHash();
 	createBloomCode();
 }
 
-String::String(GCList& gcList, const char* s) : super(gcList), QArray(static_cast<UInt32>(strlen(s)), &gcList.getHeap()), hash(0), bloom(0) {
+String::String(GCList& gcList, const char* s) : super(gcList), QArray(static_cast<UInt32>(strlen(s) + 1), &gcList.getHeap()), hash(0), bloom(0) {
 	std::copy(s, s + size(), begin());
+	assert(end()[-1] == 0);
 	calcHash();
 	createBloomCode();
 }
@@ -665,11 +671,11 @@ Object* String::getPrototype(Runtime& rt) const { return &rt.stringPrototype; }
 
 Flags String::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 	if (key.isEqualTo(LENGTH_STRING)) {
-		*v = Value(static_cast<Int32>(size()));
+		*v = Value(static_cast<Int32>(length()));
 		return (READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG);
 	}
 	UInt32 index;
-	if (key.toArrayIndex(index) && index < size()) {
+	if (key.toArrayIndex(index) && index < length()) {
 		const Char* p = begin() + index;
 		Heap& heap = rt.getHeap();
 		*v = (*p < 127 ? QUICK_CONSTANTS.ascii[*p] : Value(new(heap) String(heap.managed(), p, p + 1)));
@@ -682,7 +688,7 @@ Flags String::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 UInt32 String::calcHash() const {
 	if (hash == 0) {
 		UInt32 x = 2166136261U;
-		for (const Char* p = begin(), *e = end(); p < e; ++p) {
+		for (const Char* p = begin(), *e = end() - 1; p < e; ++p) {
 			x = (x << 3) | (x >> (32 - 3));
 			x = (x + *p) * 16777619;
 		}
@@ -693,14 +699,14 @@ UInt32 String::calcHash() const {
 
 bool String::isEqualTo(const String& o) const {
 	return (this == &o || ( (hash == o.hash || hash == 0 || o.hash == 0)
-			&& size() == o.size() && std::equal(begin(), end(), o.begin())));
+			&& size() == o.size() && std::equal(begin(), end() - 1, o.begin())));
 }
 
 bool String::isLessThan(const String& o) const {
 	if (this == &o) {
 		return false;
 	}
-	UInt32 l = std::min(size(), o.size());
+	UInt32 l = std::min(size(), o.size()) - 1;
 	const Char* a = begin();
 	const Char* b = o.begin();
 	for (UInt32 i = 0; i < l; ++i) {
@@ -711,7 +717,7 @@ bool String::isLessThan(const String& o) const {
 	return size() < o.size();
 }
 
-std::wstring String::toStdString() const { return std::wstring(begin(), end()); }
+std::wstring String::toStdString() const { return std::wstring(begin(), end() - 1); }
 
 UInt32 String::createBloomCode() const {
 	if (bloom == 0) {
@@ -723,7 +729,7 @@ UInt32 String::createBloomCode() const {
 
 Enumerator* String::getPropertyEnumerator(Runtime& rt) const {
 	Heap& heap = rt.getHeap();
-	return new(heap) RangeEnumerator(heap.managed(), 0, size());
+	return new(heap) RangeEnumerator(heap.managed(), 0, length());
 }
 
 const String* String::newString(Heap& heap, const char* s) { return new(heap) String(heap.managed(), s); }
@@ -4333,7 +4339,7 @@ const Char* Compiler::compileFunction(const Char* b, const Char* e, const String
 }
 
 void Compiler::compile(const String& source) {
-	compile(source.begin(), source.end());
+	compile(source.begin(), source.end() - 1);
 	white();
 	if (!eof()) {
 		error(SYNTAX_ERROR, "Syntax error"); // FIX : better error?
@@ -4474,7 +4480,7 @@ struct Support {
 			const String* source = argv[0].toString(heap);
 			Code* code = new(heap) Code(heap.managed(), new(heap) Constants(heap.managed())); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap.roots(), code, Compiler::FOR_FUNCTION);
-			compiler.compileFunction(source->begin(), source->end(), argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
+			compiler.compileFunction(source->begin(), source->end() - 1, argc >= 2 ? argv[1].toString(heap) : &ANONYMOUS_STRING);
 			return Value(new(heap) ScriptFunction(heap.managed(), code, processor.getRuntime().getGlobalScope()));
 		}
 		return Value::UNDEFINED;
@@ -4539,7 +4545,7 @@ struct Support {
 		Value result = Value::NOT_A_NUMBER;
 		if (argc >= 1) {
 			const String* s = argv[0].toString(processor.getHeap());
-			const Char* e = s->end();
+			const Char* e = s->end() - 1;
 			const Char* b = eatStringWhite(s->begin(), e);
 			double d = 0.0;
 			if (parseDouble(b, e, d) != b) {
@@ -4553,7 +4559,7 @@ struct Support {
 		if (argc >= 2) {
 			const String* s = argv[0].toString(processor.getHeap());
 			const double d = nanToZero(argv[1].toDouble());
-			if (-1.0 < d && d < s->size()) {
+			if (-1.0 < d && d < s->length()) {
 				return Value((*s)[static_cast<UInt32>(d)]);
 			}
 		}
@@ -4564,7 +4570,7 @@ struct Support {
 		Value result(&EMPTY_STRING);
 		if (argc >= 3) {
 			const String* s = argv[0].toString(processor.getHeap());
-			const double l = s->size();
+			const double l = s->length();
 			const double from = std::max(nanToZero(argv[1].toDouble()), 0.0);
 			const double to = std::min(nanToZero(argv[2].toDouble()), l);
 			if (from < to && from < l && to >= 1.0) {
@@ -4582,8 +4588,8 @@ struct Support {
 			const String* const text = argv[0].toString(processor.getHeap());
 			const Int32 offset = argv[1].toInt();
 			const String* const match = argv[2].toString(processor.getHeap());
-			const UInt32 matchSize = match->size();
-			if (offset + matchSize <= text->size()
+			const UInt32 matchSize = match->length();
+			if (offset + matchSize <= text->length()
 					&& std::equal(text->begin() + offset, text->begin() + offset + matchSize, match->begin())) {
 				return Value(true);
 			}
@@ -4824,7 +4830,7 @@ double getCPUSecs() {
 
 	void pushIOLines(char typeChar, const String& s) {
 		const Char* p = s.begin();
-		const Char* e = s.end();
+		const Char* e = s.end() - 1;
 		do {
 			const Char* b = p;
 			while (p != e && *p != '\n') {
@@ -5033,8 +5039,8 @@ globals.setOwnProperty(rt, Value(String::newString(heap, "callbackTest")), Value
                     if (!source.empty()) source = String(heap.roots(), source, LF_STRING);
                     source = String(heap.roots(), source, line);
                 } else {
-                    if (source.size() > 0 && source[0] == '?') {
-                        source = String(heap.roots(), String(heap.roots(), String("print("), String(heap.roots(), source.begin() + 1, source.end())), String(")")); // FIX : operator +
+                    if (source.length() > 0 && source[0] == '?') {
+                        source = String(heap.roots(), String(heap.roots(), String("print("), String(heap.roots(), source.begin() + 1, source.end() - 1)), String(")")); // FIX : operator +
                     }
                     if (interactive) {
                         pushIOLines('>', source);
