@@ -2,8 +2,6 @@
 #define NuXJScript_h 1
 
 #include "assert.h"
-#include <string>
-#include <cstring>
 
 #ifndef NDEBUG
 	#define VERIFY_STACK_LOGIC 1
@@ -622,7 +620,7 @@ class Function : public Object {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
 				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
 
@@ -633,7 +631,7 @@ class Function : public Object {
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	protected:	bool direct;
 };
 
@@ -724,7 +722,7 @@ class ExtensibleFunction : public LazyScriptObject<Function> {
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Runtime& rt) const;
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 };
@@ -737,7 +735,7 @@ class ScriptFunction : public ExtensibleFunction {
 				ScriptFunction(GCList& gcList, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				const Code* getCode() const;
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -755,7 +753,7 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
-				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;

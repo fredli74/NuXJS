@@ -4,17 +4,10 @@
 	#error This code requires IEEE compliant floating point handling. Avoid -Ofast / -ffast-math etc, at least for this source file.
 #endif
 
-// FIX: all below
-
 #include "assert.h"
+#include <iostream>
 #include <cmath>
 #include <ctime>
-#include <algorithm>
-#include <exception>
-#include <stdexcept>
-#include <iostream>
-#include <iomanip>      // std::setw
-#include <sstream>
 #include <limits>
 #include "NuXJScript.h"
 
@@ -1223,7 +1216,7 @@ Value Function::getInternalValue(Heap& heap) const { return Value(&NATIVE_FUNCTI
 Object* Function::getPrototype(Runtime& rt) const { return &rt.functionPrototype; }
 
 Value Function::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return call(rt, processor, argc, argv, thisObject);
+	return invoke(rt, processor, argc, argv, thisObject);
 }
 
 bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) const {
@@ -1405,7 +1398,7 @@ const String* ScriptFunction::toString(Heap& heap) const {
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value ScriptFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value ScriptFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.enterFunctionCode(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
 }
@@ -1423,8 +1416,8 @@ SpecialConstructorFunction::SpecialConstructorFunction(GCList& gcList, Function*
 	assert(regularFunction != 0);
 }
 
-Value SpecialConstructorFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return regularFunction->call(rt, processor, argc, argv, thisObject);
+Value SpecialConstructorFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return regularFunction->invoke(rt, processor, argc, argv, thisObject);
 }
 
 Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1434,7 +1427,7 @@ Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, U
 		Heap& heap = processor.getHeap();
 		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 	}
-	return constructorFunction->call(rt, processor, argc, argv, thisObject);
+	return constructorFunction->invoke(rt, processor, argc, argv, thisObject);
 }
 
 void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
@@ -1456,7 +1449,7 @@ void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
 
 /* --- FunctionPrototypeFunction --- */
 
-Value FunctionPrototypeFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return Value::UNDEFINED;
 }
 
@@ -1818,7 +1811,6 @@ ScriptException::ScriptException(Heap& heap, const Value& value) throw()
 	*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 }
 
-
 /* --- Processor --- */
 
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
@@ -2075,7 +2067,7 @@ void Processor::innerRun() {
 			case OBJ_TO_NUMBER_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toNumberFunction->call(rt, *this, 1, sp);
+					rt.toNumberFunction->invoke(rt, *this, 1, sp);
 					return;
 				}
 				break;
@@ -2084,7 +2076,7 @@ void Processor::innerRun() {
 			case OBJ_TO_STRING_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toStringFunction->call(rt, *this, 1, sp);
+					rt.toStringFunction->invoke(rt, *this, 1, sp);
 					return;
 				}
 				break;
@@ -2097,7 +2089,7 @@ void Processor::innerRun() {
 						std::swap(sp[-1], sp[0]);
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
-						rt.toNumberFunction->call(rt, *this, 1, sp);
+						rt.toNumberFunction->invoke(rt, *this, 1, sp);
 						return;
 					}
 				}
@@ -2154,7 +2146,7 @@ void Processor::innerRun() {
 				if (f == 0) {
 					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
 				} else {
-					sp[-im] = f->call(rt, *this, im, sp - im + 1);
+					sp[-im] = f->invoke(rt, *this, im, sp - im + 1);
 					pop(im);
 				}
 				return;
@@ -2169,7 +2161,7 @@ void Processor::innerRun() {
 					if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
 						error(TYPE_ERROR, new(heap) String(heap.managed(), *name.toString(heap), IS_NOT_A_FUNCTION_STRING));
 					} else {
-						sp[-(im + 1)] = f->call(rt, *this, im, sp - im + 1, o);
+						sp[-(im + 1)] = f->invoke(rt, *this, im, sp - im + 1, o);
 						pop(im + 1);
 					}
 				}
@@ -2184,7 +2176,7 @@ void Processor::innerRun() {
 					if (f == &rt.evalFunction) {
 						f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 					}
-					sp[-im] = f->call(rt, *this, im, sp - im + 1);
+					sp[-im] = f->invoke(rt, *this, im, sp - im + 1);
 					pop(im);
 				}
 				return;
@@ -2219,7 +2211,7 @@ void Processor::innerRun() {
 			}
 			
 			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				sp[-1] = rt.createRegExpFunction->call(rt, *this, 2, sp - 1);
+				sp[-1] = rt.createRegExpFunction->invoke(rt, *this, 2, sp - 1);
 				pop(1);
 				return;
 			}
@@ -4347,7 +4339,7 @@ void Compiler::getStopLineAndColumnNumbers(int& lineNumber, int& columnNumber) c
 	}
 }
 
-Value EvalFunction::call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) {
 		return Value::UNDEFINED;
 	}
@@ -4373,7 +4365,7 @@ typedef Value (*NativeFunction)(Runtime&, Processor&, Int32, const Value*, Objec
 
 template<class F> struct FunctorAdapter : public Function {
 	FunctorAdapter(const F& f) : f(f) { }
-	virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(rt, processor, argc, argv, thisObject);
 	}
 	F* f;
@@ -4381,7 +4373,7 @@ template<class F> struct FunctorAdapter : public Function {
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
-	virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F* f;
@@ -4496,7 +4488,7 @@ struct Support {
 			}
 			// FIX : we copy all arguments once to args, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
-			return callFunction->call(rt, processor, args.size(), args.begin(), newThis);
+			return callFunction->invoke(rt, processor, args.size(), args.begin(), newThis);
 		}
 	}
 	
@@ -4684,7 +4676,7 @@ GCValue Runtime::call(Function* function, UInt32 argc, const Value* argv, Object
 		Runtime& rt;
 	} nestCounter(*this);
 	Processor processor(*this);
-	function->call(*this, processor, argc, argv, thisObject);
+	function->invoke(*this, processor, argc, argv, thisObject);
 	return run(processor);
 }
 
@@ -4787,6 +4779,7 @@ void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
 #include <fstream>
 #include <memory>
 #include <vector>
+#include <sstream>
 
 #if (NED_WINDOWS)
 #error fix
@@ -4832,7 +4825,7 @@ double getCPUSecs() {
 	}
 
 	class PrintFunction : public Function {
-		public:		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		public:		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						const String* s = (argc >= 1 ? argv[0].toString(processor.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						if (interactive) {
@@ -4843,7 +4836,7 @@ double getCPUSecs() {
 	};
 	
 	struct GCFunction : public Function {
-		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 			processor.getHeap().gc();
 			return Value::UNDEFINED;
 		}
@@ -4852,7 +4845,7 @@ double getCPUSecs() {
 	class NativeTestObject : public Object {
 		protected:	struct AddFunction : public Function {
 						typedef Function super;
-						virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+						virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 							Heap& heap = processor.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
 								ScriptException::throwError(heap, TYPE_ERROR, "Invalid class");
@@ -4890,7 +4883,7 @@ double getCPUSecs() {
 	NativeTestObject::AddFunction NativeTestObject::addFunction;
 
 	class CallbackTest : public Function {
-		public:		virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		public:		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 						PrintFunction printFunction;
 						for (int i = 0; i < argc; ++i) {
 							Function* f = argv[i].asFunction();
@@ -4986,7 +4979,7 @@ globals.setOwnProperty(rt, Value(newString(heap, "callbackTest")), Value(&callba
 	Processor processor(rt);
 	processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
 //	const Value TEST_ARGV[1] = { Value(newString(heap, "Hello")) };
-//	printFunction.call(processor, 1, TEST_ARGV, &globals);
+//	printFunction.invoke(processor, 1, TEST_ARGV, &globals);
 //	processor.run();	// just testing some weird behaviour
 	
     while (inStream->good()) {
