@@ -90,10 +90,10 @@ class Heap {
 				GCList& managed() throw() { return *currentList; }
 				GCList& roots() throw() { return rootList; }
 				
-				void* allocate(size_t size);
-				void* allocateArray(size_t size);
-				void deallocate(void *ptr);
-				void deallocateArray(void *ptr);
+				void* alloc(size_t size);
+				void* allocArray(size_t size);
+				void free(void *ptr);
+				void freeArray(void *ptr);
 				void purgePooled(); // Release pooled blocks. Suggestion: call before each gc to only hold on to as much memory as we required since last gc.
 				size_t size() const;
 				UInt32 count() const;
@@ -121,10 +121,10 @@ class Heap {
 };
 
 // Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
-inline void* operator new(size_t size, Heap* optionalHeap) { return (optionalHeap != 0 ? optionalHeap->allocate(size) : ::operator new(size)); }
-inline void* operator new[](size_t size, Heap* optionalHeap) { return (optionalHeap != 0 ? optionalHeap->allocateArray(size) : ::operator new[](size)); }
-inline void operator delete(void* ptr, Heap* optionalHeap) { return (optionalHeap != 0 ? optionalHeap->deallocate(ptr) : ::operator delete(ptr)); }
-inline void operator delete[](void* ptr, Heap* optionalHeap) { return (optionalHeap != 0 ? optionalHeap->deallocateArray(ptr) : ::operator delete[](ptr)); }
+inline void* operator new(size_t size, Heap* heap) { return (heap != 0 ? heap->alloc(size) : ::operator new(size)); }
+inline void* operator new[](size_t size, Heap* heap) { return (heap != 0 ? heap->allocArray(size) : ::operator new[](size)); }
+inline void operator delete(void* ptr, Heap* heap) { return (heap != 0 ? heap->free(ptr) : ::operator delete(ptr)); }
+inline void operator delete[](void* ptr, Heap* heap) { return (heap != 0 ? heap->freeArray(ptr) : ::operator delete[](ptr)); }
 
 // FIX : name
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
@@ -259,6 +259,7 @@ class Value {
 				bool toArrayIndex(UInt32& index) const;	// returns false if value is outside valid array index range (0..2^32-1)
 				double toDouble() const;
 				const String* toString(Heap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
+				std::wstring toStdString(Heap& heap) const;
 				Object* toObject(Runtime& rt, bool requestExtensible) const; // FIX : I don't like that we involved runtime here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
@@ -403,7 +404,7 @@ class Object : public GCItem {
 				bool setPropertyDeep(Runtime& rt, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
 
 	protected:	Object() { }
-				Object(GCList& gcList) : super(gcList) { }				// Automatically include on `list`.
+				Object(GCList& gcList) : super(gcList) { }
 };
 
 class Enumerator : public Object {
@@ -429,8 +430,6 @@ class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
 
-				static const String* newString(Heap& heap, const char* s);
-				static const String* newHashedString(Heap& heap, const Char* b, const Char* e);
 				static const String* concat(Heap& heap, const String& l, const String& r);
 				static const String* fromInt(Heap& heap, Int32 i);
 				static const String* fromDouble(Heap& heap, double d);
@@ -442,7 +441,7 @@ class String : public Object, public QuickArray<Char> {
 				String(GCList& gcList, const Char* b, const Char* e);		// Create string from begin to end pointers.
 				String(GCList& gcList, const String& l, const String& r);	// Create string by concatenating two strings.
 				String(GCList& gcList, const char* s);						// Create string from constant 8-bit string. Will also generate hash and bloom code.
-				String(GCList& gcList, const wchar_t* s);
+				String(GCList& gcList, const std::wstring& fromStdString);
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
 				virtual const String* toString(Heap& heap) const;
@@ -459,6 +458,7 @@ class String : public Object, public QuickArray<Char> {
 	protected:	mutable UInt32 bloom;
 				mutable UInt32 hash;
 };
+const String* newString(Heap& heap, const char* s);
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
@@ -503,7 +503,7 @@ class JoiningEnumerator : public Enumerator {
 				}
 };
 
-class ScriptObject : public Object {
+class ScriptObject : public Object, public Table {
 	public:		typedef Object super;
 				
 				ScriptObject(GCList& gcList, Object* prototype);
@@ -513,13 +513,10 @@ class ScriptObject : public Object {
 				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
 				virtual bool deleteProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
-				Table& accessProperties();
 				
-	protected:	Table properties;
-				Object* prototype;
-
+	protected:	Object* prototype;
 				virtual void gcMark(Heap& heap) const {
-					properties.gcMark(heap);
+					Table::gcMark(heap);
 					heap.mark(prototype);
 					super::gcMark(heap);
 				}
@@ -625,9 +622,9 @@ class Function : public Object {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
-				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Processor& processor, Object* object) const;
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
+				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
 
 	protected:	Function() { }
 				Function(GCList& gcList) : super(gcList) { }
@@ -636,7 +633,7 @@ class Function : public Object {
 class EvalFunction : public Function {
 	public:		typedef Function super;
 				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	protected:	bool direct;
 };
 
@@ -672,7 +669,7 @@ class Code : public Object {
 	protected:	QuickArray<CodeWord> code;
 				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
-				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "locals" array in Scope.
+				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "locals" array in FunctionScope.
 				QuickVector<const String*> argumentNames;
 				const String* name;
 				const String* selfName;
@@ -727,7 +724,7 @@ class ExtensibleFunction : public LazyScriptObject<Function> {
 class FunctionPrototypeFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Object* getPrototype(Runtime& rt) const;
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 };
@@ -740,7 +737,7 @@ class ScriptFunction : public ExtensibleFunction {
 				ScriptFunction(GCList& gcList, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				const Code* getCode() const;
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
@@ -758,8 +755,8 @@ class ScriptFunction : public ExtensibleFunction {
 class SpecialConstructorFunction : public ExtensibleFunction {
 	public:		typedef ExtensibleFunction super;
 				SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
-				virtual Value call(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value call(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 	
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				Function* const regularFunction;
@@ -903,15 +900,14 @@ class Runtime : public GCItem {
 				void setMemoryCap(size_t maxBytesUsed);
 				void resetTimeOut(Int32 timeOutSeconds);
 				void noTimeOut();
-				void setupStandardLibrary(const String& librarySourceCode);
+				void setupStandardLibrary();
 				Heap& getHeap() const { return heap; }
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
-				// FIX : name? sync?
-				GCValue callSync(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
-				GCValue evalSync(const String* expression);
-				GCValue runIndefinitely(Processor& processor);
+				GCValue call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
+				GCValue eval(const String* expression);
+				GCValue run(Processor& processor);
 				Code* compileEvalCode(const String* expression);
 				void checkTimeOut();
 				void autoGC();
@@ -979,16 +975,9 @@ class Arguments : public LazyScriptObject<Object> {
 				}
 };
 
-/* 
-FIX: idea, have a simpler and therefore safer (no mem-alloc) Exception type and convert to full value string on demand instead?
-class Exception : public std::exception {
-	public:		virtual Value createValue(Runtime& rt) = 0;
-};
-*/
-
 // FIX : test with very short max sz length
 class Exception : public std::exception { // FIX : runtime_error instead?
-	public:		Exception(const char* s) throw() { strcpy(sz, s); }
+	public:		Exception(const char* s) throw() { assert(strlen(s) < sizeof (sz) / sizeof (*sz)); strcpy(sz, s); }
 				virtual const char* what() const throw() { return sz; }
 				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
@@ -996,27 +985,12 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 
 class ScriptException : public Exception {
 	public:		typedef Exception super;
-	
-				static void throwError(Heap& heap, ErrorType type, const String* message = 0) {
-					throw ScriptException(heap, Value(new(heap) Error(heap.managed(), type, message)));
-				}
-	
-				static void throwError(Heap& heap, ErrorType type, const char* message) {
-					throwError(heap, type, String::newString(heap, message));
-				}
-	
-				ScriptException(Heap& heap, const Value& value) throw()
-						: super("Unknown exception (failed conversion to string)"), value(value) { // FIX : not inline
-					const String* src = value.toString(heap);
-					const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
-					*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
-				}
+				static void throwError(Heap& heap, ErrorType type, const String* message = 0);
+				static void throwError(Heap& heap, ErrorType type, const char* message);
+				ScriptException(Heap& heap, const Value& value) throw();
 				const Value& getValue() const { return value; }
-	
 	protected:	Value value;
 };
-
-// FIX : Processor -> Interpreter?
 
 class Processor : public GCItem {
 	friend class ScriptFunction;
@@ -1166,9 +1140,9 @@ class Processor : public GCItem {
 				QuickArray<Value> stack;
 
 				virtual void gcMark(Heap& heap) const {
-					heap.markViaReferences(stack.begin(), sp + 1);
 					heap.mark(currentFrame);
 					heap.mark(firstCatcher);
+					heap.markViaReferences(stack.begin(), sp + 1);
 					super::gcMark(heap);
 				}
 };
@@ -1244,6 +1218,7 @@ class Compiler : public GCItem {
 					Int32 stackDepth;
 				};
 
+				static const String* newHashedString(Heap& heap, const Char* b, const Char* e);
 				void error(ErrorType errorType, const char* message);
 				void emit(Processor::Opcode opcode, Int32 operand = 0);
 				CodeSection* changeSection(CodeSection* newOutputSection);

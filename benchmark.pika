@@ -42,12 +42,12 @@ if (PLATFORM === 'UNIX') {
 	TIME_COMMAND_FORMAT = '(time -p {exe} benchmarks/{fn} >{outPath}) 2>{timePath}';
 // FIX : option to support this:
 //	TIME_COMMAND_FORMAT = '{exe} benchmarks/{fn} >{outPath} 2>{timePath}';
-	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp';
+	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp stdlibJS.cpp';
 	parseTimeOutput = function { a = $1; tokenize($0, >append(a, $0)); }
 } else if (PLATFORM == 'WINDOWS') {
 	defaults(@exe, (if (!doRevRange) 'Release/NuXJScript -s' else 'NuXJScript -s'));
 	TIME_COMMAND_FORMAT = 'timeit -s {exe} benchmarks/{fn} >{outPath} 2>{timePath}';
-	BUILD_CPP_COMMAND = 'BuildCpp.cmd NuXJScript NuXJScript.cpp';
+	BUILD_CPP_COMMAND = 'BuildCpp.cmd NuXJScript NuXJScript.cpp stdlibJS.cpp';
 	parseTimeOutput = function { a = $1; count = 0; tokenize($0, >if (count++ >= 3 && $0 != void) append(a, $0{20:})); [a][0] = 'E=' # [a][0]; [a][1] = 'P=' # [a][1];}
 } else {
 	throw("EH!?");

@@ -1,13 +1,20 @@
-*) one relatively small .cpp and one .h to include
+Keypoints
+######### 
 
-*) just standard architecture-agnostic vanilla C++03
+*) one small .cpp and two .h files to include
 
-*) relatively fast stack-machine (comparable with interpreting SpiderMonkey hopefully)
+*) small but efficient stack machine (should perform well compared to other interpreting JS engines)
 
-*) mark and sweep (stop-the-world) GC, but heap is the standard C++ heap, allocations are done with new etc
+*) quick single pass compiler (handwritten using recursive descent / operator precedence parsing)
 
 *) fully EcmaScript 3 compliant (with some partial EcmaScript 5 support where it makes most sense)
 
+*) written in standard architecture-agnostic vanilla C++03 (no platform specific tricks!)
+
+*) mark and sweep (stop-the-world) GC, but heap is the standard C++ heap, allocations are done with new etc
+
 *) fully asynchronous and sandboxed VM, you run as much or as little code you want at a time
 
-*) did I say sandbox?!
+*) zero tolerance for bugs (plenty of tests)
+
+*) did I say sandboxed?!
