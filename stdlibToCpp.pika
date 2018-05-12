@@ -1,0 +1,17 @@
+#! /usr/local/bin/PikaCmd
+
+include('stdlib.pika');
+
+::textToCpp = function {
+    args(@source);
+    result = '';
+    tokenize(source, >{ if (result != '') result #= LF; result #= TAB # escape($0 # LF) });
+   	result
+};
+
+save('stdlibJS.cpp', bake(
+'const char* STDLIB_JS =
+{textToCpp(load("./stdlib.js"))};
+'));
+
+print('Updated stdlibJS.cpp');
