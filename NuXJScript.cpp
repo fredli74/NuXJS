@@ -2001,6 +2001,19 @@ Object* Processor::convertToObject(const Value& v, const bool requestExtensible)
 	return object;
 }
 
+Function* Processor::asFunction(const Value& v) {
+	Function* const f = v.asFunction();
+	if (f == 0) {
+		error(TYPE_ERROR, new(heap) String(heap.managed(), *v.toString(heap), IS_NOT_A_FUNCTION_STRING));
+	}
+	return f;
+}
+
+void Processor::invokeFunction(Function* f, int popCount, int argc, Object* thisObject) {
+	sp[-popCount] = f->invoke(rt, *this, argc, sp - argc + 1, thisObject);
+	pop(popCount);
+}
+
 void Processor::innerRun() {
 	assert(currentFrame != 0);
 	Scope* scope = currentFrame->scope;
@@ -2064,19 +2077,11 @@ void Processor::innerRun() {
 				break;
 			}
 
-			case OBJ_TO_NUMBER_OP: {
-				const Object* o = sp[0].asObject();
-				if (o != 0) {
-					rt.toNumberFunction->invoke(rt, *this, 1, sp);
-					return;
-				}
-				break;
-			}
-
+			case OBJ_TO_NUMBER_OP:
 			case OBJ_TO_STRING_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					rt.toStringFunction->invoke(rt, *this, 1, sp);
+					invokeFunction((opcode == OBJ_TO_NUMBER_OP ? rt.toNumberFunction : rt.toStringFunction), 0, 1);
 					return;
 				}
 				break;
@@ -2089,7 +2094,7 @@ void Processor::innerRun() {
 						std::swap(sp[-1], sp[0]);
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
-						rt.toNumberFunction->invoke(rt, *this, 1, sp);
+						invokeFunction(rt.toNumberFunction, 0, 1);
 						return;
 					}
 				}
@@ -2142,12 +2147,9 @@ void Processor::innerRun() {
 			case POST_SHUFFLE_OP:	push(sp[0]); sp[-1] = sp[-2]; sp[-2] = sp[-3]; sp[-3] = sp[0]; break;
 
 			case CALL_OP: {
-				Function* const f = sp[-im].asFunction();
-				if (f == 0) {
-					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-				} else {
-					sp[-im] = f->invoke(rt, *this, im, sp - im + 1);
-					pop(im);
+				Function* const f = asFunction(sp[-im]);
+				if (f != 0) {
+					invokeFunction(f, im, im);
 				}
 				return;
 			}
@@ -2161,32 +2163,26 @@ void Processor::innerRun() {
 					if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
 						error(TYPE_ERROR, new(heap) String(heap.managed(), *name.toString(heap), IS_NOT_A_FUNCTION_STRING));
 					} else {
-						sp[-(im + 1)] = f->invoke(rt, *this, im, sp - im + 1, o);
-						pop(im + 1);
+						invokeFunction(f, im + 1, im, o);
 					}
 				}
 				return;
 			}
 			
 			case CALL_EVAL_OP: { // FIX : all these are too similar!
-				Function* f = sp[-im].asFunction();
-				if (f == 0) {
-					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-				} else {
+				Function* f = asFunction(sp[-im]);
+				if (f != 0) {
 					if (f == &rt.evalFunction) {
 						f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
 					}
-					sp[-im] = f->invoke(rt, *this, im, sp - im + 1);
-					pop(im);
+					invokeFunction(f, im, im);
 				}
 				return;
 			}
 
 			case NEW_OP: {
-				Function* f = sp[-im].asFunction();
-				if (f == 0) { // FIX : sub
-					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[-im].toString(heap), IS_NOT_A_FUNCTION_STRING));
-				} else {
+				Function* f = asFunction(sp[-im]);
+				if (f != 0) { // FIX : sub
 					Value v(Value::UNDEFINED);
 					f->getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
 					Object* prototype = v.asObject();
@@ -2199,29 +2195,10 @@ void Processor::innerRun() {
 			}
 			
 			case NEW_RESULT_OP: pop2push1(sp[0].isObject() ? sp[0] : sp[-1]); break;
-			
-			case NEW_OBJECT_OP: {
-				push(Value(new(heap) ScriptObject(heap.managed(), &rt.objectPrototype)));
-				break;
-			}
-			
-			case NEW_ARRAY_OP: {
-				push(Value(new(heap) Array(heap.managed())));
-				break;
-			}
-			
-			case NEW_REG_EXP_OP: { // FIX : all these very similar
-				sp[-1] = rt.createRegExpFunction->invoke(rt, *this, 2, sp - 1);
-				pop(1);
-				return;
-			}
-
-			case RETURN_OP:	{
-				ip = currentFrame->returnIP;
-				popFrame();
-				return;
-			}
-			
+			case NEW_OBJECT_OP: push(Value(new(heap) ScriptObject(heap.managed(), &rt.objectPrototype))); break;
+			case NEW_ARRAY_OP: push(Value(new(heap) Array(heap.managed()))); break;
+			case NEW_REG_EXP_OP: invokeFunction(rt.createRegExpFunction, 1, 2); return;
+			case RETURN_OP:	ip = currentFrame->returnIP; popFrame(); return;
 			case THIS_OP: push(Value(thisObject)); break;
 			case VOID_OP: push(Value::UNDEFINED); break;
 			
@@ -2233,11 +2210,7 @@ void Processor::innerRun() {
 				break;
 			}
 			
-			case DECLARE_OP: {
-				scope->declareVar(rt, constants[im].getString(), sp[0], true);
-				pop(1);
-				break;
-			}
+			case DECLARE_OP: scope->declareVar(rt, constants[im].getString(), sp[0], true); pop(1); break;
 			
 			case ADD_PROPERTY_OP: {
 				Object* o = sp[-1].getObject();
@@ -2246,10 +2219,7 @@ void Processor::innerRun() {
 				break;
 			}
 			
-			case DELETE_NAMED_OP: {
-				push(Value(scope->deleteVar(rt, constants[im].getString())));
-				break;
-			}
+			case DELETE_NAMED_OP: push(Value(scope->deleteVar(rt, constants[im].getString()))); break;
 			
 			case DELETE_OP: {
 				Object* o = convertToObject(sp[-1], true);
@@ -2275,17 +2245,11 @@ void Processor::innerRun() {
 				return;
 			}
 			
-			case POP_FRAME_OP: {
-				popFrame();
-				return;
-			}
-			
-			case TRY_OP: {
-				firstCatcher = new(heap) Catcher(heap.managed(), ip + im, sp, currentFrame, firstCatcher);
-				break;
-			}
+			case POP_FRAME_OP: popFrame(); return;
+			case TRY_OP: firstCatcher = new(heap) Catcher(heap.managed(), ip + im, sp, currentFrame, firstCatcher); break;
 			case TRIED_OP: popCatcher(); break;
 			case THROW_OP: throwVirtualException(sp[0]); return;
+			
 			case IN_OP: {
 				const Object* o = sp[0].asObject();
 				if (o == 0) {
@@ -2298,9 +2262,8 @@ void Processor::innerRun() {
 				break;
 			}
 			case INSTANCE_OF_OP: {
-				Function* f = sp[0].asFunction();
+				Function* f = asFunction(sp[0]);
 				if (f == 0) {
-					error(TYPE_ERROR, new(heap) String(heap.managed(), *sp[0].toString(heap), IS_NOT_A_FUNCTION_STRING));
 					return;
 				}
 				sp[-1] = Value(f->hasInstance(rt, *this, sp[-1].asObject()));

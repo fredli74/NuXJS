@@ -1088,6 +1088,8 @@ class Processor : public GCItem {
 				void pop2push1(const Value& v);
 				void innerRun();
 				Object* convertToObject(const Value& v, bool requestExtensible);
+				Function* asFunction(const Value& v);
+				void invokeFunction(Function* f, int popCount, int argc, Object* thisObject = 0);
 				void reset();
 				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
 				void popFrame();
