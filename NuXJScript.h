@@ -595,6 +595,7 @@ class Array : public LazyScriptObject<Object> {
 				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
 				virtual bool deleteProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
+				void pushElements(Runtime& rt, Int32 count, const Value* elements);
 
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				void sliceDenseVector(Runtime& rt, const Value& key);
@@ -1024,6 +1025,7 @@ class Processor : public GCItem {
 					, SET_PROPERTY_OP								// stack: object, name, value -> value
 					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
+					, PUSH_ELEMENTS_OP								// operand: count, stack: object, count * elements ... -> object
 					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
 					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value

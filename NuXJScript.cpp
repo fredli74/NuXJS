@@ -11,8 +11,6 @@
 #include <limits>
 #include "NuXJScript.h"
 
-	bool suppressStdErr = false; // FIX : drop
-
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
@@ -1227,8 +1225,7 @@ bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) co
 	getPropertyDeep(rt, Value(&PROTOTYPE_STRING), &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
-		Heap& heap = rt.getHeap();
-		ScriptException::throwError(heap, TYPE_ERROR, "Non-object prototype in instanceof check");
+		ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Non-object prototype in instanceof check");
 		return false;
 	}
 	while ((object = object->getPrototype(rt)) != 0) {
@@ -1266,8 +1263,8 @@ Flags Array::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 void Array::sliceDenseVector(Runtime& rt, const Value& key) {
 	UInt32 index;
 	if (key.toArrayIndex(index) && index < denseVector.size()) {
-		Heap& heap = rt.getHeap();
 		Table& props = *getCompleteObject(rt);
+		Heap& heap = rt.getHeap();
 		for (UInt32 moveIndex = index + 1; moveIndex < denseVector.size(); ++moveIndex) {
 			props.update(props.insert(String::fromInt(heap, moveIndex)), denseVector[moveIndex]);
 		}
@@ -1310,8 +1307,7 @@ bool Array::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags 
 	} else if (key.isEqualTo(LENGTH_STRING)) {
 		UInt32 newLength;
 		if (!v.toArrayIndex(newLength)) {
-			Heap& heap = rt.getHeap();
-			ScriptException::throwError(heap, RANGE_ERROR, "Invalid array length");
+			ScriptException::throwError(rt.getHeap(), RANGE_ERROR, "Invalid array length");
 		}
 		if (newLength < denseVector.size()) {
 			denseVector.resize(newLength);
@@ -1347,6 +1343,17 @@ Enumerator* Array::getPropertyEnumerator(Runtime& rt) const {
 	Heap& heap = rt.getHeap();
 	Enumerator* rangeEnumerator = new(heap) RangeEnumerator(heap.managed(), 0, denseVector.size());
 	return (completeObject == 0 ? rangeEnumerator : new(heap) JoiningEnumerator(heap.managed(), rt, rangeEnumerator, completeObject));
+}
+
+void Array::pushElements(Runtime& rt, Int32 count, const Value* elements) {
+	if (length == denseVector.size()) {
+		denseVector.insert(denseVector.end(), elements, elements + count);
+	} else {
+		for (int i = 0; i < count; ++i) {
+			super::setOwnProperty(rt, Value(length + i), elements[i], STANDARD_FLAGS);
+		}
+	}
+	length += count;
 }
 
 /* --- LazyScriptObject --- */
@@ -1823,6 +1830,7 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ SET_PROPERTY_OP            , "SET_PROPERTY"            , -2     , 0 },
 	{ SET_PROPERTY_POP_OP        , "SET_PROPERTY_POP"        , -3     , 0 },
 	{ ADD_PROPERTY_OP            , "ADD_PROPERTY"            , -1     , 0 },
+	{ PUSH_ELEMENTS_OP           , "PUSH_ELEMENTS_OP"        , 0      , OpcodeInfo::POP_OPERAND },
 	{ OBJ_TO_NUMBER_OP           , "OBJ_TO_NUMBER"           , 0      , 0 },
 	{ OBJ_TO_STRING_OP           , "OBJ_TO_STRING"           , 0      , 0 },
 	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , 0 },
@@ -2213,6 +2221,14 @@ void Processor::innerRun() {
 				break;
 			}
 			
+			case PUSH_ELEMENTS_OP: {
+				Object* o = sp[-im].getObject();
+				assert(dynamic_cast<Array*>(o) != 0);
+				reinterpret_cast<Array*>(o)->pushElements(rt, im, sp - im + 1);
+				pop(im);
+				break;
+			}
+			
 			case DELETE_NAMED_OP: push(Value(scope->deleteVar(rt, constants[im].getString()))); break;
 			
 			case DELETE_OP: {
@@ -2399,100 +2415,6 @@ static int recursiveStackCheck(const Code& code, QuickArray<Int32>& stackDepths
 	}
 
 	return errors;
-}
-
-static void disassemble(Heap& heap, const Code& code) {
-	const CodeWord* codeWords = code.getCodeWords();
-	const Value* constants = code.getConstants()->begin();
-	const UInt32 codeSize = code.getCodeSize();
-	
-	QuickArray<Int32> stackDepths(codeSize, &heap);
-	std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
-	
-	Int32 maxStackDepth = 0;
-	int errors = recursiveStackCheck(code, stackDepths, 0, 1, maxStackDepth);
-	if (maxStackDepth != code.getMaxStackDepth()) {
-		std::cerr << "Notice: code definition max stack depth is " << code.getMaxStackDepth() << " but max stack depth actually used is " << maxStackDepth << std::endl;
-	}
-	
-	for (UInt32 offset = 0; offset < codeSize; ++offset) {
-		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(codeWords[offset]);
-		const Processor::Opcode opcode = pair.first;
-		const Int32 operand = pair.second;
-		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
-			break;
-		}
-
-		if (stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
-			std::cerr << "?";
-		} else {
-			std::cerr << stackDepths[offset];
-		}
-		std::cerr << "\t";
-#if (VERIFY_STACK_LOGIC)
-		if (code.stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
-			std::cerr << "?";
-		} else {
-			std::cerr << code.stackDepths[offset];
-		}
-		std::cerr << "\t";
-#endif
-		std::cerr << "@" << offset << ":\t" << Processor::getOpcodeInfo(opcode).mnemonic;
-		
-		switch (opcode) {
-			case Processor::JT_OP:
-			case Processor::JF_OP:
-			case Processor::JT_OR_POP_OP:
-			case Processor::JF_OR_POP_OP:
-			case Processor::JMP_OP:
-			case Processor::JSR_OP:
-			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: {
-				const Int32 target = offset + 1 + operand;
-				std::cerr << " @" << target;
-				break;
-			}
-			case Processor::READ_LOCAL_OP:
-			case Processor::WRITE_LOCAL_OP:
-			case Processor::WRITE_LOCAL_POP_OP: {
-				const Int32 index = operand;
-				const String* name = code.getLocalName(index);
-				if (name != 0) std::wcerr << L" $" << name->toStdString();
-				std::wcerr << L" (" << index << L")";
-				break;
-			}
-			case Processor::CALL_OP:
-			case Processor::CALL_METHOD_OP:
-			case Processor::CALL_EVAL_OP:
-			case Processor::NEW_OP:
-			case Processor::POP_OP:
-			case Processor::PUSH_BACK_OP: std::cerr << " *" << operand; break;
-			case Processor::REPUSH_OP: std::cerr << " " << operand; break;
-			case Processor::CONST_OP:
-			case Processor::GEN_FUNC_OP:
-			case Processor::CATCH_SCOPE_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
-			case Processor::DECLARE_OP:
-			case Processor::READ_NAMED_OP:
-			case Processor::WRITE_NAMED_OP:
-			case Processor::WRITE_NAMED_POP_OP:
-			case Processor::ADD_PROPERTY_OP:
-			case Processor::DELETE_NAMED_OP:
-			case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
-			default: break;
-		}
-		std::cerr << std::endl;
-	}
-	
-	std::cerr << "\tMax stack depth: " << code.getMaxStackDepth() << std::endl;
-	std::cerr << "\tCode: " << code.getCodeSize() << std::endl;
-//	std::cerr << "\tConstants: " << code.getConstants().size() << std::endl;
-	std::cerr << "\tVars: " << code.getVarsCount() << std::endl;
-	std::cerr << "\tArguments: " << code.getArgumentsCount() << std::endl;
-/* FIX :	for (const Value* p = code.constants.begin(); p != code.constants.end(); ++p) {
-		std::wcerr << "\t\t" << p.toString(heap).toStdString() << std::endl;
-	}*/
-
-	assert(errors == 0);
 }
 
 /* --- Compiler --- */
@@ -3084,23 +3006,38 @@ Compiler::ExpressionResult Compiler::arrayInitialiser() { // FIX : share stuff w
 	emit(Processor::NEW_ARRAY_OP);
 	
 	Int32 index = 0;
-	Int32 lastAddedIndex = 0;
+	Int32 pushedCount = 0;
+	Int32 currentLength = 0;
 	while (!token("]", true)) {
 		ExpressionResult xr;
 		if (optionalExpression(xr, COMMA_PREC)) {
+			if (index != currentLength) {
+				assert(pushedCount == 0);
+				emitWithConstant(Processor::CONST_OP, Value(index));
+				emitWithConstant(Processor::ADD_PROPERTY_OP, Value(&LENGTH_STRING));
+			}
 			makeRValue(xr);
-			emitWithConstant(Processor::ADD_PROPERTY_OP, Value(index));
-			lastAddedIndex = index;
+			++pushedCount;
+			if (pushedCount >= 16) {
+				emit(Processor::PUSH_ELEMENTS_OP, pushedCount);
+				pushedCount = 0;
+			}
+			currentLength = index + 1;
 			if (token("]", true)) {
 				break;
 			}
+		} else if (pushedCount > 0) {
+			emit(Processor::PUSH_ELEMENTS_OP, pushedCount);
+			pushedCount = 0;
 		}
 		if (!token(",", true)) {
 			error(SYNTAX_ERROR, "Expected ',' or ']'");
 		}
 		++index;
 	}
-	if (index != lastAddedIndex) {
+	if (pushedCount > 0) {
+		emit(Processor::PUSH_ELEMENTS_OP, pushedCount);
+	} else if (index != currentLength) {
 		emitWithConstant(Processor::CONST_OP, Value(index));
 		emitWithConstant(Processor::ADD_PROPERTY_OP, Value(&LENGTH_STRING));
 	}
@@ -4222,28 +4159,15 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	code->constants->shrink();
 	code->maxStackDepth = std::max(mainSection.maxStackDepth, setupSection.maxStackDepth);
 	
-if (!suppressStdErr) {
-	disassemble(heap, *code);
-	Int32 stackDepth = mainSection.stackDepth;
-	assert(mainSection.inDeadCode() || stackDepth == 0);
-	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
-	std::cerr << "\tMax stack depth: " << code->maxStackDepth << std::endl;
-	std::cerr << "\tCode: " << code->getCodeSize() << std::endl;
-	std::cerr << "\tConstants: " << code->constants->size() << std::endl;
-	std::cerr << "\tBloom set: " << std::hex << code->bloomSet << std::dec << std::endl;
-/* FIX :	for (const Value* p = code->constants.begin(); p != code->constants.end(); ++p) {
-		std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
-	}*/
-	std::cerr << "\tVars: " << code->getVarsCount() << std::endl;
-	std::cerr << "\tArguments: " << code->getArgumentsCount() << std::endl;
-} else {
+#if (VERIFY_STACK_LOGIC)
 	QuickArray<Int32> stackDepths(code->getCodeSize(), &heap);
 	std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
 	
 	Int32 maxStackDepth = 0;
 	int errors = recursiveStackCheck(*code, stackDepths, 0, 1, maxStackDepth);
 	assert(errors == 0);
-}
+#endif
+
 	return p;
 }
 
@@ -4852,6 +4776,101 @@ double getCPUSecs() {
 					}
 	};
 
+	static void disassemble(Heap& heap, const Code& code) {
+		const CodeWord* codeWords = code.getCodeWords();
+		const Value* constants = code.getConstants()->begin();
+		const UInt32 codeSize = code.getCodeSize();
+		
+		QuickArray<Int32> stackDepths(codeSize, &heap);
+		std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
+		
+		Int32 maxStackDepth = 0;
+		int errors = recursiveStackCheck(code, stackDepths, 0, 1, maxStackDepth);
+		if (maxStackDepth != code.getMaxStackDepth()) {
+			std::cerr << "Notice: code definition max stack depth is " << code.getMaxStackDepth() << " but max stack depth actually used is " << maxStackDepth << std::endl;
+		}
+		
+		for (UInt32 offset = 0; offset < codeSize; ++offset) {
+			const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(codeWords[offset]);
+			const Processor::Opcode opcode = pair.first;
+			const Int32 operand = pair.second;
+			if (opcode < 0 || opcode >= Processor::OP_COUNT) {
+				break;
+			}
+
+			if (stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
+				std::cerr << "?";
+			} else {
+				std::cerr << stackDepths[offset];
+			}
+			std::cerr << "\t";
+	#if (VERIFY_STACK_LOGIC)
+			if (code.stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
+				std::cerr << "?";
+			} else {
+				std::cerr << code.stackDepths[offset];
+			}
+			std::cerr << "\t";
+	#endif
+			std::cerr << "@" << offset << ":\t" << Processor::getOpcodeInfo(opcode).mnemonic;
+			
+			switch (opcode) {
+				case Processor::JT_OP:
+				case Processor::JF_OP:
+				case Processor::JT_OR_POP_OP:
+				case Processor::JF_OR_POP_OP:
+				case Processor::JMP_OP:
+				case Processor::JSR_OP:
+				case Processor::TRY_OP:
+				case Processor::NEXT_PROPERTY_OP: {
+					const Int32 target = offset + 1 + operand;
+					std::cerr << " @" << target;
+					break;
+				}
+				case Processor::READ_LOCAL_OP:
+				case Processor::WRITE_LOCAL_OP:
+				case Processor::WRITE_LOCAL_POP_OP: {
+					const Int32 index = operand;
+					const String* name = code.getLocalName(index);
+					if (name != 0) std::wcerr << L" $" << name->toStdString();
+					std::wcerr << L" (" << index << L")";
+					break;
+				}
+				case Processor::CALL_OP:
+				case Processor::CALL_METHOD_OP:
+				case Processor::CALL_EVAL_OP:
+				case Processor::NEW_OP:
+				case Processor::POP_OP:
+				case Processor::PUSH_BACK_OP:
+				case Processor::PUSH_ELEMENTS_OP: std::cerr << " *" << operand; break;
+				case Processor::REPUSH_OP: std::cerr << " " << operand; break;
+				case Processor::CONST_OP:
+				case Processor::GEN_FUNC_OP:
+				case Processor::CATCH_SCOPE_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
+				case Processor::DECLARE_OP:
+				case Processor::READ_NAMED_OP:
+				case Processor::WRITE_NAMED_OP:
+				case Processor::WRITE_NAMED_POP_OP:
+				case Processor::ADD_PROPERTY_OP:
+				case Processor::DELETE_NAMED_OP:
+				case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
+				default: break;
+			}
+			std::cerr << std::endl;
+		}
+		
+		std::cerr << "\tMax stack depth: " << code.getMaxStackDepth() << std::endl;
+		std::cerr << "\tCode: " << code.getCodeSize() << std::endl;
+	//	std::cerr << "\tConstants: " << code.getConstants().size() << std::endl;
+		std::cerr << "\tVars: " << code.getVarsCount() << std::endl;
+		std::cerr << "\tArguments: " << code.getArgumentsCount() << std::endl;
+	/* FIX :	for (const Value* p = code.constants.begin(); p != code.constants.end(); ++p) {
+			std::wcerr << "\t\t" << p.toString(heap).toStdString() << std::endl;
+		}*/
+
+		assert(errors == 0);
+	}
+
 	Value disassemble(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Heap& heap = rt.getHeap();
 		Function* f = (argc >= 1 ? argv[0].asFunction() : 0);
@@ -4867,6 +4886,7 @@ double getCPUSecs() {
 	}
 
 bool pauseBeforeQuit = false;
+bool suppressStdErr = false; // FIX : drop
 
 int testMain(int argc, const char* argv[]) {
     String source(EMPTY_STRING);
@@ -4923,7 +4943,7 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(rt, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
-    globals.setOwnProperty(rt, Value(newString(heap, "disassemble"))
+    globals.setOwnProperty(rt, Value(newString(heap, "dasm"))
     		, Value(new(heap) FunctorAdapter<NativeFunction>(heap.managed(), disassemble)), DONT_ENUM_FLAG);
 CallbackTest callbackTest;
 globals.setOwnProperty(rt, Value(newString(heap, "callbackTest")), Value(&callbackTest), DONT_ENUM_FLAG);

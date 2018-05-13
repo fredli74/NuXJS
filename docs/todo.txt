@@ -74,6 +74,8 @@ Run-time
 
 	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
 
+	* is the logic correct when changing array length containing a few undeletable elements?
+
 Compiler
 ========
 
