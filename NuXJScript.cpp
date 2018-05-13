@@ -1187,7 +1187,7 @@ const String* JoiningEnumerator::nextPropertyName() {
 /* --- Code --- */
 
 Code::Code(GCList& gcList, Constants* constants)
-	: super(gcList), code(0, &gcList.getHeap()), constants(constants), nameIndexes(&gcList.getHeap())
+	: super(gcList), codeWords(0, &gcList.getHeap()), constants(constants), nameIndexes(&gcList.getHeap())
 	, varNames(&gcList.getHeap()), argumentNames(&gcList.getHeap()), name(0), selfName(0), source(0), bloomSet(0)
 	, maxStackDepth(0)
 #if (VERIFY_STACK_LOGIC)
@@ -1391,7 +1391,6 @@ ScriptFunction::ScriptFunction(GCList& gcList, const Code* code, Scope* closure)
 		: super(gcList), code(code), closure(closure) { }
 
 Value ScriptFunction::getInternalValue(Heap& heap) const { return Value(toString(heap)); }
-const Code* ScriptFunction::getCode() const { return code; }
 
 const String* ScriptFunction::toString(Heap& heap) const {
 	const String* s = code->getSource();
@@ -1424,7 +1423,7 @@ Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, U
 	if (constructorFunction == 0) {
 		Value v;
 		regularFunction->getPropertyDeep(rt, Value(&NAME_STRING), &v);
-		Heap& heap = processor.getHeap();
+		Heap& heap = rt.getHeap();
 		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), String(" is not a constructor")));
 	}
 	return constructorFunction->invoke(rt, processor, argc, argv, thisObject);
@@ -1591,15 +1590,10 @@ void Scope::makeClosure() {
 
 /* --- FunctionScope --- */
 
-static UInt32 calcLocalsSize(const ScriptFunction* function, UInt32 argc) {
-	const Code* code = function->getCode();
-	return code->getVarsCount() + std::max(code->getArgumentsCount(), argc);
-}
-
 FunctionScope::FunctionScope(GCList& gcList, ScriptFunction* function, UInt32 argc, const Value* argv)
 		: super(gcList, function->closure), function(function), passedArgumentsCount(argc)
-		, locals(calcLocalsSize(function, argc), &gcList.getHeap()), dynamicVars(0), bloomSet(function->code->bloomSet) {
-	const Code* code = function->getCode();
+		, locals(function->code->calcLocalsSize(argc), &gcList.getHeap()), dynamicVars(0), bloomSet(function->code->bloomSet) {
+	const Code* code = function->code;
 	localsPointer = locals.begin() + code->getVarsCount();
 	std::fill(locals.begin(), localsPointer, Value::UNDEFINED);
 	Value* e = std::copy(argv, argv + argc, localsPointer);
@@ -1624,7 +1618,7 @@ Flags FunctionScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	const UInt32 bloomCode = name->createBloomCode();
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
-		const Code* code = function->getCode();
+		const Code* code = function->code;
 		if (code->lookupNameIndex(name, index)) {
 			assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 			*v = localsPointer[index];
@@ -1648,7 +1642,7 @@ void FunctionScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	const UInt32 bloomCode = name->createBloomCode();
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
-		const Code* code = function->getCode();
+		const Code* code = function->code;
 		if (code->lookupNameIndex(name, index)) {
 			assert(locals.begin() <= localsPointer + index && localsPointer + index < locals.end());
 			localsPointer[index] = v;
@@ -1674,7 +1668,7 @@ bool FunctionScope::deleteVar(Runtime& rt, const String* name) {
 	const UInt32 bloomCode = name->createBloomCode();
 	if ((bloomSet & bloomCode) == bloomCode) {
 		Int32 index;
-		const Code* code = function->getCode();
+		const Code* code = function->code;
 		if (code->lookupNameIndex(name, index)) {
 			return false;
 		}
@@ -1694,7 +1688,7 @@ bool FunctionScope::deleteVar(Runtime& rt, const String* name) {
 
 void FunctionScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	Int32 index;
-	if (!function->getCode()->lookupNameIndex(name, index)) {
+	if (!function->code->lookupNameIndex(name, index)) {
 		Table& props = *getDynamicVars(rt);
 		Table::Bucket* bucket = props.insert(name);
 		if (!bucket->valueExists()) {
@@ -1947,7 +1941,7 @@ void Processor::enterEvalCode(const Code* code, bool local) {
 }
 
 void Processor::enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject) {
-	enter(func->getCode(), new(heap) FunctionScope(heap.managed(), func, argc, argv), thisObject);
+	enter(func->code, new(heap) FunctionScope(heap.managed(), func, argc, argv), thisObject);
 }
 
 void Processor::reset() {
@@ -2020,7 +2014,7 @@ void Processor::innerRun() {
 	assert(scope != 0);
 	const Code* code = currentFrame->code;
 	assert(ip >= code->getCodeWords() && ip < code->getCodeWords() + code->getCodeSize());
-	const Value* constants = currentFrame->code->getConstantsPointer();
+	const Value* constants = currentFrame->code->getConstants()->begin();
 	Value* locals = scope->getLocalsPointer();
 	Object* thisObject = currentFrame->thisObject;
 
@@ -2409,7 +2403,7 @@ static int recursiveStackCheck(const Code& code, QuickArray<Int32>& stackDepths
 
 static void disassemble(Heap& heap, const Code& code) {
 	const CodeWord* codeWords = code.getCodeWords();
-	const Value* constants = code.getConstantsPointer();
+	const Value* constants = code.getConstants()->begin();
 	const UInt32 codeSize = code.getCodeSize();
 	
 	QuickArray<Int32> stackDepths(codeSize, &heap);
@@ -2489,6 +2483,15 @@ static void disassemble(Heap& heap, const Code& code) {
 		std::cerr << std::endl;
 	}
 	
+	std::cerr << "\tMax stack depth: " << code.getMaxStackDepth() << std::endl;
+	std::cerr << "\tCode: " << code.getCodeSize() << std::endl;
+//	std::cerr << "\tConstants: " << code.getConstants().size() << std::endl;
+	std::cerr << "\tVars: " << code.getVarsCount() << std::endl;
+	std::cerr << "\tArguments: " << code.getArgumentsCount() << std::endl;
+/* FIX :	for (const Value* p = code.constants.begin(); p != code.constants.end(); ++p) {
+		std::wcerr << "\t\t" << p.toString(heap).toStdString() << std::endl;
+	}*/
+
 	assert(errors == 0);
 }
 
@@ -4206,9 +4209,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	emit(Processor::RETURN_OP);
 
 	assert(currentSection == &mainSection);
-	code->code.resize(setupSection.code.size() + mainSection.code.size());
-	std::copy(setupSection.code.begin(), setupSection.code.end(), code->code.begin());
-	std::copy(mainSection.code.begin(), mainSection.code.end(), code->code.begin() + setupSection.code.size());
+	code->codeWords.resize(setupSection.code.size() + mainSection.code.size());
+	std::copy(setupSection.code.begin(), setupSection.code.end(), code->codeWords.begin());
+	std::copy(mainSection.code.begin(), mainSection.code.end(), code->codeWords.begin() + setupSection.code.size());
 #if (VERIFY_STACK_LOGIC)
 	assert(setupSection.stackDepths.size() == setupSection.code.size());
 	assert(mainSection.stackDepths.size() == mainSection.code.size());
@@ -4225,7 +4228,7 @@ if (!suppressStdErr) {
 	assert(mainSection.inDeadCode() || stackDepth == 0);
 	std::cerr << "\tEnd stack depth: " << stackDepth << std::endl;
 	std::cerr << "\tMax stack depth: " << code->maxStackDepth << std::endl;
-	std::cerr << "\tCode: " << code->code.size() << std::endl;
+	std::cerr << "\tCode: " << code->getCodeSize() << std::endl;
 	std::cerr << "\tConstants: " << code->constants->size() << std::endl;
 	std::cerr << "\tBloom set: " << std::hex << code->bloomSet << std::dec << std::endl;
 /* FIX :	for (const Value* p = code->constants.begin(); p != code->constants.end(); ++p) {
@@ -4310,7 +4313,7 @@ Value EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const
 		return argv[0]; // FIX : better way to check type without involving typeOfString?
 	}
 
-	Heap& heap = processor.getHeap();
+	Heap& heap = rt.getHeap();
 	const String* expression = argv[0].toString(heap);
 	processor.enterEvalCode(rt.compileEvalCode(expression), direct);
 	return Value::UNDEFINED;
@@ -4323,16 +4326,6 @@ mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Proce
 	return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 }));
 */
-
-typedef Value (*NativeFunction)(Runtime&, Processor&, Int32, const Value*, Object*);
-
-template<class F> struct FunctorAdapter : public Function {
-	FunctorAdapter(const F& f) : f(f) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return f(rt, processor, argc, argv, thisObject);
-	}
-	F* f;
-};
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
@@ -4347,14 +4340,14 @@ struct Support {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
-				const String* s = argv[1].toString(processor.getHeap());
+				const String* s = argv[1].toString(rt.getHeap());
 				if (s->isEqualTo(PROTOTYPE_STRING)) {
 					Object* p = o->getPrototype(rt);
 					return (p == 0 ? Value::NUL : Value(p));
 				} else if (s->isEqualTo(CLASS_STRING)) {
 					return Value(o->getClassName());
 				} else if (s->isEqualTo(VALUE_STRING)) {
-					return o->getInternalValue(processor.getHeap());
+					return o->getInternalValue(rt.getHeap());
 				}
 			}
 		}
@@ -4363,7 +4356,7 @@ struct Support {
 
 	static Value createWrapper(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
-			Heap& heap = processor.getHeap();
+			Heap& heap = rt.getHeap();
 			const String* const className = argv[0].toString(heap);
 			const Value internalValue = argv[1];
 			Object* prototype = (argc >= 3 ? argv[2].toObject(rt, false) : 0);
@@ -4394,7 +4387,7 @@ struct Support {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
 				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
-				Heap& heap = processor.getHeap();
+				Heap& heap = rt.getHeap();
 				return Value(new(heap) SpecialConstructorFunction(heap.managed(), regularFunction, constructorFunction));
 			}
 		}
@@ -4417,7 +4410,7 @@ struct Support {
 
 	static Value compileFunction(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
-			Heap& heap = processor.getHeap();
+			Heap& heap = rt.getHeap();
 			const String* source = argv[0].toString(heap);
 			Code* code = new(heap) Code(heap.managed(), new(heap) Constants(heap.managed())); // Notice: doesn't share constants with anyone else, so they will be nicely erased if this function gets deleted.
 			Compiler compiler(heap.roots(), code, Compiler::FOR_FUNCTION);
@@ -4428,7 +4421,7 @@ struct Support {
 	}
 
 	static Value callWithArgs(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Heap& heap = processor.getHeap();
+		Heap& heap = rt.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
 			ScriptException::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
@@ -4467,7 +4460,7 @@ struct Support {
 
 	static Value fromCharCode(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
-		Heap& heap = processor.getHeap();
+		Heap& heap = rt.getHeap();
 		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(new(heap) String(heap.managed(), &c, &c + 1)));
 	}
 
@@ -4482,7 +4475,7 @@ struct Support {
 	static Value parseFloat(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Value result = Value::NOT_A_NUMBER;
 		if (argc >= 1) {
-			const String* s = argv[0].toString(processor.getHeap());
+			const String* s = argv[0].toString(rt.getHeap());
 			const Char* e = s->end();
 			const Char* b = eatStringWhite(s->begin(), e);
 			double d = 0.0;
@@ -4495,7 +4488,7 @@ struct Support {
 
 	static Value charCodeAt(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
-			const String* s = argv[0].toString(processor.getHeap());
+			const String* s = argv[0].toString(rt.getHeap());
 			const double d = nanToZero(argv[1].toDouble());
 			if (-1.0 < d && d < s->size()) {
 				return Value((*s)[static_cast<UInt32>(d)]);
@@ -4507,13 +4500,13 @@ struct Support {
 	static Value substring(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		Value result(&EMPTY_STRING);
 		if (argc >= 3) {
-			const String* s = argv[0].toString(processor.getHeap());
+			const String* s = argv[0].toString(rt.getHeap());
 			const double l = s->size();
 			const double from = std::max(nanToZero(argv[1].toDouble()), 0.0);
 			const double to = std::min(nanToZero(argv[2].toDouble()), l);
 			if (from < to && from < l && to >= 1.0) {
 				const Char* b = s->begin();
-				Heap& heap = processor.getHeap();
+				Heap& heap = rt.getHeap();
 				return Value(from < 1.0 && to >= l ? s
 						: new(heap) String(heap.managed(), b + static_cast<UInt32>(from), b + static_cast<UInt32>(to)));
 			}
@@ -4523,9 +4516,9 @@ struct Support {
 
 	static Value submatch(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 3) {
-			const String* const text = argv[0].toString(processor.getHeap());
+			const String* const text = argv[0].toString(rt.getHeap());
 			const Int32 offset = argv[1].toInt();
-			const String* const match = argv[2].toString(processor.getHeap());
+			const String* const match = argv[2].toString(rt.getHeap());
 			const UInt32 matchSize = match->size();
 			if (offset + matchSize <= text->size()
 					&& std::equal(text->begin() + offset, text->begin() + offset + matchSize, match->begin())) {
@@ -4569,7 +4562,7 @@ static struct {
 
 static struct {
 	String name;
-	FunctorAdapter<Value (Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) > func;
+	FunctorAdapter<NativeFunction> func;
 } SUPPORT_FUNCTIONS[] = {
 	{ String("getInternalProperty"), Support::getInternalProperty }, { String("createWrapper"), Support::createWrapper },
 	{ String("defineProperty"), Support::defineProperty }, { String("compileFunction"), Support::compileFunction },
@@ -4789,7 +4782,7 @@ double getCPUSecs() {
 
 	class PrintFunction : public Function {
 		public:		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-						const String* s = (argc >= 1 ? argv[0].toString(processor.getHeap()) : &EMPTY_STRING);
+						const String* s = (argc >= 1 ? argv[0].toString(rt.getHeap()) : &EMPTY_STRING);
 						std::wcout << s->toStdString().c_str() << std::endl;
 						if (interactive) {
 							pushIOLines('<', *s);
@@ -4800,7 +4793,7 @@ double getCPUSecs() {
 	
 	struct GCFunction : public Function {
 		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			processor.getHeap().gc();
+			rt.getHeap().gc();
 			return Value::UNDEFINED;
 		}
 	};
@@ -4809,7 +4802,7 @@ double getCPUSecs() {
 		protected:	struct AddFunction : public Function {
 						typedef Function super;
 						virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-							Heap& heap = processor.getHeap();
+							Heap& heap = rt.getHeap();
 							if (thisObject->getClassName() != &NativeTestObject::className) {
 								ScriptException::throwError(heap, TYPE_ERROR, "Invalid class");
 							}
@@ -4858,6 +4851,20 @@ double getCPUSecs() {
 						return Value::UNDEFINED;
 					}
 	};
+
+	Value disassemble(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Heap& heap = rt.getHeap();
+		Function* f = (argc >= 1 ? argv[0].asFunction() : 0);
+		if (f == 0) { // FIX : sub to make is not a function error or something?
+			ScriptException::throwError(heap, TYPE_ERROR, new(heap) String(heap.managed(), *argv[0].toString(heap), IS_NOT_A_FUNCTION_STRING));
+		}
+		const Code* code = f->getScriptCode();
+		if (code == 0) {
+			ScriptException::throwError(heap, TYPE_ERROR, "Cannot disassemble native code");
+		}
+		disassemble(heap, *code);
+		return Value::UNDEFINED;
+	}
 
 bool pauseBeforeQuit = false;
 
@@ -4916,6 +4923,8 @@ suppressStdErr = true;
     GCFunction gcFunction;
     const String GC_STRING("gc");
     globals.setOwnProperty(rt, Value(&GC_STRING), Value(&gcFunction), DONT_ENUM_FLAG);
+    globals.setOwnProperty(rt, Value(newString(heap, "disassemble"))
+    		, Value(new(heap) FunctorAdapter<NativeFunction>(heap.managed(), disassemble)), DONT_ENUM_FLAG);
 CallbackTest callbackTest;
 globals.setOwnProperty(rt, Value(newString(heap, "callbackTest")), Value(&callbackTest), DONT_ENUM_FLAG);
 //globals.setOwnProperty(rt, Value(newString(heap, "nativeTestObject")), Value(heap.govern(new(heap) NativeTestObject(heap, 1.4, 2.9))), STANDARD_FLAGS);

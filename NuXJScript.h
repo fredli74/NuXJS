@@ -607,34 +607,6 @@ class Array : public LazyScriptObject<Object> {
 				}
 };
 
-/*
-	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
-	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
-*/
-class Function : public Object {
-	public:		typedef Object super;
-	
-				virtual Function* asFunction();
-				virtual const String* typeOfString() const;
-				virtual const String* getClassName() const;
-				virtual const String* toString(Heap& heap) const;
-				virtual Value getInternalValue(Heap& heap) const;
-				virtual Object* getPrototype(Runtime& rt) const;
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
-				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
-
-	protected:	Function() { }
-				Function(GCList& gcList) : super(gcList) { }
-};
-
-class EvalFunction : public Function {
-	public:		typedef Function super;
-				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-	protected:	bool direct;
-};
-
 // Separate from Code so that multiple functions can share the same constants (purely optimization).
 class Constants : public GCItem, public QuickVector<Value> {
 	public:		typedef GCItem super;
@@ -657,14 +629,15 @@ class Code : public Object {
 				UInt32 getVarsCount() const { return varNames.size(); }
 				UInt32 getArgumentsCount() const { return argumentNames.size(); }
 				const String* getLocalName(Int32 index) const { return (index < 0 ? varNames[static_cast<UInt32>(~index)] : argumentNames[static_cast<UInt32>(index)]); }
-				const Value* getConstantsPointer() const { return constants->begin(); }
-				const CodeWord* getCodeWords() const { return code.begin(); }
-				UInt32 getCodeSize() const { return code.size(); }
+				const Constants* getConstants() const { return constants; }
+				const CodeWord* getCodeWords() const { return codeWords.begin(); }
+				UInt32 getCodeSize() const { return codeWords.size(); }
 				const String* getName() const { return name; }
 				const String* getSource() const { return source; }
 				UInt32 getMaxStackDepth() const { return maxStackDepth; }
+				UInt32 calcLocalsSize(UInt32 argc) const { return getVarsCount() + std::max(getArgumentsCount(), argc); }
 
-	protected:	QuickArray<CodeWord> code;
+	protected:	QuickArray<CodeWord> codeWords;
 				Constants* const constants;
 				Table nameIndexes;							// < 0 : local variables, >= 0 : arguments, CATCH_PARAMETER == current catch parameter during compile-time only (don't use fast index binding)
 				QuickVector<const String*> varNames;		// Notice that this list is reversed in relation to indexes in the "locals" array in FunctionScope.
@@ -689,6 +662,47 @@ class Code : public Object {
 #if (VERIFY_STACK_LOGIC)
 	public: QuickVector<int> stackDepths;
 #endif
+};
+
+/*
+	The Function base class, which can be used to interface with native C++ functions, does not reference other objects.
+	Therefore it is ok to not place instances in a heap. (See GCItem for more info.)
+*/
+class Function : public Object {
+	public:		typedef Object super;
+	
+				virtual Function* asFunction();
+				virtual const String* typeOfString() const;
+				virtual const String* getClassName() const;
+				virtual const String* toString(Heap& heap) const;
+				virtual Value getInternalValue(Heap& heap) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual bool hasInstance(Runtime& rt, Processor& processor, Object* object) const;
+				virtual const Code* getScriptCode() const { return 0; }
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject = 0) = 0;
+
+	protected:	Function() { }
+				Function(GCList& gcList) : super(gcList) { }
+};
+
+typedef Value (*NativeFunction)(Runtime&, Processor&, UInt32, const Value*, Object*);
+
+template<class F> struct FunctorAdapter : public Function {
+	typedef Function super;
+	FunctorAdapter(const F& f) : f(f) { }
+	FunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return f(rt, processor, argc, argv, thisObject);
+	}
+	F f;
+};
+
+class EvalFunction : public Function {
+	public:		typedef Function super;
+				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+	protected:	bool direct;
 };
 
 class Scope : public GCItem {
@@ -729,15 +743,16 @@ class FunctionPrototypeFunction : public ExtensibleFunction {
 
 class ScriptFunction : public ExtensibleFunction {
 	friend class FunctionScope;
-	
+	friend class Processor;
+
 	public:		typedef ExtensibleFunction super;
 				
 				ScriptFunction(GCList& gcList, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
 				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				const Code* getCode() const;
-				
+				virtual const Code* getScriptCode() const { return code; }
+
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				
 				const Code* const code;
@@ -755,6 +770,7 @@ class SpecialConstructorFunction : public ExtensibleFunction {
 				SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
 				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
 				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual const Code* getScriptCode() const { return regularFunction->getScriptCode(); }
 	
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				Function* const regularFunction;
@@ -1072,8 +1088,6 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Runtime& rt);
-				Runtime& getRuntime() const { return rt; }
-				Heap& getHeap() const { return rt.getHeap(); }
 				void enterGlobalCode(const Code* code);
 				void enterEvalCode(const Code* code, bool local = false);
 				void enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject = 0);
