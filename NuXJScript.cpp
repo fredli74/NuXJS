@@ -884,11 +884,11 @@ Object* Object::getPrototype(Runtime& rt) const { return &rt.objectPrototype; }
 Value Object::getInternalValue(Heap& heap) const { return Value::UNDEFINED; }
 Flags Object::getOwnProperty(Runtime& rt, const Value& key, Value* v) const { return NONEXISTENT; }
 bool Object::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags) { return false; }
-bool Object::deleteProperty(Runtime& rt, const Value& key) { return false; }
+bool Object::deleteOwnProperty(Runtime& rt, const Value& key) { return false; }
 Enumerator* Object::getPropertyEnumerator(Runtime& rt) const { return &EMPTY_ENUMERATOR; }
 
-bool Object::updateProperty(Runtime& rt, const Value& key, const Value& v) {
-	return (hasOwnProperty(rt, key) && ((void)(setOwnProperty(rt, key, v, STANDARD_FLAGS)), true));
+bool Object::updateOwnProperty(Runtime& rt, const Value& key, const Value& v) {
+	return (hasOwnProperty(rt, key) && ((void)(setOwnProperty(rt, key, v)), true));
 }
 
 bool Object::isOwnPropertyEnumerable(Runtime& rt, const Value& key) const {
@@ -905,7 +905,7 @@ bool Object::hasOwnProperty(Runtime& rt, const Value& key) const {
 	return (getOwnProperty(rt, key, &dummy) != NONEXISTENT);
 }
 
-Flags Object::getPropertyDeep(Runtime& rt, const Value& key, Value* v) const {
+Flags Object::getProperty(Runtime& rt, const Value& key, Value* v) const {
 	const Object* o = this;
 	do {
 		Flags flags = o->getOwnProperty(rt, key, v);
@@ -917,8 +917,8 @@ Flags Object::getPropertyDeep(Runtime& rt, const Value& key, Value* v) const {
 	return NONEXISTENT;
 }
 
-bool Object::setPropertyDeep(Runtime& rt, const Value& key, const Value& v) {
-	if (updateProperty(rt, key, v)) {
+bool Object::setProperty(Runtime& rt, const Value& key, const Value& v) {
+	if (updateOwnProperty(rt, key, v)) {
 		return true;
 	}
 	const Object* o = this;
@@ -928,13 +928,13 @@ bool Object::setPropertyDeep(Runtime& rt, const Value& key, const Value& v) {
 			return false;
 		}
 	}
-	return setOwnProperty(rt, key, v, STANDARD_FLAGS);
+	return setOwnProperty(rt, key, v);
 }
 
-Value Object::getPropertyDeep(Runtime& rt, const char* name) const { // FIX : keep?
+Value Object::getProperty(Runtime& rt, const char* name) const { // FIX : keep?
 	Value v = Value::UNDEFINED;
 	String s(name);
-	getPropertyDeep(rt, &s, &v);
+	getProperty(rt, &s, &v);
 	return v;
 }
 
@@ -1076,7 +1076,7 @@ bool ScriptObject::setOwnProperty(Runtime& rt, const Value& key, const Value& v,
 	return update(insert(key.toString(rt.getHeap())), v, flags);
 }
 
-bool ScriptObject::updateProperty(Runtime& rt, const Value& key, const Value& v) {
+bool ScriptObject::updateOwnProperty(Runtime& rt, const Value& key, const Value& v) {
 	Table::Bucket* bucket = lookup(key.toString(rt.getHeap()));
 	return (bucket != 0 && update(bucket, v));
 }
@@ -1090,7 +1090,7 @@ Flags ScriptObject::getOwnProperty(Runtime& rt, const Value& key, Value* v) cons
 	return NONEXISTENT;
 }
 
-bool ScriptObject::deleteProperty(Runtime& rt, const Value& key) {
+bool ScriptObject::deleteOwnProperty(Runtime& rt, const Value& key) {
 	Table::Bucket* bucket = lookup(key.toString(rt.getHeap()));
 	return (bucket == 0 || erase(bucket));
 }
@@ -1132,8 +1132,8 @@ bool StringWrapper::setOwnProperty(Runtime& rt, const Value& key, const Value& v
 	return (wrapped->hasOwnProperty(rt, key) ? false : super::setOwnProperty(rt, key, v, flags));
 }
 
-bool StringWrapper::deleteProperty(Runtime& rt, const Value& key) {
-	return (wrapped->hasOwnProperty(rt, key) ? false : super::deleteProperty(rt, key));
+bool StringWrapper::deleteOwnProperty(Runtime& rt, const Value& key) {
+	return (wrapped->hasOwnProperty(rt, key) ? false : super::deleteOwnProperty(rt, key));
 }
 
 Enumerator* StringWrapper::getPropertyEnumerator(Runtime& rt) const {
@@ -1216,7 +1216,7 @@ bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) co
 		return false;
 	}
 	Value v(Value::UNDEFINED);
-	getPropertyDeep(rt, &PROTOTYPE_STRING, &v);
+	getProperty(rt, &PROTOTYPE_STRING, &v);
 	Object* prototypeObject = v.asObject();
 	if (prototypeObject == 0) {
 		ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Non-object prototype in instanceof check");
@@ -1321,14 +1321,14 @@ bool Array::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags 
 	return super::setOwnProperty(rt, key, v, flags);
 }
 
-bool Array::updateProperty(Runtime& rt, const Value& key, const Value& v) {
+bool Array::updateOwnProperty(Runtime& rt, const Value& key, const Value& v) {
 	UInt32 index;
-	return (key.toArrayIndex(index) && index != 0xFFFFFFFFU ? setOwnProperty(rt, key, v, STANDARD_FLAGS)
-			: super::updateProperty(rt, key, v));
+	return (key.toArrayIndex(index) && index != 0xFFFFFFFFU ? setOwnProperty(rt, key, v)
+			: super::updateOwnProperty(rt, key, v));
 }
 
-bool Array::deleteProperty(Runtime& rt, const Value& key) {
-	return (key.equalsString(LENGTH_STRING) ? false : ((void)(sliceDenseVector(rt, key)), super::deleteProperty(rt, key)));
+bool Array::deleteOwnProperty(Runtime& rt, const Value& key) {
+	return (key.equalsString(LENGTH_STRING) ? false : ((void)(sliceDenseVector(rt, key)), super::deleteOwnProperty(rt, key)));
 }
 
 void Array::constructCompleteObject(Runtime& rt) const { }
@@ -1344,7 +1344,7 @@ void Array::pushElements(Runtime& rt, Int32 count, const Value* elements) {
 		denseVector.insert(denseVector.end(), elements, elements + count);
 	} else {
 		for (int i = 0; i < count; ++i) {
-			super::setOwnProperty(rt, length + i, elements[i], STANDARD_FLAGS);
+			super::setOwnProperty(rt, length + i, elements[i]);
 		}
 	}
 	length += count;
@@ -1360,8 +1360,8 @@ template<class SUPER> bool LazyScriptObject<SUPER>::setOwnProperty(Runtime& rt, 
 	return getCompleteObject(rt)->setOwnProperty(rt, key, v, flags);
 }
 
-template<class SUPER> bool LazyScriptObject<SUPER>::deleteProperty(Runtime& rt, const Value& key) {
-	return getCompleteObject(rt)->deleteProperty(rt, key);
+template<class SUPER> bool LazyScriptObject<SUPER>::deleteOwnProperty(Runtime& rt, const Value& key) {
+	return getCompleteObject(rt)->deleteOwnProperty(rt, key);
 }
 
 template<class SUPER> Enumerator* LazyScriptObject<SUPER>::getPropertyEnumerator(Runtime& rt) const {
@@ -1423,7 +1423,7 @@ Value SpecialConstructorFunction::invoke(Runtime& rt, Processor& processor, UInt
 Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (constructorFunction == 0) {
 		Value v;
-		regularFunction->getPropertyDeep(rt, &NAME_STRING, &v);
+		regularFunction->getProperty(rt, &NAME_STRING, &v);
 		Heap& heap = rt.getHeap();
 		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), " is not a constructor"));
 	}
@@ -1437,11 +1437,11 @@ void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
 		templateFunction = constructorFunction;
 	}
 	Value v;
-	Flags flags = templateFunction->getPropertyDeep(rt, &NAME_STRING, &v);
+	Flags flags = templateFunction->getProperty(rt, &NAME_STRING, &v);
 	if (flags != NONEXISTENT) { // FIX : getName?
 		completeObject->setOwnProperty(rt, &NAME_STRING, v, flags);
 	}
-	flags = templateFunction->getPropertyDeep(rt, &LENGTH_STRING, &v);
+	flags = templateFunction->getProperty(rt, &LENGTH_STRING, &v);
 	if (flags != NONEXISTENT) { // FIX : in the future I think we should have a getLength
 		completeObject->setOwnProperty(rt, &LENGTH_STRING, v, flags);
 	}
@@ -1477,8 +1477,8 @@ const String* Error::toString(Heap& heap) const {
 
 void Error::updateReflection(Runtime& rt) {
 	Value v;
-	name = (getPropertyDeep(rt, &NAME_STRING, &v) != NONEXISTENT ? v.toString(rt.getHeap()) : &ERROR_NAMES[errorType]);
-	message = (getPropertyDeep(rt, &MESSAGE_STRING, &v) != NONEXISTENT ? v.toString(rt.getHeap()) : 0);
+	name = (getProperty(rt, &NAME_STRING, &v) != NONEXISTENT ? v.toString(rt.getHeap()) : &ERROR_NAMES[errorType]);
+	message = (getProperty(rt, &MESSAGE_STRING, &v) != NONEXISTENT ? v.toString(rt.getHeap()) : 0);
 }
 
 bool Error::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags) {
@@ -1487,8 +1487,8 @@ bool Error::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags 
 	return result;
 }
 
-bool Error::deleteProperty(Runtime& rt, const Value& key) {
-	const bool result = super::deleteProperty(rt, key);
+bool Error::deleteOwnProperty(Runtime& rt, const Value& key) {
+	const bool result = super::deleteOwnProperty(rt, key);
 	updateReflection(rt);
 	return result;
 }
@@ -1542,9 +1542,9 @@ bool Arguments::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Fl
 	return (p == 0 ? super::setOwnProperty(rt, key, v, flags) : ((void)(*p = v), true));
 }
 
-bool Arguments::deleteProperty(Runtime& rt, const Value& key) {
+bool Arguments::deleteOwnProperty(Runtime& rt, const Value& key) {
 	const Value* p = findProperty(key);
-    return (p == 0 ? super::deleteProperty(rt, key) : (deletedArguments[p - scope->getLocalsPointer()] = true));
+    return (p == 0 ? super::deleteOwnProperty(rt, key) : (deletedArguments[p - scope->getLocalsPointer()] = true));
 }
 
 Enumerator* Arguments::getPropertyEnumerator(Runtime& rt) const {
@@ -1713,9 +1713,9 @@ void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initVal
 /* --- GlobalScope --- */
 
 GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
-Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobals()->getPropertyDeep(rt, name, v); }
-void GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobals()->setPropertyDeep(rt, name, v); }
-bool GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobals()->deleteProperty(rt, name); }
+Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobals()->getProperty(rt, name, v); }
+void GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobals()->setProperty(rt, name, v); }
+bool GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobals()->deleteOwnProperty(rt, name); }
 void GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
 	// FIX : deep or not?!
@@ -1760,7 +1760,7 @@ bool CatchScope::deleteVar(Runtime& rt, const String* name) {
 WithScope::WithScope(GCList& gcList, Scope* parentScope, Object* withObject) : super(gcList, parentScope), withObject(withObject) { }
 
 Flags WithScope::readVar(Runtime& rt, const String* name, Value* v) const {
-	Flags flags = withObject->getPropertyDeep(rt, name, v);
+	Flags flags = withObject->getProperty(rt, name, v);
 	return (flags != NONEXISTENT ? flags : parentScope->readVar(rt, name, v));
 }
 
@@ -1771,7 +1771,7 @@ void WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 		const Flags flags = o->getOwnProperty(rt, key, &dummy);
 		if (flags != NONEXISTENT) {
 			if ((flags & READ_ONLY_FLAG) == 0) {
-				withObject->setOwnProperty(rt, key, v, STANDARD_FLAGS);
+				withObject->setOwnProperty(rt, key, v);
 			}
 			return;
 		}
@@ -1781,8 +1781,8 @@ void WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 
 bool WithScope::deleteVar(Runtime& rt, const String* name) {
 	Value dummy;
-	Flags findFlags = withObject->getPropertyDeep(rt, name, &dummy);
-	return (findFlags != NONEXISTENT ? withObject->deleteProperty(rt, name) : parentScope->deleteVar(rt, name));
+	Flags findFlags = withObject->getProperty(rt, name, &dummy);
+	return (findFlags != NONEXISTENT ? withObject->deleteOwnProperty(rt, name) : parentScope->deleteVar(rt, name));
 }
 
 /* --- ScriptException --- */
@@ -2041,7 +2041,7 @@ void Processor::innerRun() {
 				if (o == 0) {
 					return;
 				}
-				if (o->getPropertyDeep(rt, sp[0], sp - 1) == NONEXISTENT) {
+				if (o->getProperty(rt, sp[0], sp - 1) == NONEXISTENT) {
 					sp[-1] = Value::UNDEFINED;
 				}
 				pop(1);
@@ -2053,7 +2053,7 @@ void Processor::innerRun() {
 				if (o == 0) {
 					return;
 				}
-				o->setPropertyDeep(rt, sp[-1], sp[0]);
+				o->setProperty(rt, sp[-1], sp[0]);
 				sp[-2] = sp[0];
 				pop(2);
 				break;
@@ -2064,7 +2064,7 @@ void Processor::innerRun() {
 				if (o == 0) {
 					return;
 				}
-				o->setPropertyDeep(rt, sp[-1], sp[0]);
+				o->setProperty(rt, sp[-1], sp[0]);
 				pop(3);
 				break;
 			}
@@ -2152,7 +2152,7 @@ void Processor::innerRun() {
 					Value v(Value::UNDEFINED);
 					Function* f;
 					const Value& name = sp[-im];
-					if (o->getPropertyDeep(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
+					if (o->getProperty(rt, name, &v) == NONEXISTENT || (f = v.asFunction()) == 0) {
 						error(TYPE_ERROR, new(heap) String(heap.managed(), *name.toString(heap), IS_NOT_A_FUNCTION_STRING));
 					} else {
 						invokeFunction(f, im + 1, im, o);
@@ -2176,7 +2176,7 @@ void Processor::innerRun() {
 				Function* f = asFunction(sp[-im]);
 				if (f != 0) { // FIX : sub
 					Value v(Value::UNDEFINED);
-					f->getPropertyDeep(rt, &PROTOTYPE_STRING, &v);
+					f->getProperty(rt, &PROTOTYPE_STRING, &v);
 					Object* prototype = v.asObject();
 					Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
 					sp[-(im - 1)] = f->construct(rt, *this, im, sp - im + 1, newObject);
@@ -2206,7 +2206,7 @@ void Processor::innerRun() {
 			
 			case ADD_PROPERTY_OP: {
 				Object* o = sp[-1].getObject();
-				o->setOwnProperty(rt, constants[im], sp[0], STANDARD_FLAGS);
+				o->setOwnProperty(rt, constants[im], sp[0]);
 				pop(1);
 				break;
 			}
@@ -2226,7 +2226,7 @@ void Processor::innerRun() {
 				if (o == 0) {
 					return;
 				}
-				pop2push1(o->deleteProperty(rt, sp[0]));
+				pop2push1(o->deleteOwnProperty(rt, sp[0]));
 				break;
 			}
 			
@@ -2257,7 +2257,7 @@ void Processor::innerRun() {
 					return;
 				}
 				Value dummy;
-				sp[-1] = (o->getPropertyDeep(rt, sp[-1], &dummy) != NONEXISTENT);
+				sp[-1] = (o->getProperty(rt, sp[-1], &dummy) != NONEXISTENT);
 				pop(1);
 				break;
 			}
@@ -4346,13 +4346,13 @@ struct Support {
 			Object* arrayObject = (argc > 2 ? argv[2].toObject(rt, false) : 0);
 			if (arrayObject != 0) {
 				Value v;
-				if (arrayObject->getPropertyDeep(rt, &LENGTH_STRING, &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
+				if (arrayObject->getProperty(rt, &LENGTH_STRING, &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
 					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
 					UInt32 length = static_cast<UInt32>(std::max(v.toInt() - offset, 0));
 					args.resize(length);
 					for (UInt32 i = 0; i < length; ++i) {
 						args[i] = Value::UNDEFINED;
-						arrayObject->getPropertyDeep(rt, i + offset, &args[i]);
+						arrayObject->getProperty(rt, i + offset, &args[i]);
 					}
 				}
 			}
@@ -4585,20 +4585,20 @@ void Runtime::setupStandardLibrary() {
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	const GCValue protectedSupportObject(heap, supportObject);
 	// FIX : static strings?
-	supportObject->setOwnProperty(*this, String::alloc(heap, "prototypes"), prototypesObject, STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, String::alloc(heap, "prototypes"), prototypesObject);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
-		supportObject->setOwnProperty(*this, &SUPPORT_FUNCTIONS[i].name, &SUPPORT_FUNCTIONS[i].func, STANDARD_FLAGS);
+		supportObject->setOwnProperty(*this, &SUPPORT_FUNCTIONS[i].name, &SUPPORT_FUNCTIONS[i].func);
 	}
-	supportObject->setOwnProperty(*this, String::alloc(heap, "isNaN"), &IS_NAN_FUNCTION, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, String::alloc(heap, "isFinite"), &IS_FINITE_FUNCTION, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER, STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, String::alloc(heap, "maxNumber"), std::numeric_limits<double>::max(), STANDARD_FLAGS);
-	supportObject->setOwnProperty(*this, String::alloc(heap, "minNumber"), std::numeric_limits<double>::denorm_min(), STANDARD_FLAGS);
+	supportObject->setOwnProperty(*this, String::alloc(heap, "isNaN"), &IS_NAN_FUNCTION);
+	supportObject->setOwnProperty(*this, String::alloc(heap, "isFinite"), &IS_FINITE_FUNCTION);
+	supportObject->setOwnProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
+	supportObject->setOwnProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
+	supportObject->setOwnProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
+	supportObject->setOwnProperty(*this, String::alloc(heap, "maxNumber"), std::numeric_limits<double>::max());
+	supportObject->setOwnProperty(*this, String::alloc(heap, "minNumber"), std::numeric_limits<double>::denorm_min());
 	
 	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
-		supportObject->setOwnProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, &NATIVE_MATH_FUNCTIONS[i].func, STANDARD_FLAGS);
+		supportObject->setOwnProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, &NATIVE_MATH_FUNCTIONS[i].func);
 	}
 	
 	struct { const String* name; Object* object; } PROTOTYPES[] = {
@@ -4607,10 +4607,10 @@ void Runtime::setupStandardLibrary() {
 		{ &N_UMBER_STRING, &numberPrototype }, { &A_RRAY_STRING, &arrayPrototype }
 	};
 	for (int i = 0; i < sizeof (PROTOTYPES) / sizeof (*PROTOTYPES); ++i) {
-		prototypesObject->setOwnProperty(*this, PROTOTYPES[i].name, PROTOTYPES[i].object, STANDARD_FLAGS);
+		prototypesObject->setOwnProperty(*this, PROTOTYPES[i].name, PROTOTYPES[i].object);
 	}
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		prototypesObject->setOwnProperty(*this, &ERROR_NAMES[i], errorPrototypes[i], STANDARD_FLAGS);
+		prototypesObject->setOwnProperty(*this, &ERROR_NAMES[i], errorPrototypes[i]);
 	}
 	
 	extern const char* STDLIB_JS;
@@ -4620,17 +4620,17 @@ void Runtime::setupStandardLibrary() {
 	heap.gc();
 
 	// FIX : sub v
-	toNumberFunction = supportObject->getPropertyDeep(*this, "toPrimitiveNumber").asFunction();
+	toNumberFunction = supportObject->getProperty(*this, "toPrimitiveNumber").asFunction();
 	if (toNumberFunction == 0) {
 		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveNumber");
 	}
 	
-	toStringFunction = supportObject->getPropertyDeep(*this, "toPrimitiveString").asFunction();
+	toStringFunction = supportObject->getProperty(*this, "toPrimitiveString").asFunction();
 	if (toStringFunction == 0) {
 		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveString");
 	}
 
-	createRegExpFunction = supportObject->getPropertyDeep(*this, "createRegExp").asFunction();
+	createRegExpFunction = supportObject->getProperty(*this, "createRegExp").asFunction();
 	if (toStringFunction == 0) {
 		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.createRegExp");
 	}
@@ -4932,7 +4932,7 @@ suppressStdErr = true;
     globals.setOwnProperty(rt, String::alloc(heap, "dasm"), new(heap) FunctorAdapter<NativeFunction>(heap.managed(), disassemble), DONT_ENUM_FLAG);
 CallbackTest callbackTest;
 globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, DONT_ENUM_FLAG);
-globals.setOwnProperty(rt, String::alloc(heap, "nativeTestObject"), new(heap) NativeTestObject(heap.managed(), 1.4, 2.9), STANDARD_FLAGS);
+//globals.setOwnProperty(rt, String::alloc(heap, "nativeTestObject"), new(heap) NativeTestObject(heap.managed(), 1.4, 2.9));
 
 	if (loadStdLib) {
 		try {

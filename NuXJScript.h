@@ -389,18 +389,17 @@ class Object : public GCItem {
 				virtual Object* getPrototype(Runtime& rt) const;		// Default returns the Object prototype.
 
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;					// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
-				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
-				virtual bool deleteProperty(Runtime& rt, const Value& key);									// Default returns false.
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
+				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);									// Default returns false.
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;								// Default returns an empty enumerator.
 
-				// FIX : rename non-deep to Own and drop Deep, for consistency with JS lingo
 				// FIX : or maybe drop them, we now check with getOwnProperty
 				bool hasOwnProperty(Runtime& rt, const Value& key) const; // checks via getOwnProperty()
 				bool isOwnPropertyEnumerable(Runtime& rt, const Value& key) const;
-				Flags getPropertyDeep(Runtime& rt, const Value& key, Value* v) const; // searches prototype chain
-				Value getPropertyDeep(Runtime& rt, const char* s) const; // helper function
-				bool setPropertyDeep(Runtime& rt, const Value& key, const Value& v); // First tries updateProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
+				Flags getProperty(Runtime& rt, const Value& key, Value* v) const; // searches prototype chain
+				Value getProperty(Runtime& rt, const char* s) const; // helper function
+				bool setProperty(Runtime& rt, const Value& key, const Value& v); // First tries updateOwnProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
 
 	protected:	Object() { }
 				Object(GCList& gcList) : super(gcList) { }
@@ -508,9 +507,9 @@ class ScriptObject : public Object, public Table {
 				ScriptObject(GCList& gcList, Object* prototype);
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 				
 	protected:	Object* prototype;
@@ -545,8 +544,8 @@ class StringWrapper : public ScriptObject {
 				virtual Value getInternalValue(Heap& heap) const;
 
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
 	protected:	const String* const wrapped;
@@ -570,8 +569,8 @@ template<class SUPER> class LazyScriptObject : public SUPER {
 	public:		typedef SUPER super;
 				LazyScriptObject(GCList& gcList) : super(gcList), completeObject(0) { }
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
 	protected:	virtual void constructCompleteObject(Runtime& rt) const = 0;
@@ -592,9 +591,9 @@ class Array : public LazyScriptObject<Object> {
 				virtual Object* getPrototype(Runtime& rt) const;
 				// FIX : toString too?
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool updateProperty(Runtime& rt, const Value& key, const Value& v);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 				void pushElements(Runtime& rt, Int32 count, const Value* elements);
 
@@ -796,8 +795,8 @@ class Error : public LazyScriptObject<Object> {
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const; // error type name
 				virtual Object* getPrototype(Runtime& rt) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				void updateReflection(Runtime& rt);
@@ -975,8 +974,8 @@ class Arguments : public LazyScriptObject<Object> {
 				virtual const String* toString(Heap& heap) const;
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags);
-				virtual bool deleteProperty(Runtime& rt, const Value& key);
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
 
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
