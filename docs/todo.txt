@@ -9,56 +9,7 @@ Run-time
 	* basic library (math, string, array ops)
 
 	* it would be nice if it wasn't so easy to forget that Value() didn't create an undefined type, have a SafeValue()? That also maybe even protects from garbage-collect, that would be nice :)
-
-	* lots of problems with gc safety and native calls / constructors: newed objects, methods, this values are not protected
-		- push them temporarily last on stack
-		-  or hold on, I think the entire gc approach needs rethinking, we should have something like gc(beyond) like in NuXScript...
-		- actually, the problem isn't huge as we have an asynchronous vm, we could restrict gc to happen in "bottom" main loop
-
-	* would be cleaner if we could pass a retValue pointer instead of taking a return value (but not nicer syntax for native calls returning tho, hmm, need to think)
-		- we want nice, quick, safe and clean syntax for:
-
-			a)	calling synchronously <-- not prio
-				script: running vm code until return with option to set max count before error)
-				native: call directly
-				syntax: either { ret = function->call } or { processor->call(function }
-
-			b)	calling asynchronously  <-- prio
-				script: enter call ("chain"), user runs { while (processor->run()) { } }, return value is either popped { processor->getReturnValue() } or stored into a predesignated pointer
-				native: chain a native call, syntax should be the same as for script
-
-			c)	calling script async or native sync
-				script: enter call ("chain"), user is notified and have the option to "while (run)" or alt. wait for returned value later (via pointer?? nah, probably not)
-				native: call directly, return value pushed?
-
-			d)	implementing native functions
-				prios: little overhead (quick), error safe (args and maybe even return values are automatically gc protected)
-				- so maybe argc is a bad idea, maybe we should have minimum fixed (which is also .length), like native functions
-
-			alt 1: like today, native calls are direct and faster call sequence than script code (they access arguments directly on stack)
-				pros:	fast
-				cons:	wacky code to accomodate both synchronized native and asynchronized script function calls with little overhead
-						harder to make safe
-						can't form closures right?
-
-			alt 2: native calls are "embedded" in script functions, they also get a frame, only difference is that they execute natively, probably via a dummy stub that calls the native code
-				pros:	probably cleaner and easier to make safe (all args are protected by a frame object)
-						an eval call could create a closure (but what would it access, I guess that would be up to the native function tho)
-				cons:	slower, more garbage (frames)
-
-			alt 1 is regarding functions in themselves to be either script or native
-
-			alt 2 is regarding code to be either script or native
-
-			IMPORTANT! There must be a call procedure that doesn't need to differentiate between script and native functions.
-
-			- check futures/promises in C++11, is that something useful for chaining?
-
-	* at any point where we call a c++ virtual I think we should let the interpreter have a way to update-internals and possibly repeat the instruction. E.g. for implementing getters and setters.
-		- in the future maybe
-
-	* perhaps we should separate native and script calls after all... I think one wants to use script stubs for a lot of stuff. native calls could be looked up during compile time and made into super-quick constants
-		- too complicated
+		- we have a GCValue now... not sure how "valuable" it is yet
 
 	* exceptions over C++ callbacks (js->c++->js, should be able to throw from js, catch in c++, rethrow and capture in js)
 		- ought to work if you create a new process instance each time
@@ -66,13 +17,12 @@ Run-time
 	* make variable lookup non-recursive loop outside the objects, abuse to use get/setOwnProperty for this
 		- actually CPU hit got higher from that, so doing tail-recursion instead (all compilers eliminate tail recursion right?)
 
-	* setting array length needs to do a to_number, how to do this asynchronously?
-
 	* Must have $toPrimitiveNoHint as well, for + and == (I think those are the only ones). This is for Date() objects to work I guess. See 8.6.2.6 [[DefaultValue]] (hint)
 
 	* Make gc async/incremental in the sense that you actively and repeatdly call it until it is done (doesn't block native cpu, even if it "blocks" vm cpu).
 
 	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
+		- simply prevent long proto chains somehow?
 
 	* is the logic correct when changing array length containing a few undeletable elements?
 
@@ -83,8 +33,6 @@ Compiler
 	
 GC
 ==
-
-	* we ought to have a min and max-roof, min before gc'ing at all, over max = error
 
 Stdlib
 ======
@@ -128,6 +76,7 @@ Other
 		  ... or I suppose we could change all methods to return a bool :(
 
 	* also, drop all STL dependencies, incl. std::string even, for simpler / older / stupid compiler compatibility and smaller footprint
+		- all dropped except std::wstring
 
 OPTIMIZE
 ########
@@ -152,6 +101,7 @@ Run-time
 
 	* big array literals goes nuts with ADD_PROPERTY constants, should have an PUSH_ELEMENT or something instead
 		- or PUSH_ELEMENTS and PUSH_CONST_ELEMENTS and have a counter for both. PUSH_ELEMENTS allows us to push in batches of say max 32 elements on stack.
+		- we now have PUSH_ELEMENTS_OP, although I am not super-fond of the solution with non-dense array constants ... would be so much better to have a type for that or something (but how?!)
 
 	* not a big fan of the POST_INC_DEC_SHUFFLE_OP solution, feels ugly, but can't for the world come up with any simpler solutions!?
 
@@ -176,16 +126,13 @@ Run-time
 		- bloom filter helped quite a bit!
 
 	* internal int type
-
 		- One complication is we can't always use .type directly then, e.g. for strict comparison.
-
-	* so, it's definitely worth it to "consolidate" / "internalize" all strings so that all identifiers get the same pointer (proven by the chess benchmark). The question is: how do we do this thread agnostic?
-		- there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
-			- the only problem is that it won't help stuff that is pushed on the stack only, e.g. a[x] = y <- both x and y are pushed data on stack and changing those pointers really won't help anyone :)
+		- I went with a special "index" type in Table instead, solved the most pressing need for now.
 
 	* have a tiny-string type which fits inside value directly (4 16-bit words or 8 8-bit bytes?), for faster/more economic character handling
 
 	* building strings is still slow, could they be built with an internal temporary type similar to $StringBuilder? Or a "PolyString" which consists of a meta-concatentation of two existing strings (or polystrings), possibly even substrings of those?
+		- gc is now so much better that this has improved a lot, test to see if it is still a problem if you have a heavily populated heap
 
 Compiler
 ========
@@ -236,6 +183,7 @@ Compiler
 			- it would be required to use && to never look beyond the max length of all "current candidates"
 
 	* couldn't we share identical strings in the same engine? any disadvantage to that?
+		- we did for a while (shared constants with stdlib etc), but it went away when I added the blocking eval() etc utility functions and I believe there was even some performance benefit to *not* sharing (but why?)
 
 	* simple constants pre-calculations
 		- can we instantiate a small processor to do this?

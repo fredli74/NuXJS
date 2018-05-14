@@ -252,6 +252,7 @@ class Value {
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				Object* getObject() const { assert(type == OBJECT_TYPE); return var.object; }
 				const String* typeOfString() const;
+				bool equalsString(const String& s) const;
 				bool toBool() const; // or toBoolean?
 				Int32 toInt() const; // FIX : name toInt32
 				bool toArrayIndex(UInt32& index) const;	// returns false if value is outside valid array index range (0..2^32-1)
@@ -261,7 +262,6 @@ class Value {
 				Object* toObject(Runtime& rt, bool requestExtensible) const; // FIX : I don't like that we involved runtime here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
-				bool isEqualTo(const String& s) const;
 				bool isLessThan(const Value& r) const;
 				bool isLessThanOrEqualTo(const Value& r) const;
 				Value add(Heap& heap, const Value& r) const;
@@ -296,13 +296,13 @@ class Value {
 				bool compareStrictly(const Value& y) const;
 				static const String* TYPE_STRINGS[5];
 	
-	private:	explicit Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
+	private:	Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
 };
 
 // FIX : is it dangerous with this type of cast? can upcast array GCValue* to Value*
 class GCValue : public GCItem, public Value {
 	public:		typedef GCItem super;
-				GCValue(Heap& heap, const Value& value) : super(heap.roots()), Value(value) { }
+				GCValue(Heap& heap, const Value& value = Value::UNDEFINED) : super(heap.roots()), Value(value) { }
 	protected:	virtual void gcMark(Heap& heap) const {
 					Value::gcMark(heap);
 					super::gcMark(heap);
@@ -315,7 +315,8 @@ const Flags READ_ONLY_FLAG = 2;
 const Flags DONT_ENUM_FLAG = 4;
 const Flags DONT_DELETE_FLAG = 8;
 const Flags INDEX_TYPE_FLAG = 16;	// internal index type, only used as an optimization for faster name -> index lookup
-const Flags STANDARD_FLAGS = 0;		// use with setOwnProperty()
+const Flags STANDARD_FLAGS = EXISTS_FLAG;	// use with setOwnProperty()
+const Flags HIDDEN_CONST_FLAGS = READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG;
 const Flags NONEXISTENT = 0;		// use with getOwnProperty() to check for existence, e.g. getOwnProperty(o, k, v) != NONEXISTENT
 const UInt32 TABLE_BUILT_IN_N = 3; // 1 << 3 == 8
 class Table {
@@ -428,12 +429,13 @@ class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
 
+				static const String* alloc(Heap& heap, const char* s);
 				static const String* concat(Heap& heap, const String& l, const String& r);
 				static const String* fromInt(Heap& heap, Int32 i);
 				static const String* fromDouble(Heap& heap, double d);
 
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
-				explicit String(const char* s);								// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
+				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
 				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
 				String(GCList& gcList);
 				String(GCList& gcList, const Char* b, const Char* e);		// Create string from begin to end pointers.
@@ -456,7 +458,6 @@ class String : public Object, public QuickArray<Char> {
 	protected:	mutable UInt32 bloom;
 				mutable UInt32 hash;
 };
-const String* newString(Heap& heap, const char* s);
 
 class RangeEnumerator : public Enumerator {
 	public:		typedef Enumerator super;
