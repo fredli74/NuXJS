@@ -11,7 +11,7 @@ include('stdlib.pika');
 
 save('stdlibJS.cpp', bake(
 'const char* STDLIB_JS =
-{textToCpp(load("./stdlib.js"))};
+{textToCpp(load("./stdlibMin.js"))};
 '));
 
 print('Updated stdlibJS.cpp');

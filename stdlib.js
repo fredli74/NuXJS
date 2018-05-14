@@ -43,75 +43,75 @@ var $global = this;
 var $unconstructable = $support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = $support.isNaN, $isFinite = $support.isFinite, $floor = $support.floor, $NaN = $support.NaN
-		, $Infinity = $support.Infinity, $submatch = $support.submatch
+		, $Infinity = $support.Infinity, submatch = $support.submatch
 		, $getInternalProperty = $support.getInternalProperty, $callWithArgs = $support.callWithArgs;
 var $regExpExec;
 var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 var $WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 var $PARSE_INT_CHARS = (function() {
-	var pic = { }, ws = $WHITE_SPACES;
-	for (var i = ws.length - 1; i >= 0; --i) {
-		pic[ws[i]] = null;
+	var $pic = { }, $ws = $WHITE_SPACES;
+	for (var $i = $ws.length - 1; $i >= 0; --$i) {
+		$pic[$ws[$i]] = null;
 	}
-	var adl = $ALPHA_DIGITS_LOWER, adu = $ALPHA_DIGITS_UPPER;
-	for (var i = adl.length - 1; i >= 0; --i) {
-		pic[adl[i]] = i;
-		pic[adu[i]] = i;
+	var $adl = $ALPHA_DIGITS_LOWER, $adu = $ALPHA_DIGITS_UPPER;
+	for (var $i = $adl.length - 1; $i >= 0; --$i) {
+		$pic[$adl[$i]] = $i;
+		$pic[$adu[$i]] = $i;
 	}
-	return pic;
+	return $pic;
 })();
 
-function $StringBuilder() { var i = 20, b = this.buffers = [ ]; do { b[--i] = ''; } while (i > 0); }
-$StringBuilder.prototype.append = function append(s) {
-	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = ''; }
+function $StringBuilder() { var $i = 20, $b = this.buffers = [ ]; do { $b[--$i] = ''; } while ($i > 0); }
+$StringBuilder.prototype.append = function append($s) {
+	for (var $i = 0, $n = 256, $b = this.buffers; ($b[$i] += $s).length >= $n && $i < 20; $n <<= 1, ++$i) { $s = $b[$i]; $b[$i] = ''; }
 }
 $StringBuilder.prototype.toString = function toString() {
-	var i, b, s = (b = this.buffers)[i = 19];
-	do { s += b[--i]; } while (i > 0);
-	return s;
+	var $i, $b, $s = ($b = this.buffers)[$i = 19];
+	do { $s += $b[--$i]; } while ($i > 0);
+	return $s;
 }
 
-function $toInteger(v) {
-	return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))));
+function $toInteger($v) {
+	return ($isNaN($v = +$v) ? 0.0 : (!$isFinite($v) ? $v : ($v < 0 ? -$floor(-$v) : $floor($v))));
 }
 
-function $isPrimitive(v) {
-	var v, t;
-	return (((t = typeof v) !== "object" || v === null) && t !== "function");
+function $isPrimitive($v) {
+	var $v, $t;
+	return ((($t = typeof $v) !== "object" || $v === null) && $t !== "function");
 }
 
 // FIX : join these two maybe?
 $support.toPrimitiveNumber = function toPrimitiveNumber(o) {
-	var f, v;
-	if ((typeof (f = o.valueOf) !== 'function' || !$isPrimitive(v = o.valueOf()))
-			&& (typeof (f = o.toString) !== 'function' || !$isPrimitive(v = o.toString()))) {
+	var $f, $v;
+	if ((typeof ($f = o.valueOf) !== 'function' || !$isPrimitive($v = o.valueOf()))
+			&& (typeof ($f = o.toString) !== 'function' || !$isPrimitive($v = o.toString()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return v;
+	return $v;
 };
 
 $support.toPrimitiveString = function toPrimitiveString(o) {
-	var f, v;
-	if ((typeof (f = o.toString) !== 'function' || !$isPrimitive(v = o.toString()))
-			&& (typeof (f = o.valueOf) !== 'function' || !$isPrimitive(v = o.valueOf()))) {
+	var $f, $v;
+	if ((typeof ($f = o.toString) !== 'function' || !$isPrimitive($v = o.toString()))
+			&& (typeof ($f = o.valueOf) !== 'function' || !$isPrimitive($v = o.valueOf()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return v;
+	return $v;
 };
 
-function $toString(o) {
-	return '' + ($isPrimitive(o) ? o : $support.toPrimitiveString(o));
+function $toString($o) {
+	return '' + ($isPrimitive($o) ? $o : $support.toPrimitiveString($o));
 }
 
-function $defineProperties(object, attribs, props) {
-	var readOnly = attribs.readOnly, dontEnum = attribs.dontEnum, dontDelete = attribs.dontDelete;
-	for (var p in props) $support.defineProperty(object, p, props[p], readOnly, dontEnum, dontDelete);
-	return object;
+function $defineProperties($object, $attribs, $props) {
+	var readOnly = $attribs.readOnly, dontEnum = $attribs.dontEnum, dontDelete = $attribs.dontDelete;
+	for (var p in $props) $support.defineProperty($object, p, $props[p], readOnly, dontEnum, dontDelete);
+	return $object;
 }
 
-function $checkClass(object, expectedClass, forFunction) {
-	if ($getInternalProperty(object, 'class') !== expectedClass) {
-		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
+function $checkClass($object, $expectedClass, $forFunction) {
+	if ($getInternalProperty($object, 'class') !== $expectedClass) {
+		throw TypeError($expectedClass + ".prototype." + $forFunction + " is not generic");
 	}
 }
 
@@ -172,9 +172,9 @@ function $toPrecision(value, digits, eNotationBelow) {
 	return string;
 }
 
-function $getInternalNumber(object, forFunction) {
-	$checkClass(object, 'Number', forFunction);
-	return $getInternalProperty(object, 'value');
+function $getInternalNumber($object, $forFunction) {
+	$checkClass($object, 'Number', $forFunction);
+	return $getInternalProperty($object, 'value');
 }
 
 /* --- Object --- */
@@ -195,8 +195,8 @@ $defineProperties(Object.prototype, { dontEnum: true }, {
 	valueOf: $unconstructable(function valueOf() { return this; }),
 	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 	toString: $unconstructable(function toString() {
-		var s;
-		return '[object ' + (((s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
+		var $s;
+		return '[object ' + ((($s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : $s) + ']'
 	}),
 	hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
 	propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
@@ -289,16 +289,16 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 			throw RangeError("illegal radix for toString()");
 		} else {
 			// TODO : fraction?
-			var sign = '', s = '';
+			var $sign = '', $s = '';
 			if ((value = $toInteger(value)) < 0) {
 				value = -value;
-				sign = '-';
+				$sign = '-';
 			}
 			do {
-				s = $ALPHA_DIGITS_LOWER[value % radix] + s;
+				$s = $ALPHA_DIGITS_LOWER[value % radix] + $s;
 				value = $floor(value / radix);
 			} while (value > 0);
-			return sign + s;
+			return $sign + $s;
 		}
 	}),
 	toExponential: $unconstructable(function toExponential(fractionDigits) {
@@ -357,7 +357,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 
 /* --- String --- */
 
-var $lowerToUpper, $upperToLower;
+var $lowerToUpper, upperToLower; // upperToLower is used from within regexps, so no $ there to prevent from minifying
 
 function $createCaseTables() {
 	// In the future constant tables might be (nearly) free to setup, but as of 20160423 this is quite "expensive".
@@ -367,13 +367,14 @@ function $createCaseTables() {
 		"\u1fa4":"\u1f6c\u03b9","\u1fa5":"\u1f6d\u03b9","\u1fa6":"\u1f6e\u03b9","\u1fa7":"\u1f6f\u03b9","\u1fb2":"\u1f70\u03b9","\u1fb3":"\u0391\u03b9","\u1fb4":"\u1f71\u03b9","\u1fb6":"\u03b1\u0342","\u1fb7":"\u1fb6\u03b9","\u1fbe":"\u0399","\u1fc2":"\u1f74\u03b9","\u1fc3":"\u0397\u03b9","\u1fc4":"\u1f75\u03b9","\u1fc6":"\u03b7\u0342","\u1fc7":"\u1fc6\u03b9","\u1fd2":"\u03b9\u0308\u0300","\u1fd3":"\u03b9\u0308\u0301","\u1fd6":"\u03b9\u0342","\u1fd7":"\u03b9\u0308\u0342","\u1fe2":"\u03c5\u0308\u0300","\u1fe3":"\u03c5\u0308\u0301","\u1fe4":"\u03c1\u0313","\u1fe6":"\u03c5\u0342",
 		"\u1fe7":"\u03c5\u0308\u0342","\u1ff2":"\u1f7c\u03b9","\u1ff3":"\u03a9\u03b9","\u1ff4":"\u1f7d\u03b9","\u1ff6":"\u03c9\u0342","\u1ff7":"\u1ff6\u03b9","\ufb00":"FF","\ufb01":"FI","\ufb02":"FL","\ufb03":"FFI","\ufb04":"FFL","\ufb05":"ST","\ufb06":"ST","\ufb13":"\u0544\u0546","\ufb14":"\u0544\u0535","\ufb15":"\u0544\u053b","\ufb16":"\u054e\u0546","\ufb17":"\u0544\u053d"
 	};
-	$upperToLower = {
+	upperToLower = {
 		"\u0130":"i","\u01c5":"\u01c6","\u01c8":"\u01c9","\u01cb":"\u01cc","\u01f2":"\u01f3","\u10a0":"\u10d0","\u10a1":"\u10d1","\u10a2":"\u10d2","\u10a3":"\u10d3","\u10a4":"\u10d4","\u10a5":"\u10d5","\u10a6":"\u10d6","\u10a7":"\u10d7","\u10a8":"\u10d8","\u10a9":"\u10d9","\u10aa":"\u10da","\u10ab":"\u10db","\u10ac":"\u10dc","\u10ad":"\u10dd","\u10ae":"\u10de","\u10af":"\u10df","\u10b0":"\u10e0","\u10b1":"\u10e1","\u10b2":"\u10e2","\u10b3":"\u10e3","\u10b4":"\u10e4","\u10b5":"\u10e5","\u10b6":"\u10e6","\u10b7":"\u10e7","\u10b8":"\u10e8","\u10b9":"\u10e9","\u10ba":"\u10ea",
 		"\u10bb":"\u10eb","\u10bc":"\u10ec","\u10bd":"\u10ed","\u10be":"\u10ee","\u10bf":"\u10ef","\u10c0":"\u10f0","\u10c1":"\u10f1","\u10c2":"\u10f2","\u10c3":"\u10f3","\u10c4":"\u10f4","\u10c5":"\u10f5","\u1f88":"\u1f80","\u1f89":"\u1f81","\u1f8a":"\u1f82","\u1f8b":"\u1f83","\u1f8c":"\u1f84","\u1f8d":"\u1f85","\u1f8e":"\u1f86","\u1f8f":"\u1f87","\u1f98":"\u1f90","\u1f99":"\u1f91","\u1f9a":"\u1f92","\u1f9b":"\u1f93","\u1f9c":"\u1f94","\u1f9d":"\u1f95","\u1f9e":"\u1f96","\u1f9f":"\u1f97","\u1fa8":"\u1fa0","\u1fa9":"\u1fa1","\u1faa":"\u1fa2","\u1fab":"\u1fa3","\u1fac":"\u1fa4",
 		"\u1fad":"\u1fa5","\u1fae":"\u1fa6","\u1faf":"\u1fa7","\u1fbc":"\u1fb3","\u1fcc":"\u1fc3","\u1ffc":"\u1ff3"
 	};
 	var c, $bidirectional = {
-		A:"a",B:"b",C:"c",D:"d",E:"e",F:"f",G:"g",H:"h",I:"i",J:"j",K:"k",L:"l",M:"m",N:"n",O:"o",P:"p",Q:"q",R:"r",S:"s",T:"t",U:"u",V:"v",W:"w",X:"x",Y:"y",Z:"z","\xc0":"\xe0","\xc1":"\xe1","\xc2":"\xe2","\xc3":"\xe3","\xc4":"\xe4","\xc5":"\xe5","\xc6":"\xe6","\xc7":"\xe7","\xc8":"\xe8","\xc9":"\xe9","\xca":"\xea","\xcb":"\xeb","\xcc":"\xec","\xcd":"\xed","\xce":"\xee","\xcf":"\xef","\xd0":"\xf0","\xd1":"\xf1","\xd2":"\xf2","\xd3":"\xf3","\xd4":"\xf4","\xd5":"\xf5","\xd6":"\xf6","\xd8":"\xf8","\xd9":"\xf9","\xda":"\xfa","\xdb":"\xfb","\xdc":"\xfc","\xdd":"\xfd","\xde":"\xfe",
+		'A':"a",'B':"b",'C':"c",'D':"d",'E':"e",'F':"f",'G':"g",'H':"h",'I':"i",'J':"j",'K':"k",'L':"l",'M':"m",'N':"n",'O':"o",'P':"p",'Q':"q",'R':"r",'S':"s",'T':"t",'U':"u",'V':"v",'W':"w",'X':"x",'Y':"y",'Z':"z",
+		"\xc0":"\xe0","\xc1":"\xe1","\xc2":"\xe2","\xc3":"\xe3","\xc4":"\xe4","\xc5":"\xe5","\xc6":"\xe6","\xc7":"\xe7","\xc8":"\xe8","\xc9":"\xe9","\xca":"\xea","\xcb":"\xeb","\xcc":"\xec","\xcd":"\xed","\xce":"\xee","\xcf":"\xef","\xd0":"\xf0","\xd1":"\xf1","\xd2":"\xf2","\xd3":"\xf3","\xd4":"\xf4","\xd5":"\xf5","\xd6":"\xf6","\xd8":"\xf8","\xd9":"\xf9","\xda":"\xfa","\xdb":"\xfb","\xdc":"\xfc","\xdd":"\xfd","\xde":"\xfe",
 		"\u0100":"\u0101","\u0102":"\u0103","\u0104":"\u0105","\u0106":"\u0107","\u0108":"\u0109","\u010a":"\u010b","\u010c":"\u010d","\u010e":"\u010f","\u0110":"\u0111","\u0112":"\u0113","\u0114":"\u0115","\u0116":"\u0117","\u0118":"\u0119","\u011a":"\u011b","\u011c":"\u011d","\u011e":"\u011f","\u0120":"\u0121","\u0122":"\u0123","\u0124":"\u0125","\u0126":"\u0127","\u0128":"\u0129","\u012a":"\u012b","\u012c":"\u012d","\u012e":"\u012f","\u0132":"\u0133","\u0134":"\u0135","\u0136":"\u0137","\u0139":"\u013a","\u013b":"\u013c","\u013d":"\u013e","\u013f":"\u0140","\u0141":"\u0142",
 		"\u0143":"\u0144","\u0145":"\u0146","\u0147":"\u0148","\u014a":"\u014b","\u014c":"\u014d","\u014e":"\u014f","\u0150":"\u0151","\u0152":"\u0153","\u0154":"\u0155","\u0156":"\u0157","\u0158":"\u0159","\u015a":"\u015b","\u015c":"\u015d","\u015e":"\u015f","\u0160":"\u0161","\u0162":"\u0163","\u0164":"\u0165","\u0166":"\u0167","\u0168":"\u0169","\u016a":"\u016b","\u016c":"\u016d","\u016e":"\u016f","\u0170":"\u0171","\u0172":"\u0173","\u0174":"\u0175","\u0176":"\u0177","\u0178":"\xff","\u0179":"\u017a","\u017b":"\u017c","\u017d":"\u017e","\u0181":"\u0253","\u0182":"\u0183",
 		"\u0184":"\u0185","\u0186":"\u0254","\u0187":"\u0188","\u0189":"\u0256","\u018a":"\u0257","\u018b":"\u018c","\u018e":"\u01dd","\u018f":"\u0259","\u0190":"\u025b","\u0191":"\u0192","\u0193":"\u0260","\u0194":"\u0263","\u0196":"\u0269","\u0197":"\u0268","\u0198":"\u0199","\u019c":"\u026f","\u019d":"\u0272","\u019f":"\u0275","\u01a0":"\u01a1","\u01a2":"\u01a3","\u01a4":"\u01a5","\u01a6":"\u0280","\u01a7":"\u01a8","\u01a9":"\u0283","\u01ac":"\u01ad","\u01ae":"\u0288","\u01af":"\u01b0","\u01b1":"\u028a","\u01b2":"\u028b","\u01b3":"\u01b4","\u01b5":"\u01b6","\u01b7":"\u0292",
@@ -394,7 +395,7 @@ function $createCaseTables() {
 		"\u24c6":"\u24e0","\u24c7":"\u24e1","\u24c8":"\u24e2","\u24c9":"\u24e3","\u24ca":"\u24e4","\u24cb":"\u24e5","\u24cc":"\u24e6","\u24cd":"\u24e7","\u24ce":"\u24e8","\u24cf":"\u24e9","\uff21":"\uff41","\uff22":"\uff42","\uff23":"\uff43","\uff24":"\uff44","\uff25":"\uff45","\uff26":"\uff46","\uff27":"\uff47","\uff28":"\uff48","\uff29":"\uff49","\uff2a":"\uff4a","\uff2b":"\uff4b","\uff2c":"\uff4c","\uff2d":"\uff4d","\uff2e":"\uff4e","\uff2f":"\uff4f","\uff30":"\uff50","\uff31":"\uff51","\uff32":"\uff52","\uff33":"\uff53","\uff34":"\uff54","\uff35":"\uff55","\uff36":"\uff56",
 		"\uff37":"\uff57","\uff38":"\uff58","\uff39":"\uff59","\uff3a":"\uff5a"
 	};
-	for (c in $bidirectional) $lowerToUpper[$upperToLower[c] = $bidirectional[c]] = c;
+	for (c in $bidirectional) $lowerToUpper[upperToLower[c] = $bidirectional[c]] = c;
 };
 
 function $translateString(string, table) {
@@ -439,13 +440,13 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	indexOf: $unconstructable(function indexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ((i = $toInteger(pos)) < 0) i = 0;
-		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
+		for (; i <= e; ++i) if (submatch(t, i, s)) return i;
 		return -1;
 	}),
 	lastIndexOf: $unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
 		if ($isNaN(pos = +pos) || (i = $toInteger(pos)) > e) i = e;
-		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
+		for (; i >= 0; --i) if (submatch(t, i, s)) return i;
 		return -1;
 	}),
 	localeCompare: $unconstructable(function localeCompare(that) {
@@ -499,8 +500,8 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 	}),
 	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
 	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
-	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), $upperToLower); }),
-	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), $upperToLower); }),
+	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), upperToLower); }),
+	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), upperToLower); }),
 	valueOf: $unconstructable(function valueOf() {
 		$checkClass(this, 'String', 'valueOf');
 		return $getInternalProperty(this, 'value');
@@ -846,7 +847,8 @@ var CC = { };
 	}
 })();
 
-function $regExpCanonicalize(s) {
+// regExpCanonicalize is used from within regexps, so no $ there to prevent from minifying
+function regExpCanonicalize(s) {
 	var t = '', c, d;
 	if (!$lowerToUpper) $createCaseTables();
 	for (var i = 0, l = s.length; i < l; ++i) {
@@ -937,7 +939,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	}
 
 	function canonicalizeAndEscape(c) {
-		return escapeCharacter(ignoreCase ? $regExpCanonicalize(c) : c);
+		return escapeCharacter(ignoreCase ? regExpCanonicalize(c) : c);
 	}
 
 	function parseLiteralCharacter() {
@@ -1020,7 +1022,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		} else if (literalSequence.length === 2) {
 			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return 'submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -1142,10 +1144,10 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							var b = p;
 							if (s[p] === '-' && (++p, v1 = parseClassAtom())) {
 								if (typeof v0 === 'string' && typeof v1 === 'string' && v0 <= v1) {
-									if (ignoreCase && (v0 > '~' || v1 > '~' || ($regExpCanonicalize(v0) !== v0) !== ($regExpCanonicalize(v1) !== v1))) {
+									if (ignoreCase && (v0 > '~' || v1 > '~' || (regExpCanonicalize(v0) !== v0) !== (regExpCanonicalize(v1) !== v1))) {
 										v0 = escapeCharacter(v0);
 										v1 = escapeCharacter(v1);
-										classCode = or(classCode, and('$upperToLower[c]>="' + v0 + '"', '$upperToLower[c]<="' + v1 + '"'));
+										classCode = or(classCode, and('upperToLower[c]>="' + v0 + '"', 'upperToLower[c]<="' + v1 + '"'));
 									} else {
 										v0 = canonicalizeAndEscape(v0);
 										v1 = canonicalizeAndEscape(v1);
@@ -1184,8 +1186,8 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							n = (n - 1) * 2;
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
-				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+				// TODO: submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
+							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
@@ -1328,7 +1330,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	}
 	var code = "(function(s, p) {\n"
 	if (ignoreCase) {
-		code += "\ts=$regExpCanonicalize(s)\n";
+		code += "\ts=regExpCanonicalize(s)\n";
 	}
 	code += "\tvar l=s.length,q";
 	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,q";
@@ -1356,7 +1358,7 @@ function $execRegExp(re, string) {
 var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, $origEval = eval
 		, $regExpCache = { }, $regExpPrototype;
 // eval without local variables but with access to all internals
-function $evalThere(s) { var customEval = eval; eval = $origEval; try { return eval(s) } finally { eval = customEval } }
+function $evalThere(s) { var $customEval = eval; eval = $origEval; try { return eval(s) } finally { eval = $customEval } }
 var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
 		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
@@ -1374,7 +1376,7 @@ var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp
 		template.source = pattern;
 		var key, func;
 		if (!(func = $regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
-			$regExpCache[key] = func = $evalThere(c=$compileRegExp(pattern, template.ignoreCase, template.multiline));
+			$regExpCache[key] = func = $evalThere($compileRegExp(pattern, template.ignoreCase, template.multiline));
 		}
 		var re = $support.createWrapper('RegExp', func, $regExpPrototype);
 		$defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
@@ -1426,9 +1428,9 @@ $defineProperties($global, { dontEnum: true }, {
 		string = $toString(string);
 		var pic = $PARSE_INT_CHARS, ch, i = -1;
 		while (pic[string[++i]] === null) ;
-		var sign = 1;
+		var $sign = 1;
 		switch (ch = string[i]) {
-			case '-': sign = -1;
+			case '-': $sign = -1;
 			case '+': ++i;
 		}
 		if (((radix = $toInteger(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
@@ -1444,7 +1446,7 @@ $defineProperties($global, { dontEnum: true }, {
 		for (b = i; i < e && (n = pic[string[i]]) != null && n < radix; ++i) {
 			v = v * radix + n;
 		}
-		return (b === i ? $NaN : v * sign);
+		return (b === i ? $NaN : v * $sign);
 	})
 });
 
