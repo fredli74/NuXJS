@@ -5021,7 +5021,8 @@ globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, D
                     std::wstring ws;
                     {
                         std::wstringstream ss;
-                        ss << L"!!!! Line: " << lineNumber; // FIX : keep or not? if so, need to update all tests: << ", column: " << columnNumber;
+                        ss << L"!!!! Line: " << lineNumber;
+						// ss << ", column: " << columnNumber; // FIX : keep or not? if so, need to update all tests:
                         ws = ss.str();
                     }
                     std::wcout << ws << std::endl;

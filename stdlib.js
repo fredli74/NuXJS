@@ -58,26 +58,26 @@ var $PARSE_INT_CHARS = (function() {
 		$pic[$adl[$i]] = $i;
 		$pic[$adu[$i]] = $i;
 	}
-	return $pic;
+	return $pic
 })();
 
-function $StringBuilder() { var $i = 20, $b = this.buffers = [ ]; do { $b[--$i] = ''; } while ($i > 0); }
+function $StringBuilder() { var $i = 20, $b = this.buffers = [ ]; do { $b[--$i] = '' } while ($i > 0) }
 $StringBuilder.prototype.append = function append($s) {
-	for (var $i = 0, $n = 256, $b = this.buffers; ($b[$i] += $s).length >= $n && $i < 20; $n <<= 1, ++$i) { $s = $b[$i]; $b[$i] = ''; }
-}
+	for (var $i = 0, $n = 256, $b = this.buffers; ($b[$i] += $s).length >= $n && $i < 20; $n <<= 1, ++$i) { $s = $b[$i]; $b[$i] = '' }
+};
 $StringBuilder.prototype.toString = function toString() {
 	var $i, $b, $s = ($b = this.buffers)[$i = 19];
-	do { $s += $b[--$i]; } while ($i > 0);
-	return $s;
-}
+	do { $s += $b[--$i] } while ($i > 0);
+	return $s
+};
 
 function $toInteger($v) {
-	return ($isNaN($v = +$v) ? 0.0 : (!$isFinite($v) ? $v : ($v < 0 ? -$floor(-$v) : $floor($v))));
+	return ($isNaN($v = +$v) ? 0.0 : (!$isFinite($v) ? $v : ($v < 0 ? -$floor(-$v) : $floor($v))))
 }
 
 function $isPrimitive($v) {
 	var $v, $t;
-	return ((($t = typeof $v) !== "object" || $v === null) && $t !== "function");
+	return ((($t = typeof $v) !== "object" || $v === null) && $t !== "function")
 }
 
 // FIX : join these two maybe?
@@ -87,7 +87,7 @@ $support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 			&& (typeof ($f = o.toString) !== 'function' || !$isPrimitive($v = o.toString()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return $v;
+	return $v
 };
 
 $support.toPrimitiveString = function toPrimitiveString(o) {
@@ -96,17 +96,17 @@ $support.toPrimitiveString = function toPrimitiveString(o) {
 			&& (typeof ($f = o.valueOf) !== 'function' || !$isPrimitive($v = o.valueOf()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return $v;
+	return $v
 };
 
 function $toString($o) {
-	return '' + ($isPrimitive($o) ? $o : $support.toPrimitiveString($o));
+	return '' + ($isPrimitive($o) ? $o : $support.toPrimitiveString($o))
 }
 
 function $defineProperties($object, $attribs, $props) {
 	var readOnly = $attribs.readOnly, dontEnum = $attribs.dontEnum, dontDelete = $attribs.dontDelete;
 	for (var p in $props) $support.defineProperty($object, p, $props[p], readOnly, dontEnum, dontDelete);
-	return $object;
+	return $object
 }
 
 function $checkClass($object, $expectedClass, $forFunction) {
@@ -169,12 +169,12 @@ function $toPrecision(value, digits, eNotationBelow) {
 	if (exponent !== null) {
 		string += (exponent >= 0 ? 'e+' : 'e') + exponent;
 	}
-	return string;
+	return string
 }
 
 function $getInternalNumber($object, $forFunction) {
 	$checkClass($object, 'Number', $forFunction);
-	return $getInternalProperty($object, 'value');
+	return $getInternalProperty($object, 'value')
 }
 
 /* --- Object --- */
@@ -192,7 +192,7 @@ var Object = function Object(v) {
 $defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Object });
 $defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: $unconstructable(function valueOf() { return this; }),
+	valueOf: $unconstructable(function valueOf() { return this }),
 	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
 	toString: $unconstructable(function toString() {
 		var $s;
@@ -218,7 +218,7 @@ var Function = function Function(body) {
 	}
 	source += ") {\n";
 	if (n >= 0) source += argv[n];
-	return $support.compileFunction(source + "\n}", 'anonymous');
+	return $support.compileFunction(source + "\n}", 'anonymous')
 };
 $defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Function });
 $defineProperties(Function.prototype, { dontEnum: true }, {
@@ -279,10 +279,10 @@ $defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, 
 });
 $defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: $unconstructable(function valueOf() { return $getInternalNumber(this, 'valueOf'); }),
+	valueOf: $unconstructable(function valueOf() { return $getInternalNumber(this, 'valueOf') }),
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: $unconstructable(function toString(radix) {
-		var value = $getInternalNumber(this, 'toString')
+		var value = $getInternalNumber(this, 'toString');
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
 		} else if ((radix = $toInteger(radix)) < 2 || radix > 36) {
@@ -302,7 +302,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toExponential: $unconstructable(function toExponential(fractionDigits) {
-		var value = $getInternalNumber(this, 'toExponential')
+		var value = $getInternalNumber(this, 'toExponential');
 		var string = '';
 		if (!$isFinite(value)) {
 			return value;
@@ -317,7 +317,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toFixed: $unconstructable(function toFixed(fractionDigits) {
-		var value = $getInternalNumber(this, 'toFixed')
+		var value = $getInternalNumber(this, 'toFixed');
 		var digits = $toInteger(fractionDigits);
 		if (digits < 0 || digits > 20) {
 			throw RangeError("Illegal fractionDigits argument for toFixed()");
@@ -341,7 +341,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toPrecision: $unconstructable(function toPrecision(precision) {
-		var value = $getInternalNumber(this, 'toPrecision')
+		var value = $getInternalNumber(this, 'toPrecision');
 		var string = '';
 		if (precision === void 0 || !$isFinite(value)) {
 			return value;
@@ -395,14 +395,14 @@ function $createCaseTables() {
 		"\u24c6":"\u24e0","\u24c7":"\u24e1","\u24c8":"\u24e2","\u24c9":"\u24e3","\u24ca":"\u24e4","\u24cb":"\u24e5","\u24cc":"\u24e6","\u24cd":"\u24e7","\u24ce":"\u24e8","\u24cf":"\u24e9","\uff21":"\uff41","\uff22":"\uff42","\uff23":"\uff43","\uff24":"\uff44","\uff25":"\uff45","\uff26":"\uff46","\uff27":"\uff47","\uff28":"\uff48","\uff29":"\uff49","\uff2a":"\uff4a","\uff2b":"\uff4b","\uff2c":"\uff4c","\uff2d":"\uff4d","\uff2e":"\uff4e","\uff2f":"\uff4f","\uff30":"\uff50","\uff31":"\uff51","\uff32":"\uff52","\uff33":"\uff53","\uff34":"\uff54","\uff35":"\uff55","\uff36":"\uff56",
 		"\uff37":"\uff57","\uff38":"\uff58","\uff39":"\uff59","\uff3a":"\uff5a"
 	};
-	for (c in $bidirectional) $lowerToUpper[upperToLower[c] = $bidirectional[c]] = c;
+	for (c in $bidirectional) $lowerToUpper[upperToLower[c] = $bidirectional[c]] = c
 };
 
 function $translateString(string, table) {
 	if (!$lowerToUpper) $createCaseTables();
 	var i = -1, l = string.length, s = '', t, c;
 	while (++i < l) s += (t = table[c = string[i]]) ? t : c;
-	return s;
+	return s
 }
 
 var String = $support.specialConstructor(function String(v) {
@@ -498,10 +498,10 @@ $defineProperties(String.prototype, { dontEnum: true }, {
 		}
 		return $support.substring($toString(this), start, end);
 	}),
-	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
-	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper); }),
-	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), upperToLower); }),
-	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), upperToLower); }),
+	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper) }),
+	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper) }),
+	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), upperToLower) }),
+	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), upperToLower) }),
 	valueOf: $unconstructable(function valueOf() {
 		$checkClass(this, 'String', 'valueOf');
 		return $getInternalProperty(this, 'value');
@@ -522,8 +522,8 @@ var Array = function Array(v) {
 	} else {
 		for (var i = 0; i < argc; ++i) a[i] = argv[i];
 	}
-	return a;
-}
+	return a
+};
 $defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Array });
 $defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
@@ -681,82 +681,82 @@ Date.parse = function(s) {
 		s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * $msPerMinute,
 		$isNaN(tzh) || (tz = ch === "-" ? -tzh : tzh);
     }
-	return (tz === $support.undefined ? $fromLocalTime(z) : z - tz);
+	return (tz === $support.undefined ? $fromLocalTime(z) : z - tz)
 };
 Date.UTC = function(year, month, date, hours, minutes, seconds, ms) { 
-	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms));
+	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms))
 };
 Date.prototype.toISOString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) throw RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
-	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z");
+	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z")
 };
 Date.prototype.toUTCString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) return "Invalid Date";
-	return ($toDateString(z) + " " + $toTimeString(z));
+	return ($toDateString(z) + " " + $toTimeString(z))
 };
 Date.prototype.toString = function() {
 	var l = $toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return ($toDateString(l) + " " + $toTimeString(l));
+	return ($toDateString(l) + " " + $toTimeString(l))
 };
 Date.prototype.toDateString = function() {
 	var l = $toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return $toDateString(l);
+	return $toDateString(l)
 };
 Date.prototype.toTimeString = function() {
 	var l = $toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return $toTimeString(l);
+	return $toTimeString(l)
 };
 
 Date.prototype.toLocaleString = Date.prototype.toString;
 Date.prototype.toLocaleDateString = Date.prototype.toDateString;
 Date.prototype.toLocaleTimeString = Date.prototype.toTimeString;
 
-Date.prototype.valueOf = function() { return this.Value; };
-Date.prototype.getTime = function() { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return this.Value; };
-Date.prototype.getFullYear = function() { return $dateFromEpoch($toLocalTime(this.Value))[0]; };
-Date.prototype.getUTCFullYear = function() { return $dateFromEpoch(this.Value)[0]; };
-Date.prototype.getMonth = function() { return $dateFromEpoch($toLocalTime(this.Value))[1]; };
-Date.prototype.getUTCMonth = function() { return $dateFromEpoch(this.Value)[1]; };
-Date.prototype.getDate = function() { return $dateFromEpoch($toLocalTime(this.Value))[2]; };
-Date.prototype.getUTCDate = function() { return $dateFromEpoch(this.Value)[2]; };
-Date.prototype.getDay = function() { return $weekdayFromTime($toLocalTime(this.Value)); };
-Date.prototype.getUTCDay = function() { return $weekdayFromTime(this.Value); };
-Date.prototype.getHours = function() { return $hourFromTime($toLocalTime(this.Value)); };
-Date.prototype.getUTCHours = function() { return $hourFromTime(this.Value); };
-Date.prototype.getMinutes = function() { return $minFromTime($toLocalTime(this.Value)); };
-Date.prototype.getUTCMinutes = function() { return $minFromTime(this.Value); };
-Date.prototype.getSeconds = function() { return $secFromTime($toLocalTime(this.Value)); };
-Date.prototype.getUTCSeconds = function() { return $secFromTime(this.Value); };
-Date.prototype.getMilliseconds = function() { return $msFromTime($toLocalTime(this.Value)); };
-Date.prototype.getUTCMilliseconds = function() { return $msFromTime(this.Value); };
-Date.prototype.getTimezoneOffset = function() { return (this.Value - $toLocalTime(this.Value)) / $msPerMinute; };
-Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = $timeClip(+time)); };
-Date.prototype.setMilliseconds = function(ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 3, arguments)))); };
-Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 3, arguments))); };
-Date.prototype.setSeconds = function(sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 2, arguments)))); };
-Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 2, arguments))); };
-Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 1, arguments)))); };
-Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 1, arguments))); };
-Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 0, arguments)))); };
-Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 0, arguments))); };
-Date.prototype.setDate = function(date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 2, arguments)))); };
-Date.prototype.setUTCDate = function(date) { return (this.Value = $timeClip($setDateParts(this.Value, 2, arguments))); };
-Date.prototype.setMonth = function(month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 1, arguments)))); };
-Date.prototype.setUTCMonth = function(month, date) { return (this.Value = $timeClip($setDateParts(this.Value, 1, arguments))); };
-Date.prototype.setFullYear = function(year, month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($isNaN(this.Value) ? 0 : $toLocalTime(this.Value), 0, arguments)))); };
-Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = $timeClip($setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))); };
+Date.prototype.valueOf = function() { return this.Value };
+Date.prototype.getTime = function() { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return this.Value };
+Date.prototype.getFullYear = function() { return $dateFromEpoch($toLocalTime(this.Value))[0] };
+Date.prototype.getUTCFullYear = function() { return $dateFromEpoch(this.Value)[0] };
+Date.prototype.getMonth = function() { return $dateFromEpoch($toLocalTime(this.Value))[1] };
+Date.prototype.getUTCMonth = function() { return $dateFromEpoch(this.Value)[1] };
+Date.prototype.getDate = function() { return $dateFromEpoch($toLocalTime(this.Value))[2] };
+Date.prototype.getUTCDate = function() { return $dateFromEpoch(this.Value)[2] };
+Date.prototype.getDay = function() { return $weekdayFromTime($toLocalTime(this.Value)) };
+Date.prototype.getUTCDay = function() { return $weekdayFromTime(this.Value) };
+Date.prototype.getHours = function() { return $hourFromTime($toLocalTime(this.Value)) };
+Date.prototype.getUTCHours = function() { return $hourFromTime(this.Value) };
+Date.prototype.getMinutes = function() { return $minFromTime($toLocalTime(this.Value)) };
+Date.prototype.getUTCMinutes = function() { return $minFromTime(this.Value) };
+Date.prototype.getSeconds = function() { return $secFromTime($toLocalTime(this.Value)) };
+Date.prototype.getUTCSeconds = function() { return $secFromTime(this.Value) };
+Date.prototype.getMilliseconds = function() { return $msFromTime($toLocalTime(this.Value)) };
+Date.prototype.getUTCMilliseconds = function() { return $msFromTime(this.Value) };
+Date.prototype.getTimezoneOffset = function() { return (this.Value - $toLocalTime(this.Value)) / $msPerMinute };
+Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = $timeClip(+time)) };
+Date.prototype.setMilliseconds = function(ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 3, arguments)))) };
+Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 3, arguments))) };
+Date.prototype.setSeconds = function(sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 2, arguments)))) };
+Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 2, arguments))) };
+Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 1, arguments)))) };
+Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 1, arguments))) };
+Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 0, arguments)))) };
+Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 0, arguments))) };
+Date.prototype.setDate = function(date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 2, arguments)))) };
+Date.prototype.setUTCDate = function(date) { return (this.Value = $timeClip($setDateParts(this.Value, 2, arguments))) };
+Date.prototype.setMonth = function(month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 1, arguments)))) };
+Date.prototype.setUTCMonth = function(month, date) { return (this.Value = $timeClip($setDateParts(this.Value, 1, arguments))) };
+Date.prototype.setFullYear = function(year, month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($isNaN(this.Value) ? 0 : $toLocalTime(this.Value), 0, arguments)))) };
+Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = $timeClip($setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))) };
 
 var $msPerDay = 86400000,
 	$msPerHour = 3600000,
 	$msPerMinute = 60000,
 	$msPerSecond = 1000,
-	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x); },
-	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))); },
+	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
+	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))) },
 	$epochFromDate = function(year, month, day) {
 		year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
 		var era = $int( (year >= 0 ? year : year - 399) / 400 );
@@ -777,8 +777,8 @@ var $msPerDay = 86400000,
 	    var d = doy - $int( (153 * mp + 2) / 5 ) + 1;
 	    return [ (y + (m <= 1)), m, d ];
 	},
-	$epochFromTime = function(hour, minute, second, ms) { return hour * $msPerHour + minute * $msPerMinute + second * $msPerSecond + ms; },
-	$timeFromEpoch = function(z) { return [ $mod($floor(z / $msPerHour), 24), $mod($floor(z / $msPerMinute), 60), $mod($floor(z / $msPerSecond), 60), $mod(z, $msPerSecond) ]; },
+	$epochFromTime = function(hour, minute, second, ms) { return hour * $msPerHour + minute * $msPerMinute + second * $msPerSecond + ms },
+	$timeFromEpoch = function(z) { return [ $mod($floor(z / $msPerHour), 24), $mod($floor(z / $msPerMinute), 60), $mod($floor(z / $msPerSecond), 60), $mod(z, $msPerSecond) ] },
 	$setDateParts = function(z, n, a) {
 		var i, d = $dateFromEpoch(z), r = $mod(z, $msPerDay);
 		for (i = 0; i < a.length; ++i, ++n) d[n] = $int(a[i]);
@@ -789,27 +789,27 @@ var $msPerDay = 86400000,
 		for (i = 0; i < a.length; ++i, ++n) t[n] = $int(a[i]);
 		return $epochFromTime.apply(null, t) + r;
 	},
-	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000); }, // 2016-01-01T00:00:00.000Z
-	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000); }, // 2016-07-01T00:00:00.000Z
-	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); },	// local max is during DST
-	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()); }, // local min is timezone (non DST)
-	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l); },
-	$fromLocalTime = function(z) { return $isNaN(z) ? z : (z - $localTimeDiff(z - $localMaxDiff())); },
-	$toLocalTime = function(z) { return $isNaN(z) ? z : z + $localTimeDiff(z); },
-	$weekdayFromTime = function(z) { return $mod($floor(z / $msPerDay) +4, 7); },
-	$hourFromTime = function(z) { return $mod($floor(z / $msPerHour), 24); },
-	$minFromTime = function(z) { return $mod($floor(z / $msPerMinute), 60); },
-	$secFromTime = function(z) { return $mod($floor(z / $msPerSecond), 60); },
-	$msFromTime = function(z) { return $mod(z, $msPerSecond); },
-	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)); },
+	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000) }, // 2016-01-01T00:00:00.000Z
+	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000) }, // 2016-07-01T00:00:00.000Z
+	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()) },	// local max is during DST
+	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()) }, // local min is timezone (non DST)
+	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l) },
+	$fromLocalTime = function(z) { return $isNaN(z) ? z : (z - $localTimeDiff(z - $localMaxDiff())) },
+	$toLocalTime = function(z) { return $isNaN(z) ? z : z + $localTimeDiff(z) },
+	$weekdayFromTime = function(z) { return $mod($floor(z / $msPerDay) +4, 7) },
+	$hourFromTime = function(z) { return $mod($floor(z / $msPerHour), 24) },
+	$minFromTime = function(z) { return $mod($floor(z / $msPerMinute), 60) },
+	$secFromTime = function(z) { return $mod($floor(z / $msPerSecond), 60) },
+	$msFromTime = function(z) { return $mod(z, $msPerSecond) },
+	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)) },
 	$makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
 		var argc = arguments.length;
 		return $epochFromDate( (year = $int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
 			$int(month), (argc > 2 ? $int(date) : 1)) + $epochFromTime( argc > 3 ? $int(hours) : 0,
 			argc > 4 ? $int(minutes) : 0, argc > 5 ? $int(seconds) : 0, argc > 6 ? $int(ms) : 0);
 	},
-	$toDateString = function(z) { var y, dt = $dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2); },
-	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : ""); };
+	$toDateString = function(z) { var y, dt = $dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
+	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
 
 
 
@@ -821,7 +821,7 @@ var EMPTY_CHAR = v, NEWLINE_CHAR = (v <<= 1), SPACE_CHAR = (v <<= 1), WORD_CHAR 
 		, OK_IN_STRING_LITERAL = (v <<= 1), IDENTITY_ESCAPE_CHAR = (v <<= 1);
 var CC = { };
 (function() {
-	function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask; }
+	function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask }
 
 	setupCharClass(SPECIAL_CHAR, "^$.*+?()[]{}|");
 	setupCharClass(DECIMAL_CHAR | HEX_CHAR | WORD_CHAR, "0123456789");
@@ -854,7 +854,7 @@ function regExpCanonicalize(s) {
 	for (var i = 0, l = s.length; i < l; ++i) {
 		t += ((d = $lowerToUpper[c = s[i]]) && d.length === 1 && (c < '\x80' || d >= '\x80') ? d : c);
 	}
-	return t;
+	return t
 }
 
 // FIX : all charCodeAt etc need to be stowed away so that we won't destroy regexp if changing global objects. This is true for all the code in here actually.
@@ -1044,7 +1044,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	
 	function addFunction(name, definition) {
 		// TODO : sometimes functions are identical (e.g. class-tests), reuse here or in '[' parsing directly?
-		functions += "\tfunction " + name + '(p) { ' + definition + "; }\n";
+		functions += "\tfunction " + name + '(p) { ' + definition + " }\n";
 	}
 
 	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
@@ -1058,7 +1058,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 			addFunction(functionName, head + 'while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
 					+ '; while (' + and('p>=b', '!(' + tail + ')') + ') ' + (stepSize ? 'p-=h' : '--p') + '; return p>=b');
 		} else {
-			addFunction(functionName, head + 'while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ' + (stepSize ? 'p+=h' : '++p') + '; }; return true');
+			addFunction(functionName, head + 'while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ' + (stepSize ? 'p+=h' : '++p') + ' }; return true');
 		}
 		return and(code, functionName + '(' + positionToCode(offset) + ')');
 	}
@@ -1122,7 +1122,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 						if (multiline) {
 							condition = '(' + or(condition, '!!(CC[s[' + positionToCode(offset - 1) + ']]&' + NEWLINE_CHAR + ')') + ')';
 						}
-						code = and(code, condition)
+						code = and(code, condition);
 						break;
 					}
 					case '$': {
@@ -1328,7 +1328,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	if (maxBackReference > captureCounter) {
 		throw SyntaxError("Invalid back reference in regular expression");
 	}
-	var code = "(function(s, p) {\n"
+	var code = "(function(s, p) {\n";
 	if (ignoreCase) {
 		code += "\ts=regExpCanonicalize(s)\n";
 	}
@@ -1336,7 +1336,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,q";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
 	code += "];\n})";
-	return code;
+	return code
 }
 
 function $execRegExp(re, string) {
@@ -1352,7 +1352,7 @@ function $execRegExp(re, string) {
 			}
 		}
 	}
-	re.lastIndex = 0;
+	re.lastIndex = 0
 }
 
 var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, $origEval = eval
@@ -1423,7 +1423,7 @@ $defineProperties($global, { dontEnum: true }, {
 	String: String,
 	isFinite: $unconstructable(function isFinite(v) { return $isFinite(+v) }),
 	isNaN: $unconstructable(function isNaN(v) { return $isNaN(+v) }),
-	parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat($toString(string)); }),
+	parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat($toString(string)) }),
 	parseInt: $unconstructable(function parseInt(string, radix) {
 		string = $toString(string);
 		var pic = $PARSE_INT_CHARS, ch, i = -1;
@@ -1469,22 +1469,22 @@ $defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 
 $defineProperties(Math, { dontEnum: true }, {
 	abs: $unconstructable(function abs(v) { return ((v = +v) < 0 ? -v : v) }),
-	acos: $unconstructable(function acos(v) { return $support.acos(+v); }),
-	asin: $unconstructable(function asin(v) { return $support.asin(+v); }),
-	atan: $unconstructable(function atan(v) { return $support.atan(+v); }),
-	atan2: $unconstructable(function atan2(y, x) { return $support.atan2(+y, +x); }),
-	ceil: $unconstructable(function ceil(v) { return -$floor(-v); }),
-	cos: $unconstructable(function cos(v) { return $support.cos(+v); }),
-	exp: $unconstructable(function exp(v) { return $support.exp(+v); }),
-	floor: $unconstructable(function floor(v) { return $floor(+v); }),
-	log: $unconstructable(function log(v) { return $support.log(+v); }),
-	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m; }),
-	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m; }),
-	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y); }),
-	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))); }),
-	sin: $unconstructable(function sin(v) { return $support.sin(+v); }),
-	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v); }),
-	tan: $unconstructable(function tan(v) { return $support.tan(+v); })
+	acos: $unconstructable(function acos(v) { return $support.acos(+v) }),
+	asin: $unconstructable(function asin(v) { return $support.asin(+v) }),
+	atan: $unconstructable(function atan(v) { return $support.atan(+v) }),
+	atan2: $unconstructable(function atan2(y, x) { return $support.atan2(+y, +x) }),
+	ceil: $unconstructable(function ceil(v) { return -$floor(-v) }),
+	cos: $unconstructable(function cos(v) { return $support.cos(+v) }),
+	exp: $unconstructable(function exp(v) { return $support.exp(+v) }),
+	floor: $unconstructable(function floor(v) { return $floor(+v) }),
+	log: $unconstructable(function log(v) { return $support.log(+v) }),
+	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m }),
+	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m }),
+	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y) }),
+	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))) }),
+	sin: $unconstructable(function sin(v) { return $support.sin(+v) }),
+	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v) }),
+	tan: $unconstructable(function tan(v) { return $support.tan(+v) })
 });
 
 /* --- Errors --- */
@@ -1519,7 +1519,7 @@ function $createErrorConstructor(name, prototype) {
 		toString: $unconstructable(function toString() {
 			return (this.name === void 0 ? 'Error' : this.name) + (this.message ? (': ' + this.message) : '');
 		})
-	});
+	})
 })();
 
 /* --- ES >3 polyfills --- */
