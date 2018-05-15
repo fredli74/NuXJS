@@ -15,6 +15,13 @@ Keypoints
 
 *) fully asynchronous and sandboxed VM, you run as much or as little code you want at a time
 
+*) instantiate as many or as few engines in as many or as few threads that you wish
+
 *) zero tolerance for bugs (plenty of tests)
 
 *) did I say sandboxed?!
+
+Design principles
+#################
+
+*) `const String&` arguments never saves pointer to the argument, temporary (unmanaged) instances of String("...") are allowed.

@@ -1030,10 +1030,10 @@ class Processor : public GCItem {
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
 					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
 					, INC_OP, DEC_OP								// stack: value -> number
+					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
 					, ADD_OP, SUB_OP, MUL_OP, DIV_OP, MOD_OP		// stack: left_value, right_value -> result_value
 					, OR_OP, XOR_OP, AND_OP							// stack: left_value, right_value -> result_value
 					, SHL_OP, SHR_OP, USHR_OP						// stack: left_value, right_value -> result_value
-					, PLUS_OP, MINUS_OP, INV_OP, NOT_OP				// stack: value -> value
 					, X_EQ_OP, X_NEQ_OP, EQ_OP, NEQ_OP				// stack: left_value, right_value -> boolean
 					, LT_OP, LEQ_OP, GT_OP, GEQ_OP					// stack: left_value, right_value -> boolean
 					, JMP_OP, JSR_OP								// operand: offset
