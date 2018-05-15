@@ -2,6 +2,9 @@
 
 include('stdlib.pika');
 
+vargs(@exe,,@fn);
+defaults(@fn, 'stdlib.js');
+
 ::textToCpp = function {
     args(@source);
     result = '';
@@ -11,7 +14,7 @@ include('stdlib.pika');
 
 save('stdlibJS.cpp', bake(
 'const char* STDLIB_JS =
-{textToCpp(load("./stdlibMin.js"))};
+{textToCpp(load(fn))};
 '));
 
 print('Updated stdlibJS.cpp');

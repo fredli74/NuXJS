@@ -3441,6 +3441,7 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 								}
 							}
 						}
+//std::wcout << name->toStdString() << std::endl;
 						break;
 					}
 				}

@@ -1,5 +1,23 @@
 /*
-	$support: {
+	@preserve: Array,Boolean,Date,E,Error,Function,Infinity,LN10,LN2,LOG10E,LOG2E,MAX_VALUE,MIN_VALUE,Math
+	@preserve: NEGATIVE_INFINITY,NaN,Number,Object,PI,POSITIVE_INFINITY,RangeError,RegExp,SQRT1_2,SQRT2,String
+	@preserve: SyntaxError,TypeError,UTC,abs,acos,apply,arguments,asin,atan,atan2,break,call,callWithArgs,case,ceil
+	@preserve: charAt,charCodeAt,configurable,compare,concat,cos,default,defineProperty,delete,do,dontDelete,dontEnum
+	@preserve: else,enumerable,eval,exec,exp,false,finally,floor,for,fromCharCode,fromLocalTime,function,getCurrentTime
+	@preserve: getDate,getDay,getFullYear,getHours,getInternalProperty,getMilliseconds,getMinutes,getMonth
+	@preserve: getPrototypeOf,getSeconds,getTime,getTimezoneOffset,getUTCDate,getUTCDay,getUTCFullYear,getUTCHours
+	@preserve: getUTCMilliseconds,getUTCMinutes,getUTCMonth,getUTCSeconds,hasOwnProperty,if,ignoreCase,in,index,indexOf
+	@preserve: input,isArray,isFinite,isNaN,isPropertyEnumerable,join,lastIndex,lastIndexOf,length,localeCompare,log
+	@preserve: match,max,maxNumber,message,min,minNumber,multiline,name,new,null,parseFloat,parseInt,pow
+	@preserve: propertyIsEnumerable,prototype,push,qsort,readOnly,regExpCanonicalize,return,reverse,round,setDate
+	@preserve: setFullYear,setHours,setMilliseconds,setMinutes,setMonth,setSeconds,setTime,setTimeParts,setUTCDate
+	@preserve: setUTCFullYear,setUTCHours,setUTCMilliseconds,setUTCMinutes,setUTCMonth,setUTCSeconds,shift,sin,slice
+	@preserve: sort,specialConstructor,sqrt,submatch,substr,substring,switch,tan,this,throw,time,toChar,toExponential
+	@preserve: toFixed,toISOString,toLocaleDateString,toLocaleLowerCase,toLocaleString,toLocaleTimeString
+	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
+	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable
+	
+	support: {
 		prototypes: {	// built-in prototype objects
 			object, function, string, boolean, number, array
 		},
@@ -37,85 +55,85 @@
 	}
 */
 
-(function($support) {
+(function(support) {
 
-var $global = this;
-var $unconstructable = $support.specialConstructor; // these are the same now, but not guaranteed in the future
+var globals = this;
+var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
-var $isNaN = $support.isNaN, $isFinite = $support.isFinite, $floor = $support.floor, $NaN = $support.NaN
-		, $Infinity = $support.Infinity, submatch = $support.submatch
-		, $getInternalProperty = $support.getInternalProperty, $callWithArgs = $support.callWithArgs;
-var $regExpExec;
-var $ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", $ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-var $WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
-var $PARSE_INT_CHARS = (function() {
-	var $pic = { }, $ws = $WHITE_SPACES;
-	for (var $i = $ws.length - 1; $i >= 0; --$i) {
-		$pic[$ws[$i]] = null;
+var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
+		, $Infinity = support.Infinity, $submatch = support.submatch
+		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs;
+var regExpExec;
+var ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
+var PARSE_INT_CHARS = (function() {
+	var pic = { }, ws = WHITE_SPACES;
+	for (var i = ws.length - 1; i >= 0; --i) {
+		pic[ws[i]] = null;
 	}
-	var $adl = $ALPHA_DIGITS_LOWER, $adu = $ALPHA_DIGITS_UPPER;
-	for (var $i = $adl.length - 1; $i >= 0; --$i) {
-		$pic[$adl[$i]] = $i;
-		$pic[$adu[$i]] = $i;
+	var adl = ALPHA_DIGITS_LOWER, adu = ALPHA_DIGITS_UPPER;
+	for (var i = adl.length - 1; i >= 0; --i) {
+		pic[adl[i]] = i;
+		pic[adu[i]] = i;
 	}
-	return $pic
+	return pic
 })();
 
-function $StringBuilder() { var $i = 20, $b = this.buffers = [ ]; do { $b[--$i] = '' } while ($i > 0) }
-$StringBuilder.prototype.append = function append($s) {
-	for (var $i = 0, $n = 256, $b = this.buffers; ($b[$i] += $s).length >= $n && $i < 20; $n <<= 1, ++$i) { $s = $b[$i]; $b[$i] = '' }
+function StringBuilder() { var i = 20, b = this.buffers = [ ]; do { b[--i] = '' } while (i > 0) }
+StringBuilder.prototype.append = function append(s) {
+	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = '' }
 };
-$StringBuilder.prototype.toString = function toString() {
-	var $i, $b, $s = ($b = this.buffers)[$i = 19];
-	do { $s += $b[--$i] } while ($i > 0);
-	return $s
+StringBuilder.prototype.toString = function toString() {
+	var i, b, s = (b = this.buffers)[i = 19];
+	do { s += b[--i] } while (i > 0);
+	return s
 };
 
-function $toInteger($v) {
-	return ($isNaN($v = +$v) ? 0.0 : (!$isFinite($v) ? $v : ($v < 0 ? -$floor(-$v) : $floor($v))))
+function toInteger(v) {
+	return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))))
 }
 
-function $isPrimitive($v) {
-	var $v, $t;
-	return ((($t = typeof $v) !== "object" || $v === null) && $t !== "function")
+function isPrimitive(v) {
+	var v, t;
+	return (((t = typeof v) !== "object" || v === null) && t !== "function")
 }
 
 // FIX : join these two maybe?
-$support.toPrimitiveNumber = function toPrimitiveNumber(o) {
-	var $f, $v;
-	if ((typeof ($f = o.valueOf) !== 'function' || !$isPrimitive($v = o.valueOf()))
-			&& (typeof ($f = o.toString) !== 'function' || !$isPrimitive($v = o.toString()))) {
+support.toPrimitiveNumber = function toPrimitiveNumber(o) {
+	var f, v;
+	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
+			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return $v
+	return v
 };
 
-$support.toPrimitiveString = function toPrimitiveString(o) {
-	var $f, $v;
-	if ((typeof ($f = o.toString) !== 'function' || !$isPrimitive($v = o.toString()))
-			&& (typeof ($f = o.valueOf) !== 'function' || !$isPrimitive($v = o.valueOf()))) {
+support.toPrimitiveString = function toPrimitiveString(o) {
+	var f, v;
+	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
+			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
-	return $v
+	return v
 };
 
-function $toString($o) {
-	return '' + ($isPrimitive($o) ? $o : $support.toPrimitiveString($o))
+function objectToString(o) {
+	return '' + (isPrimitive(o) ? o : support.toPrimitiveString(o))
 }
 
-function $defineProperties($object, $attribs, $props) {
-	var readOnly = $attribs.readOnly, dontEnum = $attribs.dontEnum, dontDelete = $attribs.dontDelete;
-	for (var p in $props) $support.defineProperty($object, p, $props[p], readOnly, dontEnum, dontDelete);
-	return $object
+function defineProperties(object, attribs, props) {
+	var ro = attribs.readOnly, de = attribs.dontEnum, dd = attribs.dontDelete;
+	for (var p in props) support.defineProperty(object, p, props[p], ro, de, dd);
+	return object
 }
 
-function $checkClass($object, $expectedClass, $forFunction) {
-	if ($getInternalProperty($object, 'class') !== $expectedClass) {
-		throw TypeError($expectedClass + ".prototype." + $forFunction + " is not generic");
+function checkClass(object, expectedClass, forFunction) {
+	if ($getInternalProperty(object, 'class') !== expectedClass) {
+		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
 	}
 }
 
-function $toPrecision(value, digits, eNotationBelow) {
+function numberToString(value, digits, eNotationBelow) {
 	var string = '';
 	if (value < 0) {
 		value = -value;
@@ -128,11 +146,11 @@ function $toPrecision(value, digits, eNotationBelow) {
 			exponent = -324;
 			significand = value / 1e-323 * 10.0;
 		} else {
-			exponent = $floor($support.log(value) * 0.43429448190325182765113);
+			exponent = $floor(support.log(value) * 0.43429448190325182765113);
 			if (exponent < -323) {
 				exponent = -323;
 			}
-			var magnitude = $support.pow(10, exponent);
+			var magnitude = support.pow(10, exponent);
 			if (value >= magnitude * 10.0) {
 				magnitude *= 10.0;
 				++exponent;
@@ -143,7 +161,7 @@ function $toPrecision(value, digits, eNotationBelow) {
 	if (digits === void 0) {
 		string += significand;
 	} else {
-		var magnitude = $support.pow(10, digits);
+		var magnitude = support.pow(10, digits);
 		var integer = $floor(significand);
 		var decimals = $floor((significand - integer) * magnitude + 0.5);
 		integer += (decimals >= magnitude ? 1 : 0);
@@ -153,7 +171,7 @@ function $toPrecision(value, digits, eNotationBelow) {
 		}
 		if (exponent >= eNotationBelow && exponent <= digits) {
 			digits -= exponent;
-			var magnitude = $support.pow(10, digits);
+			var magnitude = support.pow(10, digits);
 			var integer = $floor(value);
 			var decimals = $floor((value - integer) * magnitude + 0.5);
 			if (decimals >= magnitude) {
@@ -172,9 +190,9 @@ function $toPrecision(value, digits, eNotationBelow) {
 	return string
 }
 
-function $getInternalNumber($object, $forFunction) {
-	$checkClass($object, 'Number', $forFunction);
-	return $getInternalProperty($object, 'value')
+function getInternalNumber(object, forFunction) {
+	checkClass(object, 'Number', forFunction);
+	return $getInternalProperty(object, 'value')
 }
 
 /* --- Object --- */
@@ -189,18 +207,18 @@ var Object = function Object(v) {
 		case "string": return new String(v);
 	}
 };
-$defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Object });
-$defineProperties(Object.prototype, { dontEnum: true }, {
+defineProperties(Object, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Object });
+defineProperties(Object.prototype, { dontEnum: true }, {
 	constructor: Object,
-	valueOf: $unconstructable(function valueOf() { return this }),
-	toLocaleString: $unconstructable(function toLocaleString() { return this.toString() }),
-	toString: $unconstructable(function toString() {
-		var $s;
-		return '[object ' + ((($s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : $s) + ']'
+	valueOf: unconstructable(function valueOf() { return this }),
+	toLocaleString: unconstructable(function toLocaleString() { return this.toString() }),
+	toString: unconstructable(function toString() {
+		var s;
+		return '[object ' + (((s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
 	}),
-	hasOwnProperty: $unconstructable(function hasOwnProperty(name) { return $support.hasOwnProperty(this, $toString(name)) }),
-	propertyIsEnumerable: $unconstructable(function propertyIsEnumerable(name) { return $support.isPropertyEnumerable(this, $toString(name)) }),
-	isPrototypeOf: $unconstructable(function isPrototypeOf(v) {
+	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, objectToString(name)) }),
+	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, objectToString(name)) }),
+	isPrototypeOf: unconstructable(function isPrototypeOf(v) {
 		while (v = $getInternalProperty(v, 'prototype')) {
 			if (v === this) return true;
 		}
@@ -218,12 +236,12 @@ var Function = function Function(body) {
 	}
 	source += ") {\n";
 	if (n >= 0) source += argv[n];
-	return $support.compileFunction(source + "\n}", 'anonymous')
+	return support.compileFunction(source + "\n}", 'anonymous')
 };
-$defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Function });
-$defineProperties(Function.prototype, { dontEnum: true }, {
+defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
+defineProperties(Function.prototype, { dontEnum: true }, {
 	constructor: Function,
-	apply: $unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
+	apply: unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
 		var theClass;
 		if (argArray == null) argArray = [ ];
 		else if ((theClass = $getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
@@ -231,94 +249,94 @@ $defineProperties(Function.prototype, { dontEnum: true }, {
 		};
 		return $callWithArgs(this, thisArg, argArray, 0);
 	}),
-	call: $unconstructable(function call(thisArg) { // FIX : <- 100% native version in the future I think
+	call: unconstructable(function call(thisArg) { // FIX : <- 100% native version in the future I think
 		return $callWithArgs(this, thisArg, arguments, 1);
 	}),
-	toString: $unconstructable(function toString() { // FIX : <- generic, make a factory function
-		$checkClass(this, 'Function', 'toString');
+	toString: unconstructable(function toString() { // FIX : <- generic, make a factory function
+		checkClass(this, 'Function', 'toString');
 		return $getInternalProperty(this, 'value');
 	})
 });
 
 /* --- Boolean --- */
 
-var Boolean = $support.specialConstructor(function Boolean(v) {
+var Boolean = support.specialConstructor(function Boolean(v) {
 		return !!v;
 	}, function Boolean(v) {
-		return $support.createWrapper('Boolean', !!v, $support.prototypes.Boolean);
+		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
 	}
 );
-$defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Boolean });
-$defineProperties(Boolean.prototype, { dontEnum: true }, {
+defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
+defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
-	valueOf: $unconstructable(function valueOf() {
-		$checkClass(this, 'Boolean', 'valueOf');
+	valueOf: unconstructable(function valueOf() {
+		checkClass(this, 'Boolean', 'valueOf');
 		return $getInternalProperty(this, 'value');
 	}),
-	toString: $unconstructable(function toString() {
-		$checkClass(this, 'Boolean', 'toString');
+	toString: unconstructable(function toString() {
+		checkClass(this, 'Boolean', 'toString');
 		return '' + $getInternalProperty(this, 'value');
 	})
 });
 
 /* --- Number --- */
 
-var Number = $support.specialConstructor(function Number(v) {
+var Number = support.specialConstructor(function Number(v) {
 		return (arguments.length ? +v : 0);
 	}, function Number(v) {
-		return $support.createWrapper('Number', arguments.length ? +v : 0, $support.prototypes.Number);
+		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
 	}
 );
-$defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Number });
-$defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
-	MAX_VALUE: $support.maxNumber,
-	MIN_VALUE: $support.minNumber,
+defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Number });
+defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
+	MAX_VALUE: support.maxNumber,
+	MIN_VALUE: support.minNumber,
 	NaN: $NaN,
 	NEGATIVE_INFINITY: -$Infinity,
 	POSITIVE_INFINITY: $Infinity
 });
-$defineProperties(Number.prototype, { dontEnum: true }, {
+defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: $unconstructable(function valueOf() { return $getInternalNumber(this, 'valueOf') }),
+	valueOf: unconstructable(function valueOf() { return getInternalNumber(this, 'valueOf') }),
 	toLocaleString: Object.prototype.toLocaleString,
-	toString: $unconstructable(function toString(radix) {
-		var value = $getInternalNumber(this, 'toString');
+	toString: unconstructable(function toString(radix) {
+		var value = getInternalNumber(this, 'toString');
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
-		} else if ((radix = $toInteger(radix)) < 2 || radix > 36) {
+		} else if ((radix = toInteger(radix)) < 2 || radix > 36) {
 			throw RangeError("illegal radix for toString()");
 		} else {
 			// TODO : fraction?
-			var $sign = '', $s = '';
-			if ((value = $toInteger(value)) < 0) {
+			var sign = '', s = '';
+			if ((value = toInteger(value)) < 0) {
 				value = -value;
-				$sign = '-';
+				sign = '-';
 			}
 			do {
-				$s = $ALPHA_DIGITS_LOWER[value % radix] + $s;
+				s = ALPHA_DIGITS_LOWER[value % radix] + s;
 				value = $floor(value / radix);
 			} while (value > 0);
-			return $sign + $s;
+			return sign + s;
 		}
 	}),
-	toExponential: $unconstructable(function toExponential(fractionDigits) {
-		var value = $getInternalNumber(this, 'toExponential');
+	toExponential: unconstructable(function toExponential(fractionDigits) {
+		var value = getInternalNumber(this, 'toExponential');
 		var string = '';
 		if (!$isFinite(value)) {
 			return value;
 		} else if (fractionDigits === void 0) {
-			return $toPrecision(value, void 0, $Infinity);
+			return numberToString(value, void 0, $Infinity);
 		} else {
-			var digits = $toInteger(fractionDigits);
+			var digits = toInteger(fractionDigits);
 			if (digits < 0 || digits > 20) {
 				throw RangeError("Illegal fractionDigits argument for toExponential()");
 			}
-			return $toPrecision(value, digits, $Infinity);
+			return numberToString(value, digits, $Infinity);
 		}
 	}),
-	toFixed: $unconstructable(function toFixed(fractionDigits) {
-		var value = $getInternalNumber(this, 'toFixed');
-		var digits = $toInteger(fractionDigits);
+	toFixed: unconstructable(function toFixed(fractionDigits) {
+		var value = getInternalNumber(this, 'toFixed');
+		var digits = toInteger(fractionDigits);
 		if (digits < 0 || digits > 20) {
 			throw RangeError("Illegal fractionDigits argument for toFixed()");
 		}
@@ -330,7 +348,7 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 				value = -value;
 				string = '-';
 			}
-			var magnitude = $support.pow(10, digits);
+			var magnitude = support.pow(10, digits);
 			var integer = $floor(value);
 			var decimals = $floor((value - integer) * magnitude + 0.5);
 			string += integer + (decimals >= magnitude ? 1 : 0);
@@ -340,28 +358,28 @@ $defineProperties(Number.prototype, { dontEnum: true }, {
 			return string;
 		}
 	}),
-	toPrecision: $unconstructable(function toPrecision(precision) {
-		var value = $getInternalNumber(this, 'toPrecision');
+	toPrecision: unconstructable(function toPrecision(precision) {
+		var value = getInternalNumber(this, 'toPrecision');
 		var string = '';
 		if (precision === void 0 || !$isFinite(value)) {
 			return value;
 		} else {
-			var digits = $toInteger(precision) - 1;
+			var digits = toInteger(precision) - 1;
 			if (digits < 0 || digits > 20) {
 				throw RangeError("Illegal precision argument for toPrecision()");
 			}
-			return $toPrecision(value, digits, -6);
+			return numberToString(value, digits, -6);
 		}
 	})
 });
 
 /* --- String --- */
 
-var $lowerToUpper, upperToLower; // upperToLower is used from within regexps, so no $ there to prevent from minifying
+var lowerToUpper, upperToLower; // upperToLower is used from within regexps, so no  there to prevent from minifying
 
-function $createCaseTables() {
+function createCaseTables() {
 	// In the future constant tables might be (nearly) free to setup, but as of 20160423 this is quite "expensive".
-	$lowerToUpper = {
+	lowerToUpper = {
 		"\xdf":"SS","\u0131":"I","\u0149":"\u02bcn","\u017f":"S","\u01c5":"\u01c4","\u01c8":"\u01c7","\u01cb":"\u01ca","\u01f0":"j\u030c","\u01f2":"\u01f1","\u0345":"\u0399","\u0390":"\u03b9\u0308\u030d","\u03b0":"\u03c5\u0308\u030d","\u03c2":"\u03a3","\u03d0":"\u0392","\u03d1":"\u0398","\u03d5":"\u03a6","\u03d6":"\u03a0","\u03f0":"\u039a","\u03f1":"\u03a1","\u03f2":"\u03a3","\u0587":"\u0535\u0552","\u1e96":"h\u0331","\u1e97":"t\u0308","\u1e98":"w\u030a","\u1e99":"y\u030a","\u1e9a":"a\u02be","\u1e9b":"\u1e60","\u1f50":"\u03c5\u0313","\u1f52":"\u03c5\u0313\u0300",
 		"\u1f54":"\u03c5\u0313\u0301","\u1f56":"\u03c5\u0313\u0342","\u1f80":"\u1f08\u03b9","\u1f81":"\u1f09\u03b9","\u1f82":"\u1f0a\u03b9","\u1f83":"\u1f0b\u03b9","\u1f84":"\u1f0c\u03b9","\u1f85":"\u1f0d\u03b9","\u1f86":"\u1f0e\u03b9","\u1f87":"\u1f0f\u03b9","\u1f88":"\u1f08\u03b9","\u1f90":"\u1f28\u03b9","\u1f91":"\u1f29\u03b9","\u1f92":"\u1f2a\u03b9","\u1f93":"\u1f2b\u03b9","\u1f94":"\u1f2c\u03b9","\u1f95":"\u1f2d\u03b9","\u1f96":"\u1f2e\u03b9","\u1f97":"\u1f2f\u03b9","\u1fa0":"\u1f68\u03b9","\u1fa1":"\u1f69\u03b9","\u1fa2":"\u1f6a\u03b9","\u1fa3":"\u1f6b\u03b9",
 		"\u1fa4":"\u1f6c\u03b9","\u1fa5":"\u1f6d\u03b9","\u1fa6":"\u1f6e\u03b9","\u1fa7":"\u1f6f\u03b9","\u1fb2":"\u1f70\u03b9","\u1fb3":"\u0391\u03b9","\u1fb4":"\u1f71\u03b9","\u1fb6":"\u03b1\u0342","\u1fb7":"\u1fb6\u03b9","\u1fbe":"\u0399","\u1fc2":"\u1f74\u03b9","\u1fc3":"\u0397\u03b9","\u1fc4":"\u1f75\u03b9","\u1fc6":"\u03b7\u0342","\u1fc7":"\u1fc6\u03b9","\u1fd2":"\u03b9\u0308\u0300","\u1fd3":"\u03b9\u0308\u0301","\u1fd6":"\u03b9\u0342","\u1fd7":"\u03b9\u0308\u0342","\u1fe2":"\u03c5\u0308\u0300","\u1fe3":"\u03c5\u0308\u0301","\u1fe4":"\u03c1\u0313","\u1fe6":"\u03c5\u0342",
@@ -372,7 +390,7 @@ function $createCaseTables() {
 		"\u10bb":"\u10eb","\u10bc":"\u10ec","\u10bd":"\u10ed","\u10be":"\u10ee","\u10bf":"\u10ef","\u10c0":"\u10f0","\u10c1":"\u10f1","\u10c2":"\u10f2","\u10c3":"\u10f3","\u10c4":"\u10f4","\u10c5":"\u10f5","\u1f88":"\u1f80","\u1f89":"\u1f81","\u1f8a":"\u1f82","\u1f8b":"\u1f83","\u1f8c":"\u1f84","\u1f8d":"\u1f85","\u1f8e":"\u1f86","\u1f8f":"\u1f87","\u1f98":"\u1f90","\u1f99":"\u1f91","\u1f9a":"\u1f92","\u1f9b":"\u1f93","\u1f9c":"\u1f94","\u1f9d":"\u1f95","\u1f9e":"\u1f96","\u1f9f":"\u1f97","\u1fa8":"\u1fa0","\u1fa9":"\u1fa1","\u1faa":"\u1fa2","\u1fab":"\u1fa3","\u1fac":"\u1fa4",
 		"\u1fad":"\u1fa5","\u1fae":"\u1fa6","\u1faf":"\u1fa7","\u1fbc":"\u1fb3","\u1fcc":"\u1fc3","\u1ffc":"\u1ff3"
 	};
-	var c, $bidirectional = {
+	var c, bidirectional = {
 		'A':"a",'B':"b",'C':"c",'D':"d",'E':"e",'F':"f",'G':"g",'H':"h",'I':"i",'J':"j",'K':"k",'L':"l",'M':"m",'N':"n",'O':"o",'P':"p",'Q':"q",'R':"r",'S':"s",'T':"t",'U':"u",'V':"v",'W':"w",'X':"x",'Y':"y",'Z':"z",
 		"\xc0":"\xe0","\xc1":"\xe1","\xc2":"\xe2","\xc3":"\xe3","\xc4":"\xe4","\xc5":"\xe5","\xc6":"\xe6","\xc7":"\xe7","\xc8":"\xe8","\xc9":"\xe9","\xca":"\xea","\xcb":"\xeb","\xcc":"\xec","\xcd":"\xed","\xce":"\xee","\xcf":"\xef","\xd0":"\xf0","\xd1":"\xf1","\xd2":"\xf2","\xd3":"\xf3","\xd4":"\xf4","\xd5":"\xf5","\xd6":"\xf6","\xd8":"\xf8","\xd9":"\xf9","\xda":"\xfa","\xdb":"\xfb","\xdc":"\xfc","\xdd":"\xfd","\xde":"\xfe",
 		"\u0100":"\u0101","\u0102":"\u0103","\u0104":"\u0105","\u0106":"\u0107","\u0108":"\u0109","\u010a":"\u010b","\u010c":"\u010d","\u010e":"\u010f","\u0110":"\u0111","\u0112":"\u0113","\u0114":"\u0115","\u0116":"\u0117","\u0118":"\u0119","\u011a":"\u011b","\u011c":"\u011d","\u011e":"\u011f","\u0120":"\u0121","\u0122":"\u0123","\u0124":"\u0125","\u0126":"\u0127","\u0128":"\u0129","\u012a":"\u012b","\u012c":"\u012d","\u012e":"\u012f","\u0132":"\u0133","\u0134":"\u0135","\u0136":"\u0137","\u0139":"\u013a","\u013b":"\u013c","\u013d":"\u013e","\u013f":"\u0140","\u0141":"\u0142",
@@ -395,119 +413,119 @@ function $createCaseTables() {
 		"\u24c6":"\u24e0","\u24c7":"\u24e1","\u24c8":"\u24e2","\u24c9":"\u24e3","\u24ca":"\u24e4","\u24cb":"\u24e5","\u24cc":"\u24e6","\u24cd":"\u24e7","\u24ce":"\u24e8","\u24cf":"\u24e9","\uff21":"\uff41","\uff22":"\uff42","\uff23":"\uff43","\uff24":"\uff44","\uff25":"\uff45","\uff26":"\uff46","\uff27":"\uff47","\uff28":"\uff48","\uff29":"\uff49","\uff2a":"\uff4a","\uff2b":"\uff4b","\uff2c":"\uff4c","\uff2d":"\uff4d","\uff2e":"\uff4e","\uff2f":"\uff4f","\uff30":"\uff50","\uff31":"\uff51","\uff32":"\uff52","\uff33":"\uff53","\uff34":"\uff54","\uff35":"\uff55","\uff36":"\uff56",
 		"\uff37":"\uff57","\uff38":"\uff58","\uff39":"\uff59","\uff3a":"\uff5a"
 	};
-	for (c in $bidirectional) $lowerToUpper[upperToLower[c] = $bidirectional[c]] = c
+	for (c in bidirectional) lowerToUpper[upperToLower[c] = bidirectional[c]] = c
 };
 
-function $translateString(string, table) {
-	if (!$lowerToUpper) $createCaseTables();
+function translateString(string, table) {
+	if (!lowerToUpper) createCaseTables();
 	var i = -1, l = string.length, s = '', t, c;
 	while (++i < l) s += (t = table[c = string[i]]) ? t : c;
 	return s
 }
 
-var String = $support.specialConstructor(function String(v) {
-		return (arguments.length ? $toString(v) : '');
+var String = support.specialConstructor(function String(v) {
+		return (arguments.length ? objectToString(v) : '');
 	}, function String(v) {
 		var s;
-		return $defineProperties(
-				$support.createWrapper('String', (s = (arguments.length ? $toString(v) : '')), $support.prototypes.String)
+		return defineProperties(
+				support.createWrapper('String', (s = (arguments.length ? objectToString(v) : '')), support.prototypes.String)
 				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 	}
 );
-$defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.String });
-$defineProperties(String, { dontEnum: true }, {
-	fromCharCode: $unconstructable(function fromCharCode(v) {
+defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
+defineProperties(String, { dontEnum: true }, {
+	fromCharCode: unconstructable(function fromCharCode(v) {
 		var argc, argv;
-		if ((argc = (argv = arguments).length) === 1) return $support.fromCharCode(v & 65535);
-		for (var i = 0, s = ''; i < argc; ++i) s += $support.fromCharCode(argv[i] & 65535);
+		if ((argc = (argv = arguments).length) === 1) return support.fromCharCode(v & 65535);
+		for (var i = 0, s = ''; i < argc; ++i) s += support.fromCharCode(argv[i] & 65535);
 		return s;
 	})
 });
-$defineProperties(String.prototype, { dontEnum: true }, {
+defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
-	charAt: $unconstructable(function charAt(pos) {
+	charAt: unconstructable(function charAt(pos) {
 		var s;
-		return (((pos = $toInteger(pos)) < 0 || pos >= (s = $toString(this)).length) ? '' : s[pos]);
+		return (((pos = toInteger(pos)) < 0 || pos >= (s = objectToString(this)).length) ? '' : s[pos]);
 	}),
-	charCodeAt: $unconstructable(function charCodeAt(pos) {
-		return $support.charCodeAt($toString(this), +pos);
+	charCodeAt: unconstructable(function charCodeAt(pos) {
+		return support.charCodeAt(objectToString(this), +pos);
 	}),
-	concat: $unconstructable(function concat(string1) {
-		var args, n = (args = arguments).length, s = $toString(this);
-		for (var i = 0; i < n; ++i) s += $toString(args[i]);
+	concat: unconstructable(function concat(string1) {
+		var args, n = (args = arguments).length, s = objectToString(this);
+		for (var i = 0; i < n; ++i) s += objectToString(args[i]);
 		return s;
 	}),
-	indexOf: $unconstructable(function indexOf(searchString) { // .length should be 1
-		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
-		if ((i = $toInteger(pos)) < 0) i = 0;
-		for (; i <= e; ++i) if (submatch(t, i, s)) return i;
+	indexOf: unconstructable(function indexOf(searchString) { // .length should be 1
+		var t, s, i, e = (t = objectToString(this)).length - (s = objectToString(searchString)).length, pos = arguments[1];
+		if ((i = toInteger(pos)) < 0) i = 0;
+		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
-	lastIndexOf: $unconstructable(function lastIndexOf(searchString) { // .length should be 1
-		var t, s, i, e = (t = $toString(this)).length - (s = $toString(searchString)).length, pos = arguments[1];
-		if ($isNaN(pos = +pos) || (i = $toInteger(pos)) > e) i = e;
-		for (; i >= 0; --i) if (submatch(t, i, s)) return i;
+	lastIndexOf: unconstructable(function lastIndexOf(searchString) { // .length should be 1
+		var t, s, i, e = (t = objectToString(this)).length - (s = objectToString(searchString)).length, pos = arguments[1];
+		if ($isNaN(pos = +pos) || (i = toInteger(pos)) > e) i = e;
+		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
-	localeCompare: $unconstructable(function localeCompare(that) {
+	localeCompare: unconstructable(function localeCompare(that) {
 		var me, him;
-		return ((me = $toString(this)) === (him = $toString(that)) ? 0 : (me < him ? -1 : 1));
+		return ((me = objectToString(this)) === (him = objectToString(that)) ? 0 : (me < him ? -1 : 1));
 	}),
-	match: $unconstructable(function match(regexp) {
+	match: unconstructable(function match(regexp) {
 		if ($getInternalProperty(regexp, 'class') !== 'RegExp') regexp = new RegExp(regexp);
-		var args = [ $toString(this) ];
-		if (!regexp.global) return $callWithArgs($regExpExec, regexp, args);
+		var args = [ objectToString(this) ];
+		if (!regexp.global) return $callWithArgs(regExpExec, regexp, args);
 		else {
 			var i = regexp.lastIndex = 0, a = [ ], s, r;
 			do {
-				if ((r = $callWithArgs($regExpExec, regexp, args)) === null) return (i === 0 ? null : a);
+				if ((r = $callWithArgs(regExpExec, regexp, args)) === null) return (i === 0 ? null : a);
 				if ((a[i++] = (s = r[0])) === '') ++regexp.lastIndex;
 			} while (true);
 		}
 	}),
-	slice: $unconstructable(function slice(start, end) {
-		var s = $toString(this);
-		if ((start = $toInteger(start)) < 0) start = s.length + start;
+	slice: unconstructable(function slice(start, end) {
+		var s = objectToString(this);
+		if ((start = toInteger(start)) < 0) start = s.length + start;
 		if (end === void 0) end = $Infinity;
-		else if ((end = $toInteger(end)) < 0) end = s.length + end;
-		return $support.substring(s, start, end);
+		else if ((end = toInteger(end)) < 0) end = s.length + end;
+		return support.substring(s, start, end);
 	}),
-/*	split: $unconstructable(function split(separator, limit) {
-		var s = $toString(this);
+/*	split: unconstructable(function split(separator, limit) {
+		var s = objectToString(this);
 		var a = [ ];
-		limit = ((limit === void 0) ? 0xFFFFFFFF : $toInteger(limit));
+		limit = ((limit === void 0) ? 0xFFFFFFFF : toInteger(limit));
 		var sl = s.length;
-		if ($getInternalProperty(separator, 'class') !== 'RegExp') separator = $toString(separator);
+		if ($getInternalProperty(separator, 'class') !== 'RegExp') separator = objectToString(separator);
 		if (limit === 0) {
 			return a;
 		}
 
 	}),*/
-	substr: $unconstructable(function substr(start, length) {
-		var s = $toString(this);
-		if ((start = $toInteger(start)) < 0) start = s.length + start;
-		return $support.substring(s, start, (length === void 0 ? $Infinity : start + $toInteger(length)));
+	substr: unconstructable(function substr(start, length) {
+		var s = objectToString(this);
+		if ((start = toInteger(start)) < 0) start = s.length + start;
+		return support.substring(s, start, (length === void 0 ? $Infinity : start + toInteger(length)));
 	}),
-	substring: $unconstructable(function substring(start, end) {
-		start = $toInteger(start);
+	substring: unconstructable(function substring(start, end) {
+		start = toInteger(start);
 		if (end === void 0) end = $Infinity;
-		else if ((end = $toInteger(end)) < start) {
+		else if ((end = toInteger(end)) < start) {
 			var swap = start;
 			start = end;
 			end = swap;
 		}
-		return $support.substring($toString(this), start, end);
+		return support.substring(objectToString(this), start, end);
 	}),
-	toUpperCase: $unconstructable(function toUpperCase() { return $translateString($toString(this), $lowerToUpper) }),
-	toLocaleUpperCase: $unconstructable(function toLocaleUpperCase() { return $translateString($toString(this), $lowerToUpper) }),
-	toLowerCase: $unconstructable(function toLowerCase() { return $translateString($toString(this), upperToLower) }),
-	toLocaleLowerCase: $unconstructable(function toLocaleLowerCase() { return $translateString($toString(this), upperToLower) }),
-	valueOf: $unconstructable(function valueOf() {
-		$checkClass(this, 'String', 'valueOf');
+	toUpperCase: unconstructable(function toUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
+	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
+	toLowerCase: unconstructable(function toLowerCase() { return translateString(objectToString(this), upperToLower) }),
+	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return translateString(objectToString(this), upperToLower) }),
+	valueOf: unconstructable(function valueOf() {
+		checkClass(this, 'String', 'valueOf');
 		return $getInternalProperty(this, 'value');
 	}),
-	toString: $unconstructable(function toString() {
-		$checkClass(this, 'String', 'toString');
+	toString: unconstructable(function toString() {
+		checkClass(this, 'String', 'toString');
 		return $getInternalProperty(this, 'value');
 	})
 });
@@ -524,10 +542,10 @@ var Array = function Array(v) {
 	}
 	return a
 };
-$defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $support.prototypes.Array });
-$defineProperties(Array.prototype, { dontEnum: true }, {
+defineProperties(Array, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Array });
+defineProperties(Array.prototype, { dontEnum: true }, {
 	constructor: Array,
-	concat: $unconstructable(function concat(item1) {
+	concat: unconstructable(function concat(item1) {
 		var a = [ ], argv, argc = (argv = arguments).length, n = 0, v = this;
 		for (var i = -1; i < argc; v = argv[++i]) {
 			if ($getInternalProperty(v, 'class') !== 'Array') {
@@ -539,16 +557,16 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return a;
 	}),
-	join: $unconstructable(function join(separator) {
-		var s = new $StringBuilder, s2, l = this.length;
-		separator = (separator === void 0 ? ',' : $toString(separator));
+	join: unconstructable(function join(separator) {
+		var s = new StringBuilder, s2, l = this.length;
+		separator = (separator === void 0 ? ',' : objectToString(separator));
 		for (var i = 0; i < l; ++i) {
 			if (i > 0) s.append(separator);
-			if ((s2 = this[i]) != null) s.append($toString(s2));
+			if ((s2 = this[i]) != null) s.append(objectToString(s2));
 		}
 		return s.toString();
 	}),
-	pop: $unconstructable(function pop() {
+	pop: unconstructable(function pop() {
 		var v = void 0, l;
 		if ((l = this.length) > 0) {
 			v = this[l - 1];
@@ -556,12 +574,12 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return v;
 	}),
-	push: $unconstructable(function push(item) {
+	push: unconstructable(function push(item) {
 		var argv, offset = this.length, end = (argv = arguments).length + offset;
 		for (var i = offset; i < end; ++i) this[i] = argv[i - offset];
 		return end;
 	}),
-	reverse: $unconstructable(function reverse() {
+	reverse: unconstructable(function reverse() {
 		var len, mid = $floor((len = this.length) / 2);
 		--len;
 		for (var leftIndex = 0; leftIndex < mid; ++leftIndex) {
@@ -572,7 +590,7 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return this;
 	}),
-	shift: $unconstructable(function shift() {
+	shift: unconstructable(function shift() {
 		var len, elementZero;
 		if (len = this.length) {
 			elementZero = this[0];
@@ -583,7 +601,7 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return elementZero;
 	}),
-	sort: $unconstructable(function sort(comparefn) {
+	sort: unconstructable(function sort(comparefn) {
 		var self = this;
 		function swap(arr, aIndex, bIndex) {
 			var gotA = (aIndex in arr), aValue = arr[aIndex];
@@ -612,7 +630,7 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 			}
 		};
 		function qsort(from, to) {
-			var swp = swap, cmp = compare, arr = self, mid;
+			var swp = swap, cmp = compare, arr = self, mid, low;
 			for (--to; from + 1 < to; from = low) {
 				var low = from, high = to, mid = $floor((low + high) / 2);
 				while (low < high) {
@@ -631,14 +649,14 @@ $defineProperties(Array.prototype, { dontEnum: true }, {
 		};
 		if (comparefn === void 0) {
 			comparefn = function(a, b) {
-				return ((a = $toString(a)) < (b = $toString(b)) ? -1 : (a > b ? 1 : 0));
+				return ((a = objectToString(a)) < (b = objectToString(b)) ? -1 : (a > b ? 1 : 0));
 			}
 		};
 		qsort(0, this.length >>> 0);
 	}),
 	toLocaleString: Object.prototype.toLocaleString,
-	toString: $unconstructable(function toString() {
-		$checkClass(this, 'Array', 'toString');
+	toString: unconstructable(function toString() {
+		checkClass(this, 'Array', 'toString');
 		return this.join();
 	})
 });
@@ -649,67 +667,67 @@ var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
 	if (!(this instanceof Date)) {
 		return (new Date()).toString();
 	} else if (arguments.length >= 2 && arguments.length <= 7) {
-		this.Value = $timeClip($fromLocalTime($makeDateTime.apply(this, arguments)));
+		this.Value = timeClip(fromLocalTime(makeDateTime.apply(this, arguments)));
 	} else if (arguments.length === 1) {
-		this.Value = $timeClip(typeof (v = arguments[0]) === "string" ? Date.parse($support.toPrimitiveString(v)) : +$support.toPrimitiveNumber(v));
+		this.Value = timeClip(typeof (v = arguments[0]) === "string" ? Date.parse(support.toPrimitiveString(v)) : +support.toPrimitiveNumber(v));
 	} else {
-		this.Value = $support.getCurrentTime();
+		this.Value = support.getCurrentTime();
 	}
 };
 Date.parse = function(s) {
-	var z, y, i = 0, ch, tz = $support.undefined, tzh, tzm,
+	var z, y, i = 0, ch, tz = support.undefined, tzh, tzm,
 		readPart = function(l) {
 			var v;
-			for (v = 0;l > 0;--l) if ("0" <= s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
+			for (v = 0;l > 0;--l) if ("0" <= s[i] && s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
 			return v;
 		};
 
-	z = $epochFromDate(
+	z = epochFromDate(
 		((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
 		s[i] === "-" && (++i, readPart(2) -1),
-		s[i] === "-" && (++i, readPart(2)) || 1) + $epochFromTime(
+		s[i] === "-" && (++i, readPart(2)) || 1) + epochFromTime(
 		((ch = s[i]) === "T" || ch === " ") && (++i, readPart(2)) || 0,
 		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
 		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
 		(ch = s[i]) === "." && (++i, readPart(3)) || 0);
 
-	while (ch !== $support.undefined && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
+	while (ch !== support.undefined && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
 
 	if (ch === "Z") tz = 0;
 	else if (ch === "+" || ch === "-") {
-		++i, tzh = readPart(2) * $msPerHour,
-		s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * $msPerMinute,
+		++i, tzh = readPart(2) * msPerHour,
+		s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * msPerMinute,
 		$isNaN(tzh) || (tz = ch === "-" ? -tzh : tzh);
     }
-	return (tz === $support.undefined ? $fromLocalTime(z) : z - tz)
+	return (tz === support.undefined ? fromLocalTime(z) : z - tz)
 };
 Date.UTC = function(year, month, date, hours, minutes, seconds, ms) { 
-	return $timeClip($makeDateTime(year, month, date, hours, minutes, seconds, ms))
+	return timeClip(makeDateTime(year, month, date, hours, minutes, seconds, ms))
 };
 Date.prototype.toISOString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) throw RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
-	return ($toDateString(z) + "T" + $toTimeString(z, true) + "Z")
+	return (toDateString(z) + "T" + toTimeString(z, true) + "Z")
 };
 Date.prototype.toUTCString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) return "Invalid Date";
-	return ($toDateString(z) + " " + $toTimeString(z))
+	return (toDateString(z) + " " + toTimeString(z))
 };
 Date.prototype.toString = function() {
-	var l = $toLocalTime(this.Value);
+	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return ($toDateString(l) + " " + $toTimeString(l))
+	return (toDateString(l) + " " + toTimeString(l))
 };
 Date.prototype.toDateString = function() {
-	var l = $toLocalTime(this.Value);
+	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return $toDateString(l)
+	return toDateString(l)
 };
 Date.prototype.toTimeString = function() {
-	var l = $toLocalTime(this.Value);
+	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return $toTimeString(l)
+	return toTimeString(l)
 };
 
 Date.prototype.toLocaleString = Date.prototype.toString;
@@ -718,98 +736,98 @@ Date.prototype.toLocaleTimeString = Date.prototype.toTimeString;
 
 Date.prototype.valueOf = function() { return this.Value };
 Date.prototype.getTime = function() { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return this.Value };
-Date.prototype.getFullYear = function() { return $dateFromEpoch($toLocalTime(this.Value))[0] };
-Date.prototype.getUTCFullYear = function() { return $dateFromEpoch(this.Value)[0] };
-Date.prototype.getMonth = function() { return $dateFromEpoch($toLocalTime(this.Value))[1] };
-Date.prototype.getUTCMonth = function() { return $dateFromEpoch(this.Value)[1] };
-Date.prototype.getDate = function() { return $dateFromEpoch($toLocalTime(this.Value))[2] };
-Date.prototype.getUTCDate = function() { return $dateFromEpoch(this.Value)[2] };
-Date.prototype.getDay = function() { return $weekdayFromTime($toLocalTime(this.Value)) };
-Date.prototype.getUTCDay = function() { return $weekdayFromTime(this.Value) };
-Date.prototype.getHours = function() { return $hourFromTime($toLocalTime(this.Value)) };
-Date.prototype.getUTCHours = function() { return $hourFromTime(this.Value) };
-Date.prototype.getMinutes = function() { return $minFromTime($toLocalTime(this.Value)) };
-Date.prototype.getUTCMinutes = function() { return $minFromTime(this.Value) };
-Date.prototype.getSeconds = function() { return $secFromTime($toLocalTime(this.Value)) };
-Date.prototype.getUTCSeconds = function() { return $secFromTime(this.Value) };
-Date.prototype.getMilliseconds = function() { return $msFromTime($toLocalTime(this.Value)) };
-Date.prototype.getUTCMilliseconds = function() { return $msFromTime(this.Value) };
-Date.prototype.getTimezoneOffset = function() { return (this.Value - $toLocalTime(this.Value)) / $msPerMinute };
-Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = $timeClip(+time)) };
-Date.prototype.setMilliseconds = function(ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 3, arguments)))) };
-Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 3, arguments))) };
-Date.prototype.setSeconds = function(sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 2, arguments)))) };
-Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 2, arguments))) };
-Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 1, arguments)))) };
-Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 1, arguments))) };
-Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($fromLocalTime($setTimeParts($toLocalTime(this.Value), 0, arguments)))) };
-Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = $timeClip($setTimeParts(this.Value, 0, arguments))) };
-Date.prototype.setDate = function(date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 2, arguments)))) };
-Date.prototype.setUTCDate = function(date) { return (this.Value = $timeClip($setDateParts(this.Value, 2, arguments))) };
-Date.prototype.setMonth = function(month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($toLocalTime(this.Value), 1, arguments)))) };
-Date.prototype.setUTCMonth = function(month, date) { return (this.Value = $timeClip($setDateParts(this.Value, 1, arguments))) };
-Date.prototype.setFullYear = function(year, month, date) { return (this.Value = $timeClip($fromLocalTime($setDateParts($isNaN(this.Value) ? 0 : $toLocalTime(this.Value), 0, arguments)))) };
-Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = $timeClip($setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))) };
+Date.prototype.getFullYear = function() { return dateFromEpoch(toLocalTime(this.Value))[0] };
+Date.prototype.getUTCFullYear = function() { return dateFromEpoch(this.Value)[0] };
+Date.prototype.getMonth = function() { return dateFromEpoch(toLocalTime(this.Value))[1] };
+Date.prototype.getUTCMonth = function() { return dateFromEpoch(this.Value)[1] };
+Date.prototype.getDate = function() { return dateFromEpoch(toLocalTime(this.Value))[2] };
+Date.prototype.getUTCDate = function() { return dateFromEpoch(this.Value)[2] };
+Date.prototype.getDay = function() { return weekdayFromTime(toLocalTime(this.Value)) };
+Date.prototype.getUTCDay = function() { return weekdayFromTime(this.Value) };
+Date.prototype.getHours = function() { return hourFromTime(toLocalTime(this.Value)) };
+Date.prototype.getUTCHours = function() { return hourFromTime(this.Value) };
+Date.prototype.getMinutes = function() { return minFromTime(toLocalTime(this.Value)) };
+Date.prototype.getUTCMinutes = function() { return minFromTime(this.Value) };
+Date.prototype.getSeconds = function() { return secFromTime(toLocalTime(this.Value)) };
+Date.prototype.getUTCSeconds = function() { return secFromTime(this.Value) };
+Date.prototype.getMilliseconds = function() { return msFromTime(toLocalTime(this.Value)) };
+Date.prototype.getUTCMilliseconds = function() { return msFromTime(this.Value) };
+Date.prototype.getTimezoneOffset = function() { return (this.Value - toLocalTime(this.Value)) / msPerMinute };
+Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) };
+Date.prototype.setMilliseconds = function(ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 3, arguments)))) };
+Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = timeClip(setTimeParts(this.Value, 3, arguments))) };
+Date.prototype.setSeconds = function(sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) };
+Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 2, arguments))) };
+Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 1, arguments)))) };
+Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 1, arguments))) };
+Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 0, arguments)))) };
+Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 0, arguments))) };
+Date.prototype.setDate = function(date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 2, arguments)))) };
+Date.prototype.setUTCDate = function(date) { return (this.Value = timeClip(setDateParts(this.Value, 2, arguments))) };
+Date.prototype.setMonth = function(month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 1, arguments)))) };
+Date.prototype.setUTCMonth = function(month, date) { return (this.Value = timeClip(setDateParts(this.Value, 1, arguments))) };
+Date.prototype.setFullYear = function(year, month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts($isNaN(this.Value) ? 0 : toLocalTime(this.Value), 0, arguments)))) };
+Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = timeClip(setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))) };
 
-var $msPerDay = 86400000,
-	$msPerHour = 3600000,
-	$msPerMinute = 60000,
-	$msPerSecond = 1000,
-	$mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
-	$int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))) },
-	$epochFromDate = function(year, month, day) {
+var msPerDay = 86400000,
+	msPerHour = 3600000,
+	msPerMinute = 60000,
+	msPerSecond = 1000,
+	mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
+	int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))) },
+	epochFromDate = function(year, month, day) {
 		year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
-		var era = $int( (year >= 0 ? year : year - 399) / 400 );
+		var era = int( (year >= 0 ? year : year - 399) / 400 );
 		var yoe = year - era * 400;
-		var doy = $int( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
-		var doe = yoe * 365 + $int(yoe / 4) - $int(yoe / 100) + doy;
-		return (era * 146097 + doe - 719468) * $msPerDay;
+		var doy = int( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
+		var doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy;
+		return (era * 146097 + doe - 719468) * msPerDay;
 	},
-	$dateFromEpoch = function(z) {
-		z = $floor(z / $msPerDay) + 719468;
-		var era = $int( (z >= 0 ? z : z - 146096) / 146097 );
+	dateFromEpoch = function(z) {
+		z = $floor(z / msPerDay) + 719468;
+		var era = int( (z >= 0 ? z : z - 146096) / 146097 );
 		var doe = z - era * 146097;
-		var yoe = $int( (doe - $int(doe / 1460) + $int(doe / 36524) - $int(doe / 146096)) / 365 );
+		var yoe = int( (doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365 );
 		var y = yoe + era * 400;
-	    var doy = doe - (365 * yoe + $int(yoe / 4) - $int(yoe/100) );
-	    var mp = $int( (5 * doy + 2) / 153);
+	    var doy = doe - (365 * yoe + int(yoe / 4) - int(yoe/100) );
+	    var mp = int( (5 * doy + 2) / 153);
 	    var m = mp + (mp < 10 ? 2 : -10);
-	    var d = doy - $int( (153 * mp + 2) / 5 ) + 1;
+	    var d = doy - int( (153 * mp + 2) / 5 ) + 1;
 	    return [ (y + (m <= 1)), m, d ];
 	},
-	$epochFromTime = function(hour, minute, second, ms) { return hour * $msPerHour + minute * $msPerMinute + second * $msPerSecond + ms },
-	$timeFromEpoch = function(z) { return [ $mod($floor(z / $msPerHour), 24), $mod($floor(z / $msPerMinute), 60), $mod($floor(z / $msPerSecond), 60), $mod(z, $msPerSecond) ] },
-	$setDateParts = function(z, n, a) {
-		var i, d = $dateFromEpoch(z), r = $mod(z, $msPerDay);
-		for (i = 0; i < a.length; ++i, ++n) d[n] = $int(a[i]);
-		return $epochFromDate.apply(null, d) + r;
+	epochFromTime = function(hour, minute, second, ms) { return hour * msPerHour + minute * msPerMinute + second * msPerSecond + ms },
+	timeFromEpoch = function(z) { return [ mod($floor(z / msPerHour), 24), mod($floor(z / msPerMinute), 60), mod($floor(z / msPerSecond), 60), mod(z, msPerSecond) ] },
+	setDateParts = function(z, n, a) {
+		var i, d = dateFromEpoch(z), r = mod(z, msPerDay);
+		for (i = 0; i < a.length; ++i, ++n) d[n] = int(a[i]);
+		return epochFromDate.apply(null, d) + r;
 	},
-	$setTimeParts = function(z, n, a) {
-		var i, t = $timeFromEpoch(z), r = $floor(z / $msPerDay) * $msPerDay;
-		for (i = 0; i < a.length; ++i, ++n) t[n] = $int(a[i]);
-		return $epochFromTime.apply(null, t) + r;
+	setTimeParts = function(z, n, a) {
+		var i, t = timeFromEpoch(z), r = $floor(z / msPerDay) * msPerDay;
+		for (i = 0; i < a.length; ++i, ++n) t[n] = int(a[i]);
+		return epochFromTime.apply(null, t) + r;
 	},
-	$startOfYearDiff = function() { return $support.localTimeDifference(1451606400000) }, // 2016-01-01T00:00:00.000Z
-	$midOfYearDiff = function() { return $support.localTimeDifference(1467331200000) }, // 2016-07-01T00:00:00.000Z
-	$localMaxDiff = function() { return ($startOfYearDiff() > $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()) },	// local max is during DST
-	$localMinDiff = function() { return ($startOfYearDiff() < $midOfYearDiff() ? $startOfYearDiff() : $midOfYearDiff()) }, // local min is timezone (non DST)
-	$localTimeDiff = function(z) { var l = $support.localTimeDifference(z); return ($isNaN(l) ? $localMinDiff() : l) },
-	$fromLocalTime = function(z) { return $isNaN(z) ? z : (z - $localTimeDiff(z - $localMaxDiff())) },
-	$toLocalTime = function(z) { return $isNaN(z) ? z : z + $localTimeDiff(z) },
-	$weekdayFromTime = function(z) { return $mod($floor(z / $msPerDay) +4, 7) },
-	$hourFromTime = function(z) { return $mod($floor(z / $msPerHour), 24) },
-	$minFromTime = function(z) { return $mod($floor(z / $msPerMinute), 60) },
-	$secFromTime = function(z) { return $mod($floor(z / $msPerSecond), 60) },
-	$msFromTime = function(z) { return $mod(z, $msPerSecond) },
-	$timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : $int(z)) },
-	$makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
+	startOfYearDiff = function() { return support.localTimeDifference(1451606400000) }, // 2016-01-01T00:00:00.000Z
+	midOfYearDiff = function() { return support.localTimeDifference(1467331200000) }, // 2016-07-01T00:00:00.000Z
+	localMaxDiff = function() { return (startOfYearDiff() > midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) },	// local max is during DST
+	localMinDiff = function() { return (startOfYearDiff() < midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) }, // local min is timezone (non DST)
+	localTimeDiff = function(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) },
+	fromLocalTime = function(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) },
+	toLocalTime = function(z) { return $isNaN(z) ? z : z + localTimeDiff(z) },
+	weekdayFromTime = function(z) { return mod($floor(z / msPerDay) +4, 7) },
+	hourFromTime = function(z) { return mod($floor(z / msPerHour), 24) },
+	minFromTime = function(z) { return mod($floor(z / msPerMinute), 60) },
+	secFromTime = function(z) { return mod($floor(z / msPerSecond), 60) },
+	msFromTime = function(z) { return mod(z, msPerSecond) },
+	timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : int(z)) },
+	makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
 		var argc = arguments.length;
-		return $epochFromDate( (year = $int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
-			$int(month), (argc > 2 ? $int(date) : 1)) + $epochFromTime( argc > 3 ? $int(hours) : 0,
-			argc > 4 ? $int(minutes) : 0, argc > 5 ? $int(seconds) : 0, argc > 6 ? $int(ms) : 0);
+		return epochFromDate( (year = int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
+			int(month), (argc > 2 ? int(date) : 1)) + epochFromTime( argc > 3 ? int(hours) : 0,
+			argc > 4 ? int(minutes) : 0, argc > 5 ? int(seconds) : 0, argc > 6 ? int(ms) : 0);
 	},
-	$toDateString = function(z) { var y, dt = $dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
-	$toTimeString = function(z, ms) { var tm = $timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
+	toDateString = function(z) { var y, dt = dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
+	toTimeString = function(z, ms) { var tm = timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
 
 
 
@@ -847,18 +865,18 @@ var CC = { };
 	}
 })();
 
-// regExpCanonicalize is used from within regexps, so no $ there to prevent from minifying
+// regExpCanonicalize is used from within regexps, so no  there to prevent from minifying
 function regExpCanonicalize(s) {
 	var t = '', c, d;
-	if (!$lowerToUpper) $createCaseTables();
+	if (!lowerToUpper) createCaseTables();
 	for (var i = 0, l = s.length; i < l; ++i) {
-		t += ((d = $lowerToUpper[c = s[i]]) && d.length === 1 && (c < '\x80' || d >= '\x80') ? d : c);
+		t += ((d = lowerToUpper[c = s[i]]) && d.length === 1 && (c < '\x80' || d >= '\x80') ? d : c);
 	}
 	return t
 }
 
 // FIX : all charCodeAt etc need to be stowed away so that we won't destroy regexp if changing global objects. This is true for all the code in here actually.
-function $compileRegExp(s, ignoreCase, multiline) {
+function compileRegExp(s, caseInsensitive, multiLine) {
 	function isClass(char, mask) {
 		return ((CC[char] & mask) !== 0);
 	}
@@ -886,7 +904,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		if (isClass(s[p], DECIMAL_CHAR)) {
 			n = 0;
 			do {
-				n = n * 10 + (s.charCodeAt(p) - 48);
+				n = n * 10 + (s.charCodeAt(p) - 48); // FIX : +s[p] faster?
 				++p;
 			} while (isClass(s[p], DECIMAL_CHAR))
 		}
@@ -894,7 +912,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	}
 
 	function parseQuantifier() {
-		var min = 0, max = Infinity, greedy = true;
+		var min = 0, max = $Infinity, greedy = true;
 		switch (s[p]) {
 			case '*': ++p; break;
 			case '+': ++p; min = 1; break;
@@ -908,7 +926,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 				}
 				if (s[p] === ',') {
 					++p;
-					max = parseNumber(Infinity);
+					max = parseNumber($Infinity);
 				}
 				if (s[p] !== '}') {
 					p = b;
@@ -939,7 +957,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	}
 
 	function canonicalizeAndEscape(c) {
-		return escapeCharacter(ignoreCase ? regExpCanonicalize(c) : c);
+		return escapeCharacter(caseInsensitive ? regExpCanonicalize(c) : c);
 	}
 
 	function parseLiteralCharacter() {
@@ -1022,7 +1040,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		} else if (literalSequence.length === 2) {
 			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return 'submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -1119,7 +1137,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 					case '^': {
 						++p;
 						var condition = positionToCode(offset) + '===0';
-						if (multiline) {
+						if (multiLine) {
 							condition = '(' + or(condition, '!!(CC[s[' + positionToCode(offset - 1) + ']]&' + NEWLINE_CHAR + ')') + ')';
 						}
 						code = and(code, condition);
@@ -1128,7 +1146,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 					case '$': {
 						++p;
 						var condition = positionToCode(offset) + '===l';
-						if (multiline) {
+						if (multiLine) {
 							condition = '(' + or(condition, '!!(CC[s[' + positionToCode(offset) + ']]&' + NEWLINE_CHAR + ')') + ')';
 						}
 						code = and(code, condition);
@@ -1144,7 +1162,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							var b = p;
 							if (s[p] === '-' && (++p, v1 = parseClassAtom())) {
 								if (typeof v0 === 'string' && typeof v1 === 'string' && v0 <= v1) {
-									if (ignoreCase && (v0 > '~' || v1 > '~' || (regExpCanonicalize(v0) !== v0) !== (regExpCanonicalize(v1) !== v1))) {
+									if (caseInsensitive && (v0 > '~' || v1 > '~' || (regExpCanonicalize(v0) !== v0) !== (regExpCanonicalize(v1) !== v1))) {
 										v0 = escapeCharacter(v0);
 										v1 = escapeCharacter(v1);
 										classCode = or(classCode, and('upperToLower[c]>="' + v0 + '"', 'upperToLower[c]<="' + v1 + '"'));
@@ -1186,8 +1204,8 @@ function $compileRegExp(s, ignoreCase, multiline) {
 							n = (n - 1) * 2;
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + '-c' + n;
-				// TODO: submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = 'submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
+							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, 'return ' + tail);
@@ -1248,9 +1266,9 @@ function $compileRegExp(s, ignoreCase, multiline) {
 						var inner = disjunction;
 						var extraEndlessCheck = '';
 						var looping = (quantity && quantity.max > 1);
-						if (looping && (quantity.max < Infinity || quantity.min > 1)) {
+						if (looping && (quantity.max < $Infinity || quantity.min > 1)) {
 							closureVars += ',n' + functionNumber + '=0';
-							if (quantity.max < Infinity) {
+							if (quantity.max < $Infinity) {
 								inner = and('++n' + functionNumber + '<=' + quantity.max, inner);
 							} else {
 								inner = '++n' + functionNumber + ', ' + inner;
@@ -1329,7 +1347,7 @@ function $compileRegExp(s, ignoreCase, multiline) {
 		throw SyntaxError("Invalid back reference in regular expression");
 	}
 	var code = "(function(s, p) {\n";
-	if (ignoreCase) {
+	if (caseInsensitive) {
 		code += "\ts=regExpCanonicalize(s)\n";
 	}
 	code += "\tvar l=s.length,q";
@@ -1339,10 +1357,10 @@ function $compileRegExp(s, ignoreCase, multiline) {
 	return code
 }
 
-function $execRegExp(re, string) {
+function execRegExp(re, string) {
 	var i, m, l;
-	string = $toString(string);
-	if ((i = (re.global ? $toInteger(re.lastIndex) : 0)) >= 0) {
+	string = objectToString(string);
+	if ((i = (re.global ? toInteger(re.lastIndex) : 0)) >= 0) {
 		for (l = string.length; i <= l; ++i) {
 			if (m = $getInternalProperty(re, 'value')(string, i)) {
 				if (re.global) {
@@ -1355,42 +1373,42 @@ function $execRegExp(re, string) {
 	re.lastIndex = 0
 }
 
-var $REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, $origEval = eval
-		, $regExpCache = { }, $regExpPrototype;
+var REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, origEval = eval
+		, regExpCache = { }, regExpPrototype;
 // eval without local variables but with access to all internals
-function $evalThere(s) { var $customEval = eval; eval = $origEval; try { return eval(s) } finally { eval = $customEval } }
-var RegExp = $support.createRegExp = $support.specialConstructor(function RegExp(pattern, flags) {
-		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new $support.createRegExp(pattern, flags));
+function evalThere(s) { var customEval = eval; eval = origEval; try { return eval(s) } finally { eval = customEval } }
+var RegExp = support.createRegExp = support.specialConstructor(function RegExp(pattern, flags) {
+		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
 		// TODO : short-cut most of this through cache instead of only the func def.
-		pattern = (pattern === void 0 ? '' : $toString(pattern));
-		flags = (flags === void 0 ? '' : $toString(flags));
+		pattern = (pattern === void 0 ? '' : objectToString(pattern));
+		flags = (flags === void 0 ? '' : objectToString(flags));
 		var template = { global: false, ignoreCase: false, multiline: false };
 		for (var i = flags.length - 1; i >= 0; --i) {
 			var p;
-			if (!(p = $REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p]) {
+			if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p]) {
 				throw SyntaxError("Invalid regular expression flags");
 			}
 			template[p] = true;
 		}
 		template.source = pattern;
 		var key, func;
-		if (!(func = $regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
-			$regExpCache[key] = func = $evalThere($compileRegExp(pattern, template.ignoreCase, template.multiline));
+		if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
+			regExpCache[key] = func = evalThere(compileRegExp(pattern, template.ignoreCase, template.multiline));
 		}
-		var re = $support.createWrapper('RegExp', func, $regExpPrototype);
-		$defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
-		$defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
+		var re = support.createWrapper('RegExp', func, regExpPrototype);
+		defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
+		defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
 		return re;
 	}
 );
 
-$defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: $regExpPrototype = RegExp.prototype });
-$defineProperties(RegExp.prototype, { dontEnum: true }, {
-	exec: $unconstructable($regExpExec = function exec(string) {
-		$checkClass(this, 'RegExp', 'exec');
+defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: regExpPrototype = RegExp.prototype });
+defineProperties(RegExp.prototype, { dontEnum: true }, {
+	exec: unconstructable(regExpExec = function exec(string) {
+		checkClass(this, 'RegExp', 'exec');
 		var m, a = null;
-		if (m = $execRegExp(this, string)) {
+		if (m = execRegExp(this, string)) {
 			(a = [ ]).input = string;
 			a.index = m[0];
 			for (var j = 0; j < m.length; j += 2) {
@@ -1399,41 +1417,41 @@ $defineProperties(RegExp.prototype, { dontEnum: true }, {
 		}
 		return a;
 	}),
-	test: $unconstructable(function test(string) {
-		$checkClass(this, 'RegExp', 'test');
-		return $execRegExp(this, string) !== void 0;
+	test: unconstructable(function test(string) {
+		checkClass(this, 'RegExp', 'test');
+		return execRegExp(this, string) !== void 0;
 	}),
-	toString: $unconstructable(function toString() {
-		$checkClass(this, 'RegExp', 'toString');
+	toString: unconstructable(function toString() {
+		checkClass(this, 'RegExp', 'toString');
 		return '/' + this.source + '/' + (this.global ? 'g' : '') + (this.ignoreCase ? 'i' : '') + (this.multiline ? 'm' : '');
 	})
 });
 
 /* --- Set up globals --- */
 
-$defineProperties($global, { dontEnum: true }, {
+defineProperties(globals, { dontEnum: true }, {
 	Array: Array,
 	Boolean: Boolean,
 	Date: Date,
 	Function: Function,
-	Math: $support.createWrapper('Math', void 0),
+	Math: support.createWrapper('Math', void 0),
 	Number: Number,
 	Object: Object,
 	RegExp: RegExp,
 	String: String,
-	isFinite: $unconstructable(function isFinite(v) { return $isFinite(+v) }),
-	isNaN: $unconstructable(function isNaN(v) { return $isNaN(+v) }),
-	parseFloat: $unconstructable(function parseFloat(string) { return $support.parseFloat($toString(string)) }),
-	parseInt: $unconstructable(function parseInt(string, radix) {
-		string = $toString(string);
-		var pic = $PARSE_INT_CHARS, ch, i = -1;
+	isFinite: unconstructable(function isFinite(v) { return $isFinite(+v) }),
+	isNaN: unconstructable(function isNaN(v) { return $isNaN(+v) }),
+	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(objectToString(string)) }),
+	parseInt: unconstructable(function parseInt(string, radix) {
+		string = objectToString(string);
+		var pic = PARSE_INT_CHARS, ch, i = -1;
 		while (pic[string[++i]] === null) ;
-		var $sign = 1;
+		var sign = 1;
 		switch (ch = string[i]) {
-			case '-': $sign = -1;
+			case '-': sign = -1;
 			case '+': ++i;
 		}
-		if (((radix = $toInteger(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
+		if (((radix = toInteger(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
 			i += 2;
 			radix = 16;
 		}
@@ -1446,17 +1464,17 @@ $defineProperties($global, { dontEnum: true }, {
 		for (b = i; i < e && (n = pic[string[i]]) != null && n < radix; ++i) {
 			v = v * radix + n;
 		}
-		return (b === i ? $NaN : v * $sign);
+		return (b === i ? $NaN : v * sign);
 	})
 });
 
-$defineProperties($global, { dontEnum: true, dontDelete: true }, {
-	NaN: $NaN, Infinity: $Infinity, undefined: $support.undefined
+defineProperties(globals, { dontEnum: true, dontDelete: true }, {
+	NaN: $NaN, Infinity: $Infinity, undefined: support.undefined
 });
 
 /* --- Math --- */
 
-$defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
+defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 	E: 2.718281828459045235360,
 	LN10: 2.302585092994045684018,
 	LN2: 0.6931471805599453094172,
@@ -1467,33 +1485,33 @@ $defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 	SQRT2: 1.414213562373095048802
 });
 
-$defineProperties(Math, { dontEnum: true }, {
-	abs: $unconstructable(function abs(v) { return ((v = +v) < 0 ? -v : v) }),
-	acos: $unconstructable(function acos(v) { return $support.acos(+v) }),
-	asin: $unconstructable(function asin(v) { return $support.asin(+v) }),
-	atan: $unconstructable(function atan(v) { return $support.atan(+v) }),
-	atan2: $unconstructable(function atan2(y, x) { return $support.atan2(+y, +x) }),
-	ceil: $unconstructable(function ceil(v) { return -$floor(-v) }),
-	cos: $unconstructable(function cos(v) { return $support.cos(+v) }),
-	exp: $unconstructable(function exp(v) { return $support.exp(+v) }),
-	floor: $unconstructable(function floor(v) { return $floor(+v) }),
-	log: $unconstructable(function log(v) { return $support.log(+v) }),
-	max: $unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m }),
-	min: $unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m }),
-	pow: $unconstructable(function pow(x, y) { return $support.pow(+x, +y) }),
-	round: $unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))) }),
-	sin: $unconstructable(function sin(v) { return $support.sin(+v) }),
-	sqrt: $unconstructable(function sqrt(v) { return $support.sqrt(+v) }),
-	tan: $unconstructable(function tan(v) { return $support.tan(+v) })
+defineProperties(Math, { dontEnum: true }, {
+	abs: unconstructable(function abs(v) { return ((v = +v) < 0 ? -v : v) }),
+	acos: unconstructable(function acos(v) { return support.acos(+v) }),
+	asin: unconstructable(function asin(v) { return support.asin(+v) }),
+	atan: unconstructable(function atan(v) { return support.atan(+v) }),
+	atan2: unconstructable(function atan2(y, x) { return support.atan2(+y, +x) }),
+	ceil: unconstructable(function ceil(v) { return -$floor(-v) }),
+	cos: unconstructable(function cos(v) { return support.cos(+v) }),
+	exp: unconstructable(function exp(v) { return support.exp(+v) }),
+	floor: unconstructable(function floor(v) { return $floor(+v) }),
+	log: unconstructable(function log(v) { return support.log(+v) }),
+	max: unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m }),
+	min: unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m }),
+	pow: unconstructable(function pow(x, y) { return support.pow(+x, +y) }),
+	round: unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))) }),
+	sin: unconstructable(function sin(v) { return support.sin(+v) }),
+	sqrt: unconstructable(function sqrt(v) { return support.sqrt(+v) }),
+	tan: unconstructable(function tan(v) { return support.tan(+v) })
 });
 
 /* --- Errors --- */
 
-function $createErrorConstructor(name, prototype) {
+function createErrorConstructor(name, prototype) {
 	return function(message) {
 		var e;
-		$support.defineProperty(e = $support.createWrapper('Error', name, prototype), 'message'
-				, (message !== void 0 ? $toString(message) : ''), false, true, false);
+		support.defineProperty(e = support.createWrapper('Error', name, prototype), 'message'
+				, (message !== void 0 ? objectToString(message) : ''), false, true, false);
 		return e
 	}
 };
@@ -1503,20 +1521,20 @@ function $createErrorConstructor(name, prototype) {
 
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
-		$support.defineProperty($global, name = ERROR_NAMES[i]
-				, constructor = $createErrorConstructor(name, prototype = $support.prototypes[name]), false, true, false);
+		support.defineProperty(globals, name = ERROR_NAMES[i]
+				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
     /* FIX : not necessary for strict es3, where .name isn't included at all in the official specs but is my own extension using standard flags
 		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
     */
 		constructor.name = name;
-		$defineProperties(constructor, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: prototype });
-		$defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
+		defineProperties(constructor, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: prototype });
+		defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
 		prototype.name = name;
 	}
 
-	$defineProperties(Error.prototype, { dontEnum: true }, {
+	defineProperties(Error.prototype, { dontEnum: true }, {
 		message: '',
-		toString: $unconstructable(function toString() {
+		toString: unconstructable(function toString() {
 			return (this.name === void 0 ? 'Error' : this.name) + (this.message ? (': ' + this.message) : '');
 		})
 	})
@@ -1526,21 +1544,21 @@ function $createErrorConstructor(name, prototype) {
 
 // These are not guaranteed to be 100% compatible
 
-$defineProperties(Array, { dontEnum: true }, {
-	isArray: $unconstructable(function isArray(o) {
+defineProperties(Array, { dontEnum: true }, {
+	isArray: unconstructable(function isArray(o) {
 		return $getInternalProperty(o, 'class') === 'Array';
 	})
 });
 
-$defineProperties(Object, { dontEnum: true }, {
-	defineProperty: $unconstructable(function defineProperty(o, p, d) {
-		$support.defineProperty(o, $toString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
+defineProperties(Object, { dontEnum: true }, {
+	defineProperty: unconstructable(function defineProperty(o, p, d) {
+		support.defineProperty(o, objectToString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
 	}),
-	getPrototypeOf: $unconstructable(function getPrototypeOf(o) {
+	getPrototypeOf: unconstructable(function getPrototypeOf(o) {
 		return $getInternalProperty(o, 'prototype');
 	})
 });
 
-if (NaN.toString() !== 'NaN') throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
+if ($NaN.toString() !== 'NaN') throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
 
 })
