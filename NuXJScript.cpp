@@ -6,6 +6,7 @@
 
 #include "assert.h"
 #include <iostream>
+#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <limits>
@@ -4050,7 +4051,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 
 /*
 	'scopeLabelsEnd' points to the end of a range of scopes that are all labelled scopes. This is required
-	because it is legal to give while loops etc mulitple alternative labels to be used with 'continue'.
+	because it is legal to give while loops etc multiple alternative labels to be used with 'continue'.
 	(These should all be converted to 'ITERATOR_LABEL_TYPE' upon entry.)
 */
 void Compiler::statement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
@@ -4657,8 +4658,8 @@ void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
 #include <vector>
 #include <sstream>
 
-#if (NED_WINDOWS)
-#error fix
+#if (_MSC_VER)
+#include <Windows.h>
 long getCPUSecs() {
 	::FILETIME creationTime;
 	::FILETIME exitTime;
@@ -4666,7 +4667,7 @@ long getCPUSecs() {
 	::FILETIME userTime;
 	BOOL success = ::GetProcessTimes(::GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime);
 	assert(success);
-	return ((static_cast<tInt64>(userTime.dwHighDateTime) << 32) | userTime.dwLowDateTime) / 10000000;
+	return ((static_cast<__int64>(userTime.dwHighDateTime) << 32) | userTime.dwLowDateTime) / 10000000;
 }
 #else
 double getCPUSecs() {

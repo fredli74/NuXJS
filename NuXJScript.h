@@ -902,7 +902,7 @@ class CatchScope : public Scope {
 
 const UInt32 DEFAULT_STACK_SIZE = 1024;
 const UInt32 STANDARD_CYCLES_BETWEEN_AUTO_GC = 1024;
-const UInt32 MAX_CALL_RECURSION = 1024;
+const UInt32 MAX_CALL_RECURSION = 64;
 const Int32 CHECK_TIMEOUT_INTERVAL = 1024;
 const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 class Runtime : public GCItem {

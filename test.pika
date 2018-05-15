@@ -1,9 +1,10 @@
 #! /usr/local/bin/PikaCmd
 
+include('debug.pika');
 include('stdlib.pika');
 include('systools.pika');
 
-STANDARD_COLOR = SUCCESS_COLOR = FAILURE_COLOR = INPUT_COLOR = GOT_COLOR = EXPECTED_COLOR = '';
+STANDARD_COLOR = SUCCESS_COLOR = FAILURE_COLOR = INPUT_COLOR = GOT_COLOR = EXPECTED_COLOR = RESET_COLOR = '';
 if (exists(@::PLATFORM) && ::PLATFORM === 'UNIX') {
 	STANDARD_COLOR = "\x1B[1;37m";
 	SUCCESS_COLOR = "\x1B[0;32m";
