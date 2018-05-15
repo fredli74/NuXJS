@@ -1106,11 +1106,12 @@ class Processor : public GCItem {
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				Function* asFunction(const Value& v);
 				void invokeFunction(Function* f, int popCount, int argc, Object* thisObject = 0);
+				void newOperation(const Int32 argc);
 				void reset();
 				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
 				void popFrame();
 				void popCatcher();
-	
+
 				static const OpcodeInfo opcodeInfo[OP_COUNT];
 
 				struct Frame : public GCItem {

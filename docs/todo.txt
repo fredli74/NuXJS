@@ -21,9 +21,6 @@ Run-time
 
 	* Make gc async/incremental in the sense that you actively and repeatdly call it until it is done (doesn't block native cpu, even if it "blocks" vm cpu).
 
-	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
-		- simply prevent long proto chains somehow?
-
 	* is the logic correct when changing array length containing a few undeletable elements?
 
 Compiler

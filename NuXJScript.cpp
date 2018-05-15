@@ -97,6 +97,7 @@ const String IS_NOT_A_FUNCTION_STRING(" is not a function");
 const String IS_NOT_DEFINED_STRING(" is not defined");
 const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
 const String STACK_OVERFLOW_STRING("Stack overflow");
+const String PROTOTYPE_CHAIN_TOO_LONG("Prototype chain too long");
 const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"
 };
@@ -1806,6 +1807,7 @@ ScriptException::ScriptException(Heap& heap, const Value& value) throw()
 
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
 const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
+const Int32 MAX_PROTOTYPE_CHAIN_LENGTH = 32;
 
 // This list must be in enum order
 const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
@@ -2006,6 +2008,26 @@ void Processor::invokeFunction(Function* f, int popCount, int argc, Object* this
 	pop(popCount);
 }
 
+void Processor::newOperation(const Int32 argc) {
+	Function* f = asFunction(sp[-argc]);
+	if (f != 0) { // FIX : sub
+		Value v(Value::UNDEFINED);
+		f->getProperty(rt, &PROTOTYPE_STRING, &v);
+		Object* prototype = v.asObject();
+		Int32 counter = 0;
+		for (Object* p = prototype; p != 0; p = p->getPrototype(rt)) {
+			if (++counter > MAX_PROTOTYPE_CHAIN_LENGTH) {
+				error(RANGE_ERROR, &PROTOTYPE_CHAIN_TOO_LONG);
+				return;
+			}
+		}
+		Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
+		sp[-(argc - 1)] = f->construct(rt, *this, argc, sp - argc + 1, newObject);
+		sp[-(argc - 1) - 1] = newObject;
+		pop(argc - 1);
+	}
+}
+
 void Processor::innerRun() {
 	assert(currentFrame != 0);
 	Scope* scope = currentFrame->scope;
@@ -2172,20 +2194,7 @@ void Processor::innerRun() {
 				return;
 			}
 
-			case NEW_OP: {
-				Function* f = asFunction(sp[-im]);
-				if (f != 0) { // FIX : sub
-					Value v(Value::UNDEFINED);
-					f->getProperty(rt, &PROTOTYPE_STRING, &v);
-					Object* prototype = v.asObject();
-					Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
-					sp[-(im - 1)] = f->construct(rt, *this, im, sp - im + 1, newObject);
-					sp[-(im - 1) - 1] = newObject;
-					pop(im - 1);
-				}
-				return;
-			}
-			
+			case NEW_OP: newOperation(im); return;
 			case NEW_RESULT_OP: pop2push1(sp[0].isObject() ? sp[0] : sp[-1]); break;
 			case NEW_OBJECT_OP: push(new(heap) ScriptObject(heap.managed(), &rt.objectPrototype)); break;
 			case NEW_ARRAY_OP: push(new(heap) Array(heap.managed())); break;

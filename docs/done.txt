@@ -278,3 +278,7 @@ DONE
 		- there is also the "string sync" idea from old NuXScript... it could do something like { if (sameString && pointer < other.pointer && heap is 0 or mine) pointer = other.pointer } on all Values compared
 			- the only problem is that it won't help stuff that is pushed on the stack only, e.g. a[x] = y <- both x and y are pushed data on stack and changing those pointers really won't help anyone :)
 		- we're not going to do this
+
+	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
+		- simply prevent long proto chains somehow?
+		- yeah, just preventing them to <= 32, should *always* be sufficient
