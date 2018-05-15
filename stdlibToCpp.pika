@@ -1,20 +1,37 @@
 #! /usr/local/bin/PikaCmd
 
 include('stdlib.pika');
+run('./initPPEG.pika');
 
-vargs(@exe,,@fn);
-defaults(@fn, 'stdlib.js');
+vargs(@exe,, @inputFile, @outputFile);
+defaults(@inputFile, 'stdlib.js', @outputFile, 'stdlibJS.cpp');
 
-::textToCpp = function {
-    args(@source);
-    result = '';
-    tokenize(source, >{ if (result != '') result #= LF; result #= TAB # escape($0 # LF) });
-   	result
+print(bake('Loading {inputFile}'));
+src = load(inputFile);
+
+print('Compiling parser');
+
+ok = ppeg.compileFunction(load('./stdlibMinifier.ppeg'), @minifier);
+if (!ok) throw("Error compiling the command parser");
+
+print('Shrinking code');
+
+ok = minifier(src, @minified, @i);
+if (!ok) throw("Failed parsing at offset " # i);
+
+print(bake('Code shrunk from {length(src)} to {length(minified)}'));
+
+code = '';
+for (offset = 0; offset < length(minified); offset += n) {
+	for (n = min(length(minified) - offset, 118)
+			; { line = '"' # (escape("\n" # minified{offset:n}){3:}); length(line) > 120 }
+			; --n);
+	code #= line # LF;
 };
 
 save('stdlibJS.cpp', bake(
 'const char* STDLIB_JS =
-{textToCpp(load(fn))};
+{code};
 '));
 
-print('Updated stdlibJS.cpp');
+print(bake('Updated {outputFile}'));

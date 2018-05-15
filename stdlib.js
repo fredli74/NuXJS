@@ -2,20 +2,22 @@
 	@preserve: Array,Boolean,Date,E,Error,Function,Infinity,LN10,LN2,LOG10E,LOG2E,MAX_VALUE,MIN_VALUE,Math
 	@preserve: NEGATIVE_INFINITY,NaN,Number,Object,PI,POSITIVE_INFINITY,RangeError,RegExp,SQRT1_2,SQRT2,String
 	@preserve: SyntaxError,TypeError,UTC,abs,acos,apply,arguments,asin,atan,atan2,break,call,callWithArgs,case,ceil
-	@preserve: charAt,charCodeAt,configurable,compare,concat,cos,default,defineProperty,delete,do,dontDelete,dontEnum
-	@preserve: else,enumerable,eval,exec,exp,false,finally,floor,for,fromCharCode,fromLocalTime,function,getCurrentTime
+	@preserve: charAt,charCodeAt,configurable,concat,cos,default,defineProperty,delete,do,dontDelete,dontEnum
+	@preserve: else,enumerable,eval,exec,exp,false,finally,floor,for,fromCharCode,function,getCurrentTime
 	@preserve: getDate,getDay,getFullYear,getHours,getInternalProperty,getMilliseconds,getMinutes,getMonth
 	@preserve: getPrototypeOf,getSeconds,getTime,getTimezoneOffset,getUTCDate,getUTCDay,getUTCFullYear,getUTCHours
 	@preserve: getUTCMilliseconds,getUTCMinutes,getUTCMonth,getUTCSeconds,hasOwnProperty,if,ignoreCase,in,index,indexOf
 	@preserve: input,isArray,isFinite,isNaN,isPropertyEnumerable,join,lastIndex,lastIndexOf,length,localeCompare,log
 	@preserve: match,max,maxNumber,message,min,minNumber,multiline,name,new,null,parseFloat,parseInt,pow
-	@preserve: propertyIsEnumerable,prototype,push,qsort,readOnly,regExpCanonicalize,return,reverse,round,setDate
-	@preserve: setFullYear,setHours,setMilliseconds,setMinutes,setMonth,setSeconds,setTime,setTimeParts,setUTCDate
+	@preserve: propertyIsEnumerable,prototype,push,readOnly,regExpCanonicalize,return,reverse,round,setDate
+	@preserve: setFullYear,setHours,setMilliseconds,setMinutes,setMonth,setSeconds,setTime,setUTCDate
 	@preserve: setUTCFullYear,setUTCHours,setUTCMilliseconds,setUTCMinutes,setUTCMonth,setUTCSeconds,shift,sin,slice
 	@preserve: sort,specialConstructor,sqrt,submatch,substr,substring,switch,tan,this,throw,time,toChar,toExponential
 	@preserve: toFixed,toISOString,toLocaleDateString,toLocaleLowerCase,toLocaleString,toLocaleTimeString
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
-	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable
+	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
+	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
+	@preserve: createRegExp, CC, global, source
 	
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -61,7 +63,7 @@ var globals = this;
 var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
-		, $Infinity = support.Infinity, $submatch = support.submatch
+		, $Infinity = support.Infinity, $submatch = support.submatch // "$submatch" is used from within regexps, so it has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs;
 var regExpExec;
 var ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -83,7 +85,7 @@ function StringBuilder() { var i = 20, b = this.buffers = [ ]; do { b[--i] = '' 
 StringBuilder.prototype.append = function append(s) {
 	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = '' }
 };
-StringBuilder.prototype.toString = function toString() {
+StringBuilder.prototype.build = function toString() {
 	var i, b, s = (b = this.buffers)[i = 19];
 	do { s += b[--i] } while (i > 0);
 	return s
@@ -133,29 +135,29 @@ function checkClass(object, expectedClass, forFunction) {
 	}
 }
 
-function numberToString(value, digits, eNotationBelow) {
+function numberToString(num, digits, eNotationBelow) {
 	var string = '';
-	if (value < 0) {
-		value = -value;
+	if (num < 0) {
+		num = -num;
 		string = '-';
 	}
 	var significand = 0; 
 	var exponent = 0;
-	if (value !== 0) {
-		if (value < 1e-323) {
+	if (num !== 0) {
+		if (num < 1e-323) {
 			exponent = -324;
-			significand = value / 1e-323 * 10.0;
+			significand = num / 1e-323 * 10.0;
 		} else {
-			exponent = $floor(support.log(value) * 0.43429448190325182765113);
+			exponent = $floor(support.log(num) * 0.43429448190325182765113);
 			if (exponent < -323) {
 				exponent = -323;
 			}
 			var magnitude = support.pow(10, exponent);
-			if (value >= magnitude * 10.0) {
+			if (num >= magnitude * 10.0) {
 				magnitude *= 10.0;
 				++exponent;
 			}
-			significand = value / magnitude;
+			significand = num / magnitude;
 		}
 	}
 	if (digits === void 0) {
@@ -172,8 +174,8 @@ function numberToString(value, digits, eNotationBelow) {
 		if (exponent >= eNotationBelow && exponent <= digits) {
 			digits -= exponent;
 			var magnitude = support.pow(10, digits);
-			var integer = $floor(value);
-			var decimals = $floor((value - integer) * magnitude + 0.5);
+			var integer = $floor(num);
+			var decimals = $floor((num - integer) * magnitude + 0.5);
 			if (decimals >= magnitude) {
 				++integer;
 			}
@@ -229,14 +231,14 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 /* --- Function --- */
 
 var Function = function Function(body) {
-	var argv, source = '(', n = (argv = arguments).length - 1;
+	var argv, src = '(', n = (argv = arguments).length - 1;
 	for (var i = 0; i < n; ++i) {
-		source += argv[i];
-		if (i < n - 1) source += ',';
+		src += argv[i];
+		if (i < n - 1) src += ',';
 	}
-	source += ") {\n";
-	if (n >= 0) source += argv[n];
-	return support.compileFunction(source + "\n}", 'anonymous')
+	src += ") {\n";
+	if (n >= 0) src += argv[n];
+	return support.compileFunction(src + "\n}", 'anonymous')
 };
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
@@ -375,7 +377,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 
 /* --- String --- */
 
-var lowerToUpper, upperToLower; // upperToLower is used from within regexps, so no  there to prevent from minifying
+var lowerToUpper, upperToLower; // "upperToLower" is used from within regexps, so it has to be preserved
 
 function createCaseTables() {
 	// In the future constant tables might be (nearly) free to setup, but as of 20160423 this is quite "expensive".
@@ -564,7 +566,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 			if (i > 0) s.append(separator);
 			if ((s2 = this[i]) != null) s.append(objectToString(s2));
 		}
-		return s.toString();
+		return s.build();
 	}),
 	pop: unconstructable(function pop() {
 		var v = void 0, l;
@@ -707,27 +709,27 @@ Date.UTC = function(year, month, date, hours, minutes, seconds, ms) {
 Date.prototype.toISOString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) throw RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
-	return (toDateString(z) + "T" + toTimeString(z, true) + "Z")
+	return (epochToDateString(z) + "T" + epochToTimeString(z, true) + "Z")
 };
 Date.prototype.toUTCString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) return "Invalid Date";
-	return (toDateString(z) + " " + toTimeString(z))
+	return (epochToDateString(z) + " " + epochToTimeString(z))
 };
 Date.prototype.toString = function() {
 	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return (toDateString(l) + " " + toTimeString(l))
+	return (epochToDateString(l) + " " + epochToTimeString(l))
 };
 Date.prototype.toDateString = function() {
 	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return toDateString(l)
+	return epochToDateString(l)
 };
 Date.prototype.toTimeString = function() {
 	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return toTimeString(l)
+	return epochToTimeString(l)
 };
 
 Date.prototype.toLocaleString = Date.prototype.toString;
@@ -756,12 +758,12 @@ Date.prototype.getTimezoneOffset = function() { return (this.Value - toLocalTime
 Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) };
 Date.prototype.setMilliseconds = function(ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 3, arguments)))) };
 Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = timeClip(setTimeParts(this.Value, 3, arguments))) };
-Date.prototype.setSeconds = function(sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) };
-Date.prototype.setUTCSeconds = function(sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 2, arguments))) };
-Date.prototype.setMinutes = function(min, sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 1, arguments)))) };
-Date.prototype.setUTCMinutes = function(min, sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 1, arguments))) };
-Date.prototype.setHours = function(hour, min, sec, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 0, arguments)))) };
-Date.prototype.setUTCHours = function(hour, min, sec, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 0, arguments))) };
+Date.prototype.setSeconds = function(s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) };
+Date.prototype.setUTCSeconds = function(s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 2, arguments))) };
+Date.prototype.setMinutes = function(m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 1, arguments)))) };
+Date.prototype.setUTCMinutes = function(m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 1, arguments))) };
+Date.prototype.setHours = function(h, m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 0, arguments)))) };
+Date.prototype.setUTCHours = function(h, m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 0, arguments))) };
 Date.prototype.setDate = function(date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 2, arguments)))) };
 Date.prototype.setUTCDate = function(date) { return (this.Value = timeClip(setDateParts(this.Value, 2, arguments))) };
 Date.prototype.setMonth = function(month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 1, arguments)))) };
@@ -826,8 +828,8 @@ var msPerDay = 86400000,
 			int(month), (argc > 2 ? int(date) : 1)) + epochFromTime( argc > 3 ? int(hours) : 0,
 			argc > 4 ? int(minutes) : 0, argc > 5 ? int(seconds) : 0, argc > 6 ? int(ms) : 0);
 	},
-	toDateString = function(z) { var y, dt = dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
-	toTimeString = function(z, ms) { var tm = timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
+	epochToDateString = function(z) { var y, dt = dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
+	epochToTimeString = function(z, ms) { var tm = timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
 
 
 
@@ -837,7 +839,7 @@ var v = 1;
 var EMPTY_CHAR = v, NEWLINE_CHAR = (v <<= 1), SPACE_CHAR = (v <<= 1), WORD_CHAR = (v <<= 1), DECIMAL_CHAR = (v <<= 1)
 		, LETTER_CHAR = (v <<= 1), HEX_CHAR = (v <<= 1), ESCAPE_CHAR = (v <<= 1), SPECIAL_CHAR = (v <<= 1)
 		, OK_IN_STRING_LITERAL = (v <<= 1), IDENTITY_ESCAPE_CHAR = (v <<= 1);
-var CC = { };
+var CC = { }; // "CC" is used from within regexps, so it has to be preserved
 (function() {
 	function setupCharClass(mask, chars) { for (var i in chars) CC[chars[i]] |= mask }
 
@@ -865,7 +867,7 @@ var CC = { };
 	}
 })();
 
-// regExpCanonicalize is used from within regexps, so no  there to prevent from minifying
+// "regExpCanonicalize" is used from within regexps, so it has to be preserved
 function regExpCanonicalize(s) {
 	var t = '', c, d;
 	if (!lowerToUpper) createCaseTables();
@@ -912,27 +914,27 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	}
 
 	function parseQuantifier() {
-		var min = 0, max = $Infinity, greedy = true;
+		var mini = 0, maxi = $Infinity, greedy = true;
 		switch (s[p]) {
 			case '*': ++p; break;
-			case '+': ++p; min = 1; break;
-			case '?': ++p; max = 1; break;
+			case '+': ++p; mini = 1; break;
+			case '?': ++p; maxi = 1; break;
 			case '{': {
 				var b = p, n;
 				++p;
-				if ((min = max = parseNumber(-1)) < 0) {
+				if ((mini = maxi = parseNumber(-1)) < 0) {
 					p = b;
 					return null;
 				}
 				if (s[p] === ',') {
 					++p;
-					max = parseNumber($Infinity);
+					maxi = parseNumber($Infinity);
 				}
 				if (s[p] !== '}') {
 					p = b;
 					return null;
 				}
-				if (min > max) {
+				if (mini > maxi) {
 					throw SyntaxError("Min greater than max in regular expression quantifier"); // FIX
 				}
 				++p;
@@ -944,7 +946,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 			++p;
 			greedy = false;
 		}
-		return { min: min, max: max, greedy: greedy };
+		return { mini: mini, maxi: maxi, greedy: greedy };
 	}
 
 	function escapeCharacter(c) {
@@ -1068,7 +1070,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
 		// TODO : eliminate unnecessary b=p+0,e=p+Infinity and stuff
 		var functionName = 'q' + (++functionCounter);
-		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.min + '*h,e=p+' + quantity.max + '*h' : 'b=p+' + quantity.min + ',e=p+' + quantity.max) + '; ';
+		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.mini + '*h,e=p+' + quantity.maxi + '*h' : 'b=p+' + quantity.mini + ',e=p+' + quantity.maxi) + '; ';
 		if (stepSize) {
 			head += 'if (h<=0 || h!==h) return ' + tail + '; ';
 		} 
@@ -1265,22 +1267,22 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						var tail = compileTerms(0, junction);
 						var inner = disjunction;
 						var extraEndlessCheck = '';
-						var looping = (quantity && quantity.max > 1);
-						if (looping && (quantity.max < $Infinity || quantity.min > 1)) {
+						var looping = (quantity && quantity.maxi > 1);
+						if (looping && (quantity.maxi < $Infinity || quantity.mini > 1)) {
 							closureVars += ',n' + functionNumber + '=0';
-							if (quantity.max < $Infinity) {
-								inner = and('++n' + functionNumber + '<=' + quantity.max, inner);
+							if (quantity.maxi < $Infinity) {
+								inner = and('++n' + functionNumber + '<=' + quantity.maxi, inner);
 							} else {
 								inner = '++n' + functionNumber + ', ' + inner;
 							}
-							if (quantity.min > 1) {
-								inner = and(inner, 'n' + functionNumber + '>=' + quantity.min, inner);
-								extraEndlessCheck = 'n' + functionNumber + '<' + quantity.min;
+							if (quantity.mini > 1) {
+								inner = and(inner, 'n' + functionNumber + '>=' + quantity.mini, inner);
+								extraEndlessCheck = 'n' + functionNumber + '<' + quantity.mini;
 							}
 							inner = or(inner, '(--n' + functionNumber + ',false)');
 						}
 						if (lookAhead) {
-							var call = junctionName + '(' + positionToCode(0) + ')';
+							var useCall = junctionName + '(' + positionToCode(0) + ')';
 							if (negativeLookAhead) {
 								inner = '!(' + inner + ')';
 								if (innerCapturesStart < innerCapturesEnd) {
@@ -1288,10 +1290,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 									for (var i = innerCapturesStart; i < innerCapturesEnd; ++i) {
 										captureResets += 'c' + i * 2 + '=';
 									}
-									call = '(' + captureResets + 'void 0, ' + call + ')';
+									useCall = '(' + captureResets + 'void 0, ' + useCall + ')';
 								}
 							}
-							inner = and(inner, call);
+							inner = and(inner, useCall);
 						}
 						if (looping) {
 							closureVars += ',p' + functionNumber;
@@ -1303,12 +1305,12 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							var recursionCall = groupName + '(' + positionToCode(0) + ')';
 							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
 							addFunction(junctionName, captureWrap(inner, closeCapture));
-							var call = (quantity.min === 0 ? junctionCall : groupCall);
-							code = and(code, (looping ? '(p' + functionNumber + '=void 0,' + call + ')' : call));
+							var useCall = (quantity.mini === 0 ? junctionCall : groupCall);
+							code = and(code, (looping ? '(p' + functionNumber + '=void 0,' + useCall + ')' : useCall));
 						} else {
 							addFunction(junctionName, captureWrap(tail, closeCapture));
-							if (quantity && quantity.min === 0) {
-								code = and(code, (quantity.max === 0 ? junctionCall
+							if (quantity && quantity.mini === 0) {
+								code = and(code, (quantity.maxi === 0 ? junctionCall
 										: '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')'));
 							} else {
 								code = and(code, groupCall);

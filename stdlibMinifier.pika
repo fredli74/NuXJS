@@ -1,0 +1,13 @@
+#! /usr/local/bin/PikaCmd
+
+include('stdlib.pika');
+run('./initPPEG.pika');
+
+args(@exe, @inputFile, @outputFile);
+
+src = load(inputFile);
+ok = ppeg.compileFunction(load('./stdlibMinifier.ppeg'), @minifier);
+if (!ok) throw("Error compiling the command parser");
+ok = minifier(src, @minified, @i);
+if (!ok) throw("Failed parsing at offset " # i);
+save(outputFile, minified)

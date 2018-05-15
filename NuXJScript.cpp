@@ -4622,18 +4622,18 @@ void Runtime::setupStandardLibrary() {
 
 	// FIX : sub v
 	toNumberFunction = supportObject->getProperty(*this, "toPrimitiveNumber").asFunction();
-	if (toNumberFunction == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveNumber");
+	if (toNumberFunction == 0 || toNumberFunction->asFunction() == 0) {
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.toPrimitiveNumber");
 	}
 	
 	toStringFunction = supportObject->getProperty(*this, "toPrimitiveString").asFunction();
-	if (toStringFunction == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.toPrimitiveString");
+	if (toStringFunction == 0 || toStringFunction->asFunction() == 0) {
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.toPrimitiveString");
 	}
 
 	createRegExpFunction = supportObject->getProperty(*this, "createRegExp").asFunction();
-	if (toStringFunction == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing support.createRegExp");
+	if (createRegExpFunction == 0 || createRegExpFunction->asFunction() == 0) {
+		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.createRegExp");
 	}
 }
 
