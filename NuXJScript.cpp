@@ -1829,10 +1829,6 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , 0 },
 	{ INC_OP                     , "INC"                     , 0      , 0 },
 	{ DEC_OP                     , "DEC"                     , 0      , 0 },
-	{ PLUS_OP                    , "PLUS"                    , 0      , 0 },
-	{ MINUS_OP                   , "MINUS"                   , 0      , 0 },
-	{ INV_OP                     , "INV"                     , 0      , 0 },
-	{ NOT_OP                     , "NOT"                     , 0      , 0 },
 	{ ADD_OP                     , "ADD"                     , -1     , 0 },
 	{ SUB_OP                     , "SUB"                     , -1     , 0 },
 	{ MUL_OP                     , "MUL"                     , -1     , 0 },
@@ -1844,6 +1840,10 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ SHL_OP                     , "SHL"                     , -1     , 0 },
 	{ SHR_OP                     , "SHR"                     , -1     , 0 },
 	{ USHR_OP                    , "USHR"                    , -1     , 0 },
+	{ PLUS_OP                    , "PLUS"                    , 0      , 0 },
+	{ MINUS_OP                   , "MINUS"                   , 0      , 0 },
+	{ INV_OP                     , "INV"                     , 0      , 0 },
+	{ NOT_OP                     , "NOT"                     , 0      , 0 },
 	{ X_EQ_OP                    , "X_EQ"                    , -1     , 0 },
 	{ X_NEQ_OP                   , "X_NEQ"                   , -1     , 0 },
 	{ EQ_OP                      , "EQ"                      , -1     , 0 },
@@ -2117,10 +2117,6 @@ void Processor::innerRun() {
 
 			case INC_OP:	sp[0] = sp[0].toDouble() + 1.0; break;
 			case DEC_OP:	sp[0] = sp[0].toDouble() - 1.0; break;
-			case PLUS_OP:	sp[0] = sp[0].toDouble(); break;
-			case MINUS_OP:	sp[0] = -sp[0].toDouble(); break;
-			case INV_OP:	sp[0] = ~sp[0].toInt(); break;
-			case NOT_OP:	sp[0] = !sp[0].toBool(); break;
 			case ADD_OP:	pop2push1(sp[-1].add(heap, sp[0])); break;
 			case SUB_OP:	pop2push1(sp[-1].toDouble() - sp[0].toDouble()); break;
 			case MUL_OP:	pop2push1(sp[-1].toDouble() * sp[0].toDouble()); break;
@@ -2132,6 +2128,10 @@ void Processor::innerRun() {
 			case SHL_OP:	pop2push1(sp[-1].toInt() << ((UInt32)sp[0].toInt() & 0x1F)); break;
 			case SHR_OP:	pop2push1(sp[-1].toInt() >> ((UInt32)sp[0].toInt() & 0x1F)); break;
 			case USHR_OP:	pop2push1(((UInt32)(sp[-1].toInt()) >> ((UInt32)sp[0].toInt() & 0x1F))); break;
+			case PLUS_OP:	sp[0] = sp[0].toDouble(); break;
+			case MINUS_OP:	sp[0] = -sp[0].toDouble(); break;
+			case INV_OP:	sp[0] = ~sp[0].toInt(); break;
+			case NOT_OP:	sp[0] = !sp[0].toBool(); break;
 			case X_EQ_OP:	pop2push1(sp[-1].isStrictlyEqualTo(sp[0])); break;
 			case X_NEQ_OP:	pop2push1(!sp[-1].isStrictlyEqualTo(sp[0])); break;
 			case EQ_OP:		pop2push1(sp[-1].isEqualTo(sp[0])); break;
@@ -2692,9 +2692,7 @@ void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& p
 UInt32 Compiler::addConstant(const Value& constant) {
 	Constants* constants = code->constants;
 	for (UInt32 index = constants->size(); index > 0;) {
-		const Value v = (*constants)[--index];
-		if (v.isStrictlyEqualTo(constant)
-				&& (!constant.isStrictlyEqualTo(0.0) || 1.0 / v.toDouble() == 1.0 / constant.toDouble())) {
+		if ((*constants)[--index].isStrictlyEqualTo(constant)) {
 			return index;
 		}
 	}
@@ -3116,20 +3114,9 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
         }
 		
 		case UNARY: {
-			xr = operand(op);
-			if (xr.t == ExpressionResult::CONSTANT) {
-				switch (op.vmOp) {
-					case Processor::PLUS_OP:	xr.v = xr.v.toDouble(); break;
-					case Processor::MINUS_OP:	xr.v = -xr.v.toDouble(); break;
-					case Processor::INV_OP:		xr.v = ~xr.v.toInt(); break;
-					case Processor::NOT_OP:		xr.v = !xr.v.toBool(); break;
-					default: assert(0);
-				}
-			} else {
-				makeRValue(xr, op.primitiveInput);
-				emit(op.vmOp);
-				xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
-			}
+			makeRValue(operand(op), op.primitiveInput);
+			emit(op.vmOp);
+            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
 			break;
 		}
 
@@ -3182,17 +3169,13 @@ bool Compiler::preOperate(ExpressionResult& xr, Precedence precedence) {
             assert(!op.primitiveInput);
             assert(op.primitiveOutput);
 			xr = operand(op);
-			if (xr.t == ExpressionResult::CONSTANT) {
-				xr.v = xr.v.typeOfString();
+			if (xr.t == ExpressionResult::NAMED) {
+				emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
 			} else {
-				if (xr.t == ExpressionResult::NAMED) {
-					emitWithConstant(Processor::TYPEOF_NAMED_OP, xr.v);
-				} else {
-					makeRValue(xr, false);
-					emit(op.vmOp);
-				}
-				xr = ExpressionResult::PUSHED_PRIMITIVE;
+				makeRValue(xr, false);
+				emit(op.vmOp);
 			}
+            xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
 		}
 		
@@ -3216,57 +3199,21 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
         }
             
 		case BINARY: {
-			if (xr.t == ExpressionResult::CONSTANT) {
-				CodeSection rightSection(heap, currentSection->stackDepth);
-				CodeSection* previousSection = changeSection(&rightSection);
-				ExpressionResult rxr = operand(op);
-				changeSection(previousSection);
-				if (rxr.t == ExpressionResult::CONSTANT) {
-					switch (op.vmOp) {
-						case Processor::ADD_OP: currentSection->insertSection(rightSection); xr.v = xr.v.add(heap, rxr.v); break;
-						case Processor::SUB_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toDouble() - rxr.v.toDouble(); break;
-						case Processor::MUL_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toDouble() * rxr.v.toDouble(); break;
-						case Processor::DIV_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toDouble() / rxr.v.toDouble(); break;
-						case Processor::MOD_OP:	currentSection->insertSection(rightSection); xr.v = modulo(xr.v.toDouble(), rxr.v.toDouble()); break;
-						case Processor::OR_OP:		currentSection->insertSection(rightSection); xr.v = xr.v.toInt() | rxr.v.toInt(); break;
-						case Processor::XOR_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toInt() ^ rxr.v.toInt(); break;
-						case Processor::AND_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toInt() & rxr.v.toInt(); break;
-						case Processor::SHL_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toInt() << ((UInt32)rxr.v.toInt() & 0x1F); break;
-						case Processor::SHR_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.toInt() >> ((UInt32)rxr.v.toInt() & 0x1F); break;
-						case Processor::USHR_OP:	currentSection->insertSection(rightSection); xr.v = ((UInt32)(xr.v.toInt()) >> ((UInt32)rxr.v.toInt() & 0x1F)); break;
-						case Processor::X_EQ_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.isStrictlyEqualTo(rxr.v); break;
-						case Processor::X_NEQ_OP:	currentSection->insertSection(rightSection); xr.v = !xr.v.isStrictlyEqualTo(rxr.v); break;
-						case Processor::EQ_OP:		currentSection->insertSection(rightSection); xr.v = xr.v.isEqualTo(rxr.v); break;
-						case Processor::NEQ_OP:	currentSection->insertSection(rightSection); xr.v = !xr.v.isEqualTo(rxr.v); break;
-						case Processor::LT_OP:		currentSection->insertSection(rightSection); xr.v = xr.v.isLessThan(rxr.v); break;
-						case Processor::LEQ_OP:	currentSection->insertSection(rightSection); xr.v = xr.v.isLessThanOrEqualTo(rxr.v); break;
-						case Processor::GT_OP:		currentSection->insertSection(rightSection); xr.v = rxr.v.isLessThan(xr.v); break;
-						case Processor::GEQ_OP:	currentSection->insertSection(rightSection); xr.v = rxr.v.isLessThanOrEqualTo(xr.v); break;
-						default: goto fugly;
-					}
-				} else {
-				fugly:
-					makeRValue(xr, op.primitiveInput);
-					currentSection->insertSection(rightSection);
-					makeRValue(rxr, op.primitiveInput);
-					emit(op.vmOp);
-					xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
-				}
-			} else {
-				makeRValue(xr, op.primitiveInput);
-				makeRValue(operand(op), op.primitiveInput);
-				emit(op.vmOp);
-				xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
-			}
+			makeRValue(xr, op.primitiveInput);
+			makeRValue(operand(op), op.primitiveInput);
+			emit(op.vmOp);
+            xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
 			break;
 		}
 		
 		case ABSTRACT_EQUAL: {
 			assert(!op.primitiveInput);
             assert(op.primitiveOutput);
-			makeRValue(xr, false);
-			makeRValue(operand(op), op.primitiveInput);
-			emit(Processor::PRE_EQ_OP);
+			const ExpressionResult lxr = makeRValue(xr, false);
+			xr = makeRValue(operand(op), op.primitiveInput);
+			if (lxr.t != ExpressionResult::PUSHED_PRIMITIVE || xr.t != ExpressionResult::PUSHED_PRIMITIVE) {
+				emit(Processor::PRE_EQ_OP);
+			}
 			emit(op.vmOp);
             xr = ExpressionResult::PUSHED_PRIMITIVE;
 			break;
