@@ -2617,16 +2617,6 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 			lastEmitted = replacementOpcode;
 			return;
 		}
-	} else if (opcode == Processor::READ_LOCAL_OP && lastEmitted == Processor::WRITE_LOCAL_POP_OP
-			&& operand == Processor::unpackInstruction(code.end()[-1]).second) {
-		const Int32 oldOperand = Processor::unpackInstruction(code.end()[-1]).second;
-		code.pop();
-#if (VERIFY_STACK_LOGIC)
-stackDepths.pop();
-#endif
-		code.push(Processor::packInstruction(Processor::WRITE_LOCAL_OP, oldOperand));
-		lastEmitted = Processor::WRITE_LOCAL_OP;
-		return;
 	}
 	code.push(Processor::packInstruction(opcode, operand));
 	lastEmitted = opcode;
