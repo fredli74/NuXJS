@@ -5,14 +5,11 @@
 #endif
 
 #include "assert.h"
-#include <iostream>
-#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <limits>
+#include <string>
 #include "NuXJScript.h"
-
-Value test(0);
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
@@ -56,50 +53,50 @@ static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
 /* --- String constants --- */
 
 // FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
-const String EMPTY_STRING;
-const String ANONYMOUS_STRING("anonymous");
-const String UNDEFINED_STRING("undefined");
-const String OBJECT_STRING("object");
-const String O_BJECT_STRING("Object");
-const String A_RRAY_STRING("Array");
-const String BOOLEAN_STRING("boolean");
-const String B_OOLEAN_STRING("Boolean");
-const String BRACKET_OBJECT_STRING("[object ");
-const String END_BRACKET_STRING("]");
-const String NUMBER_STRING("number");
-const String N_UMBER_STRING("Number");
-const String STRING_STRING("string");
-const String S_TRING_STRING("String");
-const String FUNCTION_STRING("function");
-const String F_UNCTION_STRING("Function");
-const String NULL_STRING("null");
-const String FALSE_STRING("false");
-const String TRUE_STRING("true");
-const String NAN_STRING("NaN");
-const String INFINITY_STRING("Infinity");
-const String MINUS_INFINITY_STRING("-Infinity");
-const String LENGTH_STRING("length");
-const String ARGUMENTS_STRING("arguments");
-const String A_RGUMENTS_STRING("Arguments");
-const String CALLEE_STRING("callee");
-const String PROTOTYPE_STRING("prototype");
-const String CLASS_STRING("class");
-const String VALUE_STRING("value");
-const String CONSTRUCTOR_STRING("constructor");
-const String EVAL_STRING("eval");
-const String NATIVE_FUNCTION_STRING("function() { [native code] }");
-const String E_RROR_STRING("Error");
-const String MESSAGE_STRING("message");
-const String NAME_STRING("name");
-const String FUNCTION_SPACE("function ");
-const String COLON_SPACE(": ");
-const String CANNOT_CONVERT_TO_OBJECT_STRING("Cannot convert undefined or null to object");
-const String IS_NOT_A_FUNCTION_STRING(" is not a function");
-const String IS_NOT_DEFINED_STRING(" is not defined");
-const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
-const String STACK_OVERFLOW_STRING("Stack overflow");
-const String PROTOTYPE_CHAIN_TOO_LONG("Prototype chain too long");
-const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
+const String String::EMPTY;
+static const String ANONYMOUS_STRING("anonymous");
+static const String UNDEFINED_STRING("undefined");
+static const String OBJECT_STRING("object");
+static const String O_BJECT_STRING("Object");
+static const String A_RRAY_STRING("Array");
+static const String BOOLEAN_STRING("boolean");
+static const String B_OOLEAN_STRING("Boolean");
+static const String BRACKET_OBJECT_STRING("[object ");
+static const String END_BRACKET_STRING("]");
+static const String NUMBER_STRING("number");
+static const String N_UMBER_STRING("Number");
+static const String STRING_STRING("string");
+static const String S_TRING_STRING("String");
+static const String FUNCTION_STRING("function");
+static const String F_UNCTION_STRING("Function");
+static const String NULL_STRING("null");
+static const String FALSE_STRING("false");
+static const String TRUE_STRING("true");
+static const String NAN_STRING("NaN");
+static const String INFINITY_STRING("Infinity");
+static const String MINUS_INFINITY_STRING("-Infinity");
+static const String LENGTH_STRING("length");
+static const String ARGUMENTS_STRING("arguments");
+static const String A_RGUMENTS_STRING("Arguments");
+static const String CALLEE_STRING("callee");
+static const String PROTOTYPE_STRING("prototype");
+static const String CLASS_STRING("class");
+static const String VALUE_STRING("value");
+static const String CONSTRUCTOR_STRING("constructor");
+static const String EVAL_STRING("eval");
+static const String NATIVE_FUNCTION_STRING("function() { [native code] }");
+static const String E_RROR_STRING("Error");
+static const String MESSAGE_STRING("message");
+static const String NAME_STRING("name");
+static const String FUNCTION_SPACE("function ");
+static const String COLON_SPACE(": ");
+static const String CANNOT_CONVERT_TO_OBJECT_STRING("Cannot convert undefined or null to object");
+static const String IS_NOT_A_FUNCTION_STRING(" is not a function");
+static const String IS_NOT_DEFINED_STRING(" is not defined");
+static const String CANNOT_USE_IN_OPERATOR_STRING("Cannot use 'in' operator on ");
+static const String STACK_OVERFLOW_STRING("Stack overflow");
+static const String PROTOTYPE_CHAIN_TOO_LONG("Prototype chain too long");
+static const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"
 };
 
@@ -1458,7 +1455,7 @@ Value FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt3
 Object* FunctionPrototypeFunction::getPrototype(Runtime& rt) const { return &rt.objectPrototype; }
 
 void FunctionPrototypeFunction::constructCompleteObject(Runtime& rt) const {
-	completeObject->setOwnProperty(rt, &NAME_STRING, &EMPTY_STRING, DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(rt, &NAME_STRING, &String::EMPTY, DONT_ENUM_FLAG);
 	completeObject->setOwnProperty(rt, &LENGTH_STRING, Value(0.0), HIDDEN_CONST_FLAGS);
 }
 
@@ -2340,83 +2337,6 @@ bool Processor::run(Int32 maxCycles) {
 	return (ip != 0);
 }
 
-static int recursiveStackCheck(const Code& code, QuickArray<Int32>& stackDepths
-		, Int32 offset, Int32 currentStackDepth, Int32& maxStackDepth) {
-	const CodeWord* codeWords = code.getCodeWords();
-	const UInt32 codeSize = code.getCodeSize();
-	
-	int errors = 0;
-	for (; offset < codeSize; ++offset) {
-		if (stackDepths[offset] != DEAD_CODE_STACK_DEPTH) {
-			if (stackDepths[offset] != currentStackDepth) {
-				std::cerr << "Conflicting stack depth @" << offset << ": " << currentStackDepth << " & " << stackDepths[offset] << std::endl;
-				++errors;
-			}
-			return errors;
-		}
-
-		const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(codeWords[offset]);
-		const Processor::Opcode opcode = pair.first;
-		const Int32 operand = pair.second;
-		if (opcode < 0 || opcode >= Processor::OP_COUNT) {
-			std::cerr << "Invalid opcode " << static_cast<int>(opcode) << "@" << offset << std::endl;
-			++errors;
-		}
-		stackDepths[offset] = currentStackDepth;
-		if (currentStackDepth > code.getMaxStackDepth()) {
-			std::cerr << "Stack overflow (code max is " << code.getMaxStackDepth() << ", stack depth @" << offset << " is " << currentStackDepth << ")" << std::endl;
-			++errors;
-		}
-		maxStackDepth = std::max(maxStackDepth, currentStackDepth);
-#if (VERIFY_STACK_LOGIC)
-	if (stackDepths[offset] != code.stackDepths[offset]) {
-		std::cerr << "Invalid compile-time stack depth @" << offset << " (" << code.stackDepths[offset] << " vs " << stackDepths[offset] << ")" << std::endl;
-		++errors;
-	}
-#endif
-		const Processor::OpcodeInfo& info = Processor::getOpcodeInfo(opcode);
-		const Int32 thisStackUse = info.stackUse + (((info.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
-		currentStackDepth += thisStackUse;
-		maxStackDepth = std::max(maxStackDepth, currentStackDepth);
-		if (currentStackDepth < 0) {
-			std::cerr << "Negative stack depth @" << offset << std::endl;
-			++errors;
-		}
-		switch (opcode) {
-			case Processor::JT_OP:
-			case Processor::JF_OP:
-			case Processor::JT_OR_POP_OP:
-			case Processor::JF_OR_POP_OP:
-			case Processor::JMP_OP:
-			case Processor::JSR_OP:
-			case Processor::TRY_OP:
-			case Processor::NEXT_PROPERTY_OP: {
-				const Int32 targetOffset = offset + 1 + operand;
-				if (targetOffset < 0 || targetOffset >= codeSize) {
-					std::cerr << "Invalid target @" << offset << ": @" << targetOffset << std::endl;
-					++errors;
-					return errors;
-				}
-				const Int32 targetStackDepth = currentStackDepth + (((info.flags & Processor::OpcodeInfo::NO_POP_ON_BRANCH) != 0) ? 1 : 0)
-						+ (((info.flags & Processor::OpcodeInfo::POP_ON_BRANCH) != 0) ? -1 : 0);
-				errors += recursiveStackCheck(code, stackDepths, targetOffset, targetStackDepth, maxStackDepth);
-				if (opcode == Processor::JMP_OP) {
-					return errors;
-				}
-				break;
-			}
-			case Processor::RETURN_OP: // fix: check all returns from jsr end with the same stack pointer as entry (keep track with extra parameter that only updates with JSR)
-			case Processor::THROW_OP: {
-				return errors;
-			}
-	
-			default: break;
-		}
-	}
-
-	return errors;
-}
-
 /* --- Compiler --- */
 
 // FIX : sort
@@ -2566,7 +2486,7 @@ Compiler::Compiler(GCList& gcList, Code* code, Target compileFor)
 
 const String* Compiler::newHashedString(Heap& heap, const Char* b, const Char* e) {
 	if (b == e) {
-		return &EMPTY_STRING;
+		return &String::EMPTY;
 	}
 	String* s = new(heap) String(heap.managed(), b, e);
 	s->createBloomCode();
@@ -3692,7 +3612,7 @@ void Compiler::continueStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::forOrForInStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
-	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, String::EMPTY, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	expectToken("(", true);
 	CodeSection initSection(heap, currentSection->stackDepth);
@@ -3751,7 +3671,7 @@ void Compiler::ifStatement(SemanticScope* currentScope) {
 
 void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	const BranchPoint loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, String::EMPTY, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	rvalueGroup();
 	const BranchPoint exitLoopPoint = emitForwardBranch(Processor::JF_OP);
@@ -3765,7 +3685,7 @@ void Compiler::whileStatement(SemanticScope* currentScope, SemanticScope* scopeL
 void Compiler::doWhileStatement(SemanticScope* currentScope, SemanticScope* scopeLabelsEnd) {
 	white();
 	const BranchPoint loopPoint = markBackwardBranch();
-	SemanticScope emptyLabelScope(heap, EMPTY_STRING, currentSection->stackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, String::EMPTY, currentSection->stackDepth, currentScope);
 	emptyLabelScope.makeIteratorScopes(scopeLabelsEnd);
 	statement(&emptyLabelScope, &emptyLabelScope);
 	completeIteratorContinues(&emptyLabelScope, scopeLabelsEnd);
@@ -3991,7 +3911,7 @@ void Compiler::switchStatement(SemanticScope* currentScope) {
 	CodeSection testsSection(heap, testsSectionEntryStackDepth);
 	QuickVector<Int32> jumpOffsets(&heap);
 	BranchPoint defaultPoint;
-	SemanticScope emptyLabelScope(heap, EMPTY_STRING, testsSectionEntryStackDepth, currentScope);
+	SemanticScope emptyLabelScope(heap, String::EMPTY, testsSectionEntryStackDepth, currentScope);
 	bool firstStatement = true;
 	white();
 	while (!token("}", false)) {
@@ -4436,7 +4356,7 @@ struct Support {
 						: new(heap) String(heap.managed(), b + static_cast<UInt32>(from), b + static_cast<UInt32>(to)));
 			}
 		}
-		return &EMPTY_STRING;
+		return &String::EMPTY;
 	}
 
 	static Value submatch(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4508,7 +4428,7 @@ Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap
 		, evalDirectFunction(heap.roots(), true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
 		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, false, &objectPrototype)
 		, numberPrototype(heap.roots(), &N_UMBER_STRING, 0.0, &objectPrototype)
-		, stringPrototype(heap.roots(), &S_TRING_STRING, &EMPTY_STRING, &objectPrototype)
+		, stringPrototype(heap.roots(), &S_TRING_STRING, &String::EMPTY, &objectPrototype)
 		, arrayPrototype(heap.roots()), unixEpochTimeDiff(0.0)
 		, evalCodeCache(&heap) {
 	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
@@ -4654,468 +4574,3 @@ void Runtime::setStackSize(UInt32 maxValuesOnStack) { stackSize = maxValuesOnSta
 void Runtime::setMemoryCap(size_t maxBytesUsed) { memoryCap = maxBytesUsed; }
 void Runtime::resetTimeOut(Int32 timeOutSeconds) { timeOut = clock() + timeOutSeconds * CLOCKS_PER_SEC; checkTimeOutCounter = CHECK_TIMEOUT_INTERVAL; }
 void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
-
-#include <fstream>
-#include <memory>
-#include <vector>
-#include <sstream>
-
-#if (_MSC_VER)
-#include <Windows.h>
-long getCPUSecs() {
-	::FILETIME creationTime;
-	::FILETIME exitTime;
-	::FILETIME kernelTime;
-	::FILETIME userTime;
-	BOOL success = ::GetProcessTimes(::GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime);
-	assert(success);
-	return ((static_cast<__int64>(userTime.dwHighDateTime) << 32) | userTime.dwLowDateTime) / 10000000;
-}
-#else
-double getCPUSecs() {
-	rusage rus;
-	int res = getrusage(RUSAGE_SELF, &rus);
-	assert(res == 0);
-	return rus.ru_utime.tv_sec + rus.ru_utime.tv_usec / 1000000.0;
-}
-#endif
-
-	bool interactive = true;
-
-	std::vector<std::string> ioLines;
-
-	void pushIOLines(char typeChar, const String& s) {
-		const Char* p = s.begin();
-		const Char* e = s.end();
-		do {
-			const Char* b = p;
-			while (p != e && *p != '\n') {
-				++p;
-			}
-			ioLines.push_back(typeChar + std::string(" ") + std::string(b, p));
-			if (p != e) {
-				++p;
-			}
-		} while (p != e);
-	}
-
-	void pushIOStop() {
-		ioLines.push_back("-");
-	}
-
-	class PrintFunction : public Function {
-		public:		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-						const String* s = (argc >= 1 ? argv[0].toString(rt.getHeap()) : &EMPTY_STRING);
-						std::wcout << s->toStdString().c_str() << std::endl;
-						if (interactive) {
-							pushIOLines('<', *s);
-						}
-						return Value::UNDEFINED;
-					}
-	};
-	
-	struct GCFunction : public Function {
-		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-			rt.getHeap().gc();
-			return Value::UNDEFINED;
-		}
-	};
-
-	class NativeTestObject : public Object {
-		protected:	struct AddFunction : public Function {
-						typedef Function super;
-						virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-							Heap& heap = rt.getHeap();
-							if (thisObject->getClassName() != &NativeTestObject::className) {
-								ScriptException::throwError(heap, TYPE_ERROR, "Invalid class");
-							}
-							const NativeTestObject* me = reinterpret_cast<NativeTestObject*>(thisObject);
-							const double addX = (argc >= 1 ? argv[0].toDouble() : 0.0);
-							const double addY = (argc >= 2 ? argv[1].toDouble() : 0.0);
-							return new(heap) NativeTestObject(heap.managed(), addX + me->x, addY + me->y);
-						}
-					};
-
-		public:		typedef Object super;
-					NativeTestObject(GCList& gcList, double x, double y) : super(gcList), x(x), y(y) { }
-					virtual const String* getClassName() const { return &className; };
-					virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
-						if (key.equalsString("x")) { *v = x; return HIDDEN_CONST_FLAGS; };
-						if (key.equalsString("y")) { *v = y; return HIDDEN_CONST_FLAGS; };
-						if (key.equalsString("add")) { *v = &addFunction; return HIDDEN_CONST_FLAGS; };
-						return super::getOwnProperty(rt, key, v);
-					}
-		
-					virtual const String* toString(Heap& heap) const {
-						std::stringstream ss;
-						ss << "x: " << x << ", y: " << y;
-						return String::alloc(heap, ss.str().c_str());
-					}
-
-		
-		protected:	double x;
-					double y;
-					static String className;
-					static AddFunction addFunction;
-	};
-	String NativeTestObject::className("NativeTestObject");
-	NativeTestObject::AddFunction NativeTestObject::addFunction;
-
-	class CallbackTest : public Function {
-		public:		virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-						PrintFunction printFunction;
-						for (int i = 0; i < argc; ++i) {
-							Function* f = argv[i].asFunction();
-							if (f == 0) {
-								f = &printFunction;
-							}
-							rt.call(f, 1, &argv[i]);
-						}
-						return Value::UNDEFINED;
-					}
-	};
-
-	static void disassemble(Heap& heap, const Code& code) {
-		const CodeWord* codeWords = code.getCodeWords();
-		const Value* constants = code.getConstants()->begin();
-		const UInt32 codeSize = code.getCodeSize();
-		
-		QuickArray<Int32> stackDepths(codeSize, &heap);
-		std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
-		
-		Int32 maxStackDepth = 0;
-		int errors = recursiveStackCheck(code, stackDepths, 0, 1, maxStackDepth);
-		if (maxStackDepth != code.getMaxStackDepth()) {
-			std::cerr << "Notice: code definition max stack depth is " << code.getMaxStackDepth() << " but max stack depth actually used is " << maxStackDepth << std::endl;
-		}
-		
-		for (UInt32 offset = 0; offset < codeSize; ++offset) {
-			const std::pair<Processor::Opcode, Int32> pair = Processor::unpackInstruction(codeWords[offset]);
-			const Processor::Opcode opcode = pair.first;
-			const Int32 operand = pair.second;
-			if (opcode < 0 || opcode >= Processor::OP_COUNT) {
-				break;
-			}
-
-			if (stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
-				std::cerr << "?";
-			} else {
-				std::cerr << stackDepths[offset];
-			}
-			std::cerr << "\t";
-	#if (VERIFY_STACK_LOGIC)
-			if (code.stackDepths[offset] == DEAD_CODE_STACK_DEPTH) {
-				std::cerr << "?";
-			} else {
-				std::cerr << code.stackDepths[offset];
-			}
-			std::cerr << "\t";
-	#endif
-			std::cerr << "@" << offset << ":\t" << Processor::getOpcodeInfo(opcode).mnemonic;
-			
-			switch (opcode) {
-				case Processor::JT_OP:
-				case Processor::JF_OP:
-				case Processor::JT_OR_POP_OP:
-				case Processor::JF_OR_POP_OP:
-				case Processor::JMP_OP:
-				case Processor::JSR_OP:
-				case Processor::TRY_OP:
-				case Processor::NEXT_PROPERTY_OP: {
-					const Int32 target = offset + 1 + operand;
-					std::cerr << " @" << target;
-					break;
-				}
-				case Processor::READ_LOCAL_OP:
-				case Processor::WRITE_LOCAL_OP:
-				case Processor::WRITE_LOCAL_POP_OP: {
-					const Int32 index = operand;
-					const String* name = code.getLocalName(index);
-					if (name != 0) std::wcerr << L" $" << name->toStdString();
-					std::wcerr << L" (" << index << L")";
-					break;
-				}
-				case Processor::CALL_OP:
-				case Processor::CALL_METHOD_OP:
-				case Processor::CALL_EVAL_OP:
-				case Processor::NEW_OP:
-				case Processor::POP_OP:
-				case Processor::PUSH_BACK_OP:
-				case Processor::PUSH_ELEMENTS_OP: std::cerr << " *" << operand; break;
-				case Processor::REPUSH_OP: std::cerr << " " << operand; break;
-				case Processor::CONST_OP:
-				case Processor::GEN_FUNC_OP:
-				case Processor::CATCH_SCOPE_OP: std::wcerr << L" #" << constants[operand].toString(heap)->toStdString(); break;
-				case Processor::DECLARE_OP:
-				case Processor::READ_NAMED_OP:
-				case Processor::WRITE_NAMED_OP:
-				case Processor::WRITE_NAMED_POP_OP:
-				case Processor::ADD_PROPERTY_OP:
-				case Processor::DELETE_NAMED_OP:
-				case Processor::TYPEOF_NAMED_OP: std::wcerr << L" " << constants[operand].toString(heap)->toStdString(); break;
-				default: break;
-			}
-			std::cerr << std::endl;
-		}
-		
-		std::cerr << "\tMax stack depth: " << code.getMaxStackDepth() << std::endl;
-		std::cerr << "\tCode: " << code.getCodeSize() << std::endl;
-	//	std::cerr << "\tConstants: " << code.getConstants().size() << std::endl;
-		std::cerr << "\tVars: " << code.getVarsCount() << std::endl;
-		std::cerr << "\tArguments: " << code.getArgumentsCount() << std::endl;
-	/* FIX :	for (const Value* p = code.constants.begin(); p != code.constants.end(); ++p) {
-			std::wcerr << "\t\t" << p.toString(heap).toStdString() << std::endl;
-		}*/
-
-		assert(errors == 0);
-	}
-
-	Value disassemble(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Heap& heap = rt.getHeap();
-		Function* f = (argc >= 1 ? argv[0].asFunction() : 0);
-		if (f == 0) { // FIX : sub to make is not a function error or something?
-			ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *argv[0].toString(heap), IS_NOT_A_FUNCTION_STRING));
-		}
-		const Code* code = f->getScriptCode();
-		if (code == 0) {
-			ScriptException::throwError(heap, TYPE_ERROR, "Cannot disassemble native code");
-		}
-		disassemble(heap, *code);
-		return Value::UNDEFINED;
-	}
-
-bool pauseBeforeQuit = false;
-bool suppressStdErr = false; // FIX : drop
-
-int testMain(int argc, const char* argv[]) {
-    String source(EMPTY_STRING);
-    std::auto_ptr<std::wifstream> inputFileStream;
-    std::wistream* inStream = &std::wcin;
-    bool doTime = false;
-    int gcRate = 256; // FIX : drop or what?
-    size_t peakMemory = 0;
-    bool autoGCRate = true;
-	bool doSuppressStdErr = false;
-	bool loadStdLib = true;
-    for (int argi = 1; argi < argc; ++argi) {
-        if (strcmp(argv[argi], "-t") == 0) doTime = true;
-        else if (strcmp(argv[argi], "-s") == 0) doSuppressStdErr = true;
-        else if (argi + 1 < argc && strcmp(argv[argi], "-gc") == 0) {
-            gcRate = atoi(argv[++argi]);
-            autoGCRate = false;
-        }
-        else if (strcmp(argv[argi], "-p") == 0) pauseBeforeQuit = true;
-        else if (strcmp(argv[argi], "-n") == 0) loadStdLib = false;
-        else if (inputFileStream.get() == 0) {
-            inputFileStream.reset(new std::wifstream(argv[argi]));
-            inStream = inputFileStream.get();
-            interactive = false;
-        } else {
-            std::cout << "Too many arguments" << std::endl;
-            return 1;
-        }
-    }
-
-    /*std::cout << sizeof(Value) << std::endl;
-     std::cout << sizeof(String) << std::endl;
-     std::cout << sizeof(ScriptObject) << std::endl;
-     std::cout << sizeof(Array) << std::endl;
-     std::cout << sizeof(ScriptFunction) << std::endl;*/
-suppressStdErr = true;
-    const String LF_STRING("\n");
-    const String PRINT_STRING("print");
-    /*std::cerr << "Value size: " << sizeof (Value) << std::endl;
-     std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
-     std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
-    Heap heap;
-    Runtime rt(heap);
-//    std::wcout << rt.evalSync(String::alloc(heap, "s = 0; for (i = 0; i < 100; ++i) s += i; s")).toStdString(heap) << std::endl;
-    rt.setMemoryCap(512 * 1024 * 1024);
-
- /*   ScriptObject globals(heap.roots(), &rt.objectPrototype);
-	rt.setGlobalObject(&globals);
-	*/
-	Object& globals = *rt.getGlobals();
-	
-    PrintFunction printFunction;
-    globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
-    GCFunction gcFunction;
-    const String GC_STRING("gc");
-    globals.setOwnProperty(rt, &GC_STRING, &gcFunction, DONT_ENUM_FLAG);
-    globals.setOwnProperty(rt, String::alloc(heap, "dasm"), new(heap) FunctorAdapter<NativeFunction>(heap.managed(), disassemble), DONT_ENUM_FLAG);
-CallbackTest callbackTest;
-globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, DONT_ENUM_FLAG);
-//globals.setOwnProperty(rt, String::alloc(heap, "nativeTestObject"), new(heap) NativeTestObject(heap.managed(), 1.4, 2.9));
-
-	if (loadStdLib) {
-		try {
-/* FIX : drop			std::wifstream stdlibStream("stdlib.js");
-			std::wstring sourceWString = std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>());
-			String source = String(heap.roots(), sourceWString.c_str());
-			stdlibStream.close();*/
-			rt.setupStandardLibrary();
-		}
-		catch (const std::exception& x) {
-			std::cerr << "exception setting up standard lib: " << x.what() << std::endl;
-			return 1;
-		}
-		catch (...) {
-			std::cerr << "exception setting up standard lib" << std::endl;
-			return 1;
-		}
-	}
-    suppressStdErr = doSuppressStdErr;
-
-	Processor processor(rt);
-	processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
-//	const Value TEST_ARGV[1] = { String::alloc(heap, "Hello") };
-//	printFunction.invoke(processor, 1, TEST_ARGV, &globals);
-//	processor.run();	// just testing some weird behaviour
-	
-    while (inStream->good()) {
-        bool execute = false;
-        try {
-            std::wstring s;
-            if (interactive) {
-                std::getline(*inStream, s);
-                // FIX : add #undo that drops just the last one
-                if (s == L"#save" || s.substr(0, 6) == L"#save ") {
-                    const time_t t = time(0);
-                    char fn[257];
-                    if (s.size() >= 6) {
-                        std::wstring ws = L"tests/";
-                        ws += s.substr(6);
-                        ws += L".io";
-                        strncpy(fn, std::string(ws.begin(), ws.end()).c_str(), 256);
-                        fn[256] = 0;
-                    } else {
-                        strftime(fn, 256, "tests/%Y%m%d_%H%M%S.io", localtime(&t));
-                    }
-                    std::ofstream saveStream(fn);
-                    for (std::vector<std::string>::const_iterator it = ioLines.begin(); it != ioLines.end(); ++it) {
-                        saveStream << *it << std::endl;
-                    }
-                    saveStream.close();
-                    ioLines.clear();
-                    std::cout << "saved to " << fn << std::endl;
-                } else if (s == L"#purge") {
-                    ioLines.clear();
-                    std::cout << "purged" << std::endl;
-                } else if (!s.empty()) {
-                    String line(heap.roots(), s.c_str());
-                    if (!source.empty()) source = String(heap.roots(), source, LF_STRING);
-                    source = String(heap.roots(), source, line);
-                } else {
-                    if (source.size() > 0 && source[0] == '?') {
-                        source = String(heap.roots(), String(heap.roots(), String("print("), String(heap.roots(), source.begin() + 1, source.end())), String(")")); // FIX : operator +
-                    }
-                    if (interactive) {
-                        pushIOLines('>', source);
-                    }
-                    execute = true;
-                }
-            } else {
-				std::wstring sourceWString = std::wstring(std::istreambuf_iterator<wchar_t>(*inStream), std::istreambuf_iterator<wchar_t>());
-				source = String(heap.roots(), sourceWString.c_str());
-                inStream->get(); // FIX : weird, seems necessary to force !inStream->good
-                execute = true;
-            }
-            
-            if (execute) {
-			    Code globalCode(heap.roots(), rt.getSharedConstants());
-                Compiler compiler(heap.roots(), &globalCode, (interactive ? Compiler::FOR_EVAL : Compiler::FOR_GLOBAL));
-                try {
-                    compiler.compile(source);
-                }
-                catch (const Exception&) {
-                	int lineNumber;
-                	int columnNumber;
-                	compiler.getStopLineAndColumnNumbers(lineNumber, columnNumber);
-                    std::wstring ws;
-                    {
-                        std::wstringstream ss;
-                        ss << L"!!!! Line: " << lineNumber;
-						// ss << ", column: " << columnNumber; // FIX : keep or not? if so, need to update all tests:
-                        ws = ss.str();
-                    }
-                    std::wcout << ws << std::endl;
-                    if (interactive) {
-                        pushIOLines('!', String(heap.roots(), ws.c_str()));
-                    }
-// FIX :						std::wcout << std::wstring(std::max<const Char*>(stopPoint - 8, source.begin()), std::min<const Char*>(stopPoint + 8, source.end())) << std::endl;
-                    throw;
-                }
-                if (!suppressStdErr) {
-/*                	const Constants* const consts = rt.getSharedConstants();
-                    for (const Value* p = consts->begin(); p != consts->end(); ++p) {
-                        std::wcerr << "\t\t" << p->toString(heap)->toStdString() << std::endl;
-                    }*/
-                }
-               	processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
-                processor.enterGlobalCode(&globalCode);
-
-                bool done = false;
-			    rt.resetTimeOut(60);
-                double start = getCPUSecs();
-                do {
-                    done = !processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);
-					rt.autoGC();
-					rt.checkTimeOut();
-                   	peakMemory = std::max<long>(peakMemory, heap.size());
-                } while (!done);
-
-				processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
-				if (!suppressStdErr) {
-					GCValue v = processor.getResult();
-					std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
-				}
-				if (doTime) {
-					double end = getCPUSecs();
-					std::cerr << (end - start) << "s" << std::endl;
-					std::cerr << peakMemory / (1024.0 * 1024.0) << "MiB" << std::endl;
-				}
-
-                source = EMPTY_STRING;
-            }
-        }
-        catch (const ScriptException& x) {
-            source = EMPTY_STRING;
-            std::wstring ws = x.getValue().toString(heap)->toStdString();
-            ws = L"!!!! " + ws;
-            std::wcout << ws << std::endl;
-            if (!interactive) {
-                return 1;
-            } else {
-                pushIOLines('!', String(heap.roots(), ws.c_str()));
-            }
-        }
-        catch (const std::exception& x) {
-            source = EMPTY_STRING;
-            std::cout << "!!!! " << x.what() << std::endl;
-            if (!interactive) {
-                return 1;
-            } else {
-                pushIOLines('!', x.what());
-            }
-        }
-        catch (...) {
-            source = EMPTY_STRING;
-            std::cout << "Unknown exception" << std::endl;
-            if (!interactive) {
-                return 1;
-            } else {
-                pushIOLines('!', "Unknown exception");
-            }
-        }
-        if (execute && interactive) {
-            pushIOStop();
-        }
-    }
-    return 0;
-}
-
-int main(int argc, const char* argv[]) {
-    int rc = testMain(argc, argv);
-    if (pauseBeforeQuit) std::wcin.get();
-    return rc;
-}

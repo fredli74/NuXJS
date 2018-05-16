@@ -2,12 +2,9 @@
 #define NuXJScript_h 1
 
 #include "assert.h"
+#include <algorithm>
 
-#ifndef NDEBUG
-	#define VERIFY_STACK_LOGIC 1
-#else
-	#define VERIFY_STACK_LOGIC 0
-#endif
+#define VERIFY_STACK_LOGIC 0
 
 typedef short Int16;
 typedef unsigned short UInt16;
@@ -427,12 +424,13 @@ class Enumerator : public Object {
 class String : public Object, public QuickArray<Char> {
 	public:		typedef Object super;
 				typedef QuickArray<Char> QArray;
-
+	
 				static const String* alloc(Heap& heap, const char* s);
 				static const String* concat(Heap& heap, const String& l, const String& r);
 				static const String* fromInt(Heap& heap, Int32 i);
 				static const String* fromDouble(Heap& heap, double d);
-
+				static const String EMPTY;
+				
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
 				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
 				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
