@@ -4,7 +4,7 @@
 #include "assert.h"
 #include <algorithm>
 
-#define VERIFY_STACK_LOGIC 0
+namespace NuXJScript {
 
 typedef short Int16;
 typedef unsigned short UInt16;
@@ -114,12 +114,6 @@ class Heap {
 	private:	Heap(const Heap& that); // N/A
 				Heap& operator=(const Heap& that); // N/A
 };
-
-// Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
-inline void* operator new(size_t size, Heap* heap) { return (heap != 0 ? heap->alloc(size) : ::operator new(size)); }
-inline void* operator new[](size_t size, Heap* heap) { return (heap != 0 ? heap->allocArray(size) : ::operator new[](size)); }
-inline void operator delete(void* ptr, Heap* heap) { return (heap != 0 ? heap->free(ptr) : ::operator delete(ptr)); }
-inline void operator delete[](void* ptr, Heap* heap) { return (heap != 0 ? heap->freeArray(ptr) : ::operator delete[](ptr)); }
 
 // FIX : name
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
@@ -657,10 +651,6 @@ class Code : public Object {
 					heap.mark(source);
 					super::gcMark(heap);
 				}
-
-#if (VERIFY_STACK_LOGIC)
-	public: QuickVector<int> stackDepths;
-#endif
 };
 
 /*
@@ -1206,18 +1196,11 @@ class Compiler : public GCItem {
 				struct CodeSection {
 					CodeSection(Heap& heap, Int32 initialStackDepth)
 							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
-							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth)
-#if (VERIFY_STACK_LOGIC)
-	, stackDepths(&heap)
-#endif
-							 { }
+							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth) { }
 					void emit(Processor::Opcode opcode, Int32 operand);
 					void insertSection(const CodeSection& section);
 					bool inDeadCode() const { return stackDepth == DEAD_CODE_STACK_DEPTH; }
 					QuickVector<CodeWord> code;
-#if (VERIFY_STACK_LOGIC)
-	QuickVector<Int32> stackDepths;
-#endif
 					Processor::Opcode lastEmitted;
 					const Int32 initialStackDepth;
 					Int32 stackDepth;
@@ -1322,4 +1305,12 @@ class Compiler : public GCItem {
 				}
 };
 
+} /* namespace NuXJScript */
+
 #endif
+
+// Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
+inline void* operator new(size_t size, NuXJScript::Heap* heap) { return (heap != 0 ? heap->alloc(size) : ::operator new(size)); }
+inline void* operator new[](size_t size, NuXJScript::Heap* heap) { return (heap != 0 ? heap->allocArray(size) : ::operator new[](size)); }
+inline void operator delete(void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->free(ptr) : ::operator delete(ptr)); }
+inline void operator delete[](void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->freeArray(ptr) : ::operator delete[](ptr)); }

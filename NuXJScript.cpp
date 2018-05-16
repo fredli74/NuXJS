@@ -10,11 +10,15 @@
 #include <limits>
 #include <string>
 #include "NuXJScript.h"
+#ifdef _MSC_VER
+#include <float.h>
+#endif
+
+namespace NuXJScript {
 
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
-#include <float.h>
 static bool isNaN(double d) { return (_isnan(d) != 0); }
 static bool isFinite(double d) { return (_finite(d) != 0); }
 
@@ -1181,9 +1185,6 @@ Code::Code(GCList& gcList, Constants* constants)
 	: super(gcList), codeWords(0, &gcList.getHeap()), constants(constants), nameIndexes(&gcList.getHeap())
 	, varNames(&gcList.getHeap()), argumentNames(&gcList.getHeap()), name(0), selfName(0), source(0), bloomSet(0)
 	, maxStackDepth(0)
-#if (VERIFY_STACK_LOGIC)
-	, stackDepths(&gcList.getHeap())
-#endif
 {
 	assert(constants != 0);
 }
@@ -2499,9 +2500,6 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (inDeadCode()) {	// unknown stack depth = dead code
 		return;
 	}
-#if (VERIFY_STACK_LOGIC)
-	stackDepths.push(stackDepth);
-#endif
 	const Processor::OpcodeInfo& opcodeInfo = Processor::getOpcodeInfo(opcode);
 	stackDepth += opcodeInfo.stackUse + (((opcodeInfo.flags & Processor::OpcodeInfo::POP_OPERAND) != 0) ? -operand : 0);
 	assert(stackDepth >= 0);
@@ -2519,9 +2517,6 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 			case Processor::CONST_OP:
 			case Processor::VOID_OP: {
 				code.pop();
-#if (VERIFY_STACK_LOGIC)
-	stackDepths.pop(2);
-#endif
 				lastEmitted = Processor::INVALID_OP;
 				return;
 			}
@@ -2530,9 +2525,6 @@ void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 		if (replacementOpcode != Processor::INVALID_OP) {
 			const Int32 oldOperand = Processor::unpackInstruction(code.end()[-1]).second;
 			code.pop();
-#if (VERIFY_STACK_LOGIC)
-	stackDepths.pop();
-#endif
 			code.push(Processor::packInstruction(replacementOpcode, oldOperand));
 			lastEmitted = replacementOpcode;
 			return;
@@ -2546,11 +2538,6 @@ void Compiler::CodeSection::insertSection(const CodeSection& section) {
 	const Int32 stackAdjust = stackDepth - section.initialStackDepth;
 	lastEmitted = Processor::INVALID_OP;
 	code.insert(code.end(), section.code.begin(), section.code.end());
-#if (VERIFY_STACK_LOGIC)
-	for (int i = 0; i < section.stackDepths.size(); ++i) {
-		stackDepths.push(section.stackDepths[i] + stackAdjust);
-	}
-#endif
 	stackDepth = section.stackDepth + stackAdjust;
 	maxStackDepth = std::max(maxStackDepth, section.maxStackDepth + stackAdjust);
 }
@@ -4072,25 +4059,9 @@ const Char* Compiler::compile(const Char* b, const Char* e) {
 	code->codeWords.resize(setupSection.code.size() + mainSection.code.size());
 	std::copy(setupSection.code.begin(), setupSection.code.end(), code->codeWords.begin());
 	std::copy(mainSection.code.begin(), mainSection.code.end(), code->codeWords.begin() + setupSection.code.size());
-#if (VERIFY_STACK_LOGIC)
-	assert(setupSection.stackDepths.size() == setupSection.code.size());
-	assert(mainSection.stackDepths.size() == mainSection.code.size());
-	code->stackDepths.resize(setupSection.stackDepths.size() + mainSection.stackDepths.size());
-	std::copy(setupSection.stackDepths.begin(), setupSection.stackDepths.end(), code->stackDepths.begin());
-	std::copy(mainSection.stackDepths.begin(), mainSection.stackDepths.end(), code->stackDepths.begin() + setupSection.stackDepths.size());
-#endif
 	code->constants->shrink();
 	code->maxStackDepth = std::max(mainSection.maxStackDepth, setupSection.maxStackDepth);
 	
-#if (VERIFY_STACK_LOGIC)
-	QuickArray<Int32> stackDepths(code->getCodeSize(), &heap);
-	std::fill(stackDepths.begin(), stackDepths.end(), DEAD_CODE_STACK_DEPTH);
-	
-	Int32 maxStackDepth = 0;
-	int errors = recursiveStackCheck(*code, stackDepths, 0, 1, maxStackDepth);
-	assert(errors == 0);
-#endif
-
 	return p;
 }
 
@@ -4574,3 +4545,6 @@ void Runtime::setStackSize(UInt32 maxValuesOnStack) { stackSize = maxValuesOnSta
 void Runtime::setMemoryCap(size_t maxBytesUsed) { memoryCap = maxBytesUsed; }
 void Runtime::resetTimeOut(Int32 timeOutSeconds) { timeOut = clock() + timeOutSeconds * CLOCKS_PER_SEC; checkTimeOutCounter = CHECK_TIMEOUT_INTERVAL; }
 void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
+
+} /* namespace NuXJScript */
+

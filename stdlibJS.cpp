@@ -1,3 +1,4 @@
+namespace NuXJScript {
 const char* STDLIB_JS =
 "(function(a){var b=this;var c=a.specialConstructor;var d=a.isNaN,e=a.isFinite,f=a.floor,g=a.NaN,h=a.Infinity,$submatch"
 "=a.submatch,i=a.getInternalProperty,j=a.callWithArgs;var k;var l=\"0123456789abcdefghijklmnopqrstuvwxyz\",m=\"01234567"
@@ -429,3 +430,5 @@ const char* STDLIB_JS =
 "configurable);}),getPrototypeOf:c(function getPrototypeOf(G){return i(G,'prototype');})});if(g.toString()!=='NaN')thro"
 "w Error(\"Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.\");})"
 ;
+}
+

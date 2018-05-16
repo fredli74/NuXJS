@@ -5,6 +5,8 @@
 #include <vector>
 #include <sstream>
 
+using namespace NuXJScript;
+
 static int recursiveStackCheck(const Code& code, QuickArray<Int32>& stackDepths
 		, Int32 offset, Int32 currentStackDepth, Int32& maxStackDepth) {
 	const CodeWord* codeWords = code.getCodeWords();
