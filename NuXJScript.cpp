@@ -8,7 +8,6 @@
 #include <cmath>
 #include <ctime>
 #include <limits>
-#include <string>
 #include "NuXJScript.h"
 #ifdef _MSC_VER
 #include <float.h>
@@ -58,6 +57,7 @@ static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }
 
 // FIX : sort, check all used, join to few lines, or maybe even do some smart array based construction?
 const String String::EMPTY;
+const String LENGTH_STRING("length");
 static const String ANONYMOUS_STRING("anonymous");
 static const String UNDEFINED_STRING("undefined");
 static const String OBJECT_STRING("object");
@@ -79,7 +79,6 @@ static const String TRUE_STRING("true");
 static const String NAN_STRING("NaN");
 static const String INFINITY_STRING("Infinity");
 static const String MINUS_INFINITY_STRING("-Infinity");
-static const String LENGTH_STRING("length");
 static const String ARGUMENTS_STRING("arguments");
 static const String A_RGUMENTS_STRING("Arguments");
 static const String CALLEE_STRING("callee");
@@ -434,6 +433,13 @@ static double stringToDouble(const String& s) {
 const String* Value::TYPE_STRINGS[5] = { &UNDEFINED_STRING, &OBJECT_STRING, &BOOLEAN_STRING, &NUMBER_STRING, &STRING_STRING };
 
 Function* Value::asFunction() const { return (type == OBJECT_TYPE ? var.object->asFunction() : 0); }
+Function* Value::toFunction(Heap& heap) const {
+	Function* f = asFunction();
+	if (f == 0) {
+		throw ScriptException(heap, new(heap) Error(heap.managed(), TYPE_ERROR, new(heap) String(heap.managed(), *toString(heap), IS_NOT_A_FUNCTION_STRING)));
+	}
+	return f;
+}
 
 const String* Value::typeOfString() const {
 	return (type == OBJECT_TYPE ? var.object->typeOfString() : TYPE_STRINGS[static_cast<int>(type)]);
@@ -512,8 +518,7 @@ const String* Value::toString(Heap& heap) const {
 
 std::wstring Value::toStdString(Heap& heap) const { return toString(heap)->toStdString(); }
 
-// FIX : requestExtensible is only used once! do we need it?
-Object* Value::toObject(Runtime& rt, bool requestExtensible) const {
+Object* Value::toObjectOrNull(Runtime& rt, bool requestExtensible) const {
 	Heap& heap = rt.getHeap();
 	switch (type) {
 		default: assert(0);
@@ -526,6 +531,15 @@ Object* Value::toObject(Runtime& rt, bool requestExtensible) const {
 				: new(heap) StringWrapper(heap.managed(), var.string, &rt.stringPrototype));
 		case OBJECT_TYPE: return var.object;
 	}
+}
+
+Object* Value::toObject(Runtime& rt, bool requestExtensible) const {
+	Object* object = toObjectOrNull(rt, requestExtensible);
+	if (object == 0) {
+		Heap& heap = rt.getHeap();
+		throw ScriptException(heap, new(heap) Error(heap.managed(), TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING));
+	}
+	return object;
 }
 
 bool Value::compareStrictly(const Value& r) const {
@@ -936,7 +950,7 @@ bool Object::setProperty(Runtime& rt, const Value& key, const Value& v) {
 
 Value Object::getProperty(Runtime& rt, const char* name) const { // FIX : keep?
 	Value v = Value::UNDEFINED;
-	String s(name);
+	String s(name); // FIX : not ok not to allocate according to the policy!
 	getProperty(rt, &s, &v);
 	return v;
 }
@@ -1927,6 +1941,10 @@ void Processor::enter(const Code* code, Scope* scope, Object* thisObject) {
 	}
 }
 
+void Processor::invokeFunction(Function* f, Int32 argc, const Value* argv, Object* thisObject) {
+	sp[0] = f->invoke(rt, *this, argc, argv, thisObject);
+}
+
 void Processor::enterGlobalCode(const Code* code) {
 	enter(code, rt.getGlobalScope(), rt.getGlobals());
 }
@@ -1987,13 +2005,14 @@ void Processor::error(ErrorType errorType, const String* message) {
 }
 
 Object* Processor::convertToObject(const Value& v, const bool requestExtensible) {
-	Object* const object = v.toObject(rt, requestExtensible);
+	Object* const object = v.toObjectOrNull(rt, requestExtensible);
 	if (object == 0) {
 		error(TYPE_ERROR, &CANNOT_CONVERT_TO_OBJECT_STRING);
 	}
 	return object;
 }
 
+// FIX : should we continue this non-throwing approach or simply use toFunction everywhere? If keeping, we should share error creation with toFunction()
 Function* Processor::asFunction(const Value& v) {
 	Function* const f = v.asFunction();
 	if (f == 0) {
@@ -2002,7 +2021,7 @@ Function* Processor::asFunction(const Value& v) {
 	return f;
 }
 
-void Processor::invokeFunction(Function* f, int popCount, int argc, Object* thisObject) {
+void Processor::invokeFunction(Function* f, Int32 popCount, Int32 argc, Object* thisObject) {
 	sp[-popCount] = f->invoke(rt, *this, argc, sp - argc + 1, thisObject);
 	pop(popCount);
 }
@@ -2320,9 +2339,9 @@ void Processor::innerRun() {
 	}
 }
 
-GCValue Processor::getResult() const {
+Value Processor::getResult() const {
 	assert(ip == 0 && sp == stack.begin()); // make sure you've called run() until it returns false
-	return GCValue(heap, sp[0]);
+	return sp[0];
 }
 
 bool Processor::run(Int32 maxCycles) {
@@ -4177,7 +4196,7 @@ struct Support {
 			Heap& heap = rt.getHeap();
 			const String* const className = argv[0].toString(heap);
 			const Value internalValue = argv[1];
-			Object* prototype = (argc >= 3 ? argv[2].toObject(rt, false) : 0);
+			Object* prototype = (argc >= 3 ? argv[2].toObjectOrNull(rt, false) : 0);
 			if (prototype == 0) {
 				prototype = &rt.objectPrototype;
 			}
@@ -4245,34 +4264,34 @@ struct Support {
 			ScriptException::throwError(heap, TYPE_ERROR, "apply / call used on non-function");
 			return Value();
 		} else {
-			Object* newThis = (argc > 1 ? argv[1].toObject(rt, true) : 0);
-			QuickArray<Value> args(0, &heap);
-			Object* arrayObject = (argc > 2 ? argv[2].toObject(rt, false) : 0);
+			Object* newThis = (argc > 1 ? argv[1].toObjectOrNull(rt, true) : 0);
+			QuickArray<Value> argv(0, &heap);
+			Object* arrayObject = (argc > 2 ? argv[2].toObjectOrNull(rt, false) : 0);
 			if (arrayObject != 0) {
 				Value v;
 				if (arrayObject->getProperty(rt, &LENGTH_STRING, &v) != NONEXISTENT) { // FIX : in the future I think we should have a getLength
 					Int32 offset = (argc > 3 ? argv[3].toInt() : 0);
 					UInt32 length = static_cast<UInt32>(std::max(v.toInt() - offset, 0));
-					args.resize(length);
+					argv.resize(length);
 					for (UInt32 i = 0; i < length; ++i) {
-						args[i] = Value::UNDEFINED;
-						arrayObject->getProperty(rt, i + offset, &args[i]);
+						argv[i] = Value::UNDEFINED;
+						arrayObject->getProperty(rt, i + offset, &argv[i]);
 					}
 				}
 			}
-			// FIX : we copy all arguments once to args, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
+			// FIX : we copy all arguments once to argv, and then chain will copy them again to a scope object, couldn't we short-cut that somehow?
 			// FIX : since only arrays and arguments are really valid here, perhaps even have a new virtual in object for implementing efficient apply with these?
-			return callFunction->invoke(rt, processor, args.size(), args.begin(), newThis);
+			return callFunction->invoke(rt, processor, argv.size(), argv.begin(), newThis);
 		}
 	}
 	
 	static Value hasOwnProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Object* object = (argc >= 2 ? argv[0].toObject(rt, false) : 0);
+		Object* object = (argc >= 2 ? argv[0].toObjectOrNull(rt, false) : 0);
 		return (object != 0 ? object->hasOwnProperty(rt, argv[1]) : false);
 	}
 
 	static Value isPropertyEnumerable(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		Object* object = (argc >= 2 ? argv[0].toObject(rt, false) : 0);
+		Object* object = (argc >= 2 ? argv[0].toObjectOrNull(rt, false) : 0);
 		return (object != 0 ? object->isOwnPropertyEnumerable(rt, argv[1]) : false);
 	}
 
@@ -4392,11 +4411,25 @@ static struct {
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
+static struct DefaultConversion : public Function {
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return argv[0];
+	}
+} DEFAULT_CONVERSION;
+
+static struct NoRegExpSupport : public Function {
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		ScriptException::throwError(rt.getHeap(), REFERENCE_ERROR, "No RegExp support");
+		return Value::UNDEFINED;
+	}
+} NO_REG_EXP_SUPPORT;
+
 Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globals(0)
 		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
 		, timeOut(0), memoryCap(MAX_MEMORY_CAP)
 		, gcThreshold(0), objectPrototype(heap.roots(), 0), functionPrototype(heap.roots()), evalFunction(heap.roots(), false)
-		, evalDirectFunction(heap.roots(), true), toNumberFunction(0), toStringFunction(0), createRegExpFunction(0)
+		, evalDirectFunction(heap.roots(), true), toNumberFunction(&DEFAULT_CONVERSION)
+		, toStringFunction(&DEFAULT_CONVERSION), createRegExpFunction(&NO_REG_EXP_SUPPORT)
 		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, false, &objectPrototype)
 		, numberPrototype(heap.roots(), &N_UMBER_STRING, 0.0, &objectPrototype)
 		, stringPrototype(heap.roots(), &S_TRING_STRING, &String::EMPTY, &objectPrototype)
@@ -4428,15 +4461,15 @@ void Runtime::checkTimeOut() {
 	}
 }
 
-GCValue Runtime::run(Processor& processor) {
+Var Runtime::runUntilReturn(Processor& processor) {
 	while (processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC)) {
 		autoGC();
 		checkTimeOut();
 	}
-	return processor.getResult();
+	return Var(*this, processor.getResult());
 }
 
-GCValue Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
+Var Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (callNestCounter >= MAX_CALL_RECURSION) {
 		ScriptException::throwError(heap, RANGE_ERROR, &STACK_OVERFLOW_STRING); // FIX : other string?
 	}
@@ -4446,14 +4479,20 @@ GCValue Runtime::call(Function* function, UInt32 argc, const Value* argv, Object
 		Runtime& rt;
 	} nestCounter(*this);
 	Processor processor(*this);
-	function->invoke(*this, processor, argc, argv, thisObject);
-	return run(processor);
+	processor.invokeFunction(function, argc, argv, thisObject);
+	return runUntilReturn(processor);
 }
 
-GCValue Runtime::eval(const String* expression) {
+void Runtime::run(const String& source) {
 	Processor processor(*this);
-	processor.enterEvalCode(compileEvalCode(expression));
-	return run(processor);
+	processor.enterGlobalCode(compileGlobalCode(source));
+	runUntilReturn(processor);
+}
+
+Var Runtime::eval(const String& expression) {
+	Processor processor(*this);
+	processor.enterEvalCode(compileEvalCode(new(heap) String(expression)));
+	return runUntilReturn(processor);
 }
 
 Code* Runtime::compileEvalCode(const String* expression) {
@@ -4469,6 +4508,13 @@ Code* Runtime::compileEvalCode(const String* expression) {
 		evalCodeCache.update(evalCodeCache.insert(expression), code);
 		return code;
 	}
+}
+
+Code* Runtime::compileGlobalCode(const String& source) {
+	Code* code = new(heap) Code(heap.managed(), &sharedConstants);
+	Compiler compiler(heap.roots(), code, Compiler::FOR_GLOBAL);
+	compiler.compile(source);
+	return code;
 }
 
 // FIX : make this optional by including default toNumberFunction etc that throws (or should they return something?)
@@ -4487,7 +4533,7 @@ void Runtime::setupStandardLibrary() {
 	globals->setOwnProperty(*this, &EVAL_STRING, &evalFunction, DONT_ENUM_FLAG);
 	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
-	const GCValue protectedSupportObject(heap, supportObject);
+	const Var protectedSupportObject(*this, supportObject);
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, String::alloc(heap, "prototypes"), prototypesObject);
 	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
@@ -4518,9 +4564,9 @@ void Runtime::setupStandardLibrary() {
 	}
 	
 	extern const char* STDLIB_JS;
-	const GCValue func = eval(String::alloc(heap, STDLIB_JS));
+	const Var func = eval(String(STDLIB_JS));
 	Value argv[1] = { protectedSupportObject };
-	call(func.asFunction(), 1, argv);
+	call(func, 1, argv);
 	heap.gc();
 
 	// FIX : sub v

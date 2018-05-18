@@ -1,5 +1,4 @@
 #include "NuXJScript.h"
-#include <iostream>
 #include <fstream>
 #include <memory>
 #include <vector>
@@ -308,6 +307,16 @@ double getCPUSecs() {
 		return Value::UNDEFINED;
 	}
 
+	Value gcTest(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Heap& heap = rt.getHeap();
+		heap.gc();
+		Value v = String::alloc(heap, "");
+		for (int i = 0; i < argc; ++i) {
+			v = String::concat(heap, *v.toString(heap), *argv[i].toString(heap));
+		}
+		return v;
+	}
+
 bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
 
@@ -351,16 +360,61 @@ suppressStdErr = true;
     /*std::cerr << "Value size: " << sizeof (Value) << std::endl;
      std::cerr << "Bucket size: " << sizeof (Table::Bucket) << std::endl;
      std::cerr << "Table size: " << sizeof (Table) << std::endl;*/
+
     Heap heap;
     Runtime rt(heap);
-//    std::wcout << rt.evalSync(String::alloc(heap, "s = 0; for (i = 0; i < 100; ++i) s += i; s")).toStdString(heap) << std::endl;
-    rt.setMemoryCap(512 * 1024 * 1024);
 
+    rt.setMemoryCap(8192*10);
+    Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
+    Var aValue = anObject["a"];
+    std::wstring ws = anObject["a"];
+    anObject["c"] = 99;
+    anObject["z"] = rt.eval("(123)");
+    std::wcout << aValue << std::endl;
+    std::wcout << static_cast<Var>(anObject["z"]) << std::endl;
+    std::wcout << ws << std::endl;
+
+	
+	Var v23(rt);
+    bool b = v23;
+    const Value args[1] = { v23 };
+  //  rt.call(v23, 0, args);
+    std::wcout << rt.eval("s = 0; for (i = 0; i < 100; ++i) s += i; s") << std::endl;
+    double v = rt.eval("s = 0; for (i = 0; i < 100; ++i) s += i; s");
+    std::wcout << v23 << std::endl;
+
+    rt.setMemoryCap(512 * 1024 * 1024);
  /*   ScriptObject globals(heap.roots(), &rt.objectPrototype);
 	rt.setGlobalObject(&globals);
 	*/
 	Object& globals = *rt.getGlobals();
 	
+rt.setupStandardLibrary();
+	Var globs(rt, rt.getGlobals());
+	globs["tezt"] = 55;
+//	globs["tezt2"] = globs["tezt"];
+	double ddd = globs["tezt"];
+	globs["f"] = rt.eval("(function(a, b) { return a + b })");
+	globs["arr"] = rt.eval("([1,3,5,2,4,6])");
+	Var o = globs["o"] = new(heap) ScriptObject(heap.managed(), &rt.objectPrototype);
+	o["gcTest"] = new(heap) FunctorAdapter<NativeFunction>(heap.managed(), gcTest);
+	o["zub"] = Var(rt, "yo");
+	std::wcout << globs["f"](29, 99) << std::endl;
+	Var a = globs["arr"];
+	std::wcout << o["gcTest"]("hej", 12959) << std::endl;
+	std::wcout << o["gcTest"]("hej", 12959, "zzz") << std::endl;
+	const Var list[4] = { Var(rt, "a"), Var(rt, "bcd"), Var(rt, 1391), Var(rt, "zz9z9") };
+	std::wcout << o["gcTest"](4, list) << std::endl;
+	std::wcout << globs["o"][o["gcTest"]("zub")] << std::endl;
+
+	Var regExp = rt.eval("(/x.*y/)");
+	std::wcout << regExp["test"]("xyzzzy") << std::endl;
+//	a = 55;
+	for (int i = 0; i < a.length(); ++i) {
+		std::wcout << a[i] << std::endl;
+		a[i] = a[i] * 2;
+	}
+
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
     GCFunction gcFunction;
@@ -490,8 +544,8 @@ globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, D
 
 				processor.run(STANDARD_CYCLES_BETWEEN_AUTO_GC);	// just testing some weird behaviour
 				if (!suppressStdErr) {
-					GCValue v = processor.getResult();
-					std::wcerr << L"\t=" << (v.toString(heap))->toStdString().c_str() << std::endl;
+					Value v = processor.getResult();
+					std::wcerr << L"\t=" << v.toString(heap)->toStdString() << std::endl;
 				}
 				if (doTime) {
 					double end = getCPUSecs();

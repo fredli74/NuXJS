@@ -25,3 +25,7 @@ Design principles
 #################
 
 *) `const String&` arguments never saves pointer to the argument, temporary (unmanaged) instances of String("...") are allowed.
+
+*) 	getXXX() implies that there will be an assertion failure if the value is not of type XXX
+	asXXX() implies that 0 will be returned if the value is not of type XXX
+	toXXX() implies that the value will be converted to type XXX if necessary and an exception might be thrown if it is not possible

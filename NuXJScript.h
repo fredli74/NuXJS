@@ -3,6 +3,8 @@
 
 #include "assert.h"
 #include <algorithm>
+#include <string>
+#include <iostream>
 
 namespace NuXJScript {
 
@@ -49,6 +51,7 @@ class GCItem {
 				GCItem(GCList& gcList) throw();
 				GCItem(const GCItem& copy) throw();
 				GCItem& operator=(const GCItem& copy) throw();
+				Heap& gcGetHeap() const;
 				virtual void gcMark(Heap& heap) const;
 				virtual ~GCItem();
 	
@@ -76,6 +79,7 @@ class GCList : public GCItem {
 	protected:	Heap& heap;
 				UInt32 count;
 };
+inline Heap& GCItem::gcGetHeap() const { return _gcList->getHeap(); }
 
 const int MAX_POOLED_SIZE = 1024;
 const int POOL_SIZE_GRANULARITY = 16;
@@ -167,6 +171,8 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						}
 						::operator delete(p, associatedHeap);
 					}
+					associatedHeap = 0;
+					p = 0;
 				}
 				
 	protected:	Heap* associatedHeap;
@@ -240,6 +246,7 @@ class Value {
 				bool isObject() const { return type == OBJECT_TYPE; } // FIX : should we expose the type enum instead?
 				Object* asObject() const { return (type == OBJECT_TYPE ? var.object : 0); }
 				Function* asFunction() const;
+				Function* toFunction(Heap& heap) const;
 				const String* getString() const { assert(type == STRING_TYPE); return var.string; }
 				Object* getObject() const { assert(type == OBJECT_TYPE); return var.object; }
 				const String* typeOfString() const;
@@ -250,6 +257,7 @@ class Value {
 				double toDouble() const;
 				const String* toString(Heap& heap) const; // this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				std::wstring toStdString(Heap& heap) const;
+				Object* toObjectOrNull(Runtime& rt, bool requestExtensible) const; // FIX : I don't like that we involved runtime here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				Object* toObject(Runtime& rt, bool requestExtensible) const; // FIX : I don't like that we involved runtime here, not the end of the world but feels inconsistent, it is needed to create wrapper objects for numbers and booleans (and strings if makeExtensible)
 				bool isStrictlyEqualTo(const Value& r) const;
 				bool isEqualTo(const Value& r) const;
@@ -288,16 +296,6 @@ class Value {
 				static const String* TYPE_STRINGS[5];
 	
 	private:	Value(const void* v); // N/A. Just to avoid unwanted casting of a pointer to bool.
-};
-
-// FIX : is it dangerous with this type of cast? can upcast array GCValue* to Value*
-class GCValue : public GCItem, public Value {
-	public:		typedef GCItem super;
-				GCValue(Heap& heap, const Value& value = Value::UNDEFINED) : super(heap.roots()), Value(value) { }
-	protected:	virtual void gcMark(Heap& heap) const {
-					Value::gcMark(heap);
-					super::gcMark(heap);
-				}
 };
 
 typedef Byte Flags; // FIX : turn into enum
@@ -888,6 +886,7 @@ class CatchScope : public Scope {
 				}
 };
 
+class Var;
 const UInt32 DEFAULT_STACK_SIZE = 1024;
 const UInt32 STANDARD_CYCLES_BETWEEN_AUTO_GC = 1024;
 const UInt32 MAX_CALL_RECURSION = 64;
@@ -898,20 +897,22 @@ class Runtime : public GCItem {
 	
 	public:		typedef GCItem super;
 				Runtime(Heap& heap);
-				void setGlobalObject(Object* globals);
-				void setStackSize(UInt32 maxValuesOnStack);
-				void setMemoryCap(size_t maxBytesUsed);
-				void resetTimeOut(Int32 timeOutSeconds);
-				void noTimeOut();
-				void setupStandardLibrary();
+				void setGlobalObject(Object* globals);			// Assign a new global object. By default the global object is a standard ScriptObject.
+				void setStackSize(UInt32 maxValuesOnStack);		// Sets the stack size used by the Processor constructor. Default stack size is 1024 elements (see above) which should be sufficient for normal use.
+				void setMemoryCap(size_t maxBytesUsed);			// Sets an absolute limit on memory allocated by this run-time. Checked after each GC. If more memory than this is in use an exception is thrown.
+				void resetTimeOut(Int32 timeOutSeconds);		// Sets a time-out after which an exception is thrown (by checkTimeOut() which is called from runUntilReturn()).
+				void noTimeOut();								// Disables the time-out (default).
+				void setupStandardLibrary();					// Sets up all the standard library functions and support routines. It is possible to execute script code without calling setupStandardLibrary() but apart from missing all built-in "native objects" defined in EcmaScript there will be some other limitations (e.g. no support for regular expression literals and no support for implicit valueOf() / toString() conversions).
 				Heap& getHeap() const { return heap; }
 				Object* getGlobals() const { assert(globals != 0); return globals; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
-				GCValue call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
-				GCValue eval(const String* expression);
-				GCValue run(Processor& processor);
+				Var call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
+				Var eval(const String& expression);
+				void run(const String& source);
+				Var runUntilReturn(Processor& processor);
 				Code* compileEvalCode(const String* expression);
+				Code* compileGlobalCode(const String& source);
 				void checkTimeOut();
 				void autoGC();
 
@@ -925,7 +926,8 @@ class Runtime : public GCItem {
 				clock_t timeOut;
 				size_t memoryCap;
 				size_t gcThreshold;
-	
+				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
+
 	// FIX : public? v
 	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
 				FunctionPrototypeFunction functionPrototype;
@@ -940,7 +942,6 @@ class Runtime : public GCItem {
 				Function* toStringFunction;
 				Function* createRegExpFunction;
 				double unixEpochTimeDiff;
-				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 
 	public:		virtual void gcMark(Heap& heap) const {
 					heap.mark(globals);
@@ -953,6 +954,68 @@ class Runtime : public GCItem {
 					super::gcMark(heap);
 				}
 };
+
+extern const String LENGTH_STRING; // FIX : placement?
+class Var;
+class Property;
+struct AccessorBase {
+	AccessorBase(Runtime& rt) : rt(rt) { }
+	virtual Value get() const = 0;
+	virtual Var call(int argc, const Value* argv) const = 0;
+	operator Value() const { return get(); }
+	operator double() const { return get().toDouble(); }
+	operator Object*() const { return get().toObject(rt, true); }
+	operator Function*() const { return get().toFunction(rt.getHeap()); }
+	operator std::wstring() const { return get().toStdString(rt.getHeap()); }
+	operator Var() const;
+	Var operator ()() const;
+	template<typename T0> Var operator ()(const T0& arg0) const;
+	template<typename T0, typename T1> Var operator ()(const T0& arg0, const T1& arg1) const;
+	template<typename T0, typename T1, typename T2> Var operator ()(const T0& arg0, const T1& arg1, const T2& arg2) const;
+	Var operator ()(int argc, const Var* argv) const;
+	template<typename T> const Property operator[](const T& key) const;
+	UInt32 length();
+	Runtime& rt;
+};
+
+class Var : public GCItem, public AccessorBase {
+	public:		typedef GCItem super;
+				Var(Runtime& rt, const Var& copy) : super(rt.getHeap().roots()), AccessorBase(rt), v(copy.v) { }
+				Var(Runtime& rt, const Value& value = Value::UNDEFINED) : super(rt.getHeap().roots()), AccessorBase(rt), v(value) { }
+				Var(Runtime& rt, const char* s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
+				Var(Runtime& rt, const std::wstring& s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
+				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(t) { }
+				Var operator =(const Value& v) { this->v = v; return *this; }
+				template<typename T> Var operator =(const T& v) { (*this) = Var(rt, v); return *this; }
+
+	protected:	Value v;
+				virtual Value get() const { return v; }
+				virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv); }
+				virtual void gcMark(Heap& heap) const {
+					v.gcMark(heap);
+					super::gcMark(heap);
+				}
+};
+
+struct Property : public AccessorBase {
+	typedef AccessorBase super;
+	Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
+	virtual Value get() const { Value v; object->getProperty(rt, key, &v); return v; }
+	template<typename T> Var operator =(const T& v) const { Var w(rt, v); object->setProperty(rt, key, w); return w; }
+	virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
+	Object* const object;
+	const Var key;
+};
+
+inline AccessorBase::operator Var() const { return Var(rt, get()); }
+inline Var AccessorBase::operator ()() const { return call(0, 0); }
+template<typename T0> Var AccessorBase::operator ()(const T0& arg0) const { const Var v0(rt, arg0); const Value argv[1] = { v0 }; return call(1, argv); }
+template<typename T0, typename T1> Var AccessorBase::operator ()(const T0& arg0, const T1& arg1) const { const Var v0(rt, arg0), v1(rt, arg1); const Value argv[2] = { v0, v1 }; return call(2, argv); }
+template<typename T0, typename T1, typename T2> Var AccessorBase::operator ()(const T0& arg0, const T1& arg1, const T2& arg2) const { const Var v0(rt, arg0), v1(rt, arg1), v2(rt, arg2); const Value argv[3] = { v0, v1, v2 }; return call(3, argv); }
+inline Var AccessorBase::operator ()(int argc, const Var* argv) const { QuickArray<Value> vs(argc, &rt.getHeap()); std::copy(argv + 0, argv + argc, vs.begin()); return call(argc, vs.begin()); }
+template<typename T> const Property AccessorBase::operator[](const T& key) const { return Property(rt, get().toObject(rt, true), Var(rt, key)); }
+inline UInt32 AccessorBase::length() { return static_cast<Int32>(operator[](&LENGTH_STRING)); }
+inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
 
 class Arguments : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
@@ -1078,13 +1141,14 @@ class Processor : public GCItem {
 				static const OpcodeInfo& getOpcodeInfo(const Opcode opcode);
 
 	public:		Processor(Runtime& rt);
+				void invokeFunction(Function* f, Int32 argc, const Value* argv, Object* thisObject = 0);
 				void enterGlobalCode(const Code* code);
 				void enterEvalCode(const Code* code, bool local = false);
 				void enterFunctionCode(ScriptFunction* func, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				void throwVirtualException(const Value& exception);
 				void error(ErrorType errorType, const String* message = 0);
 				bool run(Int32 maxCycles);
-				GCValue getResult() const;
+				Value getResult() const;
 
 	protected:	void enter(const Code* code, Scope* scope, Object* thisObject);
 				void push(const Value& v);
@@ -1093,7 +1157,7 @@ class Processor : public GCItem {
 				void innerRun();
 				Object* convertToObject(const Value& v, bool requestExtensible);
 				Function* asFunction(const Value& v);
-				void invokeFunction(Function* f, int popCount, int argc, Object* thisObject = 0);
+				void invokeFunction(Function* f, Int32 popCount, Int32 argc, Object* thisObject = 0);
 				void newOperation(const Int32 argc);
 				void reset();
 				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
@@ -1137,7 +1201,7 @@ class Processor : public GCItem {
 
 				Runtime& rt;
 				Heap& heap;
-				int cyclesLeft;
+				Int32 cyclesLeft;
 				Frame* currentFrame;
 				Catcher* firstCatcher;
 				const CodeWord* ip;
