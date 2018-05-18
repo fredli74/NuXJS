@@ -1247,7 +1247,6 @@ bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) co
 /* --- Array --- */
 
 Array::Array(GCList& gcList) : super(gcList), length(0), denseVector(&gcList.getHeap()) { }
-
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
 
 Object* Array::getPrototype(Runtime& rt) const { // FIX : have a sep. ArrayPrototype object like we have for Function?
@@ -1727,15 +1726,15 @@ void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initVal
 /* --- GlobalScope --- */
 
 GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
-Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobals()->getProperty(rt, name, v); }
-void GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobals()->setProperty(rt, name, v); }
-bool GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobals()->deleteOwnProperty(rt, name); }
+Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobalObject()->getProperty(rt, name, v); }
+void GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobalObject()->setProperty(rt, name, v); }
+bool GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobalObject()->deleteOwnProperty(rt, name); }
 void GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
 	// FIX : deep or not?!
-	const Flags flags = rt.getGlobals()->getOwnProperty(rt, name, &v);
+	const Flags flags = rt.getGlobalObject()->getOwnProperty(rt, name, &v);
 	if (flags == NONEXISTENT || !initValue.isUndefined()) {
-		rt.getGlobals()->setOwnProperty(rt, name, initValue, dontDelete ? DONT_DELETE_FLAG : 0);
+		rt.getGlobalObject()->setOwnProperty(rt, name, initValue, dontDelete ? DONT_DELETE_FLAG : 0);
 	}
 }
 
@@ -1936,7 +1935,7 @@ void Processor::enter(const Code* code, Scope* scope, Object* thisObject) {
 	if (sp + code->getMaxStackDepth() > stack.end()) {
 		error(RANGE_ERROR, &STACK_OVERFLOW_STRING);
 	} else {
-		pushFrame(code, scope, (thisObject == 0 ? rt.getGlobals() : thisObject));
+		pushFrame(code, scope, (thisObject == 0 ? rt.getGlobalObject() : thisObject));
 		ip = code->getCodeWords();
 	}
 }
@@ -1946,14 +1945,14 @@ void Processor::invokeFunction(Function* f, Int32 argc, const Value* argv, Objec
 }
 
 void Processor::enterGlobalCode(const Code* code) {
-	enter(code, rt.getGlobalScope(), rt.getGlobals());
+	enter(code, rt.getGlobalScope(), rt.getGlobalObject());
 }
 
 void Processor::enterEvalCode(const Code* code, bool local) {
 	if (local && currentFrame != 0) {
 		enter(code, new(heap) EvalScope(heap.managed(), currentFrame->scope), currentFrame->thisObject);
 	} else {
-		enter(code, new(heap) EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobals());
+		enter(code, new(heap) EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobalObject());
 	}
 }
 
@@ -4424,7 +4423,7 @@ static struct NoRegExpSupport : public Function {
 	}
 } NO_REG_EXP_SUPPORT;
 
-Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globals(0)
+Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globalObject(0)
 		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
 		, timeOut(0), memoryCap(MAX_MEMORY_CAP)
 		, gcThreshold(0), objectPrototype(heap.roots(), 0), functionPrototype(heap.roots()), evalFunction(heap.roots(), false)
@@ -4439,7 +4438,7 @@ Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		errorPrototypes[i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));
 	}
-	globals = new(heap) ScriptObject(heap.managed(), &objectPrototype);
+	globalObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 }
 
 void Runtime::autoGC() {
@@ -4468,6 +4467,11 @@ Var Runtime::runUntilReturn(Processor& processor) {
 	}
 	return Var(*this, processor.getResult());
 }
+
+Var Runtime::getGlobals() { return Var(*this, globalObject); }
+
+Var Runtime::newObject() { return Var(*this, new(heap) ScriptObject(heap.managed(), &objectPrototype)); }
+Var Runtime::newArray() { return Var(*this, new(heap) Array(heap.managed())); }
 
 Var Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (callNestCounter >= MAX_CALL_RECURSION) {
@@ -4530,7 +4534,7 @@ void Runtime::setupStandardLibrary() {
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
-	globals->setOwnProperty(*this, &EVAL_STRING, &evalFunction, DONT_ENUM_FLAG);
+	globalObject->setOwnProperty(*this, &EVAL_STRING, &evalFunction, DONT_ENUM_FLAG);
 	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
 	const Var protectedSupportObject(*this, supportObject);
@@ -4586,7 +4590,7 @@ void Runtime::setupStandardLibrary() {
 	}
 }
 
-void Runtime::setGlobalObject(Object* globalObject) { globals = globalObject; }
+void Runtime::setGlobalObject(Object* newGlobals) { globalObject = newGlobals; }
 void Runtime::setStackSize(UInt32 maxValuesOnStack) { stackSize = maxValuesOnStack; }
 void Runtime::setMemoryCap(size_t maxBytesUsed) { memoryCap = maxBytesUsed; }
 void Runtime::resetTimeOut(Int32 timeOutSeconds) { timeOut = clock() + timeOutSeconds * CLOCKS_PER_SEC; checkTimeOutCounter = CHECK_TIMEOUT_INTERVAL; }

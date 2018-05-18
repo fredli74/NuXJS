@@ -387,18 +387,18 @@ suppressStdErr = true;
  /*   ScriptObject globals(heap.roots(), &rt.objectPrototype);
 	rt.setGlobalObject(&globals);
 	*/
-	Object& globals = *rt.getGlobals();
+	Object& globals = *rt.getGlobalObject();
 	
 rt.setupStandardLibrary();
-	Var globs(rt, rt.getGlobals());
+	Var globs = rt.getGlobals();
 	globs["tezt"] = 55;
-//	globs["tezt2"] = globs["tezt"];
+	globs["tezt2"] = globs["tezt"];
 	double ddd = globs["tezt"];
 	globs["f"] = rt.eval("(function(a, b) { return a + b })");
 	globs["arr"] = rt.eval("([1,3,5,2,4,6])");
 	Var o = globs["o"] = new(heap) ScriptObject(heap.managed(), &rt.objectPrototype);
 	o["gcTest"] = new(heap) FunctorAdapter<NativeFunction>(heap.managed(), gcTest);
-	o["zub"] = Var(rt, "yo");
+	o["zub"] = "yo";
 	std::wcout << globs["f"](29, 99) << std::endl;
 	Var a = globs["arr"];
 	std::wcout << o["gcTest"]("hej", 12959) << std::endl;
@@ -406,6 +406,13 @@ rt.setupStandardLibrary();
 	const Var list[4] = { Var(rt, "a"), Var(rt, "bcd"), Var(rt, 1391), Var(rt, "zz9z9") };
 	std::wcout << o["gcTest"](4, list) << std::endl;
 	std::wcout << globs["o"][o["gcTest"]("zub")] << std::endl;
+
+	globs["o2"] = rt.newObject();
+	Var arrr = globs["o2"]["a"] = rt.newArray();
+	for (int i = 0; i < 22; ++i) arrr[i] = i * 3;
+	std::wcout << globs["o2"]["a"]["length"] << std::endl;
+	std::wcout << globs["o2"]["a"]["toString"]() << std::endl;
+	std::wcout << globs["o2"]["a"][15]["toString"](16) << std::endl;
 
 	Var regExp = rt.eval("(/x.*y/)");
 	std::wcout << regExp["test"]("xyzzzy") << std::endl;

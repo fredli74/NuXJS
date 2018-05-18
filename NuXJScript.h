@@ -577,6 +577,7 @@ class Array : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
 	
 				Array(GCList& gcList);
+				Array(GCList& gcList, Int32 initialLength, const Value* initialElements);
 				virtual const String* getClassName() const;
 				virtual Object* getPrototype(Runtime& rt) const;
 				// FIX : toString too?
@@ -897,16 +898,19 @@ class Runtime : public GCItem {
 	
 	public:		typedef GCItem super;
 				Runtime(Heap& heap);
-				void setGlobalObject(Object* globals);			// Assign a new global object. By default the global object is a standard ScriptObject.
+				void setGlobalObject(Object* newGlobals);		// Assign a new global object. By default the global object is a standard ScriptObject.
 				void setStackSize(UInt32 maxValuesOnStack);		// Sets the stack size used by the Processor constructor. Default stack size is 1024 elements (see above) which should be sufficient for normal use.
 				void setMemoryCap(size_t maxBytesUsed);			// Sets an absolute limit on memory allocated by this run-time. Checked after each GC. If more memory than this is in use an exception is thrown.
 				void resetTimeOut(Int32 timeOutSeconds);		// Sets a time-out after which an exception is thrown (by checkTimeOut() which is called from runUntilReturn()).
 				void noTimeOut();								// Disables the time-out (default).
 				void setupStandardLibrary();					// Sets up all the standard library functions and support routines. It is possible to execute script code without calling setupStandardLibrary() but apart from missing all built-in "native objects" defined in EcmaScript there will be some other limitations (e.g. no support for regular expression literals and no support for implicit valueOf() / toString() conversions).
 				Heap& getHeap() const { return heap; }
-				Object* getGlobals() const { assert(globals != 0); return globals; }
+				Object* getGlobalObject() const { assert(globalObject != 0); return globalObject; }
 				GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
+				Var getGlobals();
+				Var newObject();
+				Var newArray();
 				Var call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				Var eval(const String& expression);
 				void run(const String& source);
@@ -918,7 +922,7 @@ class Runtime : public GCItem {
 
 	protected:	Heap& heap;
 				GlobalScope globalScope;
-				Object* globals;
+				Object* globalObject;
 				Constants sharedConstants;
 				UInt32 stackSize;
 				UInt32 callNestCounter;
@@ -944,7 +948,7 @@ class Runtime : public GCItem {
 				double unixEpochTimeDiff;
 
 	public:		virtual void gcMark(Heap& heap) const {
-					heap.mark(globals);
+					heap.mark(globalObject);
 					heap.markViaPointers(errorPrototypes + 0, errorPrototypes + ERROR_TYPE_COUNT);
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
@@ -985,7 +989,7 @@ class Var : public GCItem, public AccessorBase {
 				Var(Runtime& rt, const char* s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
 				Var(Runtime& rt, const std::wstring& s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
 				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(t) { }
-				Var operator =(const Value& v) { this->v = v; return *this; }
+				Var& operator =(const Var& v) { this->v = v; return *this; }
 				template<typename T> Var operator =(const T& v) { (*this) = Var(rt, v); return *this; }
 
 	protected:	Value v;
@@ -1001,7 +1005,8 @@ struct Property : public AccessorBase {
 	typedef AccessorBase super;
 	Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
 	virtual Value get() const { Value v; object->getProperty(rt, key, &v); return v; }
-	template<typename T> Var operator =(const T& v) const { Var w(rt, v); object->setProperty(rt, key, w); return w; }
+	const Property& operator =(const Property& p) const { object->setProperty(rt, key, p.get()); return *this; }
+	template<typename T> const Property& operator =(const T& v) const { object->setProperty(rt, key, Var(rt, v)); return *this; }
 	virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
 	Object* const object;
 	const Var key;
