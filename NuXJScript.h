@@ -371,7 +371,7 @@ class Object : public GCItem {
 	public:		typedef GCItem super;
 	
 				virtual Function* asFunction();							// Default returns 0. (Functions returns this.)
-				virtual const String* typeOfString() const;				// Default reutrns "object". (Strings and functions override.)
+				virtual const String* typeOfString() const;				// Default returns "object". (Strings and functions override.)
 				virtual const String* getClassName() const;				// Default returns "Object".
 				virtual const String* toString(Heap& heap) const; 		// this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				virtual Value getInternalValue(Heap& heap) const;		// Used by the standard library to retrieve internal value for wrappers (Number, String etc), source code for functions and parser function for RegExp. Default returns Value::UNDEFINED.
@@ -959,10 +959,27 @@ class Runtime : public GCItem {
 				}
 };
 
+// FIX : test with very short max sz length
+class Exception : public std::exception { // FIX : runtime_error instead?
+	public:		Exception(const char* s) throw() { assert(strlen(s) < sizeof (sz) / sizeof (*sz)); strcpy(sz, s); }
+				virtual const char* what() const throw() { return sz; }
+				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
+	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
+};
+
+class ScriptException : public Exception {
+	public:		typedef Exception super;
+				static void throwError(Heap& heap, ErrorType type, const String* message = 0);
+				static void throwError(Heap& heap, ErrorType type, const char* message);
+				ScriptException(Heap& heap, const Value& value) throw();
+				const Value& getValue() const { return value; }
+	protected:	Value value;
+};
+
 extern const String LENGTH_STRING; // FIX : placement?
 class VarList;
 class Property;
-typedef Var (*VarFunction)(Runtime&, const Var& thisVar, const VarList& args);
+typedef Var (*VarFunction)(Runtime&, const Var&, const VarList&);
 struct AccessorBase {
 	AccessorBase(Runtime& rt) : rt(rt) { }
 	virtual Value get() const = 0;
@@ -974,7 +991,7 @@ struct AccessorBase {
 	operator std::wstring() const { return get().toStdString(rt.getHeap()); }
 	operator Var() const;
 	Var operator()() const;
-	template<typename T> Value makeValue(const T& t) const { return Value(t); }
+	template<class C> Value makeValue(Var (C::*const& f)(Runtime&, const Var&, const VarList&)) const;
 	Value makeValue(const Value& v) const { return v; }
 	Value makeValue(const Var& v) const;
 	Value makeValue(const Property& v) const;
@@ -987,7 +1004,8 @@ struct AccessorBase {
 	template<typename T0, typename T1, typename T2> Var operator()(const T0& arg0, const T1& arg1, const T2& arg2) const;
 	Var operator()(const VarList& args) const;
 	template<typename T> const Property operator[](const T& key) const;
-	template<typename T> bool operator==(const T& v) const;
+	template<typename T> bool operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
+	template<typename T> bool operator!=(const T& t) const { return !get().isStrictlyEqualTo(makeValue(t)); }
 	Var typeOf() const;
 	UInt32 length();
 	Runtime& rt;
@@ -1040,7 +1058,6 @@ template<typename T0, typename T1> Var AccessorBase::operator()(const T0& arg0, 
 template<typename T0, typename T1, typename T2> Var AccessorBase::operator()(const T0& arg0, const T1& arg1, const T2& arg2) const { const Value argv[3] = { makeValue(arg0), makeValue(arg1), makeValue(arg2) }; return call(3, argv); }
 inline Var AccessorBase::operator()(const VarList& args) const { return call(args.size(), args.begin()); }
 template<typename T> const Property AccessorBase::operator[](const T& key) const { return Property(rt, get().toObject(rt, true), Var(rt, key)); }
-template<typename T> bool AccessorBase::operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
 inline Var AccessorBase::typeOf() const { return Var(rt, get().typeOfString()); }
 inline UInt32 AccessorBase::length() { return static_cast<Int32>(operator[](&LENGTH_STRING)); }
 inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
@@ -1051,12 +1068,27 @@ template<class F> struct VarFunctorAdapter : public Function {
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
-	F f;
+	const F f;
+};
+
+template<class C> struct VarMemberFunctionAdapter : public Function {
+	typedef Function super;
+	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &f)(Runtime&, const Var&, const VarList&))
+			: super(gcList), f(f) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		C* me = reinterpret_cast<C*>(thisObject);
+		if ((me->C::getClassName()) != (me->getClassName())) {
+			ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
+		}
+		return (me->*f)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
+	}
+	Var (C::*f)(Runtime&, const Var&, const VarList&);
 };
 
 inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f); }
 inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
 inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
+template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const { return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f); }
 
 template<typename R, typename T> struct UnaryFunction : public Function {
 	UnaryFunction(R (*f)(Runtime& rt, const T&)) : f(f) { }
@@ -1088,23 +1120,6 @@ class Arguments : public LazyScriptObject<Object> {
 					heap.mark(scope);
 					super::gcMark(heap);
 				}
-};
-
-// FIX : test with very short max sz length
-class Exception : public std::exception { // FIX : runtime_error instead?
-	public:		Exception(const char* s) throw() { assert(strlen(s) < sizeof (sz) / sizeof (*sz)); strcpy(sz, s); }
-				virtual const char* what() const throw() { return sz; }
-				virtual ~Exception() throw() { }																		// (GCC requires explicit destructor with one that has throw().)
-	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
-};
-
-class ScriptException : public Exception {
-	public:		typedef Exception super;
-				static void throwError(Heap& heap, ErrorType type, const String* message = 0);
-				static void throwError(Heap& heap, ErrorType type, const char* message);
-				ScriptException(Heap& heap, const Value& value) throw();
-				const Value& getValue() const { return value; }
-	protected:	Value value;
 };
 
 class Processor : public GCItem {

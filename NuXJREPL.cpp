@@ -321,7 +321,27 @@ double getCPUSecs() {
 bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
 
+String TEST_CLASS_STRING("TestClass");
 class TestClass : public ScriptObject {
+	public:		typedef ScriptObject super;
+	public:		TestClass(GCList& gcList, Object* prototype) : super(gcList, prototype), x(0.3) { }
+	public:		virtual const String* getClassName() const { return &TEST_CLASS_STRING; }
+	public:		static Var testMethod1(Runtime& rt, const Var& thisVar, const VarList& args) {
+					Object* thisObject = thisVar;
+					std::wcout << Var(rt, (reinterpret_cast<ScriptObject*>(thisObject)->ScriptObject::getClassName())) << std::endl;
+					std::wcout << Var(rt, (reinterpret_cast<TestClass*>(thisObject)->TestClass::getClassName())) << std::endl;
+					std::wcout << Var(rt, (reinterpret_cast<TestClass*>(thisObject)->getClassName())) << std::endl;
+					Var className(rt, thisObject->getClassName());
+					if ((reinterpret_cast<TestClass*>(thisObject)->TestClass::getClassName()) != (reinterpret_cast<TestClass*>(thisObject)->getClassName())) {
+						ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
+					}
+					TestClass* dis = reinterpret_cast<TestClass*>(thisObject);
+					return Var(rt, dis->x);
+				}
+	public:		Var testMethod2(Runtime& rt, const Var& thisVar, const VarList& args) {
+					return Var(rt, x);
+				}
+	protected:	double x;
 };
 
 Var test1(Runtime& rt, const Var& thisVar, const VarList& args) {
@@ -444,6 +464,12 @@ rt.setupStandardLibrary();
 		std::wcout << a[i] << std::endl;
 		a[i] = a[i] * 2;
 	}
+	
+	Var nobjProto = rt.newObject();
+	nobjProto["testMethod1"] = TestClass::testMethod1;
+//	nobjProto["testMethod2"] = new(rt.getHeap()) VarMemberFunctionAdapter<TestClass>(rt.getHeap().managed(), &TestClass::testMethod2);
+	nobjProto["testMethod2"] = &TestClass::testMethod2;
+	globs["nobj"] = new(heap) TestClass(heap.managed(), nobjProto);
 
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
