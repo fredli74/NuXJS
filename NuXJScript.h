@@ -960,8 +960,9 @@ class Runtime : public GCItem {
 };
 
 extern const String LENGTH_STRING; // FIX : placement?
-class Var;
+class VarList;
 class Property;
+typedef Var (*VarFunction)(Runtime&, const VarList& args);
 struct AccessorBase {
 	AccessorBase(Runtime& rt) : rt(rt) { }
 	virtual Value get() const = 0;
@@ -972,25 +973,32 @@ struct AccessorBase {
 	operator Function*() const { return get().toFunction(rt.getHeap()); }
 	operator std::wstring() const { return get().toStdString(rt.getHeap()); }
 	operator Var() const;
-	Var operator ()() const;
-	template<typename T0> Var operator ()(const T0& arg0) const;
-	template<typename T0, typename T1> Var operator ()(const T0& arg0, const T1& arg1) const;
-	template<typename T0, typename T1, typename T2> Var operator ()(const T0& arg0, const T1& arg1, const T2& arg2) const;
-	Var operator ()(int argc, const Var* argv) const;
+	Var operator()() const;
+	template<typename T> Value makeValue(const T& t) const { return Value(t); }
+	Value makeValue(const Value& v) const { return v; }
+	Value makeValue(const Var& v) const;
+	Value makeValue(const Property& v) const;
+	Value makeValue(const char* s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
+	Value makeValue(const std::wstring& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
+	Value makeValue(const NativeFunction& f) const { return new(rt.getHeap()) FunctorAdapter<NativeFunction>(rt.getHeap().managed(), f); }
+	Value makeValue(const VarFunction& f) const;
+	template<typename T0> Var operator()(const T0& arg0) const;
+	template<typename T0, typename T1> Var operator()(const T0& arg0, const T1& arg1) const;
+	template<typename T0, typename T1, typename T2> Var operator()(const T0& arg0, const T1& arg1, const T2& arg2) const;
+	Var operator()(const VarList& args) const;
 	template<typename T> const Property operator[](const T& key) const;
+	template<typename T> bool operator==(const T& v) const;
+	Var typeOf() const;
 	UInt32 length();
 	Runtime& rt;
 };
 
 class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;
-				Var(Runtime& rt, const Var& copy) : super(rt.getHeap().roots()), AccessorBase(rt), v(copy.v) { }
-				Var(Runtime& rt, const Value& value = Value::UNDEFINED) : super(rt.getHeap().roots()), AccessorBase(rt), v(value) { }
-				Var(Runtime& rt, const char* s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
-				Var(Runtime& rt, const std::wstring& s) : super(rt.getHeap().roots()), AccessorBase(rt), v(new(rt.getHeap()) String(rt.getHeap().managed(), s)) { }
-				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(t) { }
-				Var& operator =(const Var& v) { this->v = v; return *this; }
-				template<typename T> Var operator =(const T& v) { (*this) = Var(rt, v); return *this; }
+
+				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
+				Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
+				template<typename T> Var operator =(const T& t) { this->v = makeValue(t); return *this; }
 
 	protected:	Value v;
 				virtual Value get() const { return v; }
@@ -1005,22 +1013,58 @@ struct Property : public AccessorBase {
 	typedef AccessorBase super;
 	Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
 	virtual Value get() const { Value v; object->getProperty(rt, key, &v); return v; }
-	const Property& operator =(const Property& p) const { object->setProperty(rt, key, p.get()); return *this; }
 	template<typename T> const Property& operator =(const T& v) const { object->setProperty(rt, key, Var(rt, v)); return *this; }
 	virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
 	Object* const object;
 	const Var key;
 };
 
+struct VarList : public GCItem, public QuickArray<Value> {
+	typedef GCItem super;
+	template<typename T> VarList(Runtime& rt, UInt32 count, const T* values)
+			: super(rt.getHeap().roots()), rt(rt), QuickArray<Value>(count, &rt.getHeap()) {
+		std::copy(values + 0, values + count, begin());
+	}
+	Var operator[](UInt32 index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
+	Runtime& rt;
+	virtual void gcMark(Heap& heap) const {
+		heap.markViaReferences(begin(), end());
+		super::gcMark(heap);
+	}
+};
+
 inline AccessorBase::operator Var() const { return Var(rt, get()); }
-inline Var AccessorBase::operator ()() const { return call(0, 0); }
-template<typename T0> Var AccessorBase::operator ()(const T0& arg0) const { const Var v0(rt, arg0); const Value argv[1] = { v0 }; return call(1, argv); }
-template<typename T0, typename T1> Var AccessorBase::operator ()(const T0& arg0, const T1& arg1) const { const Var v0(rt, arg0), v1(rt, arg1); const Value argv[2] = { v0, v1 }; return call(2, argv); }
-template<typename T0, typename T1, typename T2> Var AccessorBase::operator ()(const T0& arg0, const T1& arg1, const T2& arg2) const { const Var v0(rt, arg0), v1(rt, arg1), v2(rt, arg2); const Value argv[3] = { v0, v1, v2 }; return call(3, argv); }
-inline Var AccessorBase::operator ()(int argc, const Var* argv) const { QuickArray<Value> vs(argc, &rt.getHeap()); std::copy(argv + 0, argv + argc, vs.begin()); return call(argc, vs.begin()); }
+inline Var AccessorBase::operator()() const { return call(0, 0); }
+template<typename T0> Var AccessorBase::operator()(const T0& arg0) const { const Value argv[1] = { makeValue(arg0) }; return call(1, argv); }
+template<typename T0, typename T1> Var AccessorBase::operator()(const T0& arg0, const T1& arg1) const { const Value argv[2] = { makeValue(arg0), makeValue(arg1) }; return call(2, argv); }
+template<typename T0, typename T1, typename T2> Var AccessorBase::operator()(const T0& arg0, const T1& arg1, const T2& arg2) const { const Value argv[3] = { makeValue(arg0), makeValue(arg1), makeValue(arg2) }; return call(3, argv); }
+inline Var AccessorBase::operator()(const VarList& args) const { return call(args.size(), args.begin()); }
 template<typename T> const Property AccessorBase::operator[](const T& key) const { return Property(rt, get().toObject(rt, true), Var(rt, key)); }
+template<typename T> bool AccessorBase::operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
+inline Var AccessorBase::typeOf() const { return Var(rt, get().typeOfString()); }
 inline UInt32 AccessorBase::length() { return static_cast<Int32>(operator[](&LENGTH_STRING)); }
 inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
+
+template<class F> struct VarFunctorAdapter : public Function {
+	typedef Function super;
+	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return f(rt, VarList(rt, argc, argv));
+	}
+	F f;
+};
+
+inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f); }
+inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
+inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
+
+template<typename R, typename T> struct UnaryFunction : public Function {
+	UnaryFunction(R (*f)(Runtime& rt, const T&)) : f(f) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		f(rt, Var(rt, (argc >= 1 ? argv[0] : Value::UNDEFINED)));
+	}
+	R (*const f)(const T&);
+};
 
 class Arguments : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;

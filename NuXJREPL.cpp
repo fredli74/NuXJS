@@ -308,6 +308,7 @@ double getCPUSecs() {
 	}
 
 	Value gcTest(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		VarList safeKeep(rt, argc, argv);
 		Heap& heap = rt.getHeap();
 		heap.gc();
 		Value v = String::alloc(heap, "");
@@ -319,6 +320,26 @@ double getCPUSecs() {
 
 bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
+
+// class TestClass : public ScriptObject
+
+Var test1(Runtime& rt, const VarList& args) {
+	std::wcout << L"argc: " << args.size() << std::endl;
+	std::wcout << L"arg 0: " << args[0] << std::endl;
+	std::wcout << L"arg 1: " << args[1] << std::endl;
+	std::wcout << L"arg 0 type: " << args[0].typeOf() << std::endl;
+	if (args[0].typeOf() == "function") {
+		args[0]("znooorf");
+	}
+	if (args[0] == 21) {
+		std::wcout << L"twenty three" << std::endl;
+	}
+	if (args[0] == Value::NUL) {
+		std::wcout << L"nuuuul" << std::endl;
+	}
+	args[1]["zoom"] = args[0] * 9191;
+	return Var(rt, static_cast<double>(args[0]) + args[1]);
+}
 
 int testMain(int argc, const char* argv[]) {
     String source(String::EMPTY);
@@ -396,15 +417,16 @@ rt.setupStandardLibrary();
 	double ddd = globs["tezt"];
 	globs["f"] = rt.eval("(function(a, b) { return a + b })");
 	globs["arr"] = rt.eval("([1,3,5,2,4,6])");
+	globs["test1"] = test1;
 	Var o = globs["o"] = new(heap) ScriptObject(heap.managed(), &rt.objectPrototype);
-	o["gcTest"] = new(heap) FunctorAdapter<NativeFunction>(heap.managed(), gcTest);
+	o["gcTest"] = gcTest;
 	o["zub"] = "yo";
 	std::wcout << globs["f"](29, 99) << std::endl;
 	Var a = globs["arr"];
 	std::wcout << o["gcTest"]("hej", 12959) << std::endl;
 	std::wcout << o["gcTest"]("hej", 12959, "zzz") << std::endl;
-	const Var list[4] = { Var(rt, "a"), Var(rt, "bcd"), Var(rt, 1391), Var(rt, "zz9z9") };
-	std::wcout << o["gcTest"](4, list) << std::endl;
+	const Value list[4] = { Var(rt, "a"), Var(rt, "bcd"), Var(rt, 1391), Var(rt, "zz9z9") };
+	std::wcout << o["gcTest"](VarList(rt, 4, list)) << std::endl;
 	std::wcout << globs["o"][o["gcTest"]("zub")] << std::endl;
 
 	globs["o2"] = rt.newObject();
