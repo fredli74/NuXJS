@@ -321,9 +321,10 @@ double getCPUSecs() {
 bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
 
-// class TestClass : public ScriptObject
+class TestClass : public ScriptObject {
+};
 
-Var test1(Runtime& rt, const VarList& args) {
+Var test1(Runtime& rt, const Var& thisVar, const VarList& args) {
 	std::wcout << L"argc: " << args.size() << std::endl;
 	std::wcout << L"arg 0: " << args[0] << std::endl;
 	std::wcout << L"arg 1: " << args[1] << std::endl;

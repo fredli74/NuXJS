@@ -962,7 +962,7 @@ class Runtime : public GCItem {
 extern const String LENGTH_STRING; // FIX : placement?
 class VarList;
 class Property;
-typedef Var (*VarFunction)(Runtime&, const VarList& args);
+typedef Var (*VarFunction)(Runtime&, const Var& thisVar, const VarList& args);
 struct AccessorBase {
 	AccessorBase(Runtime& rt) : rt(rt) { }
 	virtual Value get() const = 0;
@@ -1049,7 +1049,7 @@ template<class F> struct VarFunctorAdapter : public Function {
 	typedef Function super;
 	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return f(rt, VarList(rt, argc, argv));
+		return f(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
 	F f;
 };
