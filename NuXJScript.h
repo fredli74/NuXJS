@@ -718,7 +718,8 @@ class Scope : public GCItem {
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
 				ExtensibleFunction(GCList& gcList) : super(gcList) { }
-	protected:	void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const { }
+				void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
 };
 
 class FunctionPrototypeFunction : public ExtensibleFunction {
@@ -911,7 +912,6 @@ class Runtime : public GCItem {
 				Var getGlobals();
 				Var newObject();
 				Var newArray();
-				template<class C> Var newCustomObject(const Var& proto, C* dummy = 0);
 				Var call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				Var eval(const String& expression);
 				void run(const String& source);
@@ -1031,7 +1031,7 @@ class Var : public GCItem, public AccessorBase {
 struct Property : public AccessorBase {
 	typedef AccessorBase super;
 	Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
-	virtual Value get() const { Value v; object->getProperty(rt, key, &v); return v; }
+	virtual Value get() const { Value v(Value::UNDEFINED); object->getProperty(rt, key, &v); return v; }
 	template<typename T> const Property& operator =(const T& v) const { object->setProperty(rt, key, Var(rt, v)); return *this; }
 	virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
 	Object* const object;
@@ -1063,8 +1063,8 @@ inline Var AccessorBase::typeOf() const { return Var(rt, get().typeOfString()); 
 inline UInt32 AccessorBase::length() { return static_cast<Int32>(operator[](&LENGTH_STRING)); }
 inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
 
-template<class F> struct VarFunctorAdapter : public Function {
-	typedef Function super;
+template<class F> struct VarFunctorAdapter : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
 	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(rt, Var(rt, thisObject), VarList(rt, argc, argv));
@@ -1072,8 +1072,8 @@ template<class F> struct VarFunctorAdapter : public Function {
 	const F f;
 };
 
-template<class C> struct VarMemberFunctionAdapter : public Function {
-	typedef Function super;
+template<class C> struct VarMemberFunctionAdapter : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
 	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &f)(Runtime&, const Var&, const VarList&))
 			: super(gcList), f(f) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1081,7 +1081,7 @@ template<class C> struct VarMemberFunctionAdapter : public Function {
 		if ((me->C::getClassName()) != (me->getClassName())) {
 			ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
 		}
-		assert(dynamic_cast<const C*>(this) != 0);
+		assert(dynamic_cast<const C*>(thisObject) != 0);
 		return (me->*f)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
 	Var (C::*f)(Runtime&, const Var&, const VarList&);
@@ -1091,7 +1091,6 @@ inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt
 inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
 inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
 template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const { return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f); }
-template<class C> Var Runtime::newCustomObject(const Var& proto, C* dummy) { return Var(*this, new(heap) C(heap.managed(), proto)); }
 
 template<typename R, typename T> struct UnaryFunction : public Function {
 	UnaryFunction(R (*f)(Runtime& rt, const T&)) : f(f) { }

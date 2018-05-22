@@ -325,6 +325,8 @@ String TEST_CLASS_STRING("NativeObject");
 class NativeObject : public ScriptObject {
 	public:		typedef ScriptObject super;
 	public:		NativeObject(GCList& gcList, Object* prototype) : super(gcList, prototype), x(0.3) { }
+	public:		NativeObject(GCList& gcList, Object* prototype, const VarList& args)
+						: super(gcList, prototype), x(args[0] != Value::UNDEFINED ? args[0] : 0.0) { if (args[1] != Value::UNDEFINED) { Var me = args[1]; me = this; args[1](); } }
 	public:		virtual const String* getClassName() const { return &TEST_CLASS_STRING; }
 	public:		static Var testMethod1(Runtime& rt, const Var& thisVar, const VarList& args) {
 					Object* thisObject = thisVar;
@@ -339,12 +341,23 @@ class NativeObject : public ScriptObject {
 					return Var(rt, dis->x);
 				}
 	public:		static Var construct(Runtime& rt, const Var& thisVar, const VarList& args) {
-					return rt.newCustomObject<NativeObject>(thisVar["prototype"]);
+					Heap& heap = rt.getHeap();
+					return Var(rt, new(heap) NativeObject(heap.managed(), static_cast<Object*>(thisVar)->getPrototype(rt), args));
 				}
 	public:		Var nativeMethod(Runtime& rt, const Var& thisVar, const VarList& args) {
 					return Var(rt, x);
 				}
 	protected:	double x;
+};
+
+struct NativeConstructor : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
+	NativeConstructor(GCList& gcList, const Var& prototype) : super(gcList), prototype(prototype) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		Heap& heap = rt.getHeap();
+		return new(heap) NativeObject(heap.managed(), prototype, VarList(rt, argc, argv));
+	}
+	Var prototype;
 };
 
 Var test1(Runtime& rt, const Var& thisVar, const VarList& args) {
@@ -472,9 +485,10 @@ rt.setupStandardLibrary();
 	nativeObjectPrototype["testMethod1"] = NativeObject::testMethod1;
 //	nativeObjectPrototype["testMethod2"] = new(rt.getHeap()) VarMemberFunctionAdapter<NativeObject>(rt.getHeap().managed(), &NativeObject::testMethod2);
 	nativeObjectPrototype["nativeMethod"] = &NativeObject::nativeMethod;
-	globs["nativeInstance"] = rt.newCustomObject<NativeObject>(nativeObjectPrototype);
 	globs["NativeObject"] = NativeObject::construct;
 	globs["NativeObject"]["prototype"] = nativeObjectPrototype;
+	
+	globs["NativeObject2"] = new(heap) NativeConstructor(heap.managed(), nativeObjectPrototype);
 
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
