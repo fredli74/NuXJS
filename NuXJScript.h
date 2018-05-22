@@ -911,6 +911,7 @@ class Runtime : public GCItem {
 				Var getGlobals();
 				Var newObject();
 				Var newArray();
+				template<class C> Var newCustomObject(const Var& proto, C* dummy = 0);
 				Var call(Function* function, UInt32 argc, const Value* argv, Object* thisObject = 0);
 				Var eval(const String& expression);
 				void run(const String& source);
@@ -1080,6 +1081,7 @@ template<class C> struct VarMemberFunctionAdapter : public Function {
 		if ((me->C::getClassName()) != (me->getClassName())) {
 			ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
 		}
+		assert(dynamic_cast<const C*>(this) != 0);
 		return (me->*f)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
 	Var (C::*f)(Runtime&, const Var&, const VarList&);
@@ -1089,6 +1091,7 @@ inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt
 inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
 inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
 template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const { return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f); }
+template<class C> Var Runtime::newCustomObject(const Var& proto, C* dummy) { return Var(*this, new(heap) C(heap.managed(), proto)); }
 
 template<typename R, typename T> struct UnaryFunction : public Function {
 	UnaryFunction(R (*f)(Runtime& rt, const T&)) : f(f) { }

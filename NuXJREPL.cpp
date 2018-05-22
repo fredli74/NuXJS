@@ -321,24 +321,27 @@ double getCPUSecs() {
 bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
 
-String TEST_CLASS_STRING("TestClass");
-class TestClass : public ScriptObject {
+String TEST_CLASS_STRING("NativeObject");
+class NativeObject : public ScriptObject {
 	public:		typedef ScriptObject super;
-	public:		TestClass(GCList& gcList, Object* prototype) : super(gcList, prototype), x(0.3) { }
+	public:		NativeObject(GCList& gcList, Object* prototype) : super(gcList, prototype), x(0.3) { }
 	public:		virtual const String* getClassName() const { return &TEST_CLASS_STRING; }
 	public:		static Var testMethod1(Runtime& rt, const Var& thisVar, const VarList& args) {
 					Object* thisObject = thisVar;
 					std::wcout << Var(rt, (reinterpret_cast<ScriptObject*>(thisObject)->ScriptObject::getClassName())) << std::endl;
-					std::wcout << Var(rt, (reinterpret_cast<TestClass*>(thisObject)->TestClass::getClassName())) << std::endl;
-					std::wcout << Var(rt, (reinterpret_cast<TestClass*>(thisObject)->getClassName())) << std::endl;
+					std::wcout << Var(rt, (reinterpret_cast<NativeObject*>(thisObject)->NativeObject::getClassName())) << std::endl;
+					std::wcout << Var(rt, (reinterpret_cast<NativeObject*>(thisObject)->getClassName())) << std::endl;
 					Var className(rt, thisObject->getClassName());
-					if ((reinterpret_cast<TestClass*>(thisObject)->TestClass::getClassName()) != (reinterpret_cast<TestClass*>(thisObject)->getClassName())) {
+					if ((reinterpret_cast<NativeObject*>(thisObject)->NativeObject::getClassName()) != (reinterpret_cast<NativeObject*>(thisObject)->getClassName())) {
 						ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
 					}
-					TestClass* dis = reinterpret_cast<TestClass*>(thisObject);
+					NativeObject* dis = reinterpret_cast<NativeObject*>(thisObject);
 					return Var(rt, dis->x);
 				}
-	public:		Var testMethod2(Runtime& rt, const Var& thisVar, const VarList& args) {
+	public:		static Var construct(Runtime& rt, const Var& thisVar, const VarList& args) {
+					return rt.newCustomObject<NativeObject>(thisVar["prototype"]);
+				}
+	public:		Var nativeMethod(Runtime& rt, const Var& thisVar, const VarList& args) {
 					return Var(rt, x);
 				}
 	protected:	double x;
@@ -465,11 +468,13 @@ rt.setupStandardLibrary();
 		a[i] = a[i] * 2;
 	}
 	
-	Var nobjProto = rt.newObject();
-	nobjProto["testMethod1"] = TestClass::testMethod1;
-//	nobjProto["testMethod2"] = new(rt.getHeap()) VarMemberFunctionAdapter<TestClass>(rt.getHeap().managed(), &TestClass::testMethod2);
-	nobjProto["testMethod2"] = &TestClass::testMethod2;
-	globs["nobj"] = new(heap) TestClass(heap.managed(), nobjProto);
+	Var nativeObjectPrototype = rt.newObject();
+	nativeObjectPrototype["testMethod1"] = NativeObject::testMethod1;
+//	nativeObjectPrototype["testMethod2"] = new(rt.getHeap()) VarMemberFunctionAdapter<NativeObject>(rt.getHeap().managed(), &NativeObject::testMethod2);
+	nativeObjectPrototype["nativeMethod"] = &NativeObject::nativeMethod;
+	globs["nativeInstance"] = rt.newCustomObject<NativeObject>(nativeObjectPrototype);
+	globs["NativeObject"] = NativeObject::construct;
+	globs["NativeObject"]["prototype"] = nativeObjectPrototype;
 
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
