@@ -370,24 +370,22 @@ class Processor;
 class Object : public GCItem {
 	public:		typedef GCItem super;
 	
-				virtual Function* asFunction();							// Default returns 0. (Functions returns this.)
+				virtual Function* asFunction();							// Default returns 0. (Functions returns `this`.)
 				virtual const String* typeOfString() const;				// Default returns "object". (Strings and functions override.)
-				virtual const String* getClassName() const;				// Default returns "Object".
+				virtual const String* getClassName() const;				// Default returns "Object". Override if you implement custom native objects. Must return the same string pointer everytime.
 				virtual const String* toString(Heap& heap) const; 		// this toString() method does not run any script code, so it doesn't honor any user toString or valueOf implementations.
 				virtual Value getInternalValue(Heap& heap) const;		// Used by the standard library to retrieve internal value for wrappers (Number, String etc), source code for functions and parser function for RegExp. Default returns Value::UNDEFINED.
 				virtual Object* getPrototype(Runtime& rt) const;		// Default returns the Object prototype.
 
-				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;					// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);		// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
-				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);					// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
-				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);									// Default returns false.
-				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;								// Default returns an empty enumerator.
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;								// Don't touch v if you return NONEXISTENT. Default returns NONEXISTENT.
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);	// Insert a new or update an existing property. Return false if not possible (e.g. read-only property already exists). Default returns false.
+				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);								// Update existing property. Return false if it doesn't exist or can't be updated (e.g. read-only property exists). Can be overriden for optimization. (Default implementation checks existence with hasOwnProperty() first.)
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);												// Default returns false.
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;												// Default returns an empty enumerator.
 
-				// FIX : or maybe drop them, we now check with getOwnProperty
-				bool hasOwnProperty(Runtime& rt, const Value& key) const; // checks via getOwnProperty()
+				bool hasOwnProperty(Runtime& rt, const Value& key) const; // Checks via getOwnProperty().
 				bool isOwnPropertyEnumerable(Runtime& rt, const Value& key) const;
-				Flags getProperty(Runtime& rt, const Value& key, Value* v) const; // searches prototype chain
-				Value getProperty(Runtime& rt, const char* s) const; // helper function
+				Flags getProperty(Runtime& rt, const Value& key, Value* v) const; // Searches prototype chain.
 				bool setProperty(Runtime& rt, const Value& key, const Value& v); // First tries updateOwnProperty(). If that fails, checks prototype chain for read-only property with the same name and returns false if found. Otherwise attempts to insert a new property with setOwnProperty() and returns its outcome.
 
 	protected:	Object() { }
@@ -693,6 +691,21 @@ class EvalFunction : public Function {
 	protected:	bool direct;
 };
 
+class ExtensibleFunction : public LazyScriptObject<Function> {
+	public:		typedef LazyScriptObject<Function> super;
+				ExtensibleFunction(GCList& gcList) : super(gcList) { }
+	protected:	virtual void constructCompleteObject(Runtime& rt) const { }
+				void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
+};
+
+class FunctionPrototypeFunction : public ExtensibleFunction {
+	public:		typedef ExtensibleFunction super;
+				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
+				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+				virtual Object* getPrototype(Runtime& rt) const;
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
+};
+
 class Scope : public GCItem {
 	public:		typedef GCItem super;
 				Scope(GCList& gcList, Scope* parentScope);
@@ -713,21 +726,6 @@ class Scope : public GCItem {
 					heap.mark(parentScope);
 					super::gcMark(heap);
 				}
-};
-
-class ExtensibleFunction : public LazyScriptObject<Function> {
-	public:		typedef LazyScriptObject<Function> super;
-				ExtensibleFunction(GCList& gcList) : super(gcList) { }
-	protected:	virtual void constructCompleteObject(Runtime& rt) const { }
-				void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
-};
-
-class FunctionPrototypeFunction : public ExtensibleFunction {
-	public:		typedef ExtensibleFunction super;
-				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Object* getPrototype(Runtime& rt) const;
-	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 };
 
 class ScriptFunction : public ExtensibleFunction {
@@ -805,30 +803,6 @@ class ErrorPrototype : public Error {
 				virtual Object* getPrototype(Runtime& rt) const;
 };
 
-// FIX : private class in runtime?
-class GlobalScope : public Scope {
-	public:		typedef Scope super;
-				GlobalScope(GCList& gcList);
-				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
-				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-				virtual bool deleteVar(Runtime& rt, const String* key);
-				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
-};
-
-class WithScope : public Scope {
-	public:		typedef Scope super;
-				WithScope(GCList& gcList, Scope* parentScope, Object* withObject);
-				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
-				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-				virtual bool deleteVar(Runtime& rt, const String* key);
-
-	protected:	Object* withObject;
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(withObject);
-					super::gcMark(heap);
-				}
-};
-
 class FunctionScope : public Scope {
 	friend class Arguments;
 	
@@ -854,50 +828,32 @@ class FunctionScope : public Scope {
 				}
 };
 
-/*
-	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-	code pointer (for constants etc) and it declares deletable vars.
-*/
-class EvalScope : public Scope {
-	public:		typedef Scope super;
-				EvalScope(GCList& gcList, Scope* parentScope);
-				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
-};
-
-/*
-	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
-	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
-	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
-	the locals variables.
-*/
-class CatchScope : public Scope {
-	public:		typedef Scope super;
-
-				CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
-				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
-				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-				virtual bool deleteVar(Runtime& rt, const String* key);
-
-	protected:	const String* exceptionName;
-				Value exceptionValue;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(exceptionName);
-					exceptionValue.gcMark(heap);
-					super::gcMark(heap);
-				}
-};
-
 class Var;
 const UInt32 DEFAULT_STACK_SIZE = 1024;
 const UInt32 STANDARD_CYCLES_BETWEEN_AUTO_GC = 1024;
 const UInt32 MAX_CALL_RECURSION = 64;
 const Int32 CHECK_TIMEOUT_INTERVAL = 1024;
+const Int32 MAX_PROTOTYPE_CHAIN_LENGTH = 32;
 const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 class Runtime : public GCItem {
 	friend class Processor;
 	
+	protected:	struct GlobalScope : public Scope {
+					typedef Scope super;
+					GlobalScope(GCList& gcList);
+					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+					virtual bool deleteVar(Runtime& rt, const String* key);
+					virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
+				};
+	
 	public:		typedef GCItem super;
+	
+				enum Prototype {
+					OBJECT_PROTOTYPE, FUNCTION_PROTOTYPE, STRING_PROTOTYPE, BOOLEAN_PROTOTYPE, NUMBER_PROTOTYPE
+					, ARRAY_PROTOTYPE, FIRST_ERROR_PROTOTYPE, PROTOTYPE_COUNT = FIRST_ERROR_PROTOTYPE + ERROR_TYPE_COUNT
+				};
+
 				Runtime(Heap& heap);
 				void setGlobalObject(Object* newGlobals);		// Assign a new global object. By default the global object is a standard ScriptObject.
 				void setStackSize(UInt32 maxValuesOnStack);		// Sets the stack size used by the Processor constructor. Default stack size is 1024 elements (see above) which should be sufficient for normal use.
@@ -906,8 +862,11 @@ class Runtime : public GCItem {
 				void noTimeOut();								// Disables the time-out (default).
 				void setupStandardLibrary();					// Sets up all the standard library functions and support routines. It is possible to execute script code without calling setupStandardLibrary() but apart from missing all built-in "native objects" defined in EcmaScript there will be some other limitations (e.g. no support for regular expression literals and no support for implicit valueOf() / toString() conversions).
 				Heap& getHeap() const { return heap; }
+				Object* getObjectPrototype() const { return prototypes[OBJECT_PROTOTYPE]; }
+				Object* getPrototypeObject(Prototype prototype) const;
+				Object* getErrorPrototype(ErrorType error) const;
 				Object* getGlobalObject() const { assert(globalObject != 0); return globalObject; }
-				GlobalScope* getGlobalScope() { return &globalScope; }
+				Runtime::GlobalScope* getGlobalScope() { return &globalScope; }
 				Constants* getSharedConstants() { return &sharedConstants; }
 				Var getGlobals();
 				Var newObject();
@@ -921,7 +880,9 @@ class Runtime : public GCItem {
 				void checkTimeOut();
 				void autoGC();
 
-	protected:	Heap& heap;
+	protected:	void fetchFunction(const Object* supportObject, const char* name, Function** f);
+	
+				Heap& heap;
 				GlobalScope globalScope;
 				Object* globalObject;
 				Constants sharedConstants;
@@ -932,25 +893,19 @@ class Runtime : public GCItem {
 				size_t memoryCap;
 				size_t gcThreshold;
 				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
-
+				Object* prototypes[PROTOTYPE_COUNT];
+	
 	// FIX : public? v
-	public:		ScriptObject objectPrototype; // FIX : make private? put where really?
-				FunctionPrototypeFunction functionPrototype;
-				WrapperObject booleanPrototype; // FIX : maybe an array with these and loop to create etc?
-				WrapperObject numberPrototype; // FIX : maybe an array with these and loop to create etc?
-				WrapperObject stringPrototype;
-				Array arrayPrototype;
-				Error* errorPrototypes[ERROR_TYPE_COUNT];
-				EvalFunction evalFunction;
+	public:		EvalFunction evalFunction;
 				EvalFunction evalDirectFunction;
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
 				double unixEpochTimeDiff;
-
+	
 	public:		virtual void gcMark(Heap& heap) const {
 					heap.mark(globalObject);
-					heap.markViaPointers(errorPrototypes + 0, errorPrototypes + ERROR_TYPE_COUNT);
+					heap.markViaPointers(prototypes + 0, prototypes + PROTOTYPE_COUNT);
 					heap.mark(toNumberFunction);
 					heap.mark(toStringFunction);
 					heap.mark(createRegExpFunction);
@@ -981,43 +936,48 @@ extern const String LENGTH_STRING; // FIX : placement?
 class VarList;
 class Property;
 typedef Var (*VarFunction)(Runtime&, const Var&, const VarList&);
-struct AccessorBase {
-	AccessorBase(Runtime& rt) : rt(rt) { }
-	virtual Value get() const = 0;
-	virtual Var call(int argc, const Value* argv) const = 0;
-	operator Value() const { return get(); }
-	operator double() const { return get().toDouble(); }
-	operator Object*() const { return get().toObject(rt, true); }
-	operator Function*() const { return get().toFunction(rt.getHeap()); }
-	operator std::wstring() const { return get().toStdString(rt.getHeap()); }
-	operator Var() const;
-	Var operator()() const;
-	template<class C> Value makeValue(Var (C::*const& f)(Runtime&, const Var&, const VarList&)) const;
-	Value makeValue(const Value& v) const { return v; }
-	Value makeValue(const Var& v) const;
-	Value makeValue(const Property& v) const;
-	Value makeValue(const char* s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
-	Value makeValue(const std::wstring& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
-	Value makeValue(const NativeFunction& f) const { return new(rt.getHeap()) FunctorAdapter<NativeFunction>(rt.getHeap().managed(), f); }
-	Value makeValue(const VarFunction& f) const;
-	template<typename T0> Var operator()(const T0& arg0) const;
-	template<typename T0, typename T1> Var operator()(const T0& arg0, const T1& arg1) const;
-	template<typename T0, typename T1, typename T2> Var operator()(const T0& arg0, const T1& arg1, const T2& arg2) const;
-	Var operator()(const VarList& args) const;
-	template<typename T> const Property operator[](const T& key) const;
-	template<typename T> bool operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
-	template<typename T> bool operator!=(const T& t) const { return !get().isStrictlyEqualTo(makeValue(t)); }
-	Var typeOf() const;
-	UInt32 length();
-	Runtime& rt;
+class AccessorBase {
+	friend class Var;
+	friend class Property;
+	
+	public:		operator Value() const { return get(); }
+				operator double() const { return get().toDouble(); }
+				operator Object*() const { return get().toObject(rt, true); }
+				operator Function*() const { return get().toFunction(rt.getHeap()); }
+				operator std::wstring() const { return get().toStdString(rt.getHeap()); }
+				operator Var() const;
+				Var operator()() const;
+				template<typename T0> Var operator()(const T0& arg0) const;
+				template<typename T0, typename T1> Var operator()(const T0& arg0, const T1& arg1) const;
+				template<typename T0, typename T1, typename T2> Var operator()(const T0& arg0, const T1& arg1, const T2& arg2) const;
+				Var operator()(const VarList& args) const;
+				template<typename T> const Property operator[](const T& key) const;
+				template<typename T> bool operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
+				template<typename T> bool operator!=(const T& t) const { return !get().isStrictlyEqualTo(makeValue(t)); }
+				Var typeOf() const;
+				UInt32 length();
+	
+	protected:	template<class F> struct VarFunctorAdapter;
+				template<class F> struct VarMemberFunctionAdapter;
+				AccessorBase(Runtime& rt) : rt(rt) { }
+				virtual Value get() const = 0;
+				virtual Var call(int argc, const Value* argv) const = 0;
+				template<class C> Value makeValue(Var (C::*const& f)(Runtime&, const Var&, const VarList&)) const;
+				Value makeValue(const Value& v) const { return v; }
+				Value makeValue(const Var& v) const;
+				Value makeValue(const Property& v) const;
+				Value makeValue(const char* s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
+				Value makeValue(const std::wstring& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
+				Value makeValue(const NativeFunction& f) const { return new(rt.getHeap()) FunctorAdapter<NativeFunction>(rt.getHeap().managed(), f); }
+				Value makeValue(const VarFunction& f) const;
+				Runtime& rt;
 };
 
 class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;
-
 				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
 				Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
-				template<typename T> Var operator =(const T& t) { this->v = makeValue(t); return *this; }
+				template<typename T> Var& operator =(const T& t) { this->v = makeValue(t); return *this; }
 
 	protected:	Value v;
 				virtual Value get() const { return v; }
@@ -1028,28 +988,32 @@ class Var : public GCItem, public AccessorBase {
 				}
 };
 
-struct Property : public AccessorBase {
-	typedef AccessorBase super;
-	Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
-	virtual Value get() const { Value v(Value::UNDEFINED); object->getProperty(rt, key, &v); return v; }
-	template<typename T> const Property& operator =(const T& v) const { object->setProperty(rt, key, Var(rt, v)); return *this; }
-	virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
-	Object* const object;
-	const Var key;
+class Property : public AccessorBase {
+	friend class AccessorBase;
+	
+	public:		template<typename T> const Property& operator =(const T& v) const { object->setProperty(rt, key, Var(rt, v)); return *this; }
+	
+	protected:	typedef AccessorBase super;
+				Property(Runtime& rt, Object* object, const Var& key) : super(rt), object(object), key(key) { }
+				virtual Value get() const { Value v(Value::UNDEFINED); object->getProperty(rt, key, &v); return v; }
+				virtual Var call(int argc, const Value* argv) const { return rt.call(*this, argc, argv, object); }
+				Object* const object;
+				const Var key;
 };
 
-struct VarList : public GCItem, public QuickArray<Value> {
-	typedef GCItem super;
-	template<typename T> VarList(Runtime& rt, UInt32 count, const T* values)
-			: super(rt.getHeap().roots()), rt(rt), QuickArray<Value>(count, &rt.getHeap()) {
-		std::copy(values + 0, values + count, begin());
-	}
-	Var operator[](UInt32 index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
-	Runtime& rt;
-	virtual void gcMark(Heap& heap) const {
-		heap.markViaReferences(begin(), end());
-		super::gcMark(heap);
-	}
+class VarList : public GCItem, public QuickArray<Value> {
+	public:		typedef GCItem super;
+				template<typename T> VarList(Runtime& rt, UInt32 count, const T* values)
+						: super(rt.getHeap().roots()), rt(rt), QuickArray<Value>(count, &rt.getHeap()) {
+					std::copy(values + 0, values + count, begin());
+				}
+				Var operator[](UInt32 index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
+	
+	protected:	Runtime& rt;
+				virtual void gcMark(Heap& heap) const {
+					heap.markViaReferences(begin(), end());
+					super::gcMark(heap);
+				}
 };
 
 inline AccessorBase::operator Var() const { return Var(rt, get()); }
@@ -1061,9 +1025,11 @@ inline Var AccessorBase::operator()(const VarList& args) const { return call(arg
 template<typename T> const Property AccessorBase::operator[](const T& key) const { return Property(rt, get().toObject(rt, true), Var(rt, key)); }
 inline Var AccessorBase::typeOf() const { return Var(rt, get().typeOfString()); }
 inline UInt32 AccessorBase::length() { return static_cast<Int32>(operator[](&LENGTH_STRING)); }
+inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
+inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
 inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
 
-template<class F> struct VarFunctorAdapter : public ExtensibleFunction {
+template<class F> struct AccessorBase::VarFunctorAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
 	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -1071,8 +1037,9 @@ template<class F> struct VarFunctorAdapter : public ExtensibleFunction {
 	}
 	const F f;
 };
+inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f); }
 
-template<class C> struct VarMemberFunctionAdapter : public ExtensibleFunction {
+template<class C> struct AccessorBase::VarMemberFunctionAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
 	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &f)(Runtime&, const Var&, const VarList&))
 			: super(gcList), f(f) { }
@@ -1086,19 +1053,7 @@ template<class C> struct VarMemberFunctionAdapter : public ExtensibleFunction {
 	}
 	Var (C::*f)(Runtime&, const Var&, const VarList&);
 };
-
-inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f); }
-inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Value(); }
-inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
 template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const { return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f); }
-
-template<typename R, typename T> struct UnaryFunction : public Function {
-	UnaryFunction(R (*f)(Runtime& rt, const T&)) : f(f) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		f(rt, Var(rt, (argc >= 1 ? argv[0] : Value::UNDEFINED)));
-	}
-	R (*const f)(const T&);
-};
 
 class Arguments : public LazyScriptObject<Object> {
 	public:		typedef LazyScriptObject<Object> super;
@@ -1216,7 +1171,56 @@ class Processor : public GCItem {
 				bool run(Int32 maxCycles);
 				Value getResult() const;
 
-	protected:	void enter(const Code* code, Scope* scope, Object* thisObject);
+	protected:	/*
+					This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
+					code pointer (for constants etc) and it declares deletable vars.
+				*/
+				struct EvalScope : public Scope {
+					typedef Scope super;
+					EvalScope(GCList& gcList, Scope* parentScope);
+					virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
+				};
+
+				/*
+					The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
+					catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
+					exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
+					the locals variables.
+				*/
+				struct CatchScope : public Scope {
+					typedef Scope super;
+
+					CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
+					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+					virtual bool deleteVar(Runtime& rt, const String* key);
+
+					const String* exceptionName;
+					Value exceptionValue;
+
+					virtual void gcMark(Heap& heap) const {
+						heap.mark(exceptionName);
+						exceptionValue.gcMark(heap);
+						super::gcMark(heap);
+					}
+				};
+	
+				struct WithScope : public Scope {
+					typedef Scope super;
+					WithScope(GCList& gcList, Scope* parentScope, Object* withObject);
+					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
+					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
+					virtual bool deleteVar(Runtime& rt, const String* key);
+
+					Object* withObject;
+					virtual void gcMark(Heap& heap) const {
+						heap.mark(withObject);
+						super::gcMark(heap);
+					}
+				};
+
+
+				void enter(const Code* code, Scope* scope, Object* thisObject);
 				void push(const Value& v);
 				void pop(Int32 count);
 				void pop2push1(const Value& v);

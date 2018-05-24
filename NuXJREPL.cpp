@@ -421,7 +421,9 @@ suppressStdErr = true;
 
     Heap heap;
     Runtime rt(heap);
+	Object& globals = *rt.getGlobalObject();
 
+#if 0
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
     Var aValue = anObject["a"];
@@ -445,7 +447,6 @@ suppressStdErr = true;
  /*   ScriptObject globals(heap.roots(), &rt.objectPrototype);
 	rt.setGlobalObject(&globals);
 	*/
-	Object& globals = *rt.getGlobalObject();
 	
 rt.setupStandardLibrary();
 	Var globs = rt.getGlobals();
@@ -455,7 +456,7 @@ rt.setupStandardLibrary();
 	globs["f"] = rt.eval("(function(a, b) { return a + b })");
 	globs["arr"] = rt.eval("([1,3,5,2,4,6])");
 	globs["test1"] = test1;
-	Var o = globs["o"] = new(heap) ScriptObject(heap.managed(), &rt.objectPrototype);
+	Var o = globs["o"] = new(heap) ScriptObject(heap.managed(), rt.getObjectPrototype());
 	o["gcTest"] = gcTest;
 	o["zub"] = "yo";
 	std::wcout << globs["f"](29, 99) << std::endl;
@@ -489,7 +490,7 @@ rt.setupStandardLibrary();
 	globs["NativeObject"]["prototype"] = nativeObjectPrototype;
 	
 	globs["NativeObject2"] = new(heap) NativeConstructor(heap.managed(), nativeObjectPrototype);
-
+#endif
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
     GCFunction gcFunction;
@@ -499,6 +500,7 @@ rt.setupStandardLibrary();
 CallbackTest callbackTest;
 globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, DONT_ENUM_FLAG);
 //globals.setOwnProperty(rt, String::alloc(heap, "nativeTestObject"), new(heap) NativeTestObject(heap.managed(), 1.4, 2.9));
+
 
 	if (loadStdLib) {
 		try {

@@ -102,6 +102,11 @@ static const String PROTOTYPE_CHAIN_TOO_LONG("Prototype chain too long");
 static const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"
 };
+static const String* PROTOTYPE_NAMES[Runtime::PROTOTYPE_COUNT] = {
+	&O_BJECT_STRING, &F_UNCTION_STRING, &S_TRING_STRING, &B_OOLEAN_STRING, &N_UMBER_STRING, &A_RRAY_STRING
+	, &ERROR_NAMES[0], &ERROR_NAMES[1], &ERROR_NAMES[2], &ERROR_NAMES[3], &ERROR_NAMES[4], &ERROR_NAMES[5]
+	, &ERROR_NAMES[6]
+};
 
 /* --- Utilities --- */
 
@@ -524,11 +529,11 @@ Object* Value::toObjectOrNull(Runtime& rt, bool requestExtensible) const {
 		default: assert(0);
 		case UNDEFINED_TYPE: return 0;
 		case NULL_TYPE: return 0;
-		case BOOLEAN_TYPE: return new(heap) WrapperObject(heap.managed(), &B_OOLEAN_STRING, *this, &rt.booleanPrototype);
-		case NUMBER_TYPE: return new(heap) WrapperObject(heap.managed(), &N_UMBER_STRING, *this, &rt.numberPrototype);
+		case BOOLEAN_TYPE: return new(heap) WrapperObject(heap.managed(), &B_OOLEAN_STRING, *this, rt.getPrototypeObject(Runtime::BOOLEAN_PROTOTYPE));
+		case NUMBER_TYPE: return new(heap) WrapperObject(heap.managed(), &N_UMBER_STRING, *this, rt.getPrototypeObject(Runtime::NUMBER_PROTOTYPE));
 		// I think const_cast can be accepted here, the string is always immutable when accessed as an Object
 		case STRING_TYPE: return (!requestExtensible ? static_cast<Object*>(const_cast<String*>(var.string))
-				: new(heap) StringWrapper(heap.managed(), var.string, &rt.stringPrototype));
+				: new(heap) StringWrapper(heap.managed(), var.string, rt.getPrototypeObject(Runtime::STRING_PROTOTYPE)));
 		case OBJECT_TYPE: return var.object;
 	}
 }
@@ -662,7 +667,7 @@ String::String(GCList& gcList, const std::wstring& ws) : super(gcList), QArray(s
 const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::getClassName() const { return &S_TRING_STRING; }
 const String* String::toString(Heap& heap) const { return this; }
-Object* String::getPrototype(Runtime& rt) const { return &rt.stringPrototype; }
+Object* String::getPrototype(Runtime& rt) const { return rt.getPrototypeObject(Runtime::STRING_PROTOTYPE); }
 
 Flags String::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 	if (key.equalsString(LENGTH_STRING)) {
@@ -897,7 +902,7 @@ static struct EmptyEnumerator : public Enumerator { const String* nextPropertyNa
 Function* Object::asFunction() { return 0; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
-Object* Object::getPrototype(Runtime& rt) const { return &rt.objectPrototype; }
+Object* Object::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
 Value Object::getInternalValue(Heap& heap) const { return Value::UNDEFINED; }
 Flags Object::getOwnProperty(Runtime& rt, const Value& key, Value* v) const { return NONEXISTENT; }
 bool Object::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags) { return false; }
@@ -946,13 +951,6 @@ bool Object::setProperty(Runtime& rt, const Value& key, const Value& v) {
 		}
 	}
 	return setOwnProperty(rt, key, v);
-}
-
-Value Object::getProperty(Runtime& rt, const char* name) const { // FIX : keep?
-	Value v = Value::UNDEFINED;
-	String s(name); // FIX : not ok not to allocate according to the policy!
-	getProperty(rt, &s, &v);
-	return v;
 }
 
 /* --- Table --- */
@@ -1085,7 +1083,8 @@ UInt32 Table::rebuild(UInt32 newSize) {
 
 /* --- ScriptObject --- */
 
-ScriptObject::ScriptObject(GCList& gcList, Object* prototype) : super(gcList), Table(&gcList.getHeap()), prototype(prototype) { }
+ScriptObject::ScriptObject(GCList& gcList, Object* prototype)
+		: super(gcList), Table(&gcList.getHeap()), prototype(prototype) { }
 
 Object* ScriptObject::getPrototype(Runtime& rt) const { return prototype; }
 
@@ -1219,7 +1218,7 @@ const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
 const String* Function::toString(Heap& heap) const { return &NATIVE_FUNCTION_STRING; }
 Value Function::getInternalValue(Heap& heap) const { return &NATIVE_FUNCTION_STRING; }
-Object* Function::getPrototype(Runtime& rt) const { return &rt.functionPrototype; }
+Object* Function::getPrototype(Runtime& rt) const { return rt.getPrototypeObject(Runtime::FUNCTION_PROTOTYPE); }
 
 Value Function::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return invoke(rt, processor, argc, argv, thisObject);
@@ -1250,8 +1249,8 @@ Array::Array(GCList& gcList) : super(gcList), length(0), denseVector(&gcList.get
 const String* Array::getClassName() const { return &A_RRAY_STRING; }
 
 Object* Array::getPrototype(Runtime& rt) const { // FIX : have a sep. ArrayPrototype object like we have for Function?
-	return (this == &rt.arrayPrototype ? static_cast<Object*>(&rt.objectPrototype)
-			: static_cast<Object*>(&rt.arrayPrototype));
+	Object* arrayPrototype = rt.getPrototypeObject(Runtime::ARRAY_PROTOTYPE);
+	return (this == arrayPrototype ? rt.getObjectPrototype() : arrayPrototype);
 }
 
 Flags Array::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
@@ -1394,7 +1393,7 @@ template<class SUPER> ScriptObject* LazyScriptObject<SUPER>::getCompleteObject(R
 
 void ExtensibleFunction::createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const {
 	Heap& heap = rt.getHeap();
-	ScriptObject* prototype = new(heap) ScriptObject(heap.managed(), &rt.objectPrototype);
+	ScriptObject* prototype = new(heap) ScriptObject(heap.managed(), rt.getObjectPrototype());
 	prototype->setOwnProperty(rt, &CONSTRUCTOR_STRING, const_cast<ExtensibleFunction*>(this), DONT_ENUM_FLAG);
 	forObject->setOwnProperty(rt, &PROTOTYPE_STRING, prototype, (dontEnumPrototype ? (DONT_ENUM_FLAG | DONT_DELETE_FLAG) : DONT_DELETE_FLAG));
 }
@@ -1466,7 +1465,7 @@ Value FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt3
 	return Value::UNDEFINED;
 }
 
-Object* FunctionPrototypeFunction::getPrototype(Runtime& rt) const { return &rt.objectPrototype; }
+Object* FunctionPrototypeFunction::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
 
 void FunctionPrototypeFunction::constructCompleteObject(Runtime& rt) const {
 	completeObject->setOwnProperty(rt, &NAME_STRING, &String::EMPTY, DONT_ENUM_FLAG);
@@ -1482,7 +1481,7 @@ Error::Error(GCList& gcList, ErrorType type, const String* message)
 
 const String* Error::getClassName() const { return &E_RROR_STRING; }
 Value Error::getInternalValue(Heap& heap) const { return &ERROR_NAMES[errorType]; }
-Object* Error::getPrototype(Runtime& rt) const { return rt.errorPrototypes[errorType]; }
+Object* Error::getPrototype(Runtime& rt) const { return rt.getErrorPrototype(errorType); }
 
 const String* Error::toString(Heap& heap) const {
 	return (message == 0 ? name : String::concat(heap, String(heap.roots(), *name, COLON_SPACE), *message));
@@ -1517,8 +1516,7 @@ void Error::constructCompleteObject(Runtime& rt) const {
 ErrorPrototype::ErrorPrototype(GCList& gcList, ErrorType type) : super(gcList, type) { }
 
 Object* ErrorPrototype::getPrototype(Runtime& rt) const {
-	return (errorType == GENERIC_ERROR ? static_cast<Object*>(&rt.objectPrototype)
-			: static_cast<Object*>(rt.errorPrototypes[GENERIC_ERROR]));
+	return (errorType == GENERIC_ERROR ? rt.getObjectPrototype() : rt.getErrorPrototype(GENERIC_ERROR));
 }
 
 /* --- Arguments --- */
@@ -1534,7 +1532,7 @@ const String* Arguments::toString(Heap& heap) const {
 	return new(heap) String(heap.managed(), String(heap.roots(), BRACKET_OBJECT_STRING, O_BJECT_STRING), END_BRACKET_STRING);
 }
 
-Object* Arguments::getPrototype(Runtime& rt) const { return &rt.objectPrototype; }
+Object* Arguments::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
 
 Value* Arguments::findProperty(const Value& key) const {
 	UInt32 i;
@@ -1717,19 +1715,19 @@ void FunctionScope::declareVar(Runtime& rt, const String* name, const Value& ini
 
 /* --- EvalScope --- */
 
-EvalScope::EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
+Processor::EvalScope::EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
 
-void EvalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
+void Processor::EvalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	parentScope->declareVar(rt, name, initValue, false);
 }
 
 /* --- GlobalScope --- */
 
-GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
-Flags GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobalObject()->getProperty(rt, name, v); }
-void GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobalObject()->setProperty(rt, name, v); }
-bool GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobalObject()->deleteOwnProperty(rt, name); }
-void GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
+Runtime::GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
+Flags Runtime::GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobalObject()->getProperty(rt, name, v); }
+void Runtime::GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobalObject()->setProperty(rt, name, v); }
+bool Runtime::GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobalObject()->deleteOwnProperty(rt, name); }
+void Runtime::GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
 	Value v;
 	// FIX : deep or not?!
 	const Flags flags = rt.getGlobalObject()->getOwnProperty(rt, name, &v);
@@ -1740,10 +1738,10 @@ void GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initV
 
 /* --- CatchScope --- */
 
-CatchScope::CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
+Processor::CatchScope::CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
 		: super(gcList, parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
 
-Flags CatchScope::readVar(Runtime& rt, const String* name, Value* v) const {
+Flags Processor::CatchScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	if (name->isEqualTo(*exceptionName)) {
 		*v = exceptionValue;
 		return DONT_DELETE_FLAG | EXISTS_FLAG;
@@ -1752,7 +1750,7 @@ Flags CatchScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	}
 }
 
-void CatchScope::writeVar(Runtime& rt, const String* name, const Value& v) {
+void Processor::CatchScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	if (name->isEqualTo(*exceptionName)) {
 		exceptionValue = v;
 	} else {
@@ -1760,7 +1758,7 @@ void CatchScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	}
 }
 
-bool CatchScope::deleteVar(Runtime& rt, const String* name) {
+bool Processor::CatchScope::deleteVar(Runtime& rt, const String* name) {
 	if (name->isEqualTo(*exceptionName)) {
 		return false;
 	} else {
@@ -1770,14 +1768,14 @@ bool CatchScope::deleteVar(Runtime& rt, const String* name) {
 
 /* --- WithScope --- */
 
-WithScope::WithScope(GCList& gcList, Scope* parentScope, Object* withObject) : super(gcList, parentScope), withObject(withObject) { }
+Processor::WithScope::WithScope(GCList& gcList, Scope* parentScope, Object* withObject) : super(gcList, parentScope), withObject(withObject) { }
 
-Flags WithScope::readVar(Runtime& rt, const String* name, Value* v) const {
+Flags Processor::WithScope::readVar(Runtime& rt, const String* name, Value* v) const {
 	Flags flags = withObject->getProperty(rt, name, v);
 	return (flags != NONEXISTENT ? flags : parentScope->readVar(rt, name, v));
 }
 
-void WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
+void Processor::WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	const Value key(name);
 	for (Object* o = withObject; o != 0; o = o->getPrototype(rt)) {
 		Value dummy;
@@ -1792,7 +1790,7 @@ void WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	parentScope->writeVar(rt, name, v);
 }
 
-bool WithScope::deleteVar(Runtime& rt, const String* name) {
+bool Processor::WithScope::deleteVar(Runtime& rt, const String* name) {
 	Value dummy;
 	Flags findFlags = withObject->getProperty(rt, name, &dummy);
 	return (findFlags != NONEXISTENT ? withObject->deleteOwnProperty(rt, name) : parentScope->deleteVar(rt, name));
@@ -1819,7 +1817,6 @@ ScriptException::ScriptException(Heap& heap, const Value& value) throw()
 
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
 const Int32 MAX_OPERAND_VALUE = (1 << 23) - 1;
-const Int32 MAX_PROTOTYPE_CHAIN_LENGTH = 32;
 
 // This list must be in enum order
 const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
@@ -1950,9 +1947,9 @@ void Processor::enterGlobalCode(const Code* code) {
 
 void Processor::enterEvalCode(const Code* code, bool local) {
 	if (local && currentFrame != 0) {
-		enter(code, new(heap) EvalScope(heap.managed(), currentFrame->scope), currentFrame->thisObject);
+		enter(code, new(heap) Processor::EvalScope(heap.managed(), currentFrame->scope), currentFrame->thisObject);
 	} else {
-		enter(code, new(heap) EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobalObject());
+		enter(code, new(heap) Processor::EvalScope(heap.managed(), rt.getGlobalScope()), rt.getGlobalObject());
 	}
 }
 
@@ -2038,7 +2035,7 @@ void Processor::newOperation(const Int32 argc) {
 				return;
 			}
 		}
-		Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : &rt.objectPrototype);
+		Object* newObject = new(heap) ScriptObject(heap.managed(), prototype != 0 ? prototype : rt.getObjectPrototype());
 		sp[-(argc - 1)] = f->construct(rt, *this, argc, sp - argc + 1, newObject);
 		sp[-(argc - 1) - 1] = newObject;
 		pop(argc - 1);
@@ -2213,7 +2210,7 @@ void Processor::innerRun() {
 
 			case NEW_OP: newOperation(im); return;
 			case NEW_RESULT_OP: pop2push1(sp[0].isObject() ? sp[0] : sp[-1]); break;
-			case NEW_OBJECT_OP: push(new(heap) ScriptObject(heap.managed(), &rt.objectPrototype)); break;
+			case NEW_OBJECT_OP: push(new(heap) ScriptObject(heap.managed(), rt.getObjectPrototype())); break;
 			case NEW_ARRAY_OP: push(new(heap) Array(heap.managed())); break;
 			case NEW_REG_EXP_OP: invokeFunction(rt.createRegExpFunction, 1, 2); return;
 			case RETURN_OP:	ip = currentFrame->returnIP; popFrame(); return;
@@ -4197,14 +4194,14 @@ struct Support {
 			const Value internalValue = argv[1];
 			Object* prototype = (argc >= 3 ? argv[2].toObjectOrNull(rt, false) : 0);
 			if (prototype == 0) {
-				prototype = &rt.objectPrototype;
+				prototype = rt.getObjectPrototype();
 			}
 			Object* o = 0;
 			if (className->isEqualTo(S_TRING_STRING)) {
 				o = new(heap) StringWrapper(heap.managed(), internalValue.toString(heap), prototype);
 			} else if (className->isEqualTo(E_RROR_STRING)) {
 				for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-					if (prototype == rt.errorPrototypes[i]) {
+					if (prototype == rt.getErrorPrototype(static_cast<ErrorType>(i))) {
 						o = new(heap) Error(heap.managed(), static_cast<ErrorType>(i));
 						break;
 					}
@@ -4426,19 +4423,23 @@ static struct NoRegExpSupport : public Function {
 Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globalObject(0)
 		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
 		, timeOut(0), memoryCap(MAX_MEMORY_CAP)
-		, gcThreshold(0), objectPrototype(heap.roots(), 0), functionPrototype(heap.roots()), evalFunction(heap.roots(), false)
+		, gcThreshold(0), evalFunction(heap.roots(), false)
 		, evalDirectFunction(heap.roots(), true), toNumberFunction(&DEFAULT_CONVERSION)
 		, toStringFunction(&DEFAULT_CONVERSION), createRegExpFunction(&NO_REG_EXP_SUPPORT)
-		, booleanPrototype(heap.roots(), &B_OOLEAN_STRING, false, &objectPrototype)
-		, numberPrototype(heap.roots(), &N_UMBER_STRING, 0.0, &objectPrototype)
-		, stringPrototype(heap.roots(), &S_TRING_STRING, &String::EMPTY, &objectPrototype)
-		, arrayPrototype(heap.roots()), unixEpochTimeDiff(0.0)
+		, unixEpochTimeDiff(0.0)
 		, evalCodeCache(&heap) {
-	std::fill(errorPrototypes, errorPrototypes + ERROR_TYPE_COUNT, (Error*)(0));
+	std::fill(prototypes, prototypes + PROTOTYPE_COUNT, (Object*)(0));
+	Object* objectPrototype = new(heap) ScriptObject(heap.managed(), 0);
+	prototypes[OBJECT_PROTOTYPE] = objectPrototype;
+	prototypes[FUNCTION_PROTOTYPE] = new(heap) FunctionPrototypeFunction(heap.managed());
+	prototypes[BOOLEAN_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &B_OOLEAN_STRING, false, objectPrototype);
+	prototypes[NUMBER_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &N_UMBER_STRING, 0.0, objectPrototype);
+	prototypes[STRING_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &S_TRING_STRING, &String::EMPTY, objectPrototype);
+	prototypes[ARRAY_PROTOTYPE] = new(heap) Array(heap.managed());
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		errorPrototypes[i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));
+		prototypes[FIRST_ERROR_PROTOTYPE + i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));
 	}
-	globalObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
+	globalObject = new(heap) ScriptObject(heap.managed(), objectPrototype);
 }
 
 void Runtime::autoGC() {
@@ -4468,9 +4469,18 @@ Var Runtime::runUntilReturn(Processor& processor) {
 	return Var(*this, processor.getResult());
 }
 
-Var Runtime::getGlobals() { return Var(*this, globalObject); }
+Object* Runtime::getPrototypeObject(Prototype prototype) const {
+	assert(0 <= prototype && prototype < PROTOTYPE_COUNT);
+	return prototypes[prototype];
+}
 
-Var Runtime::newObject() { return Var(*this, new(heap) ScriptObject(heap.managed(), &objectPrototype)); }
+Object* Runtime::getErrorPrototype(ErrorType error) const {
+	assert(0 <= error && error < ERROR_TYPE_COUNT);
+	return prototypes[static_cast<Prototype>(FIRST_ERROR_PROTOTYPE + error)];
+}
+
+Var Runtime::getGlobals() { return Var(*this, globalObject); }
+Var Runtime::newObject() { return Var(*this, new(heap) ScriptObject(heap.managed(), getObjectPrototype())); }
 Var Runtime::newArray() { return Var(*this, new(heap) Array(heap.managed())); }
 
 Var Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4521,7 +4531,15 @@ Code* Runtime::compileGlobalCode(const String& source) {
 	return code;
 }
 
-// FIX : make this optional by including default toNumberFunction etc that throws (or should they return something?)
+void Runtime::fetchFunction(const Object* supportObject, const char* name, Function** f) {
+	Value v;
+	if (supportObject->getProperty(*this, String::alloc(heap, name), &v) != NONEXISTENT) {
+		if (v.asFunction() != 0) {
+			*f = v.asFunction();
+		}
+	}
+}
+
 void Runtime::setupStandardLibrary() {
 	{	// time() is not guaranteed to return utc time, so we perform some conversions to find the actual implementation
 		struct tm refTM;
@@ -4535,8 +4553,8 @@ void Runtime::setupStandardLibrary() {
 	}
 	
 	globalObject->setOwnProperty(*this, &EVAL_STRING, &evalFunction, DONT_ENUM_FLAG);
-	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
-	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), &objectPrototype);
+	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), getObjectPrototype());
+	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), getObjectPrototype());
 	const Var protectedSupportObject(*this, supportObject);
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, String::alloc(heap, "prototypes"), prototypesObject);
@@ -4555,39 +4573,20 @@ void Runtime::setupStandardLibrary() {
 		supportObject->setOwnProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, &NATIVE_MATH_FUNCTIONS[i].func);
 	}
 	
-	struct { const String* name; Object* object; } PROTOTYPES[] = {
-		{ &O_BJECT_STRING, &objectPrototype }, { &F_UNCTION_STRING, &functionPrototype },
-		{ &S_TRING_STRING, &stringPrototype }, { &B_OOLEAN_STRING, &booleanPrototype },
-		{ &N_UMBER_STRING, &numberPrototype }, { &A_RRAY_STRING, &arrayPrototype }
-	};
-	for (int i = 0; i < sizeof (PROTOTYPES) / sizeof (*PROTOTYPES); ++i) {
-		prototypesObject->setOwnProperty(*this, PROTOTYPES[i].name, PROTOTYPES[i].object);
-	}
-	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
-		prototypesObject->setOwnProperty(*this, &ERROR_NAMES[i], errorPrototypes[i]);
+	for (int i = 0; i < PROTOTYPE_COUNT; ++i) {
+		prototypesObject->setOwnProperty(*this, PROTOTYPE_NAMES[i], prototypes[i]);
 	}
 	
 	extern const char* STDLIB_JS;
 	const Var func = eval(String(STDLIB_JS));
 	Value argv[1] = { protectedSupportObject };
 	call(func, 1, argv);
-	heap.gc();
-
-	// FIX : sub v
-	toNumberFunction = supportObject->getProperty(*this, "toPrimitiveNumber").asFunction();
-	if (toNumberFunction == 0 || toNumberFunction->asFunction() == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.toPrimitiveNumber");
-	}
 	
-	toStringFunction = supportObject->getProperty(*this, "toPrimitiveString").asFunction();
-	if (toStringFunction == 0 || toStringFunction->asFunction() == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.toPrimitiveString");
-	}
+	fetchFunction(supportObject, "toPrimitiveNumber", &toNumberFunction);
+	fetchFunction(supportObject, "toPrimitiveString", &toStringFunction);
+	fetchFunction(supportObject, "createRegExp", &createRegExpFunction);
 
-	createRegExpFunction = supportObject->getProperty(*this, "createRegExp").asFunction();
-	if (createRegExpFunction == 0 || createRegExpFunction->asFunction() == 0) {
-		ScriptException::throwError(heap, GENERIC_ERROR, "Standard library is missing valid support.createRegExp");
-	}
+	heap.gc();
 }
 
 void Runtime::setGlobalObject(Object* newGlobals) { globalObject = newGlobals; }
