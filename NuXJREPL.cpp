@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <sstream>
+#include <ctime>
 
 using namespace NuXJScript;
 

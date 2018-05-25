@@ -4634,6 +4634,8 @@ void Runtime::fetchFunction(const Object* supportObject, const char* name, Funct
 	}
 }
 
+extern const char* STDLIB_JS;
+
 void Runtime::setupStandardLibrary() {
 	{	// time() is not guaranteed to return utc time, so we perform some conversions to find the actual implementation
 		struct tm refTM;
@@ -4671,7 +4673,6 @@ void Runtime::setupStandardLibrary() {
 		prototypesObject->setOwnProperty(*this, PROTOTYPE_NAMES[i], prototypes[i]);
 	}
 	
-	extern const char* STDLIB_JS;
 	const Var func = eval(String(STDLIB_JS));
 	Value argv[1] = { protectedSupportObject };
 	call(func, 1, argv);

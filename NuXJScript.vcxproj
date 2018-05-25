@@ -82,7 +82,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="NuXJREPL.cpp" />
     <ClCompile Include="NuXJScript.cpp" />
+    <ClCompile Include="stdlibJS.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NuXJScript.h" />

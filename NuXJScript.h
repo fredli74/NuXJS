@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 #include <iostream>
+#include <ctime>
 
 namespace NuXJScript {
 
@@ -979,7 +980,7 @@ class VarList : public GCItem, public QuickArray<Value> {
 						: super(rt.getHeap().roots()), rt(rt), QuickArray<Value>(count, &rt.getHeap()) {
 					std::copy(values + 0, values + count, begin());
 				}
-				Var operator[](UInt32 index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
+				Var operator[](int index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
 	
 	protected:	Runtime& rt;
 				virtual void gcMark(Heap& heap) const {
