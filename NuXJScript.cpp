@@ -1421,57 +1421,6 @@ void ScriptFunction::constructCompleteObject(Runtime& rt) const {
 	completeObject->setOwnProperty(rt, &LENGTH_STRING, code->getArgumentsCount(), HIDDEN_CONST_FLAGS);
 }
 
-/* --- SpecialConstructorFunction --- */
-
-SpecialConstructorFunction::SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction)
-		: super(gcList), regularFunction(regularFunction), constructorFunction(constructorFunction) {
-	assert(regularFunction != 0);
-}
-
-Value SpecialConstructorFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return regularFunction->invoke(rt, processor, argc, argv, thisObject);
-}
-
-Value SpecialConstructorFunction::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	if (constructorFunction == 0) {
-		Value v;
-		regularFunction->getProperty(rt, &NAME_STRING, &v);
-		Heap& heap = rt.getHeap();
-		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), " is not a constructor"));
-	}
-	return constructorFunction->invoke(rt, processor, argc, argv, thisObject);
-}
-
-void SpecialConstructorFunction::constructCompleteObject(Runtime& rt) const {
-	Object* templateFunction = regularFunction;
-	if (constructorFunction != 0) {
-		createPrototypeObject(rt, completeObject, true);
-		templateFunction = constructorFunction;
-	}
-	Value v;
-	Flags flags = templateFunction->getProperty(rt, &NAME_STRING, &v);
-	if (flags != NONEXISTENT) { // FIX : getName?
-		completeObject->setOwnProperty(rt, &NAME_STRING, v, flags);
-	}
-	flags = templateFunction->getProperty(rt, &LENGTH_STRING, &v);
-	if (flags != NONEXISTENT) { // FIX : in the future I think we should have a getLength
-		completeObject->setOwnProperty(rt, &LENGTH_STRING, v, flags);
-	}
-}
-
-/* --- FunctionPrototypeFunction --- */
-
-Value FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return Value::UNDEFINED;
-}
-
-Object* FunctionPrototypeFunction::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
-
-void FunctionPrototypeFunction::constructCompleteObject(Runtime& rt) const {
-	completeObject->setOwnProperty(rt, &NAME_STRING, &String::EMPTY, DONT_ENUM_FLAG);
-	completeObject->setOwnProperty(rt, &LENGTH_STRING, Value(0.0), HIDDEN_CONST_FLAGS);
-}
-
 /* --- Error --- */
 
 Error::Error(GCList& gcList, ErrorType type, const String* message)
@@ -1511,15 +1460,31 @@ void Error::constructCompleteObject(Runtime& rt) const {
 	}
 }
 
-/* --- ErrorPrototype --- */
-
-ErrorPrototype::ErrorPrototype(GCList& gcList, ErrorType type) : super(gcList, type) { }
-
-Object* ErrorPrototype::getPrototype(Runtime& rt) const {
-	return (errorType == GENERIC_ERROR ? rt.getObjectPrototype() : rt.getErrorPrototype(GENERIC_ERROR));
-}
-
 /* --- Arguments --- */
+
+class Arguments : public LazyScriptObject<Object> {
+	public:		typedef LazyScriptObject<Object> super;
+
+				Arguments(GCList& gcList, FunctionScope* scope, UInt32 argumentsCount);
+				virtual const String* getClassName() const;
+				virtual const String* toString(Heap& heap) const;
+				virtual Object* getPrototype(Runtime& rt) const;
+				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
+				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
+				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
+				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
+
+	protected:	virtual void constructCompleteObject(Runtime& rt) const;
+				Value* findProperty(const Value& key) const;
+				FunctionScope* const scope;
+				UInt32 const argumentsCount;
+				QuickArray<Byte> deletedArguments;
+
+				virtual void gcMark(Heap& heap) const {
+					heap.mark(scope);
+					super::gcMark(heap);
+				}
+};
 
 Arguments::Arguments(GCList& gcList, FunctionScope* scope, UInt32 argumentsCount)
 		: super(gcList), scope(scope), argumentsCount(argumentsCount), deletedArguments(argumentsCount, &gcList.getHeap()) {
@@ -1583,9 +1548,9 @@ void Scope::writeVar(Runtime& rt, const String* name, const Value& v) {
 	return parentScope->writeVar(rt, name, v);
 }
 
-bool Scope::deleteVar(Runtime& rt, const String* key) {
+bool Scope::deleteVar(Runtime& rt, const String* name) {
 	assert(parentScope != 0);
-	return parentScope->deleteVar(rt, key);
+	return parentScope->deleteVar(rt, name);
 }
 
 void Scope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
@@ -1713,89 +1678,6 @@ void FunctionScope::declareVar(Runtime& rt, const String* name, const Value& ini
 	}
 }
 
-/* --- EvalScope --- */
-
-Processor::EvalScope::EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
-
-void Processor::EvalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
-	parentScope->declareVar(rt, name, initValue, false);
-}
-
-/* --- GlobalScope --- */
-
-Runtime::GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
-Flags Runtime::GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobalObject()->getProperty(rt, name, v); }
-void Runtime::GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobalObject()->setProperty(rt, name, v); }
-bool Runtime::GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobalObject()->deleteOwnProperty(rt, name); }
-void Runtime::GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
-	Value v;
-	// FIX : deep or not?!
-	const Flags flags = rt.getGlobalObject()->getOwnProperty(rt, name, &v);
-	if (flags == NONEXISTENT || !initValue.isUndefined()) {
-		rt.getGlobalObject()->setOwnProperty(rt, name, initValue, dontDelete ? DONT_DELETE_FLAG : 0);
-	}
-}
-
-/* --- CatchScope --- */
-
-Processor::CatchScope::CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
-		: super(gcList, parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
-
-Flags Processor::CatchScope::readVar(Runtime& rt, const String* name, Value* v) const {
-	if (name->isEqualTo(*exceptionName)) {
-		*v = exceptionValue;
-		return DONT_DELETE_FLAG | EXISTS_FLAG;
-	} else {
-		return parentScope->readVar(rt, name, v);
-	}
-}
-
-void Processor::CatchScope::writeVar(Runtime& rt, const String* name, const Value& v) {
-	if (name->isEqualTo(*exceptionName)) {
-		exceptionValue = v;
-	} else {
-		parentScope->writeVar(rt, name, v);
-	}
-}
-
-bool Processor::CatchScope::deleteVar(Runtime& rt, const String* name) {
-	if (name->isEqualTo(*exceptionName)) {
-		return false;
-	} else {
-		return parentScope->deleteVar(rt, name);
-	}
-}
-
-/* --- WithScope --- */
-
-Processor::WithScope::WithScope(GCList& gcList, Scope* parentScope, Object* withObject) : super(gcList, parentScope), withObject(withObject) { }
-
-Flags Processor::WithScope::readVar(Runtime& rt, const String* name, Value* v) const {
-	Flags flags = withObject->getProperty(rt, name, v);
-	return (flags != NONEXISTENT ? flags : parentScope->readVar(rt, name, v));
-}
-
-void Processor::WithScope::writeVar(Runtime& rt, const String* name, const Value& v) {
-	const Value key(name);
-	for (Object* o = withObject; o != 0; o = o->getPrototype(rt)) {
-		Value dummy;
-		const Flags flags = o->getOwnProperty(rt, key, &dummy);
-		if (flags != NONEXISTENT) {
-			if ((flags & READ_ONLY_FLAG) == 0) {
-				withObject->setOwnProperty(rt, key, v);
-			}
-			return;
-		}
-	}
-	parentScope->writeVar(rt, name, v);
-}
-
-bool Processor::WithScope::deleteVar(Runtime& rt, const String* name) {
-	Value dummy;
-	Flags findFlags = withObject->getProperty(rt, name, &dummy);
-	return (findFlags != NONEXISTENT ? withObject->deleteOwnProperty(rt, name) : parentScope->deleteVar(rt, name));
-}
-
 /* --- ScriptException --- */
 
 void ScriptException::throwError(Heap& heap, ErrorType type, const String* message) {
@@ -1906,6 +1788,97 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 	assert(opcodeInfo[opcode].opcode == opcode); // source code check
 	return opcodeInfo[opcode];
 }
+
+/*
+	This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
+	code pointer (for constants etc) and it declares deletable vars.
+*/
+struct Processor::EvalScope : public Scope {
+	typedef Scope super;
+	EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
+	virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
+		parentScope->declareVar(rt, name, initValue, false);
+	}
+};
+	
+/*
+	The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
+	catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
+	exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
+	the locals variables.
+*/
+struct Processor::CatchScope : public Scope {
+	typedef Scope super;
+
+	CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue)
+			: super(gcList, parentScope), exceptionName(exceptionName), exceptionValue(exceptionValue) { }
+	virtual Flags readVar(Runtime& rt, const String* name, Value* v) const  {
+		if (name->isEqualTo(*exceptionName)) {
+			*v = exceptionValue;
+			return DONT_DELETE_FLAG | EXISTS_FLAG;
+		} else {
+			return parentScope->readVar(rt, name, v);
+		}
+	}
+	virtual void writeVar(Runtime& rt, const String* name, const Value& v) {
+		if (name->isEqualTo(*exceptionName)) {
+			exceptionValue = v;
+		} else {
+			parentScope->writeVar(rt, name, v);
+		}
+	}
+	virtual bool deleteVar(Runtime& rt, const String* name) {
+		if (name->isEqualTo(*exceptionName)) {
+			return false;
+		} else {
+			return parentScope->deleteVar(rt, name);
+		}
+	}
+
+	const String* exceptionName;
+	Value exceptionValue;
+
+	virtual void gcMark(Heap& heap) const {
+		heap.mark(exceptionName);
+		exceptionValue.gcMark(heap);
+		super::gcMark(heap);
+	}
+};
+
+struct Processor::WithScope : public Scope {
+	typedef Scope super;
+	WithScope(GCList& gcList, Scope* parentScope, Object* withObject)
+	 		: super(gcList, parentScope), withObject(withObject) { }
+	virtual Flags readVar(Runtime& rt, const String* name, Value* v) const {
+		Flags flags = withObject->getProperty(rt, name, v);
+		return (flags != NONEXISTENT ? flags : parentScope->readVar(rt, name, v));
+	}
+	virtual void writeVar(Runtime& rt, const String* name, const Value& v) {
+		const Value key(name);
+		for (Object* o = withObject; o != 0; o = o->getPrototype(rt)) {
+			Value dummy;
+			const Flags flags = o->getOwnProperty(rt, key, &dummy);
+			if (flags != NONEXISTENT) {
+				if ((flags & READ_ONLY_FLAG) == 0) {
+					withObject->setOwnProperty(rt, key, v);
+				}
+				return;
+			}
+		}
+		parentScope->writeVar(rt, name, v);
+	}
+	virtual bool deleteVar(Runtime& rt, const String* name) {
+		Value dummy;
+		Flags findFlags = withObject->getProperty(rt, name, &dummy);
+		return (findFlags != NONEXISTENT ? withObject->deleteOwnProperty(rt, name) : parentScope->deleteVar(rt, name));
+	}
+
+	Object* withObject;
+	virtual void gcMark(Heap& heap) const {
+		heap.mark(withObject);
+		super::gcMark(heap);
+	}
+};
 
 Processor::Processor(Runtime& rt) : super(rt.heap.roots()), rt(rt), heap(rt.heap), currentFrame(0), firstCatcher(0)
 		, stack(rt.stackSize, &heap) {
@@ -2355,7 +2328,6 @@ bool Processor::run(Int32 maxCycles) {
 
 /* --- Compiler --- */
 
-// FIX : sort
 enum OperatorType {
 	GROUP, UNARY, BINARY, IN_OPERATOR, ABSTRACT_EQUAL, ASSIGNMENT, COMPOUND_ASSIGNMENT, PRE_INC_DEC, POST_INC_DEC
 	, LOGICAL_AND_OR, PROPERTY_BRACKETS, PROPERTY_DOT, CONDITIONAL, FUNCTION_CALL, COMMA, VOID_OPERATOR
@@ -2366,7 +2338,7 @@ enum Associativity { LEFT_TO_RIGHT, RIGHT_TO_LEFT };
 struct OperatorInfo {
 	const char* token;
 	const char* closeToken;
-	Precedence prec;
+	Compiler::Precedence prec;
 	Associativity assoc;
 	OperatorType type;
 	Processor::Opcode vmOp;
@@ -2374,67 +2346,65 @@ struct OperatorInfo {
 	bool primitiveOutput;
 };
 
-// FIX : sort these two
 const OperatorInfo PRE_OPS[] = {
-	{ "(", ")", GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP, false, false },
-	{ "++", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP, true, true },
-	{ "--", 0, PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP, true, true },
-	{ "+", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true, true },
-	{ "-", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true, true },
-	{ "~", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true, true },
-	{ "!", 0, PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP, false, true },
-	{ "void", 0, PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP, false, true },
-	{ "delete", 0, PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP, false, true },
-	{ "new", 0, NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP, false, false },
-	{ "typeof", 0, PREFIX_PREC, RIGHT_TO_LEFT, TYPE_OF, Processor::TYPEOF_OP, false, true }
+	{ "(", ")", Compiler::GROUP_PREC, RIGHT_TO_LEFT, GROUP, Processor::INVALID_OP, false, false },
+	{ "++", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::INC_OP, true, true },
+	{ "--", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, PRE_INC_DEC, Processor::DEC_OP, true, true },
+	{ "+", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::PLUS_OP, true, true },
+	{ "-", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::MINUS_OP, true, true },
+	{ "~", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::INV_OP, true, true },
+	{ "!", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, UNARY, Processor::NOT_OP, false, true },
+	{ "void", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, VOID_OPERATOR, Processor::VOID_OP, false, true },
+	{ "delete", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, DELETE_OPERATOR, Processor::VOID_OP, false, true },
+	{ "new", 0, Compiler::NEW_PREC, RIGHT_TO_LEFT, NEW_OPERATOR, Processor::VOID_OP, false, false },
+	{ "typeof", 0, Compiler::PREFIX_PREC, RIGHT_TO_LEFT, TYPE_OF, Processor::TYPEOF_OP, false, true }
 };
 
 const OperatorInfo POST_OPS[] = {
-	{ "===", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP, false, true },
-	{ "==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::EQ_OP, false, true },
-	{ "=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP, false, false },
-    { ">>>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::USHR_OP, true, true },
-	{ ">>=", 0, SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SHR_OP, true, true },
-	{ "<<=", 0, SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SHL_OP, true, true },
-	{ "+=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::ADD_OP, true, true },
-	{ "-=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SUB_OP, true, true },
-	{ "*=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::MUL_OP, true, true },
-	{ "/=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::DIV_OP, true, true },
-	{ "%=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::MOD_OP, true, true },
-	{ "&=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::AND_OP, true, true },
-	{ "^=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::XOR_OP, true, true },
-	{ "|=", 0, ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::OR_OP, true, true },
-	{ ">>>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP, true, true },
-	{ ">>", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP, true, true },
-	{ "<<", 0, SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true, true },
-	{ "++", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true, true },
-	{ "--", 0, POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true, true },
-	{ "&&", 0, LOGICAL_AND_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JF_OR_POP_OP, false, false },
-	{ "||", 0, LOGICAL_OR_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JT_OR_POP_OP, false, false },
-	{ "+", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true, true },
-	{ "-", 0, ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true, true },
-	{ "*", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true, true },
-	{ "/", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP, true, true },
-	{ "%", 0, MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP, true, true },
-	{ "&", 0, BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP, true, true },
-	{ "^", 0, BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true, true },
-	{ "|", 0, BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true, true },
-	{ "!==", 0, EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP, false, true },
-	{ "!=", 0, EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::NEQ_OP, false, true },
-	{ "<=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true, true },
-	{ "<", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true, true },
-	{ ">=", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true, true },
-	{ ">", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP, true, true },
-	{ ".", 0, PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP, false, false },
-	{ "[", "]", PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP, false, false },
-	{ "?", ":", CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP, false, false },
-	{ "(", ")", FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP, false, false },
-	{ ",", 0, COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP, false, false },
-	{ "instanceof", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false, true },
-	{ "in", 0, RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, false, true }
+	{ "===", 0, Compiler::EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_EQ_OP, false, true },
+	{ "==", 0, Compiler::EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::EQ_OP, false, true },
+	{ "=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, ASSIGNMENT, Processor::INVALID_OP, false, false },
+    { ">>>=", 0, Compiler::SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::USHR_OP, true, true },
+	{ ">>=", 0, Compiler::SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SHR_OP, true, true },
+	{ "<<=", 0, Compiler::SHIFT_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SHL_OP, true, true },
+	{ "+=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::ADD_OP, true, true },
+	{ "-=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::SUB_OP, true, true },
+	{ "*=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::MUL_OP, true, true },
+	{ "/=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::DIV_OP, true, true },
+	{ "%=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::MOD_OP, true, true },
+	{ "&=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::AND_OP, true, true },
+	{ "^=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::XOR_OP, true, true },
+	{ "|=", 0, Compiler::ASSIGN_PREC, RIGHT_TO_LEFT, COMPOUND_ASSIGNMENT, Processor::OR_OP, true, true },
+	{ ">>>", 0, Compiler::SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::USHR_OP, true, true },
+	{ ">>", 0, Compiler::SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHR_OP, true, true },
+	{ "<<", 0, Compiler::SHIFT_PREC, LEFT_TO_RIGHT, BINARY, Processor::SHL_OP, true, true },
+	{ "++", 0, Compiler::POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::INC_OP, true, true },
+	{ "--", 0, Compiler::POST_INC_DEC_PREC, LEFT_TO_RIGHT, POST_INC_DEC, Processor::DEC_OP, true, true },
+	{ "&&", 0, Compiler::LOGICAL_AND_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JF_OR_POP_OP, false, false },
+	{ "||", 0, Compiler::LOGICAL_OR_PREC, RIGHT_TO_LEFT, LOGICAL_AND_OR, Processor::JT_OR_POP_OP, false, false },
+	{ "+", 0, Compiler::ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::ADD_OP, true, true },
+	{ "-", 0, Compiler::ADD_SUB_PREC, LEFT_TO_RIGHT, BINARY, Processor::SUB_OP, true, true },
+	{ "*", 0, Compiler::MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MUL_OP, true, true },
+	{ "/", 0, Compiler::MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::DIV_OP, true, true },
+	{ "%", 0, Compiler::MUL_DIV_PREC, LEFT_TO_RIGHT, BINARY, Processor::MOD_OP, true, true },
+	{ "&", 0, Compiler::BIT_AND_PREC, LEFT_TO_RIGHT, BINARY, Processor::AND_OP, true, true },
+	{ "^", 0, Compiler::BIT_XOR_PREC, LEFT_TO_RIGHT, BINARY, Processor::XOR_OP, true, true },
+	{ "|", 0, Compiler::BIT_OR_PREC, LEFT_TO_RIGHT, BINARY, Processor::OR_OP, true, true },
+	{ "!==", 0, Compiler::EQUALITY_PREC, LEFT_TO_RIGHT, BINARY, Processor::X_NEQ_OP, false, true },
+	{ "!=", 0, Compiler::EQUALITY_PREC, LEFT_TO_RIGHT, ABSTRACT_EQUAL, Processor::NEQ_OP, false, true },
+	{ "<=", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LEQ_OP, true, true },
+	{ "<", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::LT_OP, true, true },
+	{ ">=", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GEQ_OP, true, true },
+	{ ">", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::GT_OP, true, true },
+	{ ".", 0, Compiler::PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_DOT, Processor::INVALID_OP, false, false },
+	{ "[", "]", Compiler::PROPERTY_PREC, LEFT_TO_RIGHT, PROPERTY_BRACKETS, Processor::INVALID_OP, false, false },
+	{ "?", ":", Compiler::CONDITIONAL_PREC, RIGHT_TO_LEFT, CONDITIONAL, Processor::INVALID_OP, false, false },
+	{ "(", ")", Compiler::FUNCTION_CALL_PREC, LEFT_TO_RIGHT, FUNCTION_CALL, Processor::INVALID_OP, false, false },
+	{ ",", 0, Compiler::COMMA_PREC, LEFT_TO_RIGHT, COMMA, Processor::INVALID_OP, false, false },
+	{ "instanceof", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, BINARY, Processor::INSTANCE_OF_OP, false, true },
+	{ "in", 0, Compiler::RELATIONAL_PREC, LEFT_TO_RIGHT, IN_OPERATOR, Processor::IN_OP, false, true }
 };
 
-// FIX : sort
 enum Statement {
 	VAR_STATEMENT, IF_STATEMENT, WHILE_STATEMENT, DO_WHILE_STATEMENT, FOR_STATEMENT, RETURN_STATEMENT
 	, CONTINUE_STATEMENT, BREAK_STATEMENT, TRY_STATEMENT, THROW_STATEMENT, SWITCH_STATEMENT, FUNCTION_STATEMENT
@@ -2442,13 +2412,35 @@ enum Statement {
 };
 enum Literal { NULL_LITERAL, FALSE_LITERAL, TRUE_LITERAL, FUNCTION_LITERAL, THIS_LITERAL };
 
+struct Compiler::ExpressionResult {
+	enum Type {
+		NONE				// void
+		, PUSHED			// arbitrary value on stack
+		, PUSHED_PRIMITIVE	// primitive value on stack
+		, CONSTANT			// constant (and primitive) value on stack
+		, LOCAL				// arbitrary value in local variable
+		, NAMED				// arbitrary value in named variable
+		, PROPERTY			// arbitrary value in object property
+		, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
+	};
+	ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
+	ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
+	bool onStack() const { return t == PUSHED || t == PUSHED_PRIMITIVE; };
+	Type t;
+	Value v;
+};
+	
 struct Compiler::SemanticScope {
 	enum Type { ROOT_TYPE, LABEL_TYPE, ITERATOR_LABEL_TYPE, TRY_TYPE, CATCH_TYPE, FINALLY_TYPE, WITH_TYPE };
+	
 	SemanticScope(Heap& heap, Type type, Int32 stackDepthOnEntry, SemanticScope* next)
-			: breaks(&heap), continues(&heap), finallys(&heap), type(type), stackDepthOnEntry(stackDepthOnEntry), next(next) { }
+			: breaks(&heap), continues(&heap), finallys(&heap), type(type), stackDepthOnEntry(stackDepthOnEntry)
+			, next(next) { }
+	
 	SemanticScope(Heap& heap, const String& label, Int32 stackDepthOnEntry, SemanticScope* next)
 			: breaks(&heap), continues(&heap), finallys(&heap), type(LABEL_TYPE), label(label)
 			, stackDepthOnEntry(stackDepthOnEntry), next(next) { }
+	
 	void makeIteratorScopes(SemanticScope* untilScope) {
 		for (SemanticScope* s = this; s != untilScope; s = s->next) {
 			s->type = ITERATOR_LABEL_TYPE;
@@ -2488,12 +2480,12 @@ struct Compiler::SemanticScope {
 	}
 	
 	Type type;
-	const String label; // empty for automatic while, for, case labels
+	const String label; 					// empty for automatic while, for, case labels
 	SemanticScope* const next;
 	Int32 stackDepthOnEntry;
-	QuickVector<BranchPoint> breaks; // source points for break jmp's
-	QuickVector<BranchPoint> continues; // source points for continue jmp's
-	QuickVector<BranchPoint> finallys; // source points for finally jsr's
+	QuickVector<BranchPoint> breaks; 		// source points for break jmp's
+	QuickVector<BranchPoint> continues; 	// source points for continue jmp's
+	QuickVector<BranchPoint> finallys; 		// source points for finally jsr's
 };
 
 Compiler::Compiler(GCList& gcList, Code* code, Target compileFor)
@@ -2509,7 +2501,7 @@ const String* Compiler::newHashedString(Heap& heap, const Char* b, const Char* e
 	return s;
 }
 
-void Compiler::error(ErrorType errorType, const char* message) { ScriptException::throwError(heap, errorType, message); }
+void Compiler::error(ErrorType type, const char* message) { ScriptException::throwError(heap, type, message); }
 
 void Compiler::CodeSection::emit(Processor::Opcode opcode, Int32 operand) {
 	if (inDeadCode()) {	// unknown stack depth = dead code
@@ -4138,7 +4130,117 @@ void Compiler::getStopLineAndColumnNumbers(int& lineNumber, int& columnNumber) c
 	}
 }
 
-Value EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+/* --- Runtime --- */
+
+struct Runtime::ErrorPrototype : public Error {
+	public:		typedef Error super;
+				ErrorPrototype(GCList& gcList, ErrorType type);
+				virtual Object* getPrototype(Runtime& rt) const;
+};
+
+
+Runtime::ErrorPrototype::ErrorPrototype(GCList& gcList, ErrorType type) : super(gcList, type) { }
+
+Object* Runtime::ErrorPrototype::getPrototype(Runtime& rt) const {
+	return (errorType == GENERIC_ERROR ? rt.getObjectPrototype() : rt.getErrorPrototype(GENERIC_ERROR));
+}
+
+Runtime::GlobalScope::GlobalScope(GCList& gcList) : super(gcList, 0) { deleteOnPop = false; }
+Flags Runtime::GlobalScope::readVar(Runtime& rt, const String* name, Value* v) const { return rt.getGlobalObject()->getProperty(rt, name, v); }
+void Runtime::GlobalScope::writeVar(Runtime& rt, const String* name, const Value& v) { rt.getGlobalObject()->setProperty(rt, name, v); }
+bool Runtime::GlobalScope::deleteVar(Runtime& rt, const String* name) { return rt.getGlobalObject()->deleteOwnProperty(rt, name); }
+void Runtime::GlobalScope::declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
+	Value v;
+	// FIX : deep or not?!
+	const Flags flags = rt.getGlobalObject()->getOwnProperty(rt, name, &v);
+	if (flags == NONEXISTENT || !initValue.isUndefined()) {
+		rt.getGlobalObject()->setOwnProperty(rt, name, initValue, dontDelete ? DONT_DELETE_FLAG : 0);
+	}
+}
+
+
+struct Runtime::FunctionPrototypeFunction : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
+	FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+	virtual Object* getPrototype(Runtime& rt) const;
+	virtual void constructCompleteObject(Runtime& rt) const;
+};
+
+Value Runtime::FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return Value::UNDEFINED;
+}
+
+Object* Runtime::FunctionPrototypeFunction::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
+
+void Runtime::FunctionPrototypeFunction::constructCompleteObject(Runtime& rt) const {
+	completeObject->setOwnProperty(rt, &NAME_STRING, &String::EMPTY, DONT_ENUM_FLAG);
+	completeObject->setOwnProperty(rt, &LENGTH_STRING, Value(0.0), HIDDEN_CONST_FLAGS);
+}
+
+/* FIX : funny C++11 thing
+#include <functional>
+template<class F> Value newNativeFunction(Heap& heap, const F& f) { return Value(heap.govern(new FunctorAdapter<F>(f))); }
+mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
+}));
+*/
+
+struct SeparateConstructorFunction : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
+	SeparateConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+	virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+	virtual const Code* getScriptCode() const { return regularFunction->getScriptCode(); }
+
+	virtual void constructCompleteObject(Runtime& rt) const;
+	Function* const regularFunction;
+	Function* const constructorFunction;
+
+	virtual void gcMark(Heap& heap) const {
+		heap.mark(regularFunction);
+		heap.mark(constructorFunction);
+		super::gcMark(heap);
+	}
+};
+
+SeparateConstructorFunction::SeparateConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction)
+		: super(gcList), regularFunction(regularFunction), constructorFunction(constructorFunction) {
+	assert(regularFunction != 0);
+}
+
+Value SeparateConstructorFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	return regularFunction->invoke(rt, processor, argc, argv, thisObject);
+}
+
+Value SeparateConstructorFunction::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	if (constructorFunction == 0) {
+		Value v;
+		regularFunction->getProperty(rt, &NAME_STRING, &v);
+		Heap& heap = rt.getHeap();
+		ScriptException::throwError(heap, TYPE_ERROR, String::concat(heap, *v.toString(heap), " is not a constructor"));
+	}
+	return constructorFunction->invoke(rt, processor, argc, argv, thisObject);
+}
+
+void SeparateConstructorFunction::constructCompleteObject(Runtime& rt) const {
+	Object* templateFunction = regularFunction;
+	if (constructorFunction != 0) {
+		createPrototypeObject(rt, completeObject, true);
+		templateFunction = constructorFunction;
+	}
+	Value v;
+	Flags flags = templateFunction->getProperty(rt, &NAME_STRING, &v);
+	if (flags != NONEXISTENT) { // FIX : getName?
+		completeObject->setOwnProperty(rt, &NAME_STRING, v, flags);
+	}
+	flags = templateFunction->getProperty(rt, &LENGTH_STRING, &v);
+	if (flags != NONEXISTENT) { // FIX : in the future I think we should have a getLength
+		completeObject->setOwnProperty(rt, &LENGTH_STRING, v, flags);
+	}
+}
+
+Value Runtime::EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	if (argc < 1) {
 		return Value::UNDEFINED;
 	}
@@ -4151,14 +4253,6 @@ Value EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const
 	processor.enterEvalCode(rt.compileEvalCode(expression), direct);
 	return Value::UNDEFINED;
 }
-
-/* FIX : funny C++11 thing
-#include <functional>
-template<class F> Value newNativeFunction(Heap& heap, const F& f) { return Value(heap.govern(new FunctorAdapter<F>(f))); }
-mathObject->setOwnProperty(*this, &SQRT_STRING, newNativeFunction(heap, [](Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	return (argc >= 1 ? Value(sqrt(argv[0].toDouble())) : Value::NOT_A_NUMBER);
-}));
-*/
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
@@ -4221,7 +4315,7 @@ struct Support {
 			if (regularFunction != 0) {
 				Function* constructorFunction = (argc >= 2 ? argv[1].asFunction() : 0);
 				Heap& heap = rt.getHeap();
-				return new(heap) SpecialConstructorFunction(heap.managed(), regularFunction, constructorFunction);
+				return new(heap) SeparateConstructorFunction(heap.managed(), regularFunction, constructorFunction);
 			}
 		}
 		return Value::UNDEFINED;

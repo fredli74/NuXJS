@@ -401,6 +401,50 @@ class Enumerator : public Object {
 				Enumerator(GCList& gcList) : super(gcList) { }
 };
 
+
+class RangeEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+				RangeEnumerator(GCList& gcList, Int32 from, Int32 count);
+				virtual const String* nextPropertyName();
+	
+	protected:	Heap& heap;
+				const Int32 to;
+				Int32 index;
+};
+
+class StringListEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+				StringListEnumerator(GCList& gcList, UInt32 initialCapacity);
+				void add(const String* s);
+				virtual const String* nextPropertyName();
+
+	protected:	QuickVector<const String*> stringList;
+				UInt32 nextIndex;
+
+				virtual void gcMark(Heap& heap) const {
+					heap.markViaPointers(stringList.begin(), stringList.end());
+					super::gcMark(heap);
+				}
+};
+
+class JoiningEnumerator : public Enumerator {
+	public:		typedef Enumerator super;
+				JoiningEnumerator(GCList& gcList, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject);
+				virtual const String* nextPropertyName();
+
+	protected:	Runtime& rt;
+				Enumerator* const leftEnumerator;
+				const Object* const rightObject;
+				Enumerator* const rightEnumerator;
+
+				virtual void gcMark(Heap& heap) const {
+					heap.mark(leftEnumerator);
+					heap.mark(rightObject);
+					heap.mark(rightEnumerator);
+					super::gcMark(heap);
+				}
+};
+
 /*
 	Note that although the ECMAScript specification clearly separates string values from String objects, this
 	implementation regards both as Objects for efficiency (e.g. for quickly retrieving properties like the character
@@ -444,49 +488,6 @@ class String : public Object, public QuickArray<Char> {
 
 	protected:	mutable UInt32 bloom;
 				mutable UInt32 hash;
-};
-
-class RangeEnumerator : public Enumerator {
-	public:		typedef Enumerator super;
-				RangeEnumerator(GCList& gcList, Int32 from, Int32 count);
-				virtual const String* nextPropertyName();
-				
-	protected:	Heap& heap;
-				const Int32 to;
-				Int32 index;
-};
-
-class StringListEnumerator : public Enumerator {
-	public:		typedef Enumerator super;
-				StringListEnumerator(GCList& gcList, UInt32 initialCapacity);
-				void add(const String* s);
-				virtual const String* nextPropertyName();
-
-	protected:	QuickVector<const String*> stringList;
-				UInt32 nextIndex;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.markViaPointers(stringList.begin(), stringList.end());
-					super::gcMark(heap);
-				}
-};
-
-class JoiningEnumerator : public Enumerator {
-	public:		typedef Enumerator super;
-				JoiningEnumerator(GCList& gcList, Runtime& rt, Enumerator* leftEnumerator, const Object* rightObject);
-				virtual const String* nextPropertyName();
-
-	protected:	Runtime& rt;
-				Enumerator* const leftEnumerator;
-				const Object* const rightObject;
-				Enumerator* const rightEnumerator;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(leftEnumerator);
-					heap.mark(rightObject);
-					heap.mark(rightEnumerator);
-					super::gcMark(heap);
-				}
 };
 
 class ScriptObject : public Object, public Table {
@@ -684,13 +685,6 @@ template<class F> struct FunctorAdapter : public Function {
 	F f;
 };
 
-class EvalFunction : public Function {
-	public:		typedef Function super;
-				EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-	protected:	bool direct;
-};
-
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
 				ExtensibleFunction(GCList& gcList) : super(gcList) { }
@@ -698,20 +692,12 @@ class ExtensibleFunction : public LazyScriptObject<Function> {
 				void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
 };
 
-class FunctionPrototypeFunction : public ExtensibleFunction {
-	public:		typedef ExtensibleFunction super;
-				FunctionPrototypeFunction(GCList& gcList) : super(gcList) { }
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Object* getPrototype(Runtime& rt) const;
-	protected:	virtual void constructCompleteObject(Runtime& rt) const;
-};
-
 class Scope : public GCItem {
 	public:		typedef GCItem super;
 				Scope(GCList& gcList, Scope* parentScope);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-				virtual bool deleteVar(Runtime& rt, const String* key);
+				virtual bool deleteVar(Runtime& rt, const String* name);
 				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 				Value* getLocalsPointer() const { return localsPointer; }
 				Scope* getParentScope() const { return parentScope; }
@@ -752,24 +738,6 @@ class ScriptFunction : public ExtensibleFunction {
 				}
 };
 
-class SpecialConstructorFunction : public ExtensibleFunction {
-	public:		typedef ExtensibleFunction super;
-				SpecialConstructorFunction(GCList& gcList, Function* regularFunction, Function* constructorFunction);
-				virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual Value construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-				virtual const Code* getScriptCode() const { return regularFunction->getScriptCode(); }
-	
-	protected:	virtual void constructCompleteObject(Runtime& rt) const;
-				Function* const regularFunction;
-				Function* const constructorFunction;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(regularFunction);
-					heap.mark(constructorFunction);
-					super::gcMark(heap);
-				}
-};
-
 enum ErrorType {
 	GENERIC_ERROR, EVAL_ERROR, RANGE_ERROR, REFERENCE_ERROR, SYNTAX_ERROR, TYPE_ERROR, URI_ERROR, ERROR_TYPE_COUNT
 };
@@ -797,12 +765,6 @@ class Error : public LazyScriptObject<Object> {
 				}
 };
 
-class ErrorPrototype : public Error {
-	public:		typedef Error super;
-				ErrorPrototype(GCList& gcList, ErrorType type);
-				virtual Object* getPrototype(Runtime& rt) const;
-};
-
 class FunctionScope : public Scope {
 	friend class Arguments;
 	
@@ -811,7 +773,7 @@ class FunctionScope : public Scope {
 				FunctionScope(GCList& gcList, ScriptFunction* function, UInt32 argc, const Value* argv);
 				virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 				virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-				virtual bool deleteVar(Runtime& rt, const String* key);
+				virtual bool deleteVar(Runtime& rt, const String* name);
 				virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 				ScriptObject* getDynamicVars(Runtime& rt) const;
 
@@ -843,10 +805,20 @@ class Runtime : public GCItem {
 					GlobalScope(GCList& gcList);
 					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
 					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-					virtual bool deleteVar(Runtime& rt, const String* key);
+					virtual bool deleteVar(Runtime& rt, const String* name);
 					virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
 				};
 	
+				class EvalFunction : public Function {
+					public:		typedef Function super;
+								EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
+								virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
+					protected:	bool direct;
+				};
+	
+				struct ErrorPrototype;
+				struct FunctionPrototypeFunction;
+
 	public:		typedef GCItem super;
 	
 				enum Prototype {
@@ -1037,7 +1009,9 @@ template<class F> struct AccessorBase::VarFunctorAdapter : public ExtensibleFunc
 	}
 	const F f;
 };
-inline Value AccessorBase::makeValue(const VarFunction& f) const { return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f); }
+inline Value AccessorBase::makeValue(const VarFunction& f) const {
+	return new(rt.getHeap()) VarFunctorAdapter<VarFunction>(rt.getHeap().managed(), f);
+}
 
 template<class C> struct AccessorBase::VarMemberFunctionAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
@@ -1053,31 +1027,9 @@ template<class C> struct AccessorBase::VarMemberFunctionAdapter : public Extensi
 	}
 	Var (C::*f)(Runtime&, const Var&, const VarList&);
 };
-template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const { return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f); }
-
-class Arguments : public LazyScriptObject<Object> {
-	public:		typedef LazyScriptObject<Object> super;
-
-				Arguments(GCList& gcList, FunctionScope* scope, UInt32 argumentsCount);
-				virtual const String* getClassName() const;
-				virtual const String* toString(Heap& heap) const;
-				virtual Object* getPrototype(Runtime& rt) const;
-				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
-				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
-				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
-				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
-
-	protected:	virtual void constructCompleteObject(Runtime& rt) const;
-				Value* findProperty(const Value& key) const;
-				FunctionScope* const scope;
-				UInt32 const argumentsCount;
-				QuickArray<Byte> deletedArguments;
-
-				virtual void gcMark(Heap& heap) const {
-					heap.mark(scope);
-					super::gcMark(heap);
-				}
-};
+template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const {
+	return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f);
+}
 
 class Processor : public GCItem {
 	friend class ScriptFunction;
@@ -1171,72 +1123,7 @@ class Processor : public GCItem {
 				bool run(Int32 maxCycles);
 				Value getResult() const;
 
-	protected:	/*
-					This is the direct scope of an eval(), it only bridges all virtuals to the parent FunctionScope, but has a different
-					code pointer (for constants etc) and it declares deletable vars.
-				*/
-				struct EvalScope : public Scope {
-					typedef Scope super;
-					EvalScope(GCList& gcList, Scope* parentScope);
-					virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
-				};
-
-				/*
-					The CatchScope is necessary because within a catch block there is a single extra variable that is local to the
-					catch block. It is created dynamically and pushed on the call stack when entering a catch block and removed at any
-					exit point. Remember you can access the catch variable via evals, otherwise we could have just placed it among
-					the locals variables.
-				*/
-				struct CatchScope : public Scope {
-					typedef Scope super;
-
-					CatchScope(GCList& gcList, Scope* parentScope, const String* exceptionName, const Value& exceptionValue);
-					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
-					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-					virtual bool deleteVar(Runtime& rt, const String* key);
-
-					const String* exceptionName;
-					Value exceptionValue;
-
-					virtual void gcMark(Heap& heap) const {
-						heap.mark(exceptionName);
-						exceptionValue.gcMark(heap);
-						super::gcMark(heap);
-					}
-				};
-	
-				struct WithScope : public Scope {
-					typedef Scope super;
-					WithScope(GCList& gcList, Scope* parentScope, Object* withObject);
-					virtual Flags readVar(Runtime& rt, const String* name, Value* v) const;
-					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
-					virtual bool deleteVar(Runtime& rt, const String* key);
-
-					Object* withObject;
-					virtual void gcMark(Heap& heap) const {
-						heap.mark(withObject);
-						super::gcMark(heap);
-					}
-				};
-
-
-				void enter(const Code* code, Scope* scope, Object* thisObject);
-				void push(const Value& v);
-				void pop(Int32 count);
-				void pop2push1(const Value& v);
-				void innerRun();
-				Object* convertToObject(const Value& v, bool requestExtensible);
-				Function* asFunction(const Value& v);
-				void invokeFunction(Function* f, Int32 popCount, Int32 argc, Object* thisObject = 0);
-				void newOperation(const Int32 argc);
-				void reset();
-				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
-				void popFrame();
-				void popCatcher();
-
-				static const OpcodeInfo opcodeInfo[OP_COUNT];
-
-				struct Frame : public GCItem {
+	protected:	struct Frame : public GCItem {
 					typedef GCItem super;
 					Frame(GCList& gcList, const CodeWord* returnIP, const Code* code, Scope* scope, Object* thisObject, Frame* previousFrame)
 							: super(gcList), returnIP(returnIP), code(code), scope(scope), thisObject(thisObject), previousFrame(previousFrame) { }
@@ -1269,6 +1156,26 @@ class Processor : public GCItem {
 					}
 				};
 
+				struct EvalScope;
+				struct CatchScope;
+				struct WithScope;
+
+				void enter(const Code* code, Scope* scope, Object* thisObject);
+				void push(const Value& v);
+				void pop(Int32 count);
+				void pop2push1(const Value& v);
+				void innerRun();
+				Object* convertToObject(const Value& v, bool requestExtensible);
+				Function* asFunction(const Value& v);
+				void invokeFunction(Function* f, Int32 popCount, Int32 argc, Object* thisObject = 0);
+				void newOperation(const Int32 argc);
+				void reset();
+				void pushFrame(const Code* code, Scope* scope, Object* thisObject);
+				void popFrame();
+				void popCatcher();
+
+				static const OpcodeInfo opcodeInfo[OP_COUNT];
+
 				Runtime& rt;
 				Heap& heap;
 				Int32 cyclesLeft;
@@ -1286,18 +1193,19 @@ class Processor : public GCItem {
 				}
 };
 
-enum Precedence {
-	GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC, MUL_DIV_PREC, ADD_SUB_PREC
-	, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC
-	, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC, COMMA_PREC, LOWEST_PREC
-};
-
 const Int32 INVALID_CODE_OFFSET = -0x80000000;
 const Int32 DEAD_CODE_STACK_DEPTH = -0x80000000;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
 				
+				enum Precedence {
+					GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC
+					, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC
+					, BIT_XOR_PREC, BIT_OR_PREC, LOGICAL_AND_PREC, LOGICAL_OR_PREC, CONDITIONAL_PREC, ASSIGN_PREC
+					, COMMA_PREC, LOWEST_PREC
+				};
+
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 				
 				Compiler(GCList& gcList, Code* code, Target compileFor);
@@ -1307,27 +1215,7 @@ class Compiler : public GCItem {
 				const Char* getStopPoint() const { return p; }
 				void getStopLineAndColumnNumbers(int& lineNumber, int& columnNumber) const;
 
-	protected:	struct ExpressionResult {
-					enum Type {
-						NONE				// void
-						, PUSHED			// arbitrary value on stack
-						, PUSHED_PRIMITIVE	// primitive value on stack
-						, CONSTANT			// constant (and primitive) value on stack
-						, LOCAL				// arbitrary value in local variable
-						, NAMED				// arbitrary value in named variable
-						, PROPERTY			// arbitrary value in object property
-						, SAFEKEPT			// further up the value stack (value = position relative to safe-kept-counter)
-					};
-					ExpressionResult() : t(NONE), v(Value::UNDEFINED) { }
-					ExpressionResult(Type type, const Value& value = Value::UNDEFINED) : t(type), v(value) { }
-					bool onStack() const { return t == PUSHED || t == PUSHED_PRIMITIVE; };
-					Type t;
-					Value v;
-				};
-
-				struct SemanticScope;
-	
-				struct CodeSection {
+	protected:	struct CodeSection {
 					CodeSection(Heap& heap, Int32 initialStackDepth)
 							: code(&heap), lastEmitted(Processor::INVALID_OP), initialStackDepth(initialStackDepth)
 							, stackDepth(initialStackDepth), maxStackDepth(initialStackDepth) { }
@@ -1350,8 +1238,11 @@ class Compiler : public GCItem {
 					Int32 stackDepth;
 				};
 
+				struct ExpressionResult;
+				struct SemanticScope;
+	
 				static const String* newHashedString(Heap& heap, const Char* b, const Char* e);
-				void error(ErrorType errorType, const char* message);
+				void error(ErrorType type, const char* message);
 				void emit(Processor::Opcode opcode, Int32 operand = 0);
 				CodeSection* changeSection(CodeSection* newOutputSection);
 				void insertSection(const CodeSection& section);
