@@ -632,7 +632,7 @@ const Value Value::INFINITE_NUMBER(std::numeric_limits<double>::infinity());
 
 /* --- String --- */
 
-String::String() : QArray(0, 0), hash(2166136261), bloom(0x10000020) {
+String::String() : QArray(0, 0), hash(2166136261U), bloom(0x10000020) {
 	assert(String("").calcHash() == hash && String("").createBloomCode() == bloom);
 }
 
@@ -4479,8 +4479,8 @@ static struct {
 	String name;
 	UnaryMathFunction<double (double)> func;
 } NATIVE_MATH_FUNCTIONS[] = {
-	{ "acos", acos }, { "asin", asin }, { "atan", atan }, { "cos", cos }, { "exp", exp }, { "floor", floor }
-	, { "log", log }, { "sin", sin }, { "sqrt", sqrt }, { "tan", tan }
+	{ "acos", std::acos }, { "asin", std::asin }, { "atan", std::atan }, { "cos", std::cos }, { "exp", std::exp }
+	, { "floor", std::floor }, { "log", std::log }, { "sin", std::sin }, { "sqrt", std::sqrt }, { "tan", std::tan }
 };
 // TODO : min, max, random
 
