@@ -647,6 +647,7 @@ String::String(const char* s) : QArray(static_cast<UInt32>(strlen(s)), 0), hash(
 }
 
 String::String(GCList& gcList, const Char* b, const Char* e) : super(gcList), QArray(static_cast<UInt32>(e - b), &gcList.getHeap()), hash(0), bloom(0) {
+	assert(b <= e);
 	std::copy(b, e, begin());
 }
 
@@ -3571,7 +3572,8 @@ void Compiler::withStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::breakStatement(SemanticScope* currentScope) {
-	const String label = String(heap.roots(), (whiteNoLF() ? identifier(false, false) : p), p);
+	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
+	const String label = String(heap.roots(), b, p);
 	Int32 rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->label.isEqualTo(label)
@@ -3587,7 +3589,8 @@ void Compiler::breakStatement(SemanticScope* currentScope) {
 }
 
 void Compiler::continueStatement(SemanticScope* currentScope) {
-	const String label = String(heap.roots(), (whiteNoLF() ? identifier(false, false) : p), p);
+	const Char* b = (whiteNoLF() ? identifier(false, false) : p);
+	const String label = String(heap.roots(), b, p);
 	Int32 rollbackStackDepth = currentSection->stackDepth;
 	for (SemanticScope* s = currentScope; s != 0; s = s->next) {
 		if (s->label.isEqualTo(label) && (s->type == SemanticScope::ITERATOR_LABEL_TYPE
