@@ -89,7 +89,7 @@ class Heap {
 	
 				GCList& managed() throw() { return *currentList; }
 				GCList& roots() throw() { return rootList; }
-				
+	
 				void* alloc(size_t size);
 				void* allocArray(size_t size);
 				void free(void *ptr);
@@ -128,9 +128,9 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 				explicit QuickArray(const QuickArray& copy) : n(0), associatedHeap(copy.associatedHeap), p(a) {
 					(*this) = copy;
 				}
-				
+	
 				Heap* getAssociatedHeap() const { return associatedHeap; }
-				
+	
 				void swap(QuickArray& that) {
 					if (this != &that) {
 						std::swap(associatedHeap, that.associatedHeap);
@@ -141,7 +141,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						that.p = ((x == a) ? that.a : x);
 					}
 				}
-				
+	
 				QuickArray& operator=(const QuickArray& copy) {
 					if (this != &copy) {
 						QuickArray<T, BUILT_IN_COUNT> na(copy.n, copy.associatedHeap);
@@ -150,7 +150,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					}
 					return *this;
 				}
-				
+	
 				void resize(UInt32 newSize) {
 					if (newSize != n) {
 						QuickArray<T, BUILT_IN_COUNT> na(newSize, associatedHeap);
@@ -158,7 +158,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						swap(na);
 					}
 				}
-				
+	
 				bool empty() const { return n == 0; }
 				UInt32 size() const { return n; }
 				operator T*() const { return p; }
@@ -175,7 +175,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 					associatedHeap = 0;
 					p = 0;
 				}
-				
+	
 	protected:	Heap* associatedHeap;
 				T* p;
 				T a[BUILT_IN_COUNT];
@@ -450,10 +450,10 @@ class JoiningEnumerator : public Enumerator {
 	Note that although the ECMAScript specification clearly separates string values from String objects, this
 	implementation regards both as Objects for efficiency (e.g. for quickly retrieving properties like the character
 	elements and "length").
-	
+ 
 	String is immutable and it will never contain any references to other objects. Therefore it is ok to not place them
 	in a heap. (See GCItem for more info.)
-	
+ 
 	The ECMAScript String object on the other hand is represented by an extensible StringWrapper.
 */
 class String : public Object, public QuickArray<Char> {
@@ -465,7 +465,7 @@ class String : public Object, public QuickArray<Char> {
 				static const String* fromInt(Heap& heap, Int32 i);
 				static const String* fromDouble(Heap& heap, double d);
 				static const String EMPTY;
-				
+	
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
 				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
 				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
@@ -493,7 +493,7 @@ class String : public Object, public QuickArray<Char> {
 
 class ScriptObject : public Object, public Table {
 	public:		typedef Object super;
-				
+	
 				ScriptObject(GCList& gcList, Object* prototype);
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
@@ -501,7 +501,7 @@ class ScriptObject : public Object, public Table {
 				virtual bool updateOwnProperty(Runtime& rt, const Value& key, const Value& v);
 				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
-				
+	
 	protected:	Object* prototype;
 				virtual void gcMark(Heap& heap) const {
 					Table::gcMark(heap);
@@ -547,7 +547,7 @@ class StringWrapper : public ScriptObject {
 
 /*
 	LazyScriptObjects become complete extensible "script objects" first when their properties are accessed. There are a few reasons why this is desirable:
-	
+ 
 	1) Performance: not having to setup a fully customizable object directly is benficial when it is rare that the user accesses properties or extends the object (but you still need an object reference). Example are Functions which are most often not treated as objects (i.e. constructors) by the user.
 	2) Memory: until the user accesses or adds properties, LazyScriptObjects can be super tiny (vtable pointer + pointer to complete object + whatever internal fields are needed).
 	3) Doesn't require an Runtime or even a Heap to be constructed. Although they are required to be placed on the heap since they contain a reference.
@@ -615,7 +615,7 @@ class Code : public Object {
 	friend class Compiler; // FIX : maybe not one day?
 	
 	public:		typedef Object super;
-				
+	
 				Code(GCList& gcList, Constants* constants);
 				bool lookupNameIndex(const String* name, Int32& index) const;
 				UInt32 getVarsCount() const { return varNames.size(); }
@@ -720,7 +720,7 @@ class ScriptFunction : public ExtensibleFunction {
 	friend class Processor;
 
 	public:		typedef ExtensibleFunction super;
-				
+	
 				ScriptFunction(GCList& gcList, const Code* code, Scope* closure);
 				virtual const String* toString(Heap& heap) const;
 				virtual Value getInternalValue(Heap& heap) const;
@@ -728,10 +728,10 @@ class ScriptFunction : public ExtensibleFunction {
 				virtual const Code* getScriptCode() const { return code; }
 
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
-				
+	
 				const Code* const code;
 				Scope* const closure;
-				
+	
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(code);
 					heap.mark(closure);
@@ -752,10 +752,10 @@ class Error : public LazyScriptObject<Object> {
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual bool setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags = STANDARD_FLAGS);
 				virtual bool deleteOwnProperty(Runtime& rt, const Value& key);
-				
+	
 	protected:	virtual void constructCompleteObject(Runtime& rt) const;
 				void updateReflection(Runtime& rt);
-				
+	
 				const ErrorType errorType;
 				const String* name; // may get updated by script code
 				const String* message; // may get updated by script code
@@ -948,8 +948,10 @@ class AccessorBase {
 
 class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;
-				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
 				Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
+				Var(Runtime& rt, const Var& that) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(that)) { }
+				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
+				Var& operator =(const Var& that) { this->v = makeValue(that); return *this; }
 				template<typename T> Var& operator =(const T& t) { this->v = makeValue(t); return *this; }
 
 	protected:	Value v;
@@ -1199,7 +1201,7 @@ const Int32 DEAD_CODE_STACK_DEPTH = -0x80000000;
 struct OperatorInfo;
 class Compiler : public GCItem {
 	public:		typedef GCItem super;
-				
+	
 				enum Precedence {
 					GROUP_PREC, PROPERTY_PREC, NEW_PREC, FUNCTION_CALL_PREC, POST_INC_DEC_PREC, PREFIX_PREC
 					, MUL_DIV_PREC, ADD_SUB_PREC, SHIFT_PREC, RELATIONAL_PREC, EQUALITY_PREC, BIT_AND_PREC
@@ -1208,7 +1210,7 @@ class Compiler : public GCItem {
 				};
 
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
-				
+	
 				Compiler(GCList& gcList, Code* code, Target compileFor);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
