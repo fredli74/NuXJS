@@ -424,7 +424,7 @@ suppressStdErr = true;
     Runtime rt(heap);
 	Object& globals = *rt.getGlobalObject();
 
-#if 0
+#if 1
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
     Var aValue = anObject["a"];
@@ -452,6 +452,8 @@ suppressStdErr = true;
 rt.setupStandardLibrary();
 	Var globs = rt.getGlobals();
 	globs["tezt"] = 55;
+	assert(globs.has("tezt"));
+	assert(!globs.has("ttezt"));
 	globs["tezt2"] = globs["tezt"];
 	double ddd = globs["tezt"];
 	globs["f"] = rt.eval("(function(a, b) { return a + b })");

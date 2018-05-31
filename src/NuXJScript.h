@@ -928,6 +928,7 @@ class AccessorBase {
 				template<typename T> bool operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
 				template<typename T> bool operator!=(const T& t) const { return !get().isStrictlyEqualTo(makeValue(t)); }
 				Var typeOf() const;
+				template<typename T> bool has(const T& key) const { Value dummy; return get().toObject(rt, false)->getProperty(rt, makeValue(key), &dummy) != NONEXISTENT; }
 				UInt32 length();
 	
 	protected:	template<class F> struct VarFunctorAdapter;
