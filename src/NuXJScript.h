@@ -473,6 +473,7 @@ class String : public Object, public QuickArray<Char> {
 				String(GCList& gcList, const Char* b, const Char* e);		// Create string from begin to end pointers.
 				String(GCList& gcList, const String& l, const String& r);	// Create string by concatenating two strings.
 				String(GCList& gcList, const char* s);						// Create string from constant 8-bit string. Will also generate hash and bloom code.
+				String(GCList& gcList, const std::string& fromStdString);
 				String(GCList& gcList, const std::wstring& fromStdString);
 				virtual const String* typeOfString() const;
 				virtual const String* getClassName() const;
@@ -918,6 +919,7 @@ class AccessorBase {
 				operator Object*() const { return get().toObject(rt, true); }
 				operator Function*() const { return get().toFunction(rt.getHeap()); }
 				operator std::wstring() const { return get().toStdString(rt.getHeap()); }
+				operator const String&() const { return *get().toString(rt.getHeap()); }
 				operator Var() const;
 				Var operator()() const;
 				template<typename T0> Var operator()(const T0& arg0) const;
@@ -941,6 +943,7 @@ class AccessorBase {
 				Value makeValue(const Var& v) const;
 				Value makeValue(const Property& v) const;
 				Value makeValue(const char* s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
+				Value makeValue(const std::string& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
 				Value makeValue(const std::wstring& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
 				Value makeValue(const NativeFunction& f) const { return new(rt.getHeap()) FunctorAdapter<NativeFunction>(rt.getHeap().managed(), f); }
 				Value makeValue(const VarFunction& f) const;

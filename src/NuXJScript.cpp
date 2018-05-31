@@ -661,8 +661,12 @@ String::String(GCList& gcList, const char* s) : super(gcList), QArray(static_cas
 	createBloomCode();
 }
 
-String::String(GCList& gcList, const std::wstring& ws) : super(gcList), QArray(static_cast<UInt32>(ws.size()), &gcList.getHeap()), hash(0), bloom(0) {
-	std::copy(ws.begin(), ws.end(), begin());
+String::String(GCList& gcList, const std::string& fromStdString) : super(gcList), QArray(static_cast<UInt32>(fromStdString.size()), &gcList.getHeap()), hash(0), bloom(0) {
+	std::copy(fromStdString.begin(), fromStdString.end(), begin());
+}
+
+String::String(GCList& gcList, const std::wstring& fromStdString) : super(gcList), QArray(static_cast<UInt32>(fromStdString.size()), &gcList.getHeap()), hash(0), bloom(0) {
+	std::copy(fromStdString.begin(), fromStdString.end(), begin());
 }
 
 const String* String::typeOfString() const { return &STRING_STRING; }
