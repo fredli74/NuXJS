@@ -285,5 +285,774 @@
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "repl/NuXJREPL.cpp"
+            timestampString = "549743295.3292429"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "365"
+            endingLineNumber = "365"
+            landmarkName = "invoke(Runtime&amp; rt, Processor&amp; processor, UInt32 argc, const Value* argv, Object* thisObject)"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "repl/NuXJREPL.cpp"
+            timestampString = "549743295.329897"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "364"
+            endingLineNumber = "364"
+            landmarkName = "unknown"
+            landmarkType = "0">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NativeConstructor::NativeConstructor(NuXJScript::GCList&amp;, NuXJScript::Var const&amp;)"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/repl/NuXJREPL.cpp"
+                  timestampString = "549664221.6773829"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "356"
+                  endingLineNumber = "356"
+                  offsetFromSymbolStart = "24">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NativeConstructor::NativeConstructor(NuXJScript::GCList&amp;, NuXJScript::Var const&amp;)"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/repl/NuXJREPL.cpp"
+                  timestampString = "549664221.67881"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "356"
+                  endingLineNumber = "356"
+                  offsetFromSymbolStart = "24">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "repl/NuXJREPL.cpp"
+            timestampString = "549743295.330328"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "549"
+            endingLineNumber = "549"
+            landmarkName = "testMain(int argc, const char* argv[])"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.330619"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "901"
+            endingLineNumber = "901"
+            landmarkName = "Heap::~Heap()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.330711"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "903"
+            endingLineNumber = "903"
+            landmarkName = "Heap::~Heap()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.33079"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "740"
+            endingLineNumber = "740"
+            landmarkName = "unknown"
+            landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.330862"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "811"
+            endingLineNumber = "811"
+            landmarkName = "GCList::claim(GCItem* item)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.h"
+            timestampString = "549743295.330956"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "497"
+            endingLineNumber = "497"
+            landmarkName = "Table"
+            landmarkType = "3">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::String::~String()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549734159.440237"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "489"
+                  endingLineNumber = "489"
+                  offsetFromSymbolStart = "16">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::String::~String()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549734159.441682"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "489"
+                  endingLineNumber = "489"
+                  offsetFromSymbolStart = "25">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::String::~String()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549734159.443097"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "489"
+                  endingLineNumber = "489"
+                  offsetFromSymbolStart = "16">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331151"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "904"
+            endingLineNumber = "904"
+            landmarkName = "Heap::~Heap()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::Heap::~Heap()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736080.1126029"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "904"
+                  endingLineNumber = "904"
+                  offsetFromSymbolStart = "79">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::Heap::~Heap()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736080.114033"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "904"
+                  endingLineNumber = "904"
+                  offsetFromSymbolStart = "21">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::Heap::~Heap()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736080.1153851"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "904"
+                  endingLineNumber = "904"
+                  offsetFromSymbolStart = "42">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.h"
+            timestampString = "549743295.331266"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "179"
+            endingLineNumber = "179"
+            landmarkName = "~QuickArray()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned short, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.1200351"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "88">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;int, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.121955"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "88">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Value, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.1235189"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "91">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::String const*, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.125055"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "88">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Table::Bucket, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.126583"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "91">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Compiler::BranchPoint, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.128027"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "88">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned char, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.1294219"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "88">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned short, 64u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736080.13081"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179"
+                  offsetFromSymbolStart = "91">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331394"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "869"
+            endingLineNumber = "869"
+            landmarkName = "Heap::free(void *ptr)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            condition = "size==96"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331467"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "839"
+            endingLineNumber = "839"
+            landmarkName = "Heap::alloc(size_t size)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331526"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "837"
+            endingLineNumber = "837"
+            landmarkName = "Heap::alloc(size_t size)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.h"
+            timestampString = "549743295.331581"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "181"
+            endingLineNumber = "181"
+            landmarkName = "~QuickArray()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned short, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.1858881"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "104">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;int, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.187288"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "104">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Value, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.188639"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "107">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Table::Bucket, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.189984"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "107">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::String const*, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.191355"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "104">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Compiler::BranchPoint, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.19277"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "104">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned char, 8u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.194158"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "104">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned short, 64u&gt;::~QuickArray()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549735551.195539"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "174"
+                  endingLineNumber = "174"
+                  offsetFromSymbolStart = "107">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331634"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "874"
+            endingLineNumber = "874"
+            landmarkName = "unknown"
+            landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.3316849"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "857"
+            endingLineNumber = "857"
+            landmarkName = "Heap::free(void *ptr)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.h"
+            timestampString = "549743295.3317339"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "152"
+            endingLineNumber = "152"
+            landmarkName = "operator=(const QuickArray&amp; copy)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;unsigned short, 8u&gt;::operator=(NuXJScript::QuickArray&lt;unsigned short, 8u&gt; const&amp;)"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736410.415585"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "152"
+                  endingLineNumber = "152"
+                  offsetFromSymbolStart = "23">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickArray&lt;NuXJScript::Table::Bucket, 8u&gt;::operator=(NuXJScript::QuickArray&lt;NuXJScript::Table::Bucket, 8u&gt; const&amp;)"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.h"
+                  timestampString = "549736410.419132"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "152"
+                  endingLineNumber = "152"
+                  offsetFromSymbolStart = "23">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331778"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "147"
+            endingLineNumber = "147"
+            landmarkName = "QuickConstants"
+            landmarkType = "14">
+            <Locations>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736410.425469"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "148"
+                  endingLineNumber = "148"
+                  offsetFromSymbolStart = "21">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736410.4269021"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "148"
+                  endingLineNumber = "148"
+                  offsetFromSymbolStart = "546">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736410.428297"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "148"
+                  endingLineNumber = "148"
+                  offsetFromSymbolStart = "756">
+               </Location>
+               <Location
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
+                  moduleName = "NuXJScript"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
+                  timestampString = "549736410.429758"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "148"
+                  endingLineNumber = "148"
+                  offsetFromSymbolStart = "1030">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "549743295.331821"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "4611"
+            endingLineNumber = "4611"
+            landmarkName = "Runtime::eval(const String&amp; expression)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
    </Breakpoints>
 </Bucket>

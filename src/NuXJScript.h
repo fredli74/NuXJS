@@ -7,6 +7,13 @@
 #include <iostream>
 #include <ctime>
 
+// Must declare overriden global operator new, delete etc before everything else or they will not be used (at least not by clang)
+namespace NuXJScript { class Heap; }
+void* operator new(size_t size, NuXJScript::Heap* heap);
+void* operator new[](size_t size, NuXJScript::Heap* heap);
+void operator delete(void* ptr, NuXJScript::Heap* heap);
+void operator delete[](void* ptr, NuXJScript::Heap* heap);
+
 namespace NuXJScript {
 
 typedef short Int16;
@@ -69,15 +76,14 @@ class GCList : public GCItem {
 	friend class GCItem;
 	friend class Heap;
 	
-	public:		GCList(Heap& heap);
-				Heap& getHeap() const throw() { return heap; }
+	public:		Heap& getHeap() const throw() { return heap; }
 				bool owns(GCItem* item) throw() { return item->_gcList == this; } // FIX : drop?
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 				void deleteAll() throw();
-				~GCList();
 
-	protected:	Heap& heap;
+	protected:	GCList(Heap& heap);
+				Heap& heap;
 				UInt32 count;
 };
 inline Heap& GCItem::gcGetHeap() const { return _gcList->getHeap(); }
@@ -170,7 +176,7 @@ template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class Quic
 						for (UInt32 i = n; i > 0; --i) {
 							p[i - 1].~T();
 						}
-						::operator delete(p, associatedHeap);
+						::operator delete[](p, associatedHeap);
 					}
 					associatedHeap = 0;
 					p = 0;
@@ -677,6 +683,7 @@ class Function : public Object {
 
 typedef Value (*NativeFunction)(Runtime&, Processor&, UInt32, const Value*, Object*);
 
+// FIX : overkill?
 template<class F> struct FunctorAdapter : public Function {
 	typedef Function super;
 	FunctorAdapter(const F& f) : f(f) { }
@@ -938,7 +945,6 @@ class AccessorBase {
 				AccessorBase(Runtime& rt) : rt(rt) { }
 				virtual Value get() const = 0;
 				virtual Var call(int argc, const Value* argv) const = 0;
-				template<class C> Value makeValue(Var (C::*const& f)(Runtime&, const Var&, const VarList&)) const;
 				Value makeValue(const Value& v) const { return v; }
 				Value makeValue(const Var& v) const;
 				Value makeValue(const Property& v) const;
@@ -947,6 +953,7 @@ class AccessorBase {
 				Value makeValue(const std::wstring& s) const { return new(rt.getHeap()) String(rt.getHeap().managed(), s); }
 				Value makeValue(const NativeFunction& f) const { return new(rt.getHeap()) FunctorAdapter<NativeFunction>(rt.getHeap().managed(), f); }
 				Value makeValue(const VarFunction& f) const;
+				template<class C> Value makeValue(Var (C::*const& cppMethod)(Runtime&, const Var&, const VarList&)) const;
 				Runtime& rt;
 };
 
@@ -954,6 +961,7 @@ class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;
 				Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
 				Var(Runtime& rt, const Var& that) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(that)) { }
+				template<class C> Var(Runtime& rt, C* cppObject, Var (C::*const& cppMethod)(Runtime&, const Var&, const VarList&));
 				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
 				Var& operator =(const Var& that) { this->v = makeValue(that); return *this; }
 				template<typename T> Var& operator =(const T& t) { this->v = makeValue(t); return *this; }
@@ -1008,6 +1016,7 @@ inline Value AccessorBase::makeValue(const Var& v) const { return v.operator Val
 inline Value AccessorBase::makeValue(const Property& p) const { return p.operator Value(); }
 inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { out << std::wstring(v); return out; }
 
+// FIX : why template?
 template<class F> struct AccessorBase::VarFunctorAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
 	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
@@ -1022,21 +1031,36 @@ inline Value AccessorBase::makeValue(const VarFunction& f) const {
 
 template<class C> struct AccessorBase::VarMemberFunctionAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
-	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &f)(Runtime&, const Var&, const VarList&))
-			: super(gcList), f(f) { }
+	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &cppMethod)(Runtime&, const Var&, const VarList&))
+			: super(gcList), cppMethod(cppMethod) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		C* me = reinterpret_cast<C*>(thisObject);
 		if ((me->C::getClassName()) != (me->getClassName())) {
 			ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
 		}
 		assert(dynamic_cast<const C*>(thisObject) != 0);
-		return (me->*f)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
+		return (me->*cppMethod)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
-	Var (C::*f)(Runtime&, const Var&, const VarList&);
+	Var (C::*cppMethod)(Runtime&, const Var&, const VarList&);
 };
-template<class C> Value AccessorBase::makeValue(Var (C::*const &f)(Runtime&, const Var&, const VarList&)) const {
-	return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), f);
+template<class C> Value AccessorBase::makeValue(Var (C::*const &cppMethod)(Runtime&, const Var&, const VarList&)) const {
+	return new(rt.getHeap()) VarMemberFunctionAdapter<C>(rt.getHeap().managed(), cppMethod);
 }
+
+template<class C> struct BoundVarMemberFunctionAdapter : public ExtensibleFunction {
+	typedef ExtensibleFunction super;
+	BoundVarMemberFunctionAdapter(GCList& gcList, C* cppObject, Var (C::*const &cppMethod)(Runtime&, const Var&, const VarList&))
+			: super(gcList), cppObject(cppObject), cppMethod(cppMethod) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return (cppObject->*cppMethod)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
+	}
+	C* cppObject;
+	Var (C::*cppMethod)(Runtime&, const Var&, const VarList&);
+};
+
+template<class C> Var::Var(Runtime& rt, C* cppObject, Var (C::*const& cppMethod)(Runtime&, const Var&, const VarList&))
+		: super(rt.getHeap().roots()), AccessorBase(rt)
+		, v(new(rt.getHeap()) BoundVarMemberFunctionAdapter<C>(rt.getHeap().managed(), cppObject, cppMethod)) { }
 
 class Processor : public GCItem {
 	friend class ScriptFunction;
@@ -1339,10 +1363,10 @@ class Compiler : public GCItem {
 
 } /* namespace NuXJScript */
 
-#endif
-
 // Since these can be called during static initialization we allow heap == 0 to use standard new/delete.
 inline void* operator new(size_t size, NuXJScript::Heap* heap) { return (heap != 0 ? heap->alloc(size) : ::operator new(size)); }
 inline void* operator new[](size_t size, NuXJScript::Heap* heap) { return (heap != 0 ? heap->allocArray(size) : ::operator new[](size)); }
 inline void operator delete(void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->free(ptr) : ::operator delete(ptr)); }
 inline void operator delete[](void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->freeArray(ptr) : ::operator delete[](ptr)); }
+
+#endif

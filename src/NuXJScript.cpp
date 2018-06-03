@@ -818,10 +818,6 @@ void GCList::deleteAll() throw() {
 	assert(_gcPrev == _gcNext && _gcPrev == this);
 }
 
-GCList::~GCList() {
-	deleteAll();
-}
-
 /* --- Heap --- */
 
 Heap::Heap() : allocated(0), managedListA(*this), managedListB(*this), rootList(*this), currentList(&managedListA)
@@ -830,13 +826,16 @@ Heap::Heap() : allocated(0), managedListA(*this), managedListB(*this), rootList(
 }
 
 int Heap::calcPoolIndex(const size_t size) {
-	return (0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
+	return -1;/*(0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
 			? static_cast<int>((size + (POOL_SIZE_GRANULARITY - 1)) / POOL_SIZE_GRANULARITY)
-			: -1;
+			: -1;*/
 }
 
 void* Heap::alloc(size_t size) {
 	void* block = 0;
+if (size == 96) {
+static int x = 3;
+}
 	const int poolIndex = calcPoolIndex(size);
 	if (poolIndex >= 0) {
 		size = poolIndex * POOL_SIZE_GRANULARITY;
@@ -898,7 +897,11 @@ void Heap::purgePooled() {
 	}
 }
 
-Heap::~Heap() { purgePooled(); }
+Heap::~Heap() {
+	managedListA.deleteAll();
+	managedListB.deleteAll();
+	purgePooled();
+}
 
 /* --- Object --- */
 
@@ -3372,7 +3375,6 @@ bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
 								}
 							}
 						}
-//std::wcout << name->toStdString() << std::endl;
 						break;
 					}
 				}

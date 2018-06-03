@@ -319,7 +319,7 @@ double getCPUSecs() {
 		return v;
 	}
 
-bool pauseBeforeQuit = false;
+bool pauseBeforeQuit = true;
 bool suppressStdErr = false; // FIX : drop
 
 String TEST_CLASS_STRING("NativeObject");
@@ -349,6 +349,14 @@ class NativeObject : public ScriptObject {
 					return Var(rt, x);
 				}
 	protected:	double x;
+};
+
+struct BindingTestObject {
+	BindingTestObject() : x(123.456) { }
+	Var method(Runtime& rt, const Var& thisVar, const VarList& args) {
+		return Var(rt, x);
+	}
+	double x;
 };
 
 struct NativeConstructor : public ExtensibleFunction {
@@ -493,6 +501,9 @@ rt.setupStandardLibrary();
 	globs["NativeObject"]["prototype"] = nativeObjectPrototype;
 	
 	globs["NativeObject2"] = new(heap) NativeConstructor(heap.managed(), nativeObjectPrototype);
+	
+	BindingTestObject bindingTestObject;
+	globs["bound"] = Var(rt, &bindingTestObject, &BindingTestObject::method);
 #endif
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
