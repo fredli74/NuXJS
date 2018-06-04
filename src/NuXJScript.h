@@ -617,6 +617,7 @@ class Constants : public GCItem, public QuickVector<Value> {
 };
 
 // This is an Object so that we can store it as a constant and also in Table
+// FIX : maybe split into seperate FunctionCode for function's (most fields only apply to functions)
 class Code : public Object {
 	friend class FunctionScope;
 	friend class Compiler; // FIX : maybe not one day?
@@ -765,8 +766,8 @@ class Error : public LazyScriptObject<Object> {
 				void updateReflection(Runtime& rt);
 	
 				const ErrorType errorType;
-				const String* name; // may get updated by script code
-				const String* message; // may get updated by script code
+				const String* name; 	// may get updated by script code
+				const String* message; 	// may get updated by script code
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(name);
 					heap.mark(message);
@@ -904,13 +905,12 @@ class Exception : public std::exception { // FIX : runtime_error instead?
 	protected:	char sz[512]; // We use a fixed length buffer to store a char string version of the exception value. We do not use std::string or String to avoid potential throws in the constructor.
 };
 
-class ScriptException : public Exception {
-	public:		typedef Exception super;
-				static void throwError(Heap& heap, ErrorType type, const String* message = 0);
-				static void throwError(Heap& heap, ErrorType type, const char* message);
-				ScriptException(Heap& heap, const Value& value) throw();
-				const Value& getValue() const { return value; }
-	protected:	Value value;
+struct ScriptException : public Exception {
+	typedef Exception super;
+	static void throwError(Heap& heap, ErrorType type, const String* message = 0);
+	static void throwError(Heap& heap, ErrorType type, const char* message);
+	ScriptException(Heap& heap, const Value& value) throw();
+	Value value;
 };
 
 extern const String LENGTH_STRING; // FIX : placement?
@@ -928,6 +928,7 @@ class AccessorBase {
 				operator std::wstring() const { return get().toStdString(rt.getHeap()); }
 				operator const String&() const { return *get().toString(rt.getHeap()); }
 				operator Var() const;
+				template<typename T> T to() const { return static_cast<T>(*this); }
 				Var operator()() const;
 				template<typename T0> Var operator()(const T0& arg0) const;
 				template<typename T0, typename T1> Var operator()(const T0& arg0, const T1& arg1) const;
@@ -956,6 +957,8 @@ class AccessorBase {
 				template<class C> Value makeValue(Var (C::*const& cppMethod)(Runtime&, const Var&, const VarList&)) const;
 				Runtime& rt;
 };
+// operator bool() is ambiguous and notoriously dangerous so we left it out. Use var.to<bool>() instead.
+template<> inline bool AccessorBase::to<bool>() const { return get().toBool(); }
 
 class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;

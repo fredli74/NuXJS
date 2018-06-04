@@ -2328,7 +2328,7 @@ bool Processor::run(Int32 maxCycles) {
 			innerRun();
 		}
 		catch (const ScriptException& x) {
-			throwVirtualException(x.getValue());
+			throwVirtualException(x.value);
 		}
 	}
 	return (ip != 0);

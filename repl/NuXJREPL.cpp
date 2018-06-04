@@ -432,7 +432,7 @@ suppressStdErr = true;
     Runtime rt(heap);
 	Object& globals = *rt.getGlobalObject();
 
-#if 0
+#if 1
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
     Var aValue = anObject["a"];
@@ -504,6 +504,9 @@ rt.setupStandardLibrary();
 	
 	BindingTestObject bindingTestObject;
 	globs["bound"] = Var(rt, &bindingTestObject, &BindingTestObject::method);
+	
+	Var booool(rt);
+	std::wcout << (booool.to<bool>() ? L"true" : L"false") << std::endl;
 #endif
     PrintFunction printFunction;
     globals.setOwnProperty(rt, &PRINT_STRING, &printFunction, DONT_ENUM_FLAG);
@@ -649,7 +652,7 @@ globals.setOwnProperty(rt, String::alloc(heap, "callbackTest"), &callbackTest, D
         }
         catch (const ScriptException& x) {
             source = String::EMPTY;
-            std::wstring ws = x.getValue().toString(heap)->toStdString();
+            std::wstring ws = x.value.toString(heap)->toStdString();
             ws = L"!!!! " + ws;
             std::wcout << ws << std::endl;
             if (!interactive) {
