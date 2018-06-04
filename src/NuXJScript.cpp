@@ -18,8 +18,8 @@ namespace NuXJScript {
 // MSVC (at least 2010) doesn't do fmod correctly with infinite divisor
 static double NaN() { return std::numeric_limits<double>::quiet_NaN(); }
 #ifdef _MSC_VER
-static bool isNaN(double d) { return (_isnan(d) != 0); }
-static bool isFinite(double d) { return (_finite(d) != 0); }
+bool isNaN(double d) { return (_isnan(d) != 0); }
+bool isFinite(double d) { return (_finite(d) != 0); }
 
 /*
 	Ecma rules
@@ -47,8 +47,8 @@ static double modulo(double x, double y) { return (!_finite(y) && !_isnan(y) && 
 #else
 static double modulo(double x, double y) { return fmod(x, y); }
 // FIX : if c++11 use std::isnan and std::isfinite
-static bool isNaN(double d) { return d != d; }
-static bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); }
+bool isNaN(double d) { return d != d; }
+bool isFinite(double d) { return !isNaN(d) && fabs(d) != std::numeric_limits<double>::infinity(); }
 #endif
 
 static double nanToZero(double d) { return (isNaN(d) ? 0.0 : d); }

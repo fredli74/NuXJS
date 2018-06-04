@@ -24,6 +24,10 @@ typedef unsigned char Byte;
 typedef UInt16 Char;
 typedef Int32 CodeWord;
 
+// FIX : put into Value?
+bool isNaN(double d);
+bool isFinite(double d);
+
 class GCList;
 class Heap;
 
