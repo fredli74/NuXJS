@@ -33,17 +33,17 @@
     };
 }
 
-root            <-                                  { $$ = '' }
+root            <-                                          { $$ = '' }
                     (ws
-                    / c=(qString / aString)         { $$ #= $c }
-                    / t:token                       { $$ #= $t }
-                        (ws t:token                 { $$ #= ' ' # $t }
+                    / c=(qString / aString / regexp)        { $$ #= $c }
+                    / t:token                               { $$ #= $t }
+                        (ws t:token                         { $$ #= ' ' # $t }
                         )*
-                    / c=.                           { $$ #= $c }
+                    / c=.                                   { $$ #= $c }
                     )* !.
 
-token           <-  n=number                        { $$ = $n }
-                    / i=identifier                  { $$ = $$parser.rename($i) }
+token           <-  n=number                                { $$ = $n }
+                    / i=identifier                          { $$ = $$parser.rename($i) }
 
 number          <-  '0x' hex+
                     / ([0-9] [0-9]*) ('.' [0-9]+)? ( [eE][-+]? [0-9]+ )?
@@ -54,13 +54,15 @@ comment         <-  '/*' (preserveList / !'*/' .)* '*/' / "//" (preserveList / !
 
 preserveList    <-  '@preserve:' [ \t]* preserveId ([ \t]* ',' [ \t]* preserveId)*
 
-preserveId      <-  i=identifier                    { $$parser.preserved[$i] = true }
+preserveId      <-  i=identifier                            { $$parser.preserved[$i] = true }
 
 identifier      <-  [$a-zA-Z_0-9]+
 
 qString         <-  '"' ( !["\\\0-\37] . / escape )* '"'
 
 aString         <-  "'" ( !['\\\0-\37] . / escape )* "'"
+
+regexp          <-  "/" ( ![/\\\0-\37] . / "\\" .)+ "/" identifier?
 
 escape          <-  "\\" ( 'x' hex hex / 'u' hex hex hex hex / . )
 

@@ -319,7 +319,7 @@ double getCPUSecs() {
 		return v;
 	}
 
-bool pauseBeforeQuit = true;
+bool pauseBeforeQuit = false;
 bool suppressStdErr = false; // FIX : drop
 
 String TEST_CLASS_STRING("NativeObject");
@@ -432,7 +432,7 @@ suppressStdErr = true;
     Runtime rt(heap);
 	Object& globals = *rt.getGlobalObject();
 
-#if 1
+#if 0
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
     Var aValue = anObject["a"];
