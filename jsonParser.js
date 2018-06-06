@@ -19,6 +19,8 @@ _			<-	[ \t\r\n]*
 
 var JSON_ESCAPE_SEQUENCES = { "\\": "\\\\", "\"": "\\\"", "\b": "\\b", "\f": "\\f", "\n": "\\n", "\r": "\\r", "\t": "\\t" };
 
+JSON = {};
+
 JSON.stringify = function(val) {
 	var stack = [ ];
 
@@ -26,9 +28,9 @@ JSON.stringify = function(val) {
 		var s = '"', l = str.length;
 		for (var i = 0; i < l; ++i) {
 			var ch = str[i], seq;
-			if (seq = JSON_ESCAPE_SEQUENCES[ch]) s += seq;
-			else if (ch >= ' ' && ch <= '~') s += ch;
-			else s += "\\u" + ("0000" + ch.charCodeAt(0).toString(16)).slice(-4);
+			s += ((seq = JSON_ESCAPE_SEQUENCES[ch])
+					? seq : ((ch >= ' ' && ch <= '~')
+					? ch : "\\u" + ("0000" + ch.charCodeAt(0).toString(16)).slice(-4)));
 		}
 		return s + '"';
 	}
@@ -38,8 +40,9 @@ JSON.stringify = function(val) {
 		switch (typeof val) {
 			case "object": {
 				if (!val) return "null";
-				for (var i = stack.length - 1; --i >= 0; )
+				for (var i = stack.length - 1; --i >= 0; ) {
 					if (stack[i] === val) throw TypeError("Cannot convert circular structure to JSON");
+				}
 				stack[stack.length] = val;
 				if (Array.isArray(val)) {
 					var l = val.length, s = '[';
@@ -77,5 +80,5 @@ print(JSON.stringify({}));
 print(JSON.stringify([]));
 print(JSON.stringify({ x: 1, y: "asdf", z: false, a: [ 1,2,3,undefined,5 ], o: { zzz: null, aaa: undefined, "\u9483": "\n\r\u1234\\/ab" } }));
 var o = { n: null }; first = o; for (var i = 0; i < 20; ++i) { o.n = { i: i, n: null }; o = o.n; } o.n = first.n.n.n.n.n;
-print(JSON.stringify(o));
+try { print(JSON.stringify(o)); } catch (x) { print(x) }
 

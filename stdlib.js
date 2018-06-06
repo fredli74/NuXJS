@@ -31,7 +31,7 @@
 		specialConstructor(regularCall: function): function									// = exception on construction and no .prototype either
 		specialConstructor(regularCall: function, constructorCall: function): function
 		callWithArgs(func: function, [this: object], [args: array], [offset: number]): any
-		getInternalProperty(object: object, 'class'|'value'|'prototype'): any
+		getInternalProperty(object: object, "class"|"value"|"prototype"): any
 		hasOwnProperty(object: object, name: string): boolean
 		isPropertyEnumerable(object: object, name: string): boolean
 		pow(x: number, y: number): number
@@ -103,8 +103,8 @@ function isPrimitive(v) {
 // FIX : join these two maybe?
 support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 	var f, v;
-	if ((typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))
-			&& (typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))) {
+	if ((typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))
+			&& (typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
 	return v
@@ -112,8 +112,8 @@ support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 
 support.toPrimitiveString = function toPrimitiveString(o) {
 	var f, v;
-	if ((typeof (f = o.toString) !== 'function' || !isPrimitive(v = o.toString()))
-			&& (typeof (f = o.valueOf) !== 'function' || !isPrimitive(v = o.valueOf()))) {
+	if ((typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))
+			&& (typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))) {
 		throw TypeError("Error converting object to primitive type");
 	}
 	return v
@@ -130,7 +130,7 @@ function defineProperties(object, attribs, props) {
 }
 
 function checkClass(object, expectedClass, forFunction) {
-	if ($getInternalProperty(object, 'class') !== expectedClass) {
+	if ($getInternalProperty(object, "class") !== expectedClass) {
 		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
 	}
 }
@@ -183,18 +183,18 @@ function numberToString(num, digits, eNotationBelow) {
 		}
 		string += integer;
 		if (digits > 0) {
-			string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+			string += '.' + ("00000000000000000000" + decimals).slice(-digits);
 		}
 	}
 	if (exponent !== null) {
-		string += (exponent >= 0 ? 'e+' : 'e') + exponent;
+		string += (exponent >= 0 ? "e+" : 'e') + exponent;
 	}
 	return string
 }
 
 function getInternalNumber(object, forFunction) {
-	checkClass(object, 'Number', forFunction);
-	return $getInternalProperty(object, 'value')
+	checkClass(object, "Number", forFunction);
+	return $getInternalProperty(object, "value")
 }
 
 /* --- Object --- */
@@ -216,12 +216,12 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 	toLocaleString: unconstructable(function toLocaleString() { return this.toString() }),
 	toString: unconstructable(function toString() {
 		var s;
-		return '[object ' + (((s = $getInternalProperty(this, 'class')) === 'Arguments') ? 'Object' : s) + ']'
+		return "[object " + (((s = $getInternalProperty(this, "class")) === "Arguments") ? "Object" : s) + ']'
 	}),
 	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, objectToString(name)) }),
 	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, objectToString(name)) }),
 	isPrototypeOf: unconstructable(function isPrototypeOf(v) {
-		while (v = $getInternalProperty(v, 'prototype')) {
+		while (v = $getInternalProperty(v, "prototype")) {
 			if (v === this) return true;
 		}
 		return false;
@@ -238,7 +238,7 @@ var Function = function Function(body) {
 	}
 	src += ") {\n";
 	if (n >= 0) src += argv[n];
-	return support.compileFunction(src + "\n}", 'anonymous')
+	return support.compileFunction(src + "\n}", "anonymous")
 };
 defineProperties(Function, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Function });
 defineProperties(Function.prototype, { dontEnum: true }, {
@@ -246,7 +246,7 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 	apply: unconstructable(function apply(thisArg, argArray) { // FIX : <- 100% native version in the future I think
 		var theClass;
 		if (argArray == null) argArray = [ ];
-		else if ((theClass = $getInternalProperty(argArray, 'class')) !== 'Array' && theClass !== 'Arguments') {
+		else if ((theClass = $getInternalProperty(argArray, "class")) !== "Array" && theClass !== "Arguments") {
 			throw TypeError("Argument list has wrong type");
 		};
 		return $callWithArgs(this, thisArg, argArray, 0);
@@ -255,8 +255,8 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 		return $callWithArgs(this, thisArg, arguments, 1);
 	}),
 	toString: unconstructable(function toString() { // FIX : <- generic, make a factory function
-		checkClass(this, 'Function', 'toString');
-		return $getInternalProperty(this, 'value');
+		checkClass(this, "Function", "toString");
+		return $getInternalProperty(this, "value");
 	})
 });
 
@@ -265,19 +265,19 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 var Boolean = support.specialConstructor(function Boolean(v) {
 		return !!v;
 	}, function Boolean(v) {
-		return support.createWrapper('Boolean', !!v, support.prototypes.Boolean);
+		return support.createWrapper("Boolean", !!v, support.prototypes.Boolean);
 	}
 );
 defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
 	valueOf: unconstructable(function valueOf() {
-		checkClass(this, 'Boolean', 'valueOf');
-		return $getInternalProperty(this, 'value');
+		checkClass(this, "Boolean", "valueOf");
+		return $getInternalProperty(this, "value");
 	}),
 	toString: unconstructable(function toString() {
-		checkClass(this, 'Boolean', 'toString');
-		return '' + $getInternalProperty(this, 'value');
+		checkClass(this, "Boolean", "toString");
+		return '' + $getInternalProperty(this, "value");
 	})
 });
 
@@ -286,7 +286,7 @@ defineProperties(Boolean.prototype, { dontEnum: true }, {
 var Number = support.specialConstructor(function Number(v) {
 		return (arguments.length ? +v : 0);
 	}, function Number(v) {
-		return support.createWrapper('Number', arguments.length ? +v : 0, support.prototypes.Number);
+		return support.createWrapper("Number", arguments.length ? +v : 0, support.prototypes.Number);
 	}
 );
 defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Number });
@@ -299,10 +299,10 @@ defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 });
 defineProperties(Number.prototype, { dontEnum: true }, {
 	constructor: Number,
-	valueOf: unconstructable(function valueOf() { return getInternalNumber(this, 'valueOf') }),
+	valueOf: unconstructable(function valueOf() { return getInternalNumber(this, "valueOf") }),
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: unconstructable(function toString(radix) {
-		var value = getInternalNumber(this, 'toString');
+		var value = getInternalNumber(this, "toString");
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
 		} else if ((radix = toInteger(radix)) < 2 || radix > 36) {
@@ -322,7 +322,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toExponential: unconstructable(function toExponential(fractionDigits) {
-		var value = getInternalNumber(this, 'toExponential');
+		var value = getInternalNumber(this, "toExponential");
 		var string = '';
 		if (!$isFinite(value)) {
 			return value;
@@ -337,7 +337,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toFixed: unconstructable(function toFixed(fractionDigits) {
-		var value = getInternalNumber(this, 'toFixed');
+		var value = getInternalNumber(this, "toFixed");
 		var digits = toInteger(fractionDigits);
 		if (digits < 0 || digits > 20) {
 			throw RangeError("Illegal fractionDigits argument for toFixed()");
@@ -355,13 +355,13 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 			var decimals = $floor((value - integer) * magnitude + 0.5);
 			string += integer + (decimals >= magnitude ? 1 : 0);
 			if (digits > 0) {
-				string += '.' + ('00000000000000000000' + decimals).slice(-digits);
+				string += '.' + ("00000000000000000000" + decimals).slice(-digits);
 			}
 			return string;
 		}
 	}),
 	toPrecision: unconstructable(function toPrecision(precision) {
-		var value = getInternalNumber(this, 'toPrecision');
+		var value = getInternalNumber(this, "toPrecision");
 		var string = '';
 		if (precision === void 0 || !$isFinite(value)) {
 			return value;
@@ -430,7 +430,7 @@ var String = support.specialConstructor(function String(v) {
 	}, function String(v) {
 		var s;
 		return defineProperties(
-				support.createWrapper('String', (s = (arguments.length ? objectToString(v) : '')), support.prototypes.String)
+				support.createWrapper("String", (s = (arguments.length ? objectToString(v) : '')), support.prototypes.String)
 				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 	}
 );
@@ -474,7 +474,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		return ((me = objectToString(this)) === (him = objectToString(that)) ? 0 : (me < him ? -1 : 1));
 	}),
 	match: unconstructable(function match(regexp) {
-		if ($getInternalProperty(regexp, 'class') !== 'RegExp') regexp = new RegExp(regexp);
+		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
 		var args = [ objectToString(this) ];
 		if (!regexp.global) return $callWithArgs(regExpExec, regexp, args);
 		else {
@@ -497,7 +497,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		var a = [ ];
 		limit = ((limit === void 0) ? 0xFFFFFFFF : toInteger(limit));
 		var sl = s.length;
-		if ($getInternalProperty(separator, 'class') !== 'RegExp') separator = objectToString(separator);
+		if ($getInternalProperty(separator, "class") !== "RegExp") separator = objectToString(separator);
 		if (limit === 0) {
 			return a;
 		}
@@ -523,12 +523,12 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	toLowerCase: unconstructable(function toLowerCase() { return translateString(objectToString(this), upperToLower) }),
 	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return translateString(objectToString(this), upperToLower) }),
 	valueOf: unconstructable(function valueOf() {
-		checkClass(this, 'String', 'valueOf');
-		return $getInternalProperty(this, 'value');
+		checkClass(this, "String", "valueOf");
+		return $getInternalProperty(this, "value");
 	}),
 	toString: unconstructable(function toString() {
-		checkClass(this, 'String', 'toString');
-		return $getInternalProperty(this, 'value');
+		checkClass(this, "String", "toString");
+		return $getInternalProperty(this, "value");
 	})
 });
 
@@ -536,7 +536,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 
 var Array = function Array(v) {
 	var a = [ ], argv, argc;
-	if ((argc = (argv = arguments).length) === 1 && typeof v === 'number') {
+	if ((argc = (argv = arguments).length) === 1 && typeof v === "number") {
 		if ((v >>> 0) !== v) throw RangeError("Invalid array length");
 		a.length = v;
 	} else {
@@ -550,7 +550,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	concat: unconstructable(function concat(item1) {
 		var a = [ ], argv, argc = (argv = arguments).length, n = 0, v = this;
 		for (var i = -1; i < argc; v = argv[++i]) {
-			if ($getInternalProperty(v, 'class') !== 'Array') {
+			if ($getInternalProperty(v, "class") !== "Array") {
 				a[n++] = v;
 			} else {
 				for (var j = 0, e = v.length; j < e; ++j) if (j in v) a[n + j] = v[j];
@@ -658,7 +658,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: unconstructable(function toString() {
-		checkClass(this, 'Array', 'toString');
+		checkClass(this, "Array", "toString");
 		return this.join();
 	})
 });
@@ -850,7 +850,7 @@ var CC = { }; // "CC" is used from within regexps, so the name has to be preserv
 	setupCharClass(NEWLINE_CHAR | SPACE_CHAR, "\n\r\u2028\u2029");
 	setupCharClass(SPACE_CHAR, " \t\v\f\xA0");
 	CC['_'] |= WORD_CHAR;
-	CC['undefined'] |= EMPTY_CHAR;
+	CC["undefined"] |= EMPTY_CHAR;
 	CC[''] |= EMPTY_CHAR;
 	setupCharClass(ESCAPE_CHAR, "fnrtv");
 	for (var i = 32; i <= 126; ++i) {
@@ -1036,62 +1036,62 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 
 	function literalSequenceToCode(literalSequence, offset) {
 		if (literalSequence.length === 0) {
-			return 'true';
+			return "true";
 		} else if (literalSequence.length === 1) {
-			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '"';
+			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '"';
 		} else if (literalSequence.length === 2) {
-			return 's[' + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
+			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return '$submatch(s,' + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return "$submatch(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
 	function and(a, b) {
 		switch (a) {
-			case 'false': return 'false';
-			case 'true': return b;
-			default: return (b === 'true' ? a : a + ' && ' + b);
+			case "false": return "false";
+			case "true": return b;
+			default: return (b === "true" ? a : a + " && " + b);
 		}
 	}
 
 	function or(a, b) {
 		switch (a) {
-			case 'false': return b;
-			case 'true': return 'true';
-			default: return (b === 'false' ? a: a + ' || ' + b);
+			case "false": return b;
+			case "true": return "true";
+			default: return (b === "false" ? a: a + " || " + b);
 		}
 	}
 	
 	function addFunction(name, definition) {
 		// TODO : sometimes functions are identical (e.g. class-tests), reuse here or in '[' parsing directly?
-		functions += "\tfunction " + name + '(p) { ' + definition + " }\n";
+		functions += "\tfunction " + name + "(p) { " + definition + " }\n";
 	}
 
 	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
 		// TODO : eliminate unnecessary b=p+0,e=p+Infinity and stuff
 		var functionName = 'q' + (++functionCounter);
-		var head = 'var ' + (stepSize ? 'h=' + stepSize + ',b=p+' + quantity.mini + '*h,e=p+' + quantity.maxi + '*h' : 'b=p+' + quantity.mini + ',e=p+' + quantity.maxi) + '; ';
+		var head = "var " + (stepSize ? "h=" + stepSize + ",b=p+" + quantity.mini + "*h,e=p+" + quantity.maxi + "*h" : "b=p+" + quantity.mini + ",e=p+" + quantity.maxi) + "; ";
 		if (stepSize) {
-			head += 'if (h<=0 || h!==h) return ' + tail + '; ';
+			head += "if (h<=0 || h!==h) return " + tail + "; ";
 		} 
 		if (quantity.greedy) {
-			addFunction(functionName, head + 'while (' + and('p<e', repeatCode) + ') ' + (stepSize ? 'p+=h' : '++p')
-					+ '; while (' + and('p>=b', '!(' + tail + ')') + ') ' + (stepSize ? 'p-=h' : '--p') + '; return p>=b');
+			addFunction(functionName, head + "while (" + and("p<e", repeatCode) + ") " + (stepSize ? "p+=h" : "++p")
+					+ "; while (" + and("p>=b", "!(" + tail + ")") + ") " + (stepSize ? "p-=h" : "--p") + "; return p>=b");
 		} else {
-			addFunction(functionName, head + 'while (' + or('p<b', '!(' + tail + ')') + ') { if (' + or('p>=e', '!(' + repeatCode + ')') + ') return false; ' + (stepSize ? 'p+=h' : '++p') + ' }; return true');
+			addFunction(functionName, head + "while (" + or("p<b", "!(" + tail + ")") + ") { if (" + or("p>=e", "!(" + repeatCode + ")") + ") return false; " + (stepSize ? "p+=h" : "++p") + " }; return true");
 		}
-		return and(code, functionName + '(' + positionToCode(offset) + ')');
+		return and(code, functionName + "(" + positionToCode(offset) + ")");
 	}
 	
 	function captureWrap(code, capture, resetCaptureFrom, resetCaptureTo) {
 		if (capture === null && resetCaptureFrom === resetCaptureTo) {
-			return 'return ' + code;
+			return "return " + code;
 		} else {
 			var declares = '', captures = '', rollbacks = '';
 			if (capture !== null) {
-				declares += 'r' + capture + '=c' + capture;
-				captures = 'c' + capture + '=p';
-				rollbacks = 'c' + capture + '=r' + capture;
+				declares += 'r' + capture + "=c" + capture;
+				captures = 'c' + capture + "=p";
+				rollbacks = 'c' + capture + "=r" + capture;
 			}
 			if (resetCaptureTo !== void 0) {
 				for (var i = resetCaptureFrom; i < resetCaptureTo; ++i) {
@@ -1103,25 +1103,25 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							captures += ',';
 						}
 					}
-					declares += 'r' + j + '=c' + j;
+					declares += 'r' + j + "=c" + j;
 					captures += 'c' + j + '=';
-					rollbacks += 'c' + j + '=r' + j;
+					rollbacks += 'c' + j + "=r" + j;
 					if (i === resetCaptureTo - 1) {
-						captures += 'void 0';
+						captures += "void 0";
 					}
 				}
 			}
-			code = captures + ', ' + or(code, '(' + rollbacks + ',false)');
-			return 'var ' + declares + '; return ' + code;
+			code = captures + ", " + or(code, '(' + rollbacks + ",false)");
+			return "var " + declares + "; return " + code;
 		}
 	}
 
 	function charClassToCode(ch, rule) {
-		return (rule[1] ? '!' : '!!') + '(CC[' + ch + ']&' + (rule[0] | (rule[1] ? EMPTY_CHAR : 0)) + ')';
+		return (rule[1] ? '!' : "!!") + "(CC[" + ch + "]&" + (rule[0] | (rule[1] ? EMPTY_CHAR : 0)) + ')';
 	}
 
 	function compileTerms(offset, junction) {
-		var literalSequence, quantity, code = 'true';
+		var literalSequence, quantity, code = "true";
 		termLoop: for (;;) {
 			if (literalSequence = parseLiteralSequence()) {
 				if (quantity = parseQuantifier()) {
@@ -1138,24 +1138,24 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 				switch (c = s[p]) {
 					case '^': {
 						++p;
-						var condition = positionToCode(offset) + '===0';
+						var condition = positionToCode(offset) + "===0";
 						if (multiLine) {
-							condition = '(' + or(condition, '!!(CC[s[' + positionToCode(offset - 1) + ']]&' + NEWLINE_CHAR + ')') + ')';
+							condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset - 1) + "]]&" + NEWLINE_CHAR + ')') + ')';
 						}
 						code = and(code, condition);
 						break;
 					}
 					case '$': {
 						++p;
-						var condition = positionToCode(offset) + '===l';
+						var condition = positionToCode(offset) + "===l";
 						if (multiLine) {
-							condition = '(' + or(condition, '!!(CC[s[' + positionToCode(offset) + ']]&' + NEWLINE_CHAR + ')') + ')';
+							condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset) + "]]&" + NEWLINE_CHAR + ')') + ')';
 						}
 						code = and(code, condition);
 						break;
 					}
 					case '[': {
-						var negative = false, v0, v1, fromChar, toChar, classCode = 'false';
+						var negative = false, v0, v1, fromChar, toChar, classCode = "false";
 						if (s[++p] === '^') {
 							negative = true;
 							++p;
@@ -1163,7 +1163,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						while (v0 = parseClassAtom()) {
 							var b = p;
 							if (s[p] === '-' && (++p, v1 = parseClassAtom())) {
-								if (typeof v0 === 'string' && typeof v1 === 'string' && v0 <= v1) {
+								if (typeof v0 === "string" && typeof v1 === "string" && v0 <= v1) {
 									if (caseInsensitive && (v0 > '~' || v1 > '~' || (regExpCanonicalize(v0) !== v0) !== (regExpCanonicalize(v1) !== v1))) {
 										v0 = escapeCharacter(v0);
 										v1 = escapeCharacter(v1);
@@ -1176,7 +1176,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 								} else {
 									throw SyntaxError("Invalid character class syntax in regular expression");
 								}
-							} else if (typeof v0 === 'string') {
+							} else if (typeof v0 === "string") {
 								p = b;
 								classCode = or(classCode, 'c==="' + canonicalizeAndEscape(v0) + '"');
 							} else {
@@ -1188,7 +1188,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						}
 						++p;
 						var functionName = 'k' + (++functionCounter);
-						addFunction(functionName, 'var c=s[p]; return ' + (negative ? '!(' + classCode + ')' : classCode));
+						addFunction(functionName, "var c=s[p]; return " + (negative ? "!(" + classCode + ')' : classCode));
 						if (quantity = parseQuantifier()) {
 							return quantify(code, offset, functionName + '(' + positionToCode(0) + ')', compileTerms(0, junction), quantity);
 						}
@@ -1205,20 +1205,20 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							}
 							n = (n - 1) * 2;
 							var quantity = parseQuantifier();
-							var stepSize = 'c' + (n + 1) + '-c' + n;
+							var stepSize = 'c' + (n + 1) + "-c" + n;
 				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = '$submatch(s,' + positionToCode(offset) + ',s.substring(c' + n + ',c' + (n + 1) + '))';
+							var backMatchCode = "$submatch(s," + positionToCode(offset) + ",s.substring(c" + n + ",c" + (n + 1) + "))";
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
-							addFunction(tailName, 'return ' + tail);
+							addFunction(tailName, "return " + tail);
 							if (quantity) {
 								return quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize);
 							}
-							return and(code, '(c' + n + '<c' + (n + 1) + ' ? ' + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')
-									+ ' : ' + tailName + '(' + positionToCode(offset) + '))');
+							return and(code, '(c' + n + "<c" + (n + 1) + " ? " + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')
+									+ " : " + tailName + '(' + positionToCode(offset) + "))");
 						} else if ((c = s[p]) === 'b' || c === 'B') {
 							++p;
-							code = and(code, (c === 'b' ? '!!((CC[s[' : '!((CC[s[') + positionToCode(offset - 1) + ']]^CC[s[' + positionToCode(offset) + ']])&' + WORD_CHAR + ')');
+							code = and(code, (c === 'b' ? "!!((CC[s[" : "!((CC[s[") + positionToCode(offset - 1) + "]]^CC[s[" + positionToCode(offset) + "]])&" + WORD_CHAR + ')');
 							break;
 						}
 						// fall-through
@@ -1230,9 +1230,9 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						}
 						++p;
 						if (quantity = parseQuantifier()) {
-							return quantify(code, offset, charClassToCode('s[' + positionToCode(0) + ']', rule), compileTerms(0, junction), quantity);
+							return quantify(code, offset, charClassToCode("s[" + positionToCode(0) + ']', rule), compileTerms(0, junction), quantity);
 						}
-						code = and(code, charClassToCode('s[' + positionToCode(offset) + ']', rule));
+						code = and(code, charClassToCode("s[" + positionToCode(offset) + ']', rule));
 						++offset;
 						break;
 					}
@@ -1254,7 +1254,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						var openCapture = null, closeCapture = null;
 						if (doCapture) {
 							(closeCapture = (openCapture = (captureCounter++) * 2) + 1);
-							closureVars += ',c' + openCapture + ',c' + closeCapture;
+							closureVars += ",c" + openCapture + ",c" + closeCapture;
 						}
 						var innerCapturesStart = captureCounter; // FIX : these two are only used for negative lookAhead, use for open/close captures too?
 						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
@@ -1269,36 +1269,36 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						var extraEndlessCheck = '';
 						var looping = (quantity && quantity.maxi > 1);
 						if (looping && (quantity.maxi < $Infinity || quantity.mini > 1)) {
-							closureVars += ',n' + functionNumber + '=0';
+							closureVars += ",n" + functionNumber + "=0";
 							if (quantity.maxi < $Infinity) {
-								inner = and('++n' + functionNumber + '<=' + quantity.maxi, inner);
+								inner = and("++n" + functionNumber + "<=" + quantity.maxi, inner);
 							} else {
-								inner = '++n' + functionNumber + ', ' + inner;
+								inner = "++n" + functionNumber + ", " + inner;
 							}
 							if (quantity.mini > 1) {
-								inner = and(inner, 'n' + functionNumber + '>=' + quantity.mini, inner);
+								inner = and(inner, 'n' + functionNumber + ">=" + quantity.mini, inner);
 								extraEndlessCheck = 'n' + functionNumber + '<' + quantity.mini;
 							}
-							inner = or(inner, '(--n' + functionNumber + ',false)');
+							inner = or(inner, "(--n" + functionNumber + ",false)");
 						}
 						if (lookAhead) {
 							var useCall = junctionName + '(' + positionToCode(0) + ')';
 							if (negativeLookAhead) {
-								inner = '!(' + inner + ')';
+								inner = "!(" + inner + ')';
 								if (innerCapturesStart < innerCapturesEnd) {
 									var captureResets = '';
 									for (var i = innerCapturesStart; i < innerCapturesEnd; ++i) {
 										captureResets += 'c' + i * 2 + '=';
 									}
-									useCall = '(' + captureResets + 'void 0, ' + useCall + ')';
+									useCall = '(' + captureResets + "void 0, " + useCall + ')';
 								}
 							}
 							inner = and(inner, useCall);
 						}
 						if (looping) {
-							closureVars += ',p' + functionNumber;
-							var endlessCheck = 'p' + functionNumber + '!=p';
-							inner = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, '(p' + functionNumber + '=p, ' + inner + ')');
+							closureVars += ",p" + functionNumber;
+							var endlessCheck = 'p' + functionNumber + "!=p";
+							inner = and(extraEndlessCheck ? '(' + or(endlessCheck, extraEndlessCheck) + ')' : endlessCheck, "(p" + functionNumber + "=p, " + inner + ')');
 						}
 						addFunction(groupName, captureWrap(inner, openCapture, innerCapturesStart, innerCapturesEnd));
 						if (looping) {
@@ -1306,7 +1306,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
 							addFunction(junctionName, captureWrap(inner, closeCapture));
 							var useCall = (quantity.mini === 0 ? junctionCall : groupCall);
-							code = and(code, (looping ? '(p' + functionNumber + '=void 0,' + useCall + ')' : useCall));
+							code = and(code, (looping ? '(p' + functionNumber + "=void 0," + useCall + ')' : useCall));
 						} else {
 							addFunction(junctionName, captureWrap(tail, closeCapture));
 							if (quantity && quantity.mini === 0) {
@@ -1324,7 +1324,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		}
 		switch (junction) {
 			case void 0: return code;
-			case '': return and(code, '(q=' + positionToCode(offset) + ',true)');
+			case '': return and(code, "(q=" + positionToCode(offset) + ",true)");
 			default: return and(code, junction + '(' + positionToCode(offset) + ')');
 		}
 	}
@@ -1364,7 +1364,7 @@ function execRegExp(re, string) {
 	string = objectToString(string);
 	if ((i = (re.global ? toInteger(re.lastIndex) : 0)) >= 0) {
 		for (l = string.length; i <= l; ++i) {
-			if (m = $getInternalProperty(re, 'value')(string, i)) {
+			if (m = $getInternalProperty(re, "value")(string, i)) {
 				if (re.global) {
 					re.lastIndex = m[1];
 				}
@@ -1375,12 +1375,12 @@ function execRegExp(re, string) {
 	re.lastIndex = 0
 }
 
-var REG_EXP_FLAG_TO_PROPERTY = { 'g': 'global', 'i': 'ignoreCase', 'm': 'multiline' }, origEval = eval
+var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, origEval = eval
 		, regExpCache = { }, regExpPrototype;
 // eval without local variables but with access to all internals
 function evalThere(s) { var customEval = eval; eval = origEval; try { return eval(s) } finally { eval = customEval } }
 var RegExp = support.createRegExp = support.specialConstructor(function RegExp(pattern, flags) {
-		return ($getInternalProperty(pattern, 'class') === 'RegExp' && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
+		return ($getInternalProperty(pattern, "class") === "RegExp" && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
 		// TODO : short-cut most of this through cache instead of only the func def.
 		pattern = (pattern === void 0 ? '' : objectToString(pattern));
@@ -1398,7 +1398,7 @@ var RegExp = support.createRegExp = support.specialConstructor(function RegExp(p
 		if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
 			regExpCache[key] = func = evalThere(compileRegExp(pattern, template.ignoreCase, template.multiline));
 		}
-		var re = support.createWrapper('RegExp', func, regExpPrototype);
+		var re = support.createWrapper("RegExp", func, regExpPrototype);
 		defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
 		defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
 		return re;
@@ -1408,7 +1408,7 @@ var RegExp = support.createRegExp = support.specialConstructor(function RegExp(p
 defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: regExpPrototype = RegExp.prototype });
 defineProperties(RegExp.prototype, { dontEnum: true }, {
 	exec: unconstructable(regExpExec = function exec(string) {
-		checkClass(this, 'RegExp', 'exec');
+		checkClass(this, "RegExp", "exec");
 		var m, a = null;
 		if (m = execRegExp(this, string)) {
 			(a = [ ]).input = string;
@@ -1420,11 +1420,11 @@ defineProperties(RegExp.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	test: unconstructable(function test(string) {
-		checkClass(this, 'RegExp', 'test');
+		checkClass(this, "RegExp", "test");
 		return execRegExp(this, string) !== void 0;
 	}),
 	toString: unconstructable(function toString() {
-		checkClass(this, 'RegExp', 'toString');
+		checkClass(this, "RegExp", "toString");
 		return '/' + this.source + '/' + (this.global ? 'g' : '') + (this.ignoreCase ? 'i' : '') + (this.multiline ? 'm' : '');
 	})
 });
@@ -1436,7 +1436,7 @@ defineProperties(globals, { dontEnum: true }, {
 	Boolean: Boolean,
 	Date: Date,
 	Function: Function,
-	Math: support.createWrapper('Math', void 0),
+	Math: support.createWrapper("Math", void 0),
 	Number: Number,
 	Object: Object,
 	RegExp: RegExp,
@@ -1512,14 +1512,14 @@ defineProperties(Math, { dontEnum: true }, {
 function createErrorConstructor(name, prototype) {
 	return function(message) {
 		var e;
-		support.defineProperty(e = support.createWrapper('Error', name, prototype), 'message'
+		support.defineProperty(e = support.createWrapper("Error", name, prototype), "message"
 				, (message !== void 0 ? objectToString(message) : ''), false, true, false);
 		return e
 	}
 };
 
 (function() {
-	var ERROR_NAMES = [ 'Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError' ];
+	var ERROR_NAMES = [ "Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError" ];
 
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
@@ -1537,7 +1537,7 @@ function createErrorConstructor(name, prototype) {
 	defineProperties(Error.prototype, { dontEnum: true }, {
 		message: '',
 		toString: unconstructable(function toString() {
-			return (this.name === void 0 ? 'Error' : this.name) + (this.message ? (': ' + this.message) : '');
+			return (this.name === void 0 ? "Error" : this.name) + (this.message ? (": " + this.message) : '');
 		})
 	})
 })();
@@ -1548,7 +1548,7 @@ function createErrorConstructor(name, prototype) {
 
 defineProperties(Array, { dontEnum: true }, {
 	isArray: unconstructable(function isArray(o) {
-		return $getInternalProperty(o, 'class') === 'Array';
+		return $getInternalProperty(o, "class") === "Array";
 	})
 });
 
@@ -1557,895 +1557,11 @@ defineProperties(Object, { dontEnum: true }, {
 		support.defineProperty(o, objectToString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
 	}),
 	getPrototypeOf: unconstructable(function getPrototypeOf(o) {
-		return $getInternalProperty(o, 'prototype');
+		return $getInternalProperty(o, "prototype");
 	})
 });
 
-if ($NaN.toString() !== 'NaN') throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
-
-//  json2.js
-//  2017-06-12
-//  Public Domain.
-//  NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
-
-//  USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
-//  NOT CONTROL.
-
-//  This file creates a global JSON object containing two methods: stringify
-//  and parse. This file provides the ES5 JSON capability to ES3 systems.
-//  If a project might run on IE8 or earlier, then this file should be included.
-//  This file does nothing on ES5 systems.
-
-//      JSON.stringify(value, replacer, space)
-//          value       any JavaScript value, usually an object or array.
-//          replacer    an optional parameter that determines how object
-//                      values are stringified for objects. It can be a
-//                      function or an array of strings.
-//          space       an optional parameter that specifies the indentation
-//                      of nested structures. If it is omitted, the text will
-//                      be packed without extra whitespace. If it is a number,
-//                      it will specify the number of spaces to indent at each
-//                      level. If it is a string (such as "\t" or "&nbsp;"),
-//                      it contains the characters used to indent at each level.
-//          This method produces a JSON text from a JavaScript value.
-//          When an object value is found, if the object contains a toJSON
-//          method, its toJSON method will be called and the result will be
-//          stringified. A toJSON method does not serialize: it returns the
-//          value represented by the name/value pair that should be serialized,
-//          or undefined if nothing should be serialized. The toJSON method
-//          will be passed the key associated with the value, and this will be
-//          bound to the value.
-
-//          For example, this would serialize Dates as ISO strings.
-
-//              Date.prototype.toJSON = function (key) {
-//                  function f(n) {
-//                      // Format integers to have at least two digits.
-//                      return (n < 10)
-//                          ? "0" + n
-//                          : n;
-//                  }
-//                  return this.getUTCFullYear()   + "-" +
-//                       f(this.getUTCMonth() + 1) + "-" +
-//                       f(this.getUTCDate())      + "T" +
-//                       f(this.getUTCHours())     + ":" +
-//                       f(this.getUTCMinutes())   + ":" +
-//                       f(this.getUTCSeconds())   + "Z";
-//              };
-
-//          You can provide an optional replacer method. It will be passed the
-//          key and value of each member, with this bound to the containing
-//          object. The value that is returned from your method will be
-//          serialized. If your method returns undefined, then the member will
-//          be excluded from the serialization.
-
-//          If the replacer parameter is an array of strings, then it will be
-//          used to select the members to be serialized. It filters the results
-//          such that only members with keys listed in the replacer array are
-//          stringified.
-
-//          Values that do not have JSON representations, such as undefined or
-//          functions, will not be serialized. Such values in objects will be
-//          dropped; in arrays they will be replaced with null. You can use
-//          a replacer function to replace those with JSON values.
-
-//          JSON.stringify(undefined) returns undefined.
-
-//          The optional space parameter produces a stringification of the
-//          value that is filled with line breaks and indentation to make it
-//          easier to read.
-
-//          If the space parameter is a non-empty string, then that string will
-//          be used for indentation. If the space parameter is a number, then
-//          the indentation will be that many spaces.
-
-//          Example:
-
-//          text = JSON.stringify(["e", {pluribus: "unum"}]);
-//          // text is '["e",{"pluribus":"unum"}]'
-
-//          text = JSON.stringify(["e", {pluribus: "unum"}], null, "\t");
-//          // text is '[\n\t"e",\n\t{\n\t\t"pluribus": "unum"\n\t}\n]'
-
-//          text = JSON.stringify([new Date()], function (key, value) {
-//              return this[key] instanceof Date
-//                  ? "Date(" + this[key] + ")"
-//                  : value;
-//          });
-//          // text is '["Date(---current time---)"]'
-
-//      JSON.parse(text, reviver)
-//          This method parses a JSON text to produce an object or array.
-//          It can throw a SyntaxError exception.
-
-//          The optional reviver parameter is a function that can filter and
-//          transform the results. It receives each of the keys and values,
-//          and its return value is used instead of the original value.
-//          If it returns what it received, then the structure is not modified.
-//          If it returns undefined then the member is deleted.
-
-//          Example:
-
-//          // Parse the text. Values that look like ISO date strings will
-//          // be converted to Date objects.
-
-//          myData = JSON.parse(text, function (key, value) {
-//              var a;
-//              if (typeof value === "string") {
-//                  a =
-//   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d*)?)Z$/.exec(value);
-//                  if (a) {
-//                      return new Date(Date.UTC(
-//                         +a[1], +a[2] - 1, +a[3], +a[4], +a[5], +a[6]
-//                      ));
-//                  }
-//                  return value;
-//              }
-//          });
-
-//          myData = JSON.parse(
-//              "[\"Date(09/09/2001)\"]",
-//              function (key, value) {
-//                  var d;
-//                  if (
-//                      typeof value === "string"
-//                      && value.slice(0, 5) === "Date("
-//                      && value.slice(-1) === ")"
-//                  ) {
-//                      d = new Date(value.slice(5, -1));
-//                      if (d) {
-//                          return d;
-//                      }
-//                  }
-//                  return value;
-//              }
-//          );
-
-//  This is a reference implementation. You are free to copy, modify, or
-//  redistribute.
-
-/*jslint
-    eval, for, this
-*/
-
-/*property
-    JSON, apply, call, charCodeAt, getUTCDate, getUTCFullYear, getUTCHours,
-    getUTCMinutes, getUTCMonth, getUTCSeconds, hasOwnProperty, join,
-    lastIndex, length, parse, prototype, push, replace, slice, stringify,
-    test, toJSON, toString, valueOf
-*/
-
-
-// Create a JSON object only if one does not already exist. We create the
-// methods in a closure to avoid creating global variables.
-
-if (typeof JSON !== "object") {
-    JSON = {};
-}
-
-(function () {
-    var rx_one, rx_two, rx_three, rx_four, rx_escapable, rx_dangerous;
-    function initRegExps() {
-    	if (typeof rx_one !== "RegExp") {
-		    rx_one = /^[\],:{}\s]*$/;
-		    rx_two = /\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g;
-		    rx_three = /"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g;
-		    rx_four = /(?:^|:|,)(?:\s*\[)+/g;
-		    rx_escapable = /[\\"\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g;
-		    rx_dangerous = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g;
-    	}
-    }
-
-    function f(n) {
-        // Format integers to have at least two digits.
-        return (n < 10)
-            ? "0" + n
-            : n;
-    }
-
-    function this_value() {
-        return this.valueOf();
-    }
-
-    if (typeof Date.prototype.toJSON !== "function") {
-
-        Date.prototype.toJSON = function () {
-
-            return isFinite(this.valueOf())
-                ? (
-                    this.getUTCFullYear()
-                    + "-"
-                    + f(this.getUTCMonth() + 1)
-                    + "-"
-                    + f(this.getUTCDate())
-                    + "T"
-                    + f(this.getUTCHours())
-                    + ":"
-                    + f(this.getUTCMinutes())
-                    + ":"
-                    + f(this.getUTCSeconds())
-                    + "Z"
-                )
-                : null;
-        };
-
-        Boolean.prototype.toJSON = this_value;
-        Number.prototype.toJSON = this_value;
-        String.prototype.toJSON = this_value;
-    }
-
-    var gap;
-    var indent;
-    var meta;
-    var rep;
-
-
-    function quote(string) {
-
-// If the string contains no control characters, no quote characters, and no
-// backslash characters, then we can safely slap some quotes around it.
-// Otherwise we must also replace the offending characters with safe escape
-// sequences.
-
-        rx_escapable.lastIndex = 0;
-        return rx_escapable.test(string)
-            ? "\"" + string.replace(rx_escapable, function (a) {
-                var c = meta[a];
-                return typeof c === "string"
-                    ? c
-                    : "\\u" + ("0000" + a.charCodeAt(0).toString(16)).slice(-4);
-            }) + "\""
-            : "\"" + string + "\"";
-    }
-
-
-    function str(key, holder) {
-
-// Produce a string from holder[key].
-
-        var i;          // The loop counter.
-        var k;          // The member key.
-        var v;          // The member value.
-        var length;
-        var mind = gap;
-        var partial;
-        var val = holder[key];
-
-// If the value has a toJSON method, call it to obtain a replacement value.
-
-        if (
-            val
-            && typeof val === "object"
-            && typeof val.toJSON === "function"
-        ) {
-            val = val.toJSON(key);
-        }
-
-// If we were called with a replacer function, then call the replacer to
-// obtain a replacement value.
-
-        if (typeof rep === "function") {
-            val = rep.call(holder, key, val);
-        }
-
-// What happens next depends on the value's type.
-
-        switch (typeof val) {
-        case "string":
-            return quote(val);
-
-        case "number":
-
-// JSON numbers must be finite. Encode non-finite numbers as null.
-
-            return (isFinite(val))
-                ? String(val)
-                : "null";
-
-        case "boolean":
-        case "null":
-
-// If the value is a boolean or null, convert it to a string. Note:
-// typeof null does not produce "null". The case is included here in
-// the remote chance that this gets fixed someday.
-
-            return String(val);
-
-// If the type is "object", we might be dealing with an object or an array or
-// null.
-
-        case "object":
-
-// Due to a specification blunder in ECMAScript, typeof null is "object",
-// so watch out for that case.
-
-            if (!val) {
-                return "null";
-            }
-
-// Make an array to hold the partial results of stringifying this object value.
-
-            gap += indent;
-            partial = [];
-
-// Is the value an array?
-
-            if (Object.prototype.toString.apply(val) === "[object Array]") {
-
-// The value is an array. Stringify every element. Use null as a placeholder
-// for non-JSON values.
-
-                length = val.length;
-                for (i = 0; i < length; i += 1) {
-                    partial[i] = str(i, val) || "null";
-                }
-
-// Join all of the elements together, separated with commas, and wrap them in
-// brackets.
-
-                v = partial.length === 0
-                    ? "[]"
-                    : gap
-                        ? (
-                            "[\n"
-                            + gap
-                            + partial.join(",\n" + gap)
-                            + "\n"
-                            + mind
-                            + "]"
-                        )
-                        : "[" + partial.join(",") + "]";
-                gap = mind;
-                return v;
-            }
-
-// If the replacer is an array, use it to select the members to be stringified.
-
-            if (rep && typeof rep === "object") {
-                length = rep.length;
-                for (i = 0; i < length; i += 1) {
-                    if (typeof rep[i] === "string") {
-                        k = rep[i];
-                        v = str(k, val);
-                        if (v) {
-                            partial.push(quote(k) + (
-                                (gap)
-                                    ? ": "
-                                    : ":"
-                            ) + v);
-                        }
-                    }
-                }
-            } else {
-
-// Otherwise, iterate through all of the keys in the object.
-
-                for (k in val) {
-                    if (Object.prototype.hasOwnProperty.call(val, k)) {
-                        v = str(k, val);
-                        if (v) {
-                            partial.push(quote(k) + (
-                                (gap)
-                                    ? ": "
-                                    : ":"
-                            ) + v);
-                        }
-                    }
-                }
-            }
-
-// Join all of the member texts together, separated with commas,
-// and wrap them in braces.
-
-            v = partial.length === 0
-                ? "{}"
-                : gap
-                    ? "{\n" + gap + partial.join(",\n" + gap) + "\n" + mind + "}"
-                    : "{" + partial.join(",") + "}";
-            gap = mind;
-            return v;
-        }
-    }
-
-// If the JSON object does not yet have a stringify method, give it one.
-
-    if (typeof JSON.stringify !== "function") {
-        meta = {    // table of character substitutions
-            "\b": "\\b",
-            "\t": "\\t",
-            "\n": "\\n",
-            "\f": "\\f",
-            "\r": "\\r",
-            "\"": "\\\"",
-            "\\": "\\\\"
-        };
-        JSON.stringify = function (val, replacer, space) {
-        	initRegExps();
-
-// The stringify method takes a value and an optional replacer, and an optional
-// space parameter, and returns a JSON text. The replacer can be a function
-// that can replace values, or an array of strings that will select the keys.
-// A default replacer method can be provided. Use of the space parameter can
-// produce text that is more easily readable.
-
-            var i;
-            gap = "";
-            indent = "";
-
-// If the space parameter is a number, make an indent string containing that
-// many spaces.
-
-            if (typeof space === "number") {
-                for (i = 0; i < space; i += 1) {
-                    indent += " ";
-                }
-
-// If the space parameter is a string, it will be used as the indent string.
-
-            } else if (typeof space === "string") {
-                indent = space;
-            }
-
-// If there is a replacer, it must be a function or an array.
-// Otherwise, throw an error.
-
-            rep = replacer;
-            if (replacer && typeof replacer !== "function" && (
-                typeof replacer !== "object"
-                || typeof replacer.length !== "number"
-            )) {
-                throw new Error("JSON.stringify");
-            }
-
-// Make a fake root object containing our value under the key of "".
-// Return the result of stringifying the value.
-
-            return str("", {"": val});
-        };
-    }
-
-
-// If the JSON object does not yet have a parse method, give it one.
-
-    if (typeof JSON.parse !== "function") {
-        JSON.parse = function (text, reviver) {
-        	initRegExps();
-
-// The parse method takes a text and an optional reviver function, and returns
-// a JavaScript value if the text is a valid JSON text.
-
-            var j;
-
-            function walk(holder, key) {
-
-// The walk method is used to recursively walk the resulting structure so
-// that modifications can be made.
-
-                var k;
-                var v;
-                var val = holder[key];
-                if (val && typeof val === "object") {
-                    for (k in val) {
-                        if (Object.prototype.hasOwnProperty.call(val, k)) {
-                            v = walk(val, k);
-                            if (v !== undefined) {
-                                val[k] = v;
-                            } else {
-                                delete val[k];
-                            }
-                        }
-                    }
-                }
-                return reviver.call(holder, key, val);
-            }
-
-
-// Parsing happens in four stages. In the first stage, we replace certain
-// Unicode characters with escape sequences. JavaScript handles many characters
-// incorrectly, either silently deleting them, or treating them as line endings.
-
-            text = String(text);
-            rx_dangerous.lastIndex = 0;
-            if (rx_dangerous.test(text)) {
-                text = text.replace(rx_dangerous, function (a) {
-                    return (
-                        "\\u"
-                        + ("0000" + a.charCodeAt(0).toString(16)).slice(-4)
-                    );
-                });
-            }
-
-// In the second stage, we run the text against regular expressions that look
-// for non-JSON patterns. We are especially concerned with "()" and "new"
-// because they can cause invocation, and "=" because it can cause mutation.
-// But just to be safe, we want to reject all unexpected forms.
-
-// We split the second stage into 4 regexp operations in order to work around
-// crippling inefficiencies in IE's and Safari's regexp engines. First we
-// replace the JSON backslash pairs with "@" (a non-JSON character). Second, we
-// replace all simple value tokens with "]" characters. Third, we delete all
-// open brackets that follow a colon or comma or that begin the text. Finally,
-// we look to see that the remaining characters are only whitespace or "]" or
-// "," or ":" or "{" or "}". If that is so, then the text is safe for eval.
-
-            if (
-                rx_one.test(
-                    text
-                        .replace(rx_two, "@")
-                        .replace(rx_three, "]")
-                        .replace(rx_four, "")
-                )
-            ) {
-
-// In the third stage we use the eval function to compile the text into a
-// JavaScript structure. The "{" operator is subject to a syntactic ambiguity
-// in JavaScript: it can begin a block or an object literal. We wrap the text
-// in parens to eliminate the ambiguity.
-
-                j = eval("(" + text + ")");
-
-// In the optional fourth stage, we recursively walk the new structure, passing
-// each name/value pair to a reviver function for possible transformation.
-
-                return (typeof reviver === "function")
-                    ? walk({"": j}, "")
-                    : j;
-            }
-
-// If the text is not JSON parseable, then a SyntaxError is thrown.
-
-            throw new SyntaxError("JSON.parse");
-        };
-    }
-}());
-
-/*
-    json_parse.js
-    2016-05-02
-    Public Domain.
-    NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
-    This file creates a json_parse function.
-        json_parse(text, reviver)
-            This method parses a JSON text to produce an object or array.
-            It can throw a SyntaxError exception.
-            The optional reviver parameter is a function that can filter and
-            transform the results. It receives each of the keys and values,
-            and its return value is used instead of the original value.
-            If it returns what it received, then the structure is not modified.
-            If it returns undefined then the member is deleted.
-            Example:
-            // Parse the text. Values that look like ISO date strings will
-            // be converted to Date objects.
-            myData = json_parse(text, function (key, value) {
-                var a;
-                if (typeof value === "string") {
-                    a =
-/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d*)?)Z$/.exec(value);
-                    if (a) {
-                        return new Date(Date.UTC(+a[1], +a[2] - 1, +a[3], +a[4],
-                            +a[5], +a[6]));
-                    }
-                }
-                return value;
-            });
-    This is a reference implementation. You are free to copy, modify, or
-    redistribute.
-    This code should be minified before deployment.
-    See http://javascript.crockford.com/jsmin.html
-    USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
-    NOT CONTROL.
-*/
-
-/*jslint for */
-
-/*property
-    at, b, call, charAt, f, fromCharCode, hasOwnProperty, message, n, name,
-    prototype, push, r, t, text
-*/
-
-// @preserve: parse2
-
-JSON.parse2 = (function () {
-    "use strict";
-
-// This is a function that can parse a JSON text, producing a JavaScript
-// data structure. It is a simple, recursive descent parser. It does not use
-// eval or regular expressions, so it can be used as a model for implementing
-// a JSON parser in other languages.
-
-// We are defining the function inside of another function to avoid creating
-// global variables.
-
-    var at;     // The index of the current character
-    var ch;     // The current character
-    var escapee = {
-        "\"": "\"",
-        "\\": "\\",
-        "/": "/",
-        b: "\b",
-        f: "\f",
-        n: "\n",
-        r: "\r",
-        t: "\t"
-    };
-    var txt;
-
-    var error = function (m) {
-
-// Call error when something is wrong.
-
-        throw {
-            name: "SyntaxError",
-            message: m,
-            at: at,
-            text: txt
-        };
-    };
-
-    var next = function (c) {
-
-// If a c parameter is provided, verify that it matches the current character.
-
-        if (c && c !== ch) {
-            error("Expected '" + c + "' instead of '" + ch + "'");
-        }
-
-// Get the next character. When there are no more characters,
-// return the empty string.
-
-        ch = txt.charAt(at);
-        at += 1;
-        return ch;
-    };
-
-    var number = function () {
-
-// Parse a number value.
-
-        var value;
-        var string = "";
-
-        if (ch === "-") {
-            string = "-";
-            next("-");
-        }
-        while (ch >= "0" && ch <= "9") {
-            string += ch;
-            next();
-        }
-        if (ch === ".") {
-            string += ".";
-            while (next() && ch >= "0" && ch <= "9") {
-                string += ch;
-            }
-        }
-        if (ch === "e" || ch === "E") {
-            string += ch;
-            next();
-            if (ch === "-" || ch === "+") {
-                string += ch;
-                next();
-            }
-            while (ch >= "0" && ch <= "9") {
-                string += ch;
-                next();
-            }
-        }
-        value = +string;
-        if (!isFinite(value)) {
-            error("Bad number");
-        } else {
-            return value;
-        }
-    };
-
-    var string = function () {
-
-// Parse a string value.
-
-        var hex;
-        var i;
-        var value = "";
-        var uffff;
-
-// When parsing for string values, we must look for " and \ characters.
-
-        if (ch === "\"") {
-            while (next()) {
-                if (ch === "\"") {
-                    next();
-                    return value;
-                }
-                if (ch === "\\") {
-                    next();
-                    if (ch === "u") {
-                        uffff = 0;
-                        for (i = 0; i < 4; i += 1) {
-                            hex = parseInt(next(), 16);
-                            if (!isFinite(hex)) {
-                                break;
-                            }
-                            uffff = uffff * 16 + hex;
-                        }
-                        value += String.fromCharCode(uffff);
-                    } else if (typeof escapee[ch] === "string") {
-                        value += escapee[ch];
-                    } else {
-                        break;
-                    }
-                } else {
-                    value += ch;
-                }
-            }
-        }
-        error("Bad string");
-    };
-
-    var white = function () {
-
-// Skip whitespace.
-
-        while (ch && ch <= " ") {
-            next();
-        }
-    };
-
-    var word = function () {
-
-// true, false, or null.
-
-        switch (ch) {
-        case "t":
-            next("t");
-            next("r");
-            next("u");
-            next("e");
-            return true;
-        case "f":
-            next("f");
-            next("a");
-            next("l");
-            next("s");
-            next("e");
-            return false;
-        case "n":
-            next("n");
-            next("u");
-            next("l");
-            next("l");
-            return null;
-        }
-        error("Unexpected '" + ch + "'");
-    };
-
-    var value;  // Place holder for the value function.
-
-    var array = function () {
-
-// Parse an array value.
-
-        var arr = [];
-
-        if (ch === "[") {
-            next("[");
-            white();
-            if (ch === "]") {
-                next("]");
-                return arr;   // empty array
-            }
-            while (ch) {
-                arr.push(value());
-                white();
-                if (ch === "]") {
-                    next("]");
-                    return arr;
-                }
-                next(",");
-                white();
-            }
-        }
-        error("Bad array");
-    };
-
-    var object = function () {
-
-// Parse an object value.
-
-        var key;
-        var obj = {};
-
-        if (ch === "{") {
-            next("{");
-            white();
-            if (ch === "}") {
-                next("}");
-                return obj;   // empty object
-            }
-            while (ch) {
-                key = string();
-                white();
-                next(":");
-                if (Object.hasOwnProperty.call(obj, key)) {
-                    error("Duplicate key '" + key + "'");
-                }
-                obj[key] = value();
-                white();
-                if (ch === "}") {
-                    next("}");
-                    return obj;
-                }
-                next(",");
-                white();
-            }
-        }
-        error("Bad object");
-    };
-
-    value = function () {
-
-// Parse a JSON value. It could be an object, an array, a string, a number,
-// or a word.
-
-        white();
-        switch (ch) {
-        case "{":
-            return object();
-        case "[":
-            return array();
-        case "\"":
-            return string();
-        case "-":
-            return number();
-        default:
-            return (ch >= "0" && ch <= "9")
-                ? number()
-                : word();
-        }
-    };
-
-// Return the json_parse function. It will have access to all of the above
-// functions and variables.
-
-    return function (source, reviver) {
-        var result;
-
-        txt = source;
-        at = 0;
-        ch = " ";
-        result = value();
-        white();
-        if (ch) {
-            error("Syntax error");
-        }
-
-// If there is a reviver function, we recursively walk the new structure,
-// passing each name/value pair to the reviver function for possible
-// transformation, starting with a temporary root object that holds the result
-// in an empty key. If there is not a reviver function, we simply return the
-// result.
-
-        return (typeof reviver === "function")
-            ? (function walk(holder, key) {
-                var k;
-                var v;
-                var val = holder[key];
-                if (val && typeof val === "object") {
-                    for (k in val) {
-                        if (Object.prototype.hasOwnProperty.call(val, k)) {
-                            v = walk(val, k);
-                            if (v !== undefined) {
-                                val[k] = v;
-                            } else {
-                                delete val[k];
-                            }
-                        }
-                    }
-                }
-                return reviver.call(holder, key, val);
-            }({"": result}, ""))
-            : result;
-    };
-}());
+if ($NaN.toString() !== "NaN") throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
 
 })
 
