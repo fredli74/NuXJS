@@ -21,8 +21,8 @@ var JSON_ESCAPE_SEQUENCES = { "\\": "\\\\", "\"": "\\\"", "\b": "\\b", "\f": "\\
 
 JSON = {};
 
-JSON.stringify = function(val) {
-	var stack = [ ];
+JSON.stringify = function(val, replacer) {
+	var stack = [ ], replacerFunction = (typeof replacer === "function" ? replacer : null);
 
 	function quote(str) {
 		var s = '"', l = str.length;
@@ -36,7 +36,10 @@ JSON.stringify = function(val) {
 	}
 
 	function str(key, holder) {
-		var val = holder[key];
+		var val;
+        if ((val = holder[key]) && typeof val === "object" && typeof val.toJSON === "function") val = val.toJSON(key);
+        if (replacerFunction) val = replacerFunction.call(holder, key, val);
+
 		switch (typeof val) {
 			case "object": {
 				if (!val) return "null";
@@ -81,4 +84,11 @@ print(JSON.stringify([]));
 print(JSON.stringify({ x: 1, y: "asdf", z: false, a: [ 1,2,3,undefined,5 ], o: { zzz: null, aaa: undefined, "\u9483": "\n\r\u1234\\/ab" } }));
 var o = { n: null }; first = o; for (var i = 0; i < 20; ++i) { o.n = { i: i, n: null }; o = o.n; } o.n = first.n.n.n.n.n;
 try { print(JSON.stringify(o)); } catch (x) { print(x) }
-
+var o = { toJSON: function(k) { return "smorfen " + k; } };
+print(JSON.stringify(o));
+var o = { "hellu": { a: "b", toJSON: function(k) { return "smorfen " + k; } } }
+print(JSON.stringify(o));
+print(JSON.stringify(o, function(k, v) { return this[k]; }));
+var o = { "hellu": { a: "b", b: "c" } }
+print(JSON.stringify(o, function(k, v) { return (k === 'a' ? "yeah" : v); }));
+try { print(JSON.stringify(o, function(k, v) { return this } )); } catch (x) { print(x) }
