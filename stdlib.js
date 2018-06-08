@@ -64,7 +64,8 @@ var unconstructable = support.specialConstructor; // these are the same now, but
 
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
 		, $Infinity = support.Infinity, $submatch = support.submatch // "$submatch" is used from within regexps, so the name has to be preserved
-		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs;
+		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
+		, $charCodeAt = support.charCodeAt, $substring = support.substring;
 var regExpExec;
 var ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 var WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
@@ -85,7 +86,7 @@ function StringBuilder() { var i = 20, b = this.buffers = [ ]; do { b[--i] = '' 
 StringBuilder.prototype.append = function append(s) {
 	for (var i = 0, n = 256, b = this.buffers; (b[i] += s).length >= n && i < 20; n <<= 1, ++i) { s = b[i]; b[i] = '' }
 };
-StringBuilder.prototype.build = function toString() {
+StringBuilder.prototype.build = function build() {
 	var i, b, s = (b = this.buffers)[i = 19];
 	do { s += b[--i] } while (i > 0);
 	return s
@@ -450,7 +451,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		return (((pos = toInteger(pos)) < 0 || pos >= (s = objectToString(this)).length) ? '' : s[pos]);
 	}),
 	charCodeAt: unconstructable(function charCodeAt(pos) {
-		return support.charCodeAt(objectToString(this), +pos);
+		return $charCodeAt(objectToString(this), +pos);
 	}),
 	concat: unconstructable(function concat(string1) {
 		var args, n = (args = arguments).length, s = objectToString(this);
@@ -490,7 +491,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		if ((start = toInteger(start)) < 0) start = s.length + start;
 		if (end === void 0) end = $Infinity;
 		else if ((end = toInteger(end)) < 0) end = s.length + end;
-		return support.substring(s, start, end);
+		return $substring(s, start, end);
 	}),
 /*	split: unconstructable(function split(separator, limit) {
 		var s = objectToString(this);
@@ -506,7 +507,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	substr: unconstructable(function substr(start, length) {
 		var s = objectToString(this);
 		if ((start = toInteger(start)) < 0) start = s.length + start;
-		return support.substring(s, start, (length === void 0 ? $Infinity : start + toInteger(length)));
+		return $substring(s, start, (length === void 0 ? $Infinity : start + toInteger(length)));
 	}),
 	substring: unconstructable(function substring(start, end) {
 		start = toInteger(start);
@@ -516,7 +517,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			start = end;
 			end = swap;
 		}
-		return support.substring(objectToString(this), start, end);
+		return $substring(objectToString(this), start, end);
 	}),
 	toUpperCase: unconstructable(function toUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
 	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
@@ -671,7 +672,7 @@ var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
 	} else if (arguments.length >= 2 && arguments.length <= 7) {
 		this.Value = timeClip(fromLocalTime(makeDateTime.apply(this, arguments)));
 	} else if (arguments.length === 1) {
-		this.Value = timeClip(typeof (v = arguments[0]) === "string" ? Date.parse(support.toPrimitiveString(v)) : +support.toPrimitiveNumber(v));
+		this.Value = timeClip(typeof (v = arguments[0]) === "string" ? Date.parse('' + v) : +v);
 	} else {
 		this.Value = support.getCurrentTime();
 	}
@@ -906,7 +907,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		if (isClass(s[p], DECIMAL_CHAR)) {
 			n = 0;
 			do {
-				n = n * 10 + (s.charCodeAt(p) - 48); // FIX : +s[p] faster?
+				n = n * 10 + ($charCodeAt(s, p) - 48); // FIX : +s[p] faster?
 				++p;
 			} while (isClass(s[p], DECIMAL_CHAR))
 		}
@@ -954,7 +955,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 			return c;
 		} else {
 			// TODO : shorter escapes for \n etc
-			return (c <= '~' ? "\\x" : "\\u") + ("0000" + c.charCodeAt(0).toString(16)).slice(c <= '~' ? -2 : -4);
+			return (c <= '~' ? "\\x" : "\\u") + ("0000" + $charCodeAt(c, 0).toString(16)).slice(c <= '~' ? -2 : -4);
 		}
 	}
 
@@ -976,14 +977,14 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 				case 'c': {
 					if (isClass(s[p + 2], LETTER_CHAR)) {
 						p += 3;
-						return String.fromCharCode(s[p - 1].charCodeAt(0) & 31);
+						return String.fromCharCode($charCodeAt(s, p - 1) & 31);
 					}
 					break;
 				}
 				case 'x':
 				case 'u': {
 					var n = (c1 === 'x' ? 2 : 4);
-					if (areClass(sub = s.substring(p + 2, p + 2 + n), HEX_CHAR)) {
+					if (areClass(sub = $substring(s, p + 2, p + 2 + n), HEX_CHAR)) {
 						p += 2 + n;
 						return String.fromCharCode(parseInt(sub, 16));
 					}
@@ -1207,7 +1208,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + "-c" + n;
 				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = "$submatch(s," + positionToCode(offset) + ",s.substring(c" + n + ",c" + (n + 1) + "))";
+							var backMatchCode = "$submatch(s," + positionToCode(offset) + ",$substring(s, c" + n + ",c" + (n + 1) + "))";
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, "return " + tail);
@@ -1414,7 +1415,7 @@ defineProperties(RegExp.prototype, { dontEnum: true }, {
 			(a = [ ]).input = string;
 			a.index = m[0];
 			for (var j = 0; j < m.length; j += 2) {
-				a[a.length] = ((m[j] === void 0) ? void 0 : string.substring(m[j], m[j + 1]));
+				a[a.length] = ((m[j] === void 0) ? void 0 : $substring(string, m[j], m[j + 1]));
 			}
 		}
 		return a;
@@ -1443,6 +1444,7 @@ defineProperties(globals, { dontEnum: true }, {
 	String: String,
 	isFinite: unconstructable(function isFinite(v) { return $isFinite(+v) }),
 	isNaN: unconstructable(function isNaN(v) { return $isNaN(+v) }),
+	JSON: support.createWrapper("JSON", void 0),
 	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(objectToString(string)) }),
 	parseInt: unconstructable(function parseInt(string, radix) {
 		string = objectToString(string);
@@ -1545,6 +1547,85 @@ function createErrorConstructor(name, prototype) {
 /* --- ES >3 polyfills --- */
 
 // These are not guaranteed to be 100% compatible
+
+var JSON_ESCAPE_SEQUENCES = { "\\": "\\\\", "\"": "\\\"", "\b": "\\b", "\f": "\\f", "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+
+defineProperties(JSON, { dontEnum: true }, {
+	stringify: unconstructable(function stringify(val, replacer, space) {
+		var stack = [ ], replacerFunction = (typeof replacer === "function" ? replacer : null), gap = '', includeProps;
+
+		if ($getInternalProperty(replacer, "class") === "Array") {
+			includeProps = { };
+			for (var i = replacer.length; --i >= 0;) includeProps[replacer[i]] = true;
+		}
+
+        if (typeof space === "number" || (typeof space === "object" && $getInternalProperty(space, "class") === "Number")) {
+        	space = +space;
+            for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += " ";
+        } else if (typeof space === "string" || (typeof space === "object" && $getInternalProperty(space, "class") === "String")) {
+            gap = $substring('' + space, 0, 10);
+        }
+
+		function quote(str) {
+			var s = '"', l = str.length;
+			for (var i = 0; i < l; ++i) {
+				var ch = str[i], seq;
+				s += ((seq = JSON_ESCAPE_SEQUENCES[ch])
+						? seq : ((ch >= ' ' && ch <= '~')
+						? ch : "\\u" + ("0000" + $charCodeAt(ch, 0).toString(16)).slice(-4))); // FIX : sub <---
+			}
+			return s + '"';
+		}
+
+		function str(key, holder, indent) {
+			var val;
+	        if ((val = holder[key]) && typeof val === "object" && typeof val.toJSON === "function") val = val.toJSON(key);
+	        if (replacerFunction) val = replacerFunction.call(holder, key, val);
+
+	        var lineEnd = (gap ? '\n' + indent : '');
+	        if (typeof val === "object") {
+	        	switch ($getInternalProperty(val, "class")) {
+	        		case "Number": val = +val; break;
+	        		case "String": val = '' + val; break;
+	        		case "Boolean": val = $getInternalProperty(val, "value"); break;
+	        	}
+	        }
+			switch (typeof val) {
+				case "object": {
+					if (!val) return "null";
+					for (var i = stack.length; --i >= 0; ) {
+						if (stack[i] === val) throw TypeError("Cannot convert circular structure to JSON");
+					}
+					stack[stack.length] = val;
+					if ($getInternalProperty(val, "class") === "Array") {
+						var s = '', l = val.length;
+						for (var i = 0; i < l; ++i) {
+							s += (s ? ',' : '[') + lineEnd + gap;
+							s += str(i, val, indent + gap) || "null";
+						}
+						return (s ? s + lineEnd + ']' : "[]");
+					} else {
+						var s = '', v;
+						for (var k in (includeProps ? includeProps : val)) {
+							if (support.hasOwnProperty(val, k)) {
+								if (v = str(k, val, indent + gap)) {
+									s += (s ? ',' : '{') + lineEnd + gap;
+									s += quote(k) + (gap ? ": " : ':') + v;
+								}
+							}
+						}
+						return (s ? s + lineEnd + '}' : "{}");
+					}
+				}
+
+				case "string": return quote(val);
+				case "number": return ($isFinite(val) ? objectToString(val) : "null");
+				case "boolean": return objectToString(val);
+			}
+		}
+		return str('', { '': val }, '');
+	})
+});
 
 defineProperties(Array, { dontEnum: true }, {
 	isArray: unconstructable(function isArray(o) {

@@ -23,7 +23,12 @@ if (typeof JSON === 'undefined') {
 	JSON = {};
 
 	JSON.stringify = function(val, replacer, space) {
-		var stack = [ ], replacerFunction = (typeof replacer === "function" ? replacer : null), gap = '';
+		var stack = [ ], replacerFunction = (typeof replacer === "function" ? replacer : null), gap = '', includeProps;
+
+		if (Array.isArray(replacer)) {
+			includeProps = {};
+			for (var i = replacer.length; --i >= 0;) includeProps[replacer[i]] = true;
+		}
 
         if (typeof space === "number") {
             for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += " ";
@@ -51,7 +56,7 @@ if (typeof JSON === 'undefined') {
 			switch (typeof val) {
 				case "object": {
 					if (!val) return "null";
-					for (var i = stack.length - 1; --i >= 0; ) {
+					for (var i = stack.length; --i >= 0; ) {
 						if (stack[i] === val) throw TypeError("Cannot convert circular structure to JSON");
 					}
 					stack[stack.length] = val;
@@ -64,7 +69,7 @@ if (typeof JSON === 'undefined') {
 						return (s ? s + lineEnd + ']' : "[]");
 					} else {
 						var s = '', v;
-						for (var k in val) {
+						for (var k in (includeProps ? includeProps : val)) {
 							if (val.hasOwnProperty(k)) {
 								if (v = str(k, val, indent + gap)) {
 									s += (s ? ',' : '{') + lineEnd + gap;
@@ -93,6 +98,8 @@ print(JSON.stringify([]));
 print(JSON.stringify({ x: 1, y: "asdf", z: false, a: [ 1,2,3,undefined,5 ], o: { zzz: null, aaa: undefined, "\u9483": "\n\r\u1234\\/ab" } }));
 var o = { n: null }; first = o; for (var i = 0; i < 20; ++i) { o.n = { i: i, n: null }; o = o.n; } o.n = first.n.n.n.n.n;
 try { print(JSON.stringify(o)); } catch (x) { print(x) }
+var o = { }; o.n = o;
+try { print(JSON.stringify(o)); } catch (x) { print(x) }
 var o = { toJSON: function(k) { return "smorfen " + k; } };
 print(JSON.stringify(o));
 var o = { "hellu": { a: "b", toJSON: function(k) { return "smorfen " + k; } } }
@@ -111,3 +118,6 @@ print(JSON.stringify(o, null, ""));
 print(JSON.stringify(new Number(234)));
 print(JSON.stringify(new String(234)));
 print(JSON.stringify(new Boolean(234)));
+print(JSON.stringify({a:"a",b:"b",3:"3"},["a","a",new Number(3)]));
+print(JSON.stringify({a:"a",b:"b",3:"3",c:{a:"popo",d:"nada"}},["a","a",new Number(3)]));
+print(JSON.stringify({a:"a",b:"b",3:"3",a:{a:"popo",d:"nada"}},["a","a",new Number(3)]));
