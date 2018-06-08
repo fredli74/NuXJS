@@ -307,7 +307,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
 		} else if ((radix = toInteger(radix)) < 2 || radix > 36) {
-			throw RangeError("illegal radix for toString()");
+			throw RangeError("Illegal radix for toString()");
 		} else {
 			// TODO : fraction?
 			var sign = '', s = '';
@@ -1548,7 +1548,7 @@ function createErrorConstructor(name, prototype) {
 
 // These are not guaranteed to be 100% compatible
 
-var JSON_ESCAPE_SEQUENCES = { "\\": "\\\\", "\"": "\\\"", "\b": "\\b", "\f": "\\f", "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+var JSON_ESCAPE_SEQUENCES = { '\\': "\\\\", '"': "\\\"", '\b': "\\b", '\f': "\\f", '\n': "\\n", '\r': "\\r", '\t': "\\t" };
 
 defineProperties(JSON, { dontEnum: true }, {
 	stringify: unconstructable(function stringify(val, replacer, space) {
