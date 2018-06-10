@@ -90,3 +90,4 @@
 
 *) Not a violation but eval() conforms to the ES5 rules concerning direct vs non-direct call to eval(). In ES3 only behavior of direct calls are specified.
 
+*) Not a violation but a quite hard restriction is imposed on recursive grammar constructs such as deep object literals (64 levels only). This is so that everything works well without increasing C++ stack size on Windows for example.

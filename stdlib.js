@@ -92,9 +92,9 @@ StringBuilder.prototype.build = function build() {
 	return s
 };
 
-function toInteger(v) {
-	return ($isNaN(v = +v) ? 0.0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))))
-}
+function toInt(v) { return $isNaN(v = +v) ? 0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))); }
+function toInt32(v) { return toInt(v) | 0; }
+function toUInt32(v) { return toInt(v) >>> 0; }
 
 function isPrimitive(v) {
 	var v, t;
@@ -306,12 +306,12 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		var value = getInternalNumber(this, "toString");
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
-		} else if ((radix = toInteger(radix)) < 2 || radix > 36) {
+		} else if ((radix = toInt(radix)) < 2 || radix > 36) {
 			throw nativeErrors.RangeError("Illegal radix for toString()");
 		} else {
 			// TODO : fraction?
 			var sign = '', s = '';
-			if ((value = toInteger(value)) < 0) {
+			if ((value = toInt(value)) < 0) {
 				value = -value;
 				sign = '-';
 			}
@@ -330,7 +330,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		} else if (fractionDigits === void 0) {
 			return numberToString(value, void 0, $Infinity);
 		} else {
-			var digits = toInteger(fractionDigits);
+			var digits = toInt(fractionDigits);
 			if (digits < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal fractionDigits argument for toExponential()");
 			}
@@ -339,7 +339,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 	}),
 	toFixed: unconstructable(function toFixed(fractionDigits) {
 		var value = getInternalNumber(this, "toFixed");
-		var digits = toInteger(fractionDigits);
+		var digits = toInt(fractionDigits);
 		if (digits < 0 || digits > 20) {
 			throw nativeErrors.RangeError("Illegal fractionDigits argument for toFixed()");
 		}
@@ -367,7 +367,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		if (precision === void 0 || !$isFinite(value)) {
 			return value;
 		} else {
-			var digits = toInteger(precision) - 1;
+			var digits = toInt(precision) - 1;
 			if (digits < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal precision argument for toPrecision()");
 			}
@@ -448,7 +448,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
 	charAt: unconstructable(function charAt(pos) {
 		var s;
-		return (((pos = toInteger(pos)) < 0 || pos >= (s = objectToString(this)).length) ? '' : s[pos]);
+		return (((pos = toInt(pos)) < 0 || pos >= (s = objectToString(this)).length) ? '' : s[pos]);
 	}),
 	charCodeAt: unconstructable(function charCodeAt(pos) {
 		return $charCodeAt(objectToString(this), +pos);
@@ -460,13 +460,13 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	}),
 	indexOf: unconstructable(function indexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = objectToString(this)).length - (s = objectToString(searchString)).length, pos = arguments[1];
-		if ((i = toInteger(pos)) < 0) i = 0;
+		if ((i = toInt(pos)) < 0) i = 0;
 		for (; i <= e; ++i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
 	lastIndexOf: unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var t, s, i, e = (t = objectToString(this)).length - (s = objectToString(searchString)).length, pos = arguments[1];
-		if ($isNaN(pos = +pos) || (i = toInteger(pos)) > e) i = e;
+		if ($isNaN(pos = +pos) || (i = toInt(pos)) > e) i = e;
 		for (; i >= 0; --i) if ($submatch(t, i, s)) return i;
 		return -1;
 	}),
@@ -488,15 +488,15 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	}),
 	slice: unconstructable(function slice(start, end) {
 		var s = objectToString(this);
-		if ((start = toInteger(start)) < 0) start = s.length + start;
+		if ((start = toInt(start)) < 0) start = s.length + start;
 		if (end === void 0) end = $Infinity;
-		else if ((end = toInteger(end)) < 0) end = s.length + end;
+		else if ((end = toInt(end)) < 0) end = s.length + end;
 		return $substring(s, start, end);
 	}),
 /*	split: unconstructable(function split(separator, limit) {
 		var s = objectToString(this);
 		var a = [ ];
-		limit = ((limit === void 0) ? 0xFFFFFFFF : toInteger(limit));
+		limit = ((limit === void 0) ? 0xFFFFFFFF : toInt(limit));
 		var sl = s.length;
 		if ($getInternalProperty(separator, "class") !== "RegExp") separator = objectToString(separator);
 		if (limit === 0) {
@@ -506,13 +506,13 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	}),*/
 	substr: unconstructable(function substr(start, length) {
 		var s = objectToString(this);
-		if ((start = toInteger(start)) < 0) start = s.length + start;
-		return $substring(s, start, (length === void 0 ? $Infinity : start + toInteger(length)));
+		if ((start = toInt(start)) < 0) start = s.length + start;
+		return $substring(s, start, (length === void 0 ? $Infinity : start + toInt(length)));
 	}),
 	substring: unconstructable(function substring(start, end) {
-		start = toInteger(start);
+		start = toInt(start);
 		if (end === void 0) end = $Infinity;
-		else if ((end = toInteger(end)) < start) {
+		else if ((end = toInt(end)) < start) {
 			var swap = start;
 			start = end;
 			end = swap;
@@ -561,7 +561,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	join: unconstructable(function join(separator) {
-		var s = new StringBuilder, s2, l = this.length;
+		var s = new StringBuilder, s2, l = toUInt32(this.length);
 		separator = (separator === void 0 ? ',' : objectToString(separator));
 		for (var i = 0; i < l; ++i) {
 			if (i > 0) s.append(separator);
@@ -571,19 +571,19 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	pop: unconstructable(function pop() {
 		var v = void 0, l;
-		if ((l = this.length) > 0) {
-			v = this[l - 1];
-			--this.length;
+		if ((l = toUInt32(this.length)) > 0) {
+			v = this[--l];
+			this.length = l;
 		}
 		return v;
 	}),
 	push: unconstructable(function push(item) {
-		var argv, offset = this.length, end = (argv = arguments).length + offset;
+		var argv, offset = toUInt32(this.length), end = (argv = arguments).length + offset;
 		for (var i = offset; i < end; ++i) this[i] = argv[i - offset];
-		return end;
+		return (this.length = end);
 	}),
 	reverse: unconstructable(function reverse() {
-		var len, mid = $floor((len = this.length) / 2);
+		var len, mid = $floor((len = toUInt32(this.length)) / 2);
 		--len;
 		for (var leftIndex = 0; leftIndex < mid; ++leftIndex) {
 			var rightIndex = len - leftIndex;
@@ -689,7 +689,7 @@ Date.parse = function(s) {
 		((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
 		s[i] === "-" && (++i, readPart(2) -1),
 		s[i] === "-" && (++i, readPart(2)) || 1) + epochFromTime(
-		((ch = s[i]) === "T" || ch === " ") && (++i, readPart(2)) || 0,
+		((ch = s[i]) === "T" || ch === ' ') && (++i, readPart(2)) || 0,
 		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
 		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
 		(ch = s[i]) === "." && (++i, readPart(3)) || 0);
@@ -715,12 +715,12 @@ Date.prototype.toISOString = function() {
 Date.prototype.toUTCString = function() {
 	var z = this.Value;
 	if ($isNaN(z)) return "Invalid Date";
-	return (epochToDateString(z) + " " + epochToTimeString(z))
+	return (epochToDateString(z) + ' ' + epochToTimeString(z))
 };
 Date.prototype.toString = function() {
 	var l = toLocalTime(this.Value);
 	if ($isNaN(l)) return "Invalid Date";
-	return (epochToDateString(l) + " " + epochToTimeString(l))
+	return (epochToDateString(l) + ' ' + epochToTimeString(l))
 };
 Date.prototype.toDateString = function() {
 	var l = toLocalTime(this.Value);
@@ -1363,7 +1363,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 function execRegExp(re, string) {
 	var i, m, l;
 	string = objectToString(string);
-	if ((i = (re.global ? toInteger(re.lastIndex) : 0)) >= 0) {
+	if ((i = (re.global ? toInt(re.lastIndex) : 0)) >= 0) {
 		for (l = string.length; i <= l; ++i) {
 			if (m = $getInternalProperty(re, "value")(string, i)) {
 				if (re.global) {
@@ -1455,7 +1455,7 @@ defineProperties(globals, { dontEnum: true }, {
 			case '-': sign = -1;
 			case '+': ++i;
 		}
-		if (((radix = toInteger(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
+		if (((radix = toInt32(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
 			i += 2;
 			radix = 16;
 		}
@@ -1525,9 +1525,9 @@ function createErrorConstructor(name, prototype) {
 
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
-		support.defineProperty(nativeErrors, name = ERROR_NAMES[i]
+		support.defineProperty(globals, name = ERROR_NAMES[i]
 				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
-		globals[name] = nativeErrors[name];
+		nativeErrors[name] = globals[name];
 		constructor.name = name;	// Notice: from ES6 and upwards "name" is read-only (and you would have to delete it to modify here), but it isn't in this implementation
 		defineProperties(constructor, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: prototype });
 		defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
@@ -1560,7 +1560,7 @@ defineProperties(JSON, { dontEnum: true }, {
 
         if (typeof space === "number" || (typeof space === "object" && $getInternalProperty(space, "class") === "Number")) {
         	space = +space;
-            for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += " ";
+            for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += ' ';
         } else if (typeof space === "string" || (typeof space === "object" && $getInternalProperty(space, "class") === "String")) {
             gap = $substring('' + space, 0, 10);
         }

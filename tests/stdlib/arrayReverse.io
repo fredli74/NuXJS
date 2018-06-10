@@ -43,3 +43,20 @@
 > print(a.reverse().toString())
 < 1,,,3,,,,,,,end
 -
+> var o = { "0": "a", "1": "b", "2": "c", "3": "d", "length": 4.7 };
+> Array.prototype.reverse.call(o);
+> print(o[0]);
+< d
+-
+> print(o[1]);
+< c
+-
+> print(o[2]);
+< b
+-
+> print(o[3]);
+< a
+-
+> print(o.length);
+< 4.7
+-
