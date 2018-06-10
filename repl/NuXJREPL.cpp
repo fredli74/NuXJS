@@ -1,4 +1,4 @@
-#include "NuXJScript.h"
+#include "../src/NuXJScript.h"
 #include <fstream>
 #include <memory>
 #include <vector>
@@ -387,6 +387,24 @@ Var test1(Runtime& rt, const Var& thisVar, const VarList& args) {
 	return Var(rt, static_cast<double>(args[0]) + args[1]);
 }
 
+Var load(Runtime& rt, const Var& thisVar, const VarList& args) {
+	std::wifstream stdlibStream;
+	std::wstring contentsWide;
+	try {
+		const std::wstring filenameWide = args[0];
+		std::wifstream stdlibStream(std::string(filenameWide.begin(), filenameWide.end()));
+		if (!stdlibStream.good()) {
+			ScriptException::throwError(rt.getHeap(), GENERIC_ERROR, "Could not open input file");
+		}
+		stdlibStream.exceptions(std::ios_base::badbit | std::ios_base::failbit);
+		contentsWide = std::wstring(std::istreambuf_iterator<wchar_t>(stdlibStream), std::istreambuf_iterator<wchar_t>());
+	}
+	catch (const std::ios_base::failure& x) {
+		ScriptException::throwError(rt.getHeap(), GENERIC_ERROR, x.what());
+	}
+	return Var(rt, contentsWide);
+}
+
 int testMain(int argc, const char* argv[]) {
     String source(String::EMPTY);
     std::auto_ptr<std::wifstream> inputFileStream;
@@ -431,7 +449,9 @@ suppressStdErr = true;
     Heap heap;
     Runtime rt(heap);
 	Object& globals = *rt.getGlobalObject();
-
+	Var globs = rt.getGlobals();
+	globs["load"] = load;
+	
 #if 0
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
@@ -458,7 +478,6 @@ suppressStdErr = true;
 	*/
 	
 rt.setupStandardLibrary();
-	Var globs = rt.getGlobals();
 	globs["tezt"] = 55;
 	assert(globs.has("tezt"));
 	assert(!globs.has("ttezt"));

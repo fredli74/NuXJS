@@ -1246,7 +1246,7 @@ class Compiler : public GCItem {
 
 				enum Target { FOR_GLOBAL, FOR_FUNCTION, FOR_EVAL };
 	
-				Compiler(GCList& gcList, Code* code, Target compileFor);
+				Compiler(GCList& gcList, Code* code, Target compileFor, int initialNestCounter = 0);
 				const Char* compile(const Char* b, const Char* e);
 				const Char* compileFunction(const Char* b, const Char* e, const String* functionName, const String* selfName = 0); // FIX : messy, why do we have compilerFor if we separate this anyhow? Maybe subclass Compiler instead?
 				void compile(const String& source);
@@ -1361,6 +1361,7 @@ class Compiler : public GCItem {
 				CodeSection* currentSection;
 				bool acceptInOperator;
 				int withScopeCounter; // FIX : if we have a Context object instead as "this" we could create a new one with a simple flag for this instead of yucky counter
+				int nestCounter;
 
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(code);

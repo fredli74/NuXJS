@@ -109,7 +109,7 @@ if (true) {
 			}
 			if (ch === 'e' || ch === 'E') {
 				if ((ch = t[++p]) === '-' || ch === '+') ch = t[++p];
-				if ((ch = t[++p]) < '0' || ch > '9') return;
+				if ((ch = t[p]) < '0' || ch > '9') return;
 				while ((ch = t[++p]) >= '0' && ch <= '9') ;
 			}
 			return p;
@@ -282,3 +282,4 @@ try { print(JSON.stringify(JSON.parse('{ "a":"b" "c":"d" }'))) } catch (x) { pri
 try { print(JSON.stringify(JSON.parse('{ "a":"b","c":"d", }'))) } catch (x) { print(x) }
 try { print(JSON.stringify(JSON.parse('{ "a":"b",,"c":"d" }'))) } catch (x) { print(x) }
 print(JSON.stringify(JSON.parse('{"a":"bcd","e":"fgh","f":{"g\u004C":123.456e+11}}', function(k, v) { return (k === "gL" ? "qwertyiop" : v) })));
+try { print(JSON.stringify(JSON.parse("[1eE2]"))) } catch (x) { print(x) }

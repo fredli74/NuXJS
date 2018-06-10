@@ -48,7 +48,7 @@
       disableMainThreadChecker = "YES"
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/magnus/projects/lab/ScriptLab/NuXJScript"
+      customWorkingDirectory = "/Users/magnus/projects/NuXJS"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
@@ -66,6 +66,14 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "temp/reassignEvalShouldntBreakRegExp20180405.js"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "testJSON.js"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "JSONTestSuite-master/test_parsing/n_structure_100000_opening_arrays.json"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument

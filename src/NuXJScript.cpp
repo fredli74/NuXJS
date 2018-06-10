@@ -1911,7 +1911,7 @@ void Processor::pop(Int32 count) { assert(sp - count + 1 >= stack.begin()); sp -
 void Processor::enter(const Code* code, Scope* scope, Object* thisObject) {
 	// We could grow stack here *but* then existing pointers into the stack might become invalid and we would need to copy arguments for native calls somewhere (e.g. to C++ stack).
 	if (sp + code->getMaxStackDepth() > stack.end()) {
-		error(RANGE_ERROR, &STACK_OVERFLOW_STRING);
+		ScriptException::throwError(heap, RANGE_ERROR, &STACK_OVERFLOW_STRING); // Notice: we can't use virtual throw here, cause we need to abort any sp changes etc that could happen if we continued execution beyond this point.
 	} else {
 		pushFrame(code, scope, (thisObject == 0 ? rt.getGlobalObject() : thisObject));
 		ip = code->getCodeWords();
@@ -2496,9 +2496,10 @@ struct Compiler::SemanticScope {
 	QuickVector<BranchPoint> finallys; 		// source points for finally jsr's
 };
 
-Compiler::Compiler(GCList& gcList, Code* code, Target compileFor)
+Compiler::Compiler(GCList& gcList, Code* code, Target compileFor, int initialNestCounter)
 		: super(gcList), heap(gcList.getHeap()), code(code), compilingFor(compileFor), setupSection(heap, 1)
-		, mainSection(heap, 1), b(0), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0) { }
+		, mainSection(heap, 1), b(0), p(0), e(0), currentSection(0), acceptInOperator(true), withScopeCounter(0)
+		, nestCounter(initialNestCounter) { }
 
 const String* Compiler::newHashedString(Heap& heap, const Char* b, const Char* e) {
 	if (b == e) {
@@ -2559,7 +2560,7 @@ void Compiler::CodeSection::insertSection(const CodeSection& section) {
 
 void Compiler::emit(Processor::Opcode opcode, Int32 operand) {
 	if (operand < MIN_OPERAND_VALUE || operand > MAX_OPERAND_VALUE) { // Highly hypothetical, but correctness!
-		error(GENERIC_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
+		error(RANGE_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
 	}
 	currentSection->emit(opcode, operand);
 }
@@ -3268,7 +3269,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 void Compiler::functionDefinition(const String* functionName, const String* selfName) {
 	assert(functionName != 0);
 	Code* func = new(heap) Code(heap.managed(), code->constants);
-	Compiler funcCompiler(heap.roots(), func, Compiler::FOR_FUNCTION);
+	Compiler funcCompiler(heap.roots(), func, Compiler::FOR_FUNCTION, nestCounter);
 	try {
 		p = funcCompiler.compileFunction(p, e, functionName, selfName);
 	}
@@ -3280,8 +3281,18 @@ void Compiler::functionDefinition(const String* functionName, const String* self
 }
 
 const Int32 CATCH_PARAMETER = 0x7FFFFFFF;
+const Int32 MAX_NESTED_EXPRESSION_DEPTH = 64;
 
 bool Compiler::optionalExpression(ExpressionResult& xr, Precedence precedence) {
+	if (nestCounter >= MAX_NESTED_EXPRESSION_DEPTH) {
+		error(RANGE_ERROR, "Internal compiler limitations reached. Reduce code complexity.");
+	}
+	struct NestCounter {
+		NestCounter(Compiler& c) : c(c) { ++c.nestCounter; };
+		~NestCounter() { --c.nestCounter; };
+		Compiler& c;
+	} nestCounter(*this);
+	
 	if (!preOperate(xr, precedence)) {
 		if (eof()) {
 			return false;
