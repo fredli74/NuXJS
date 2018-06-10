@@ -1549,6 +1549,7 @@ function createErrorConstructor(name, prototype) {
 // These are not guaranteed to be 100% compatible
 
 var JSON_ESCAPE_SEQUENCES = { '\\': "\\\\", '"': "\\\"", '\b': "\\b", '\f': "\\f", '\n': "\\n", '\r': "\\r", '\t': "\\t" };
+var MAX_JSON_DEPTH = 61;	// compiler internal recursion limit is 64 (as of 20180610), we must stick under this for eval() to work and 61 gives us enough margin
 
 defineProperties(JSON, { dontEnum: true }, {
 	stringify: unconstructable(function stringify(val, replacer, space) {
@@ -1593,10 +1594,12 @@ defineProperties(JSON, { dontEnum: true }, {
 			switch (typeof val) {
 				case "object": {
 					if (!val) return "null";
-					for (var i = stack.length; --i >= 0; ) {
+					var l;
+					for (var i = (l = stack.length); --i >= 0; ) {
 						if (stack[i] === val) throw TypeError("Cannot convert circular structure to JSON");
 					}
-					stack[stack.length] = val;
+					if (l > MAX_JSON_DEPTH) throw TypeError("Structure too deeply nested for JSON conversion");
+					stack[l] = val;
 					if ($getInternalProperty(val, "class") === "Array") {
 						var s = '', l = val.length;
 						for (var i = 0; i < l; ++i) {
@@ -1627,13 +1630,14 @@ defineProperties(JSON, { dontEnum: true }, {
 	}),
 
 	parse: unconstructable(function parse(text, reviver) {
-		function ws(t, p) {
+		var nest = 0;
+		function space(t, p) {
 			var ch;
 			while ((ch = t[p]) === ' ' || ch === '\t' || ch === '\r' || ch === '\n') ++p;
 			return p;
 		}
-		function num(t, p) {
-			var b = p, ch;
+		function number(t, p) {
+			var ch;
 			if (t[p] === '-') ++p;
 			if ((ch = t[p]) === '0') ch = t[++p];
 			else if (ch >= '1' && ch <= '9') do { ch = t[++p]; } while (ch >= '0' && ch <= '9');
@@ -1649,8 +1653,8 @@ defineProperties(JSON, { dontEnum: true }, {
 			}
 			return p;
 		}
-		function str(t, p) {
-			var b = p, ch;
+		function string(t, p) {
+			var ch;
 			if (t[p] !== '"') return;
 			++p;
 			while ((ch = t[p]) !== '"' && ch >= ' ') {
@@ -1658,61 +1662,60 @@ defineProperties(JSON, { dontEnum: true }, {
 					switch (t[++p]) {
 						default: return;
 						case '"': case '/': case '\\': case 'b': case 'f': case 'n': case 'r': case 't': break;
-						case 'u': {
+						case 'u':
 							for (var i = 4; --i >= 0; ) {
-								if (!(((ch = t[++p]) >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) return;
+								if (!(((ch = t[++p]) >= '0' && ch <= '9')
+										|| (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) return;
 							};
 							break;
-						}
 					}
 				}
 				++p;
 			}
 			if (ch === '"') return ++p;
 		}
-		function lit(t, p) {
+		function literal(t, p) {
 			if (t.substr(p, 4) === "true") return p + 4;
 			else if (t.substr(p, 5) === "false") return p + 5;
 			else if (t.substr(p, 4) === "null") return p + 4;
 		}
-		function obj(t, p) {
-			var b = p, ch, expectComma = false;
-			if (t[p] !== '{') return;
-			p = ws(t, ++p);
-			while ((ch = t[p]) !== '}' && ch !== '') {
-				if (expectComma) {
-					if (ch !== ',') return;
-					p = ws(t, ++p);
+		function objectOrArray(t, p, open, close) {
+			if (nest > MAX_JSON_DEPTH) throw TypeError("Structure too deeply nested for JSON conversion");
+			++nest;
+			try {
+				var ch, expectComma = false;
+				if (t[p] !== open) return;
+				p = space(t, ++p);
+				while ((ch = t[p]) !== close && ch !== '') {
+					if (expectComma) {
+						if (ch !== ',') return;
+						p = space(t, ++p);
+					}
+					if (open === '{') {
+						if (!(p = string(t, p)) || t[p = space(t, p)] !== ':') return;
+						p = space(t, ++p);
+					}
+					if (!(parser = PARSERS[t[p]]) || !(p = parser(t, p))) return;
+					p = space(t, p);
+					expectComma = true;
 				}
-				if (!(p = str(t, p)) || t[p = ws(t, p)] !== ':') return;
-				if (!(parser = PARSERS[t[p = ws(t, ++p)]]) || !(p = parser(t, p))) return;
-				p = ws(t, p);
-				expectComma = true;
+				if (ch === close) return ++p;
 			}
-			if (ch === '}') return ++p;
-		}
-		function arr(t, p) {
-			var b = p, ch, l = -1, expectComma = false;
-			if (t[p] !== '[') return;
-			p = ws(t, ++p);
-			while ((ch = t[p]) !== ']' && ch !== '') {
-				if (expectComma) {
-					if (ch !== ',') return;
-					p = ws(t, ++p);
-				}
-				if (!(parser = PARSERS[t[p]]) || !(p = parser(t, p))) return;
-				p = ws(t, p);
-				expectComma = true;
+			finally {
+				--nest;
 			}
-			if (ch === ']') return ++p;
 		}
+		function object(t, p) { return objectOrArray(t, p, '{', '}'); }
+		function array(t, p) { return objectOrArray(t, p, '[', ']'); }
 		var PARSERS = {
-			'{': obj, '[': arr, '"': str, 't': lit, 'f': lit, 'n': lit, '-': num
-			, '0': num, '1': num, '2': num, '3': num, '4': num, '5': num, '6': num, '7': num, '8': num, '9': num
+			'{': object, '[': array, '"': string, 't': literal, 'f': literal, 'n': literal
+			, '-': number, '0': number, '1': number, '2': number, '3': number, '4': number
+			, '5': number, '6': number, '7': number, '8': number, '9': number
 		};
 		text = text.toString();
 		var p, parser;
-		if ((parser = PARSERS[text[p = ws(text, 0)]]) && (p = parser(text, p)) && (p = ws(text, p)) === text.length) {
+		if ((parser = PARSERS[text[p = space(text, 0)]]) && (p = parser(text, p))
+				&& (p = space(text, p)) === text.length) {
 			var val = eval('(' + text + ')');
             if (typeof reviver === "function") {
             	function walk(holder, key) {
