@@ -17,7 +17,7 @@
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
-	@preserve: $substring, createRegExp,CC,global,source,JSON,stringify,toJSON
+	@preserve: $substring,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift
 	
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -303,57 +303,57 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 	valueOf: unconstructable(function valueOf() { return getInternalNumber(this, "valueOf") }),
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: unconstructable(function toString(radix) {
-		var value = getInternalNumber(this, "toString");
-		if (radix === void 0 || !$isFinite(value)) {
-			return '' + value;
+		var val = getInternalNumber(this, "toString");
+		if (radix === void 0 || !$isFinite(val)) {
+			return '' + val;
 		} else if ((radix = toInt(radix)) < 2 || radix > 36) {
 			throw nativeErrors.RangeError("Illegal radix for toString()");
 		} else {
 			// TODO : fraction?
 			var sign = '', s = '';
-			if ((value = toInt(value)) < 0) {
-				value = -value;
+			if ((val = toInt(val)) < 0) {
+				val = -val;
 				sign = '-';
 			}
 			do {
-				s = ALPHA_DIGITS_LOWER[value % radix] + s;
-				value = $floor(value / radix);
-			} while (value > 0);
+				s = ALPHA_DIGITS_LOWER[val % radix] + s;
+				val = $floor(val / radix);
+			} while (val > 0);
 			return sign + s;
 		}
 	}),
 	toExponential: unconstructable(function toExponential(fractionDigits) {
-		var value = getInternalNumber(this, "toExponential");
+		var val = getInternalNumber(this, "toExponential");
 		var string = '';
-		if (!$isFinite(value)) {
-			return value;
+		if (!$isFinite(val)) {
+			return val;
 		} else if (fractionDigits === void 0) {
-			return numberToString(value, void 0, $Infinity);
+			return numberToString(val, void 0, $Infinity);
 		} else {
 			var digits = toInt(fractionDigits);
 			if (digits < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal fractionDigits argument for toExponential()");
 			}
-			return numberToString(value, digits, $Infinity);
+			return numberToString(val, digits, $Infinity);
 		}
 	}),
 	toFixed: unconstructable(function toFixed(fractionDigits) {
-		var value = getInternalNumber(this, "toFixed");
+		var val = getInternalNumber(this, "toFixed");
 		var digits = toInt(fractionDigits);
 		if (digits < 0 || digits > 20) {
 			throw nativeErrors.RangeError("Illegal fractionDigits argument for toFixed()");
 		}
-		if ($isNaN(value) || value <= -1e21 || value >= 1e21) {
-			return '' + value;
+		if ($isNaN(val) || val <= -1e21 || val >= 1e21) {
+			return '' + val;
 		} else {
 			var string = '';
-			if (value < 0) {
-				value = -value;
+			if (val < 0) {
+				val = -val;
 				string = '-';
 			}
 			var magnitude = support.pow(10, digits);
-			var integer = $floor(value);
-			var decimals = $floor((value - integer) * magnitude + 0.5);
+			var integer = $floor(val);
+			var decimals = $floor((val - integer) * magnitude + 0.5);
 			string += integer + (decimals >= magnitude ? 1 : 0);
 			if (digits > 0) {
 				string += '.' + ("00000000000000000000" + decimals).slice(-digits);
@@ -362,16 +362,16 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		}
 	}),
 	toPrecision: unconstructable(function toPrecision(precision) {
-		var value = getInternalNumber(this, "toPrecision");
+		var val = getInternalNumber(this, "toPrecision");
 		var string = '';
-		if (precision === void 0 || !$isFinite(value)) {
-			return value;
+		if (precision === void 0 || !$isFinite(val)) {
+			return val;
 		} else {
 			var digits = toInt(precision) - 1;
 			if (digits < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal precision argument for toPrecision()");
 			}
-			return numberToString(value, digits, -6);
+			return numberToString(val, digits, -6);
 		}
 	})
 });
@@ -595,12 +595,13 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	shift: unconstructable(function shift() {
 		var len, elementZero;
-		if (len = this.length) {
+		if (len = toUInt32(this.length)) {
 			elementZero = this[0];
 			for (var i = 1; i < len; ++i) {
-				if (i in this) this[i - 1] = this[i]; else delete this[i - 1];
+				if (i in this) this[i - 1] = this[i];
+				else delete this[i - 1];
 			}
-			--this.length;
+			this.length = --len;
 		}
 		return elementZero;
 	}),
@@ -661,7 +662,18 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	toString: unconstructable(function toString() {
 		checkClass(this, "Array", "toString");
 		return this.join();
-	})
+	}),
+	unshift: unconstructable(function unshift() {
+		var len, argv, n = (argv = arguments).length;
+		if (len = toUInt32(this.length)) {
+			for (var i = len; --i >= 0; ) {
+				if (i in this) this[i + n] = this[i];
+				else delete this[i + n];
+			}
+		}
+		for (var i = 0; i < n; ++i) this[i] = argv[i];
+		return (this.length = len + n);
+	}),
 });
 
 /* --- Date --- */

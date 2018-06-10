@@ -51,3 +51,46 @@
 > print(a.length);
 < 0
 -
+> print(a.unshift("one", "two", "three", "four"));
+> print(a.toString());
+< 4
+< one,two,three,four
+-
+> delete a[1]; delete a[3];
+> print(a.toString());
+< one,,three,
+-
+> print(a.unshift("minus2", "minus1", "zero"));
+> print(a.toString());
+< 7
+< minus2,minus1,zero,one,,three,
+-
+> var o = { "0": "a", "1": "b", "2": "c", "3": "d", "length": 4.7 };
+> print(Array.prototype.shift.call(o));
+> print(o.length);
+> print(o[0]);
+> print(o[1]);
+> print(o[2]);
+< a
+< 3
+< b
+< c
+< d
+-
+> print(Array.prototype.unshift.call(o, "q", "w", "e"));
+> print(o.length);
+> print(o[0]);
+> print(o[1]);
+> print(o[2]);
+> print(o[3]);
+> print(o[4]);
+> print(o[5]);
+< 6
+< 6
+< q
+< w
+< e
+< b
+< c
+< d
+-
