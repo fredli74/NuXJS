@@ -488,9 +488,9 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	}),
 	slice: unconstructable(function slice(start, end) {
 		var s = objectToString(this);
-		if ((start = toInt(start)) < 0) start = s.length + start;
+		if ((start = toInt(start)) < 0) start += s.length;
 		if (end === void 0) end = $Infinity;
-		else if ((end = toInt(end)) < 0) end = s.length + end;
+		else if ((end = toInt(end)) < 0) end += s.length;
 		return $substring(s, start, end);
 	}),
 /*	split: unconstructable(function split(separator, limit) {
@@ -605,6 +605,16 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		return elementZero;
 	}),
+	slice: unconstructable(function slice(start, end) {
+		var a = [ ], l = toUInt32(this.length);
+		if ((start = toInt(start)) < 0) { start += l; if (start < 0) start = 0; }
+		else if (start > l) start = l;
+		if (end === void 0 || (end = toInt(end)) > l) end = l;
+		else if (end < 0) { end += l; if (end < 0) end = 0; }
+		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
+		a.length = j;
+		return a;
+	}),
 	sort: unconstructable(function sort(comparefn) {
 		var self = this;
 		function swap(arr, aIndex, bIndex) {
@@ -663,7 +673,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		checkClass(this, "Array", "toString");
 		return this.join();
 	}),
-	unshift: unconstructable(function unshift() {
+	unshift: unconstructable(function unshift(item1) {
 		var len, argv, n = (argv = arguments).length;
 		if (len = toUInt32(this.length)) {
 			for (var i = len; --i >= 0; ) {
