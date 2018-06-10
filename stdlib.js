@@ -250,7 +250,7 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 		else if ((theClass = $getInternalProperty(argArray, "class")) !== "Array" && theClass !== "Arguments") {
 			throw TypeError("Argument list has wrong type");
 		};
-		return $callWithArgs(this, thisArg, argArray, 0);
+		return $callWithArgs(this, thisArg, argArray);
 	}),
 	call: unconstructable(function call(thisArg) { // FIX : <- 100% native version in the future I think
 		return $callWithArgs(this, thisArg, arguments, 1);
@@ -1581,7 +1581,7 @@ defineProperties(JSON, { dontEnum: true }, {
 		function str(key, holder, indent) {
 			var val;
 	        if ((val = holder[key]) && typeof val === "object" && typeof val.toJSON === "function") val = val.toJSON(key);
-	        if (replacerFunction) val = replacerFunction.call(holder, key, val);
+	        if (replacerFunction) val = $callWithArgs(replacerFunction, holder, [ key, val ]);
 
 	        var lineEnd = (gap ? '\n' + indent : '');
 	        if (typeof val === "object") {
@@ -1675,16 +1675,14 @@ defineProperties(JSON, { dontEnum: true }, {
 			if (ch === '"') return ++p;
 		}
 		function literal(t, p) {
-			if (t.substr(p, 4) === "true") return p + 4;
-			else if (t.substr(p, 5) === "false") return p + 5;
-			else if (t.substr(p, 4) === "null") return p + 4;
+			if ($submatch(t, p, "true") || $submatch(t, p, "null")) return p + 4;
+			else if ($submatch(t, p, "false")) return p + 5;
 		}
-		function objectOrArray(t, p, open, close) {
+		function object(t, p) {
 			if (nest > MAX_JSON_DEPTH) throw TypeError("Structure too deeply nested for JSON conversion");
 			++nest;
 			try {
-				var ch, expectComma = false;
-				if (t[p] !== open) return;
+				var ch, expectComma = false, open = t[p], close = (open === '[' ? ']' : '}');
 				p = space(t, ++p);
 				while ((ch = t[p]) !== close && ch !== '') {
 					if (expectComma) {
@@ -1705,14 +1703,12 @@ defineProperties(JSON, { dontEnum: true }, {
 				--nest;
 			}
 		}
-		function object(t, p) { return objectOrArray(t, p, '{', '}'); }
-		function array(t, p) { return objectOrArray(t, p, '[', ']'); }
 		var PARSERS = {
-			'{': object, '[': array, '"': string, 't': literal, 'f': literal, 'n': literal
+			'{': object, '[': object, '"': string, 't': literal, 'f': literal, 'n': literal
 			, '-': number, '0': number, '1': number, '2': number, '3': number, '4': number
 			, '5': number, '6': number, '7': number, '8': number, '9': number
 		};
-		text = text.toString();
+		text = objectToString(text);
 		var p, parser;
 		if ((parser = PARSERS[text[p = space(text, 0)]]) && (p = parser(text, p))
 				&& (p = space(text, p)) === text.length) {
@@ -1722,13 +1718,13 @@ defineProperties(JSON, { dontEnum: true }, {
 	                var k, v, o;
 	                if (typeof (o = holder[key]) === "object" && o) {
 	                    for (k in o) {
-	                        if (o.hasOwnProperty(k)) {
+	                        if (support.hasOwnProperty(o, k)) {
 	                            if ((v = walk(o, k)) !== void 0) o[k] = v;
 	                            else delete o[k];
 	                        }
 	                    }
 	                }
-	                return reviver.call(holder, key, o);
+	                return $callWithArgs(reviver, holder, [ key, o ]);
 	            }
 				val = walk({ "": val }, "");
 			}

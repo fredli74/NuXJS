@@ -36,6 +36,8 @@ Stdlib
 
 	* toFixed should convert to string with full exact decimals, e.g. (1000000000000000128).toFixed(0) should return "1000000000000000128" and not "1000000000000000100".
 
+	* Error classes like TypeError etc should not be used in stdlib but rather internal copies of these, in case user changes them.
+
 LOW PRIO
 ########
 
