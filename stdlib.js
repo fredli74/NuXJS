@@ -1624,6 +1624,133 @@ defineProperties(JSON, { dontEnum: true }, {
 			}
 		}
 		return str('', { '': val }, '');
+	}),
+
+	parse: unconstructable(function parse(text) {
+		var p = 0, val, parser;
+		function ws() {
+			var ch;
+			while ((ch = text[p]) === ' ' || ch === '\t' || ch === '\r' || ch === '\n') ++p;
+		}
+		function num() {
+			var b = p, ch, t = text;
+			if (t[p] === '-') ++p;
+			if ((ch = t[p]) === '0') ch = t[++p];
+			else if (ch >= '1' && ch <= '9') do { ch = t[++p]; } while (ch >= '0' && ch <= '9');
+			else return;
+			if (ch === '.') {
+				if ((ch = t[++p]) < '0' || ch > '9') return;
+				while ((ch = t[++p]) >= '0' && ch <= '9') ;
+			}
+			if (ch === 'e' || ch === 'E') {
+				if ((ch = t[++p]) === '-' || ch === '+') ch = t[++p];
+				if ((ch = t[++p]) < '0' || ch > '9') return;
+				while ((ch = t[++p]) >= '0' && ch <= '9') ;
+			}
+			return +t.slice(b, p);
+		}
+		function str() {
+			var b = p, ch, t = text;
+			if (t[p] !== '"') return;
+			++p;
+			while ((ch = t[p]) !== '"' && ch >= ' ') {
+				if (ch === '\\') {
+					switch (t[++p]) {
+						default: return;
+						case '"': case '/': case '\\': case 'b': case 'f': case 'n': case 'r': case 't': break;
+						case 'u': {
+							for (var i = 4; --i >= 0; ) {
+								if (!(((ch = t[++p]) >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) return;
+							};
+							break;
+						}
+					}
+				}
+				++p;
+			}
+			if (ch === '"') return eval(t.slice(b, ++p));
+		}
+		function lit() {
+		}
+		function obj() {
+			var b = p, ch, t = text, o = { }, expectComma = false, k;
+			if (t[p] !== '{') return;
+			++p;
+			ws();
+			while ((ch = t[p]) !== '}' && ch !== '') {
+				if (expectComma) {
+					if (ch !== ',') return;
+					++p;
+					ws();
+				}
+				if ((k = str()) === void 0) return;
+				ws();
+				if (t[p] !== ':') return;
+				++p;
+				ws();
+				if (!(parser = PARSERS[t[p]])) return;
+				if ((o[k] = parser()) === void 0) return;
+				ws();
+				expectComma = true;
+			}
+			if (ch === '}') {
+				++p;
+				return o;
+			}
+		}
+		function arr() {
+			var b = p, ch, t = text, a = [ ], l = -1, expectComma = false;
+			if (t[p] !== '[') return;
+			++p;
+			ws();
+			while ((ch = t[p]) !== ']' && ch !== '') {
+				if (expectComma) {
+					if (ch !== ',') return;
+					++p;
+					ws();
+				}
+				if (!(parser = PARSERS[t[p]])) return;
+				if ((a[++l] = parser()) === void 0) return;
+				ws();
+				expectComma = true;
+			}
+			if (ch === ']') {
+				++p;
+				return a;
+			}
+		}
+		var PARSERS = {
+			'{': obj, '[': arr, '"': str, 't': lit, 'f': lit, 'n': lit, '-': num
+			, '0': num, '1': num, '2': num, '3': num, '4': num, '5': num, '6': num, '7': num, '8': num, '9': num
+		};
+		text = text.toString();
+		ws();
+		if ((parser = PARSERS[text[p]]) && (val = parser()) !== void 0) {
+			ws();
+			if (p === text.length) {
+	       /*     function walk(holder, key) {
+	                var k;
+	                var v;
+	                var value = holder[key];
+	                if (value && typeof value === "object") {
+	                    for (k in value) {
+	                        if (Object.prototype.hasOwnProperty.call(value, k)) {
+	                            v = walk(value, k);
+	                            if (v !== undefined) {
+	                                value[k] = v;
+	                            } else {
+	                                delete value[k];
+	                            }
+	                        }
+	                    }
+	                }
+	                return reviver.call(holder, key, value);
+	            }
+*/
+				return val;
+			}
+		}
+		throw SyntaxError("Error parsing JSON");
 	})
 });
 
