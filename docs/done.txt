@@ -282,3 +282,5 @@ DONE
 	* Sandboxing execution speed problem, at least in theory, with extreme proto chains. Each cycle can take a *very* long time.
 		- simply prevent long proto chains somehow?
 		- yeah, just preventing them to <= 32, should *always* be sufficient
+
+	* Error classes like TypeError etc should not be used in stdlib but rather internal copies of these, in case user changes them.

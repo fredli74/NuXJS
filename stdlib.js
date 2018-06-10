@@ -17,7 +17,7 @@
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
-	@preserve: createRegExp,CC,global,source,JSON,stringify,toJSON
+	@preserve: $substring, createRegExp,CC,global,source,JSON,stringify,toJSON
 	
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -63,9 +63,9 @@ var globals = this;
 var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
-		, $Infinity = support.Infinity, $submatch = support.submatch // "$submatch" is used from within regexps, so the name has to be preserved
+		, $Infinity = support.Infinity, $submatch = support.submatch, $substring = support.substring // "$submatch" and "$substring" are used from within regexps, so names has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
-		, $charCodeAt = support.charCodeAt, $substring = support.substring, regExpExec, nativeErrors = { }
+		, $charCodeAt = support.charCodeAt, regExpExec, nativeErrors = { }
 		, ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		, WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 
