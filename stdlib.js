@@ -65,10 +65,10 @@ var unconstructable = support.specialConstructor; // these are the same now, but
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
 		, $Infinity = support.Infinity, $submatch = support.submatch // "$submatch" is used from within regexps, so the name has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
-		, $charCodeAt = support.charCodeAt, $substring = support.substring;
-var regExpExec;
-var ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-var WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
+		, $charCodeAt = support.charCodeAt, $substring = support.substring, regExpExec, nativeErrors = { }
+		, ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		, WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
+
 var PARSE_INT_CHARS = (function() {
 	var pic = { }, ws = WHITE_SPACES;
 	for (var i = ws.length - 1; i >= 0; --i) {
@@ -106,7 +106,7 @@ support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))) {
-		throw TypeError("Error converting object to primitive type");
+		throw nativeErrors.TypeError("Error converting object to primitive type");
 	}
 	return v
 };
@@ -115,7 +115,7 @@ support.toPrimitiveString = function toPrimitiveString(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))) {
-		throw TypeError("Error converting object to primitive type");
+		throw nativeErrors.TypeError("Error converting object to primitive type");
 	}
 	return v
 };
@@ -132,7 +132,7 @@ function defineProperties(object, attribs, props) {
 
 function checkClass(object, expectedClass, forFunction) {
 	if ($getInternalProperty(object, "class") !== expectedClass) {
-		throw TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
+		throw nativeErrors.TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
 	}
 }
 
@@ -248,7 +248,7 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 		var theClass;
 		if (argArray == null) argArray = [ ];
 		else if ((theClass = $getInternalProperty(argArray, "class")) !== "Array" && theClass !== "Arguments") {
-			throw TypeError("Argument list has wrong type");
+			throw nativeErrors.TypeError("Argument list has wrong type");
 		};
 		return $callWithArgs(this, thisArg, argArray);
 	}),
@@ -307,7 +307,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		if (radix === void 0 || !$isFinite(value)) {
 			return '' + value;
 		} else if ((radix = toInteger(radix)) < 2 || radix > 36) {
-			throw RangeError("Illegal radix for toString()");
+			throw nativeErrors.RangeError("Illegal radix for toString()");
 		} else {
 			// TODO : fraction?
 			var sign = '', s = '';
@@ -332,7 +332,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		} else {
 			var digits = toInteger(fractionDigits);
 			if (digits < 0 || digits > 20) {
-				throw RangeError("Illegal fractionDigits argument for toExponential()");
+				throw nativeErrors.RangeError("Illegal fractionDigits argument for toExponential()");
 			}
 			return numberToString(value, digits, $Infinity);
 		}
@@ -341,7 +341,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		var value = getInternalNumber(this, "toFixed");
 		var digits = toInteger(fractionDigits);
 		if (digits < 0 || digits > 20) {
-			throw RangeError("Illegal fractionDigits argument for toFixed()");
+			throw nativeErrors.RangeError("Illegal fractionDigits argument for toFixed()");
 		}
 		if ($isNaN(value) || value <= -1e21 || value >= 1e21) {
 			return '' + value;
@@ -369,7 +369,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		} else {
 			var digits = toInteger(precision) - 1;
 			if (digits < 0 || digits > 20) {
-				throw RangeError("Illegal precision argument for toPrecision()");
+				throw nativeErrors.RangeError("Illegal precision argument for toPrecision()");
 			}
 			return numberToString(value, digits, -6);
 		}
@@ -538,7 +538,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 var Array = function Array(v) {
 	var a = [ ], argv, argc;
 	if ((argc = (argv = arguments).length) === 1 && typeof v === "number") {
-		if ((v >>> 0) !== v) throw RangeError("Invalid array length");
+		if ((v >>> 0) !== v) throw nativeErrors.RangeError("Invalid array length");
 		a.length = v;
 	} else {
 		for (var i = 0; i < argc; ++i) a[i] = argv[i];
@@ -709,7 +709,7 @@ Date.UTC = function(year, month, date, hours, minutes, seconds, ms) {
 };
 Date.prototype.toISOString = function() {
 	var z = this.Value;
-	if ($isNaN(z)) throw RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
+	if ($isNaN(z)) throw nativeErrors.RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
 	return (epochToDateString(z) + "T" + epochToTimeString(z, true) + "Z")
 };
 Date.prototype.toUTCString = function() {
@@ -738,7 +738,7 @@ Date.prototype.toLocaleDateString = Date.prototype.toDateString;
 Date.prototype.toLocaleTimeString = Date.prototype.toTimeString;
 
 Date.prototype.valueOf = function() { return this.Value };
-Date.prototype.getTime = function() { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return this.Value };
+Date.prototype.getTime = function() { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return this.Value };
 Date.prototype.getFullYear = function() { return dateFromEpoch(toLocalTime(this.Value))[0] };
 Date.prototype.getUTCFullYear = function() { return dateFromEpoch(this.Value)[0] };
 Date.prototype.getMonth = function() { return dateFromEpoch(toLocalTime(this.Value))[1] };
@@ -756,7 +756,7 @@ Date.prototype.getUTCSeconds = function() { return secFromTime(this.Value) };
 Date.prototype.getMilliseconds = function() { return msFromTime(toLocalTime(this.Value)) };
 Date.prototype.getUTCMilliseconds = function() { return msFromTime(this.Value) };
 Date.prototype.getTimezoneOffset = function() { return (this.Value - toLocalTime(this.Value)) / msPerMinute };
-Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) };
+Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) };
 Date.prototype.setMilliseconds = function(ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 3, arguments)))) };
 Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = timeClip(setTimeParts(this.Value, 3, arguments))) };
 Date.prototype.setSeconds = function(s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) };
@@ -936,7 +936,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 					return null;
 				}
 				if (mini > maxi) {
-					throw SyntaxError("Min greater than max in regular expression quantifier"); // FIX
+					throw nativeErrors.SyntaxError("Min greater than max in regular expression quantifier"); // FIX
 				}
 				++p;
 				break;
@@ -1175,7 +1175,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 									}
 									classCode = or(classCode, and('c>="' + v0 + '"', 'c<="' + v1 + '"'));
 								} else {
-									throw SyntaxError("Invalid character class syntax in regular expression");
+									throw nativeErrors.SyntaxError("Invalid character class syntax in regular expression");
 								}
 							} else if (typeof v0 === "string") {
 								p = b;
@@ -1185,7 +1185,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							}
 						}
 						if (s[p] !== ']') {
-							throw SyntaxError("Invalid character class syntax in regular expression");
+							throw nativeErrors.SyntaxError("Invalid character class syntax in regular expression");
 						}
 						++p;
 						var functionName = 'k' + (++functionCounter);
@@ -1227,7 +1227,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 					case '.': {
 						var rule;
 						if (!(rule = CHAR_CLASS_RULES[c])) {
-							throw SyntaxError("Invalid escape in regular expression");
+							throw nativeErrors.SyntaxError("Invalid escape in regular expression");
 						}
 						++p;
 						if (quantity = parseQuantifier()) {
@@ -1261,7 +1261,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
 						var innerCapturesEnd = captureCounter;
 						if ((c = s[p]) !== ')') {
-							throw SyntaxError(c ? "Unterminated group in regular expression" : "Invalid regular expression");
+							throw nativeErrors.SyntaxError(c ? "Unterminated group in regular expression" : "Invalid regular expression");
 						}
 						++p;
 						var quantity = (lookAhead ? null : parseQuantifier());
@@ -1344,10 +1344,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 
 	var disjunction = compileDisjunction(0, ''); 
 	if (p < s.length) {
-		throw SyntaxError("Invalid regular expression");
+		throw nativeErrors.SyntaxError("Invalid regular expression");
 	}
 	if (maxBackReference > captureCounter) {
-		throw SyntaxError("Invalid back reference in regular expression");
+		throw nativeErrors.SyntaxError("Invalid back reference in regular expression");
 	}
 	var code = "(function(s, p) {\n";
 	if (caseInsensitive) {
@@ -1390,7 +1390,7 @@ var RegExp = support.createRegExp = support.specialConstructor(function RegExp(p
 		for (var i = flags.length - 1; i >= 0; --i) {
 			var p;
 			if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p]) {
-				throw SyntaxError("Invalid regular expression flags");
+				throw nativeErrors.SyntaxError("Invalid regular expression flags");
 			}
 			template[p] = true;
 		}
@@ -1525,12 +1525,10 @@ function createErrorConstructor(name, prototype) {
 
 	for (var i = ERROR_NAMES.length - 1; i >= 0; --i) {
 		var name, constructor, prototype;
-		support.defineProperty(globals, name = ERROR_NAMES[i]
+		support.defineProperty(nativeErrors, name = ERROR_NAMES[i]
 				, constructor = createErrorConstructor(name, prototype = support.prototypes[name]), false, true, false);
-    /* FIX : not necessary for strict es3, where .name isn't included at all in the official specs but is my own extension using standard flags
-		delete constructor.name; // ugly trick to set the read-only, but not undeletable .name on the anonymous function
-    */
-		constructor.name = name;
+		globals[name] = nativeErrors[name];
+		constructor.name = name;	// Notice: from ES6 and upwards "name" is read-only (and you would have to delete it to modify here), but it isn't in this implementation
 		defineProperties(constructor, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: prototype });
 		defineProperties(prototype, { dontEnum: true }, { constructor: constructor });
 		prototype.name = name;
@@ -1596,9 +1594,9 @@ defineProperties(JSON, { dontEnum: true }, {
 					if (!val) return "null";
 					var l;
 					for (var i = (l = stack.length); --i >= 0; ) {
-						if (stack[i] === val) throw TypeError("Cannot convert circular structure to JSON");
+						if (stack[i] === val) throw nativeErrors.TypeError("Cannot convert circular structure to JSON");
 					}
-					if (l > MAX_JSON_DEPTH) throw TypeError("Structure too deeply nested for JSON conversion");
+					if (l > MAX_JSON_DEPTH) throw nativeErrors.TypeError("Structure too deeply nested for JSON conversion");
 					stack[l] = val;
 					if ($getInternalProperty(val, "class") === "Array") {
 						var s = '', l = val.length;
@@ -1679,7 +1677,7 @@ defineProperties(JSON, { dontEnum: true }, {
 			else if ($submatch(t, p, "false")) return p + 5;
 		}
 		function object(t, p) {
-			if (nest > MAX_JSON_DEPTH) throw TypeError("Structure too deeply nested for JSON conversion");
+			if (nest > MAX_JSON_DEPTH) throw nativeErrors.TypeError("Structure too deeply nested for JSON conversion");
 			++nest;
 			try {
 				var ch, expectComma = false, open = t[p], close = (open === '[' ? ']' : '}');
@@ -1730,7 +1728,7 @@ defineProperties(JSON, { dontEnum: true }, {
 			}
 			return val;
 		}
-		throw SyntaxError("Error parsing JSON");
+		throw nativeErrors.SyntaxError("Error parsing JSON");
 	})
 });
 
@@ -1749,7 +1747,7 @@ defineProperties(Object, { dontEnum: true }, {
 	})
 });
 
-if ($NaN.toString() !== "NaN") throw Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
+if ($NaN.toString() !== "NaN") throw nativeErrors.Error("Internal self test failed. Check C++ compiler options concerning IEEE 754 compliance.");
 
 })
 
