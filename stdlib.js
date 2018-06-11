@@ -669,36 +669,28 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		qsort(0, this.length >>> 0);
 	}),
 	splice: unconstructable(function splice(start, deleteCount) {
-		var a = [ ], len = toUInt32(this.length);
+		var a = [ ], len = toUInt32(this.length), argv, argc = (argv = arguments).length, end, itemCount;
 		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
 		else if (start > len) start = len;
-		if (arguments.length == 1) deleteCount = len - start;
-		else if ((deleteCount = toInt(deleteCount)) < 0) deleteCount = 0;
-		else if (deleteCount > len - start) deleteCount = len - start;
-		var end = start + deleteCount;
+		if (argc == 1 || (end = start + toInt(deleteCount)) > len) end = len;
+		else if (end < start) end = start;
 		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
 		a.length = j;
-		var itemCount = arguments.length - 2;
-		if (itemCount < 0) itemCount = 0;
-		var move = itemCount - deleteCount;
-		var moveCount = len - (start + deleteCount);
-		if (move > 0) {
-			for (var i = len - 1; i >= 0; --i) {
-				var o = (start + deleteCount + i);
-				if (o in this) this[o + move] = this[o];
-				else delete this[o + move];
+		if ((itemCount = argc - 2) < 0) itemCount = 0;
+		var move = start + itemCount - end;
+		if (move !== 0) {
+			var step = 1, j = end;
+			if (move > 0) {
+				step = -1;
+				j = len - 1;
 			}
-		} else if (move < 0) {
-			for (var i = 0; i < len; ++i) {
-				var o = (start + deleteCount + i);
-				if (o in this) this[o + move] = this[o];
-				else delete this[o + move];
+			for (var i = len - end; --i >= 0; j += step) {
+				if (j in this) this[j + move] = this[j];
+				else delete this[j + move];
 			}
 		}
-		this.length = len - deleteCount + itemCount;
-		for (var i = 0; i < itemCount; ++i) {
-			this[start + i] = arguments[2 + i];
-		}
+		for (var i = 2, j = start; i < argc; ++i, ++j) this[j] = argv[i];
+		this.length = move + len;
 		return a;
 	}),
 	toLocaleString: Object.prototype.toLocaleString,

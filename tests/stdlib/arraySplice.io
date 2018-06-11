@@ -32,6 +32,11 @@
 < a,i
 < q,r,l,e
 -
+> print((a.splice(0,-10)).toString())
+> print(a.toString())
+< 
+< q,r,l,e
+-
 > print((a.splice(100,100,"z")).toString())
 > print(a.toString())
 < 
