@@ -17,8 +17,9 @@
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
-	@preserve: $substring,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift
-	
+	@preserve: $substring,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
+	@preserve: splice
+
 	support: {
 		prototypes: {	// built-in prototype objects
 			object, function, string, boolean, number, array
@@ -421,8 +422,8 @@ function createCaseTables() {
 
 function translateString(string, table) {
 	if (!lowerToUpper) createCaseTables();
-	var i = -1, l = string.length, s = '', t, c;
-	while (++i < l) s += (t = table[c = string[i]]) ? t : c;
+	var i = -1, len = string.length, s = '', t, c;
+	while (++i < len) s += (t = table[c = string[i]]) ? t : c;
 	return s
 }
 
@@ -561,19 +562,19 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	join: unconstructable(function join(separator) {
-		var s = new StringBuilder, s2, l = toUInt32(this.length);
+		var s = new StringBuilder, s2, len = toUInt32(this.length);
 		separator = (separator === void 0 ? ',' : objectToString(separator));
-		for (var i = 0; i < l; ++i) {
+		for (var i = 0; i < len; ++i) {
 			if (i > 0) s.append(separator);
 			if ((s2 = this[i]) != null) s.append(objectToString(s2));
 		}
 		return s.build();
 	}),
 	pop: unconstructable(function pop() {
-		var v = void 0, l;
-		if ((l = toUInt32(this.length)) > 0) {
-			v = this[--l];
-			this.length = l;
+		var v = void 0, len;
+		if ((len = toUInt32(this.length)) > 0) {
+			v = this[--len];
+			this.length = len;
 		}
 		return v;
 	}),
@@ -606,11 +607,10 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return elementZero;
 	}),
 	slice: unconstructable(function slice(start, end) {
-		var a = [ ], l = toUInt32(this.length);
-		if ((start = toInt(start)) < 0) { start += l; if (start < 0) start = 0; }
-		else if (start > l) start = l;
-		if (end === void 0 || (end = toInt(end)) > l) end = l;
-		else if (end < 0) { end += l; if (end < 0) end = 0; }
+		var a = [ ], len = toUInt32(this.length);
+		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
+		if (end === void 0 || (end = toInt(end)) > len) end = len;
+		else if (end < 0) end += len;
 		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
 		a.length = j;
 		return a;
@@ -668,6 +668,39 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		};
 		qsort(0, this.length >>> 0);
 	}),
+	splice: unconstructable(function splice(start, deleteCount) {
+		var a = [ ], len = toUInt32(this.length);
+		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
+		else if (start > len) start = len;
+		if (arguments.length == 1) deleteCount = len - start;
+		else if ((deleteCount = toInt(deleteCount)) < 0) deleteCount = 0;
+		else if (deleteCount > len - start) deleteCount = len - start;
+		var end = start + deleteCount;
+		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
+		a.length = j;
+		var itemCount = arguments.length - 2;
+		if (itemCount < 0) itemCount = 0;
+		var move = itemCount - deleteCount;
+		var moveCount = len - (start + deleteCount);
+		if (move > 0) {
+			for (var i = len - 1; i >= 0; --i) {
+				var o = (start + deleteCount + i);
+				if (o in this) this[o + move] = this[o];
+				else delete this[o + move];
+			}
+		} else if (move < 0) {
+			for (var i = 0; i < len; ++i) {
+				var o = (start + deleteCount + i);
+				if (o in this) this[o + move] = this[o];
+				else delete this[o + move];
+			}
+		}
+		this.length = len - deleteCount + itemCount;
+		for (var i = 0; i < itemCount; ++i) {
+			this[start + i] = arguments[2 + i];
+		}
+		return a;
+	}),
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: unconstructable(function toString() {
 		checkClass(this, "Array", "toString");
@@ -701,9 +734,9 @@ var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
 };
 Date.parse = function(s) {
 	var z, y, i = 0, ch, tz = support.undefined, tzh, tzm,
-		readPart = function(l) {
+		readPart = function(len) {
 			var v;
-			for (v = 0;l > 0;--l) if ("0" <= s[i] && s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
+			for (v = 0;len > 0;--len) if ("0" <= s[i] && s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
 			return v;
 		};
 
@@ -894,7 +927,7 @@ var CC = { }; // "CC" is used from within regexps, so the name has to be preserv
 function regExpCanonicalize(s) {
 	var t = '', c, d;
 	if (!lowerToUpper) createCaseTables();
-	for (var i = 0, l = s.length; i < l; ++i) {
+	for (var i = 0, len = s.length; i < len; ++i) {
 		t += ((d = lowerToUpper[c = s[i]]) && d.length === 1 && (c < '\x80' || d >= '\x80') ? d : c);
 	}
 	return t
@@ -1383,10 +1416,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 }
 
 function execRegExp(re, string) {
-	var i, m, l;
+	var i, m, len;
 	string = objectToString(string);
 	if ((i = (re.global ? toInt(re.lastIndex) : 0)) >= 0) {
-		for (l = string.length; i <= l; ++i) {
+		for (len = string.length; i <= len; ++i) {
 			if (m = $getInternalProperty(re, "value")(string, i)) {
 				if (re.global) {
 					re.lastIndex = m[1];
@@ -1588,8 +1621,8 @@ defineProperties(JSON, { dontEnum: true }, {
         }
 
 		function quote(str) {
-			var s = '"', l = str.length;
-			for (var i = 0; i < l; ++i) {
+			var s = '"', len = str.length;
+			for (var i = 0; i < len; ++i) {
 				var ch = str[i], seq;
 				s += ((seq = JSON_ESCAPE_SEQUENCES[ch])
 						? seq : ((ch >= ' ' && ch <= '~')
@@ -1614,15 +1647,15 @@ defineProperties(JSON, { dontEnum: true }, {
 			switch (typeof val) {
 				case "object": {
 					if (!val) return "null";
-					var l;
-					for (var i = (l = stack.length); --i >= 0; ) {
+					var len;
+					for (var i = (len = stack.length); --i >= 0; ) {
 						if (stack[i] === val) throw nativeErrors.TypeError("Cannot convert circular structure to JSON");
 					}
-					if (l > MAX_JSON_DEPTH) throw nativeErrors.TypeError("Structure too deeply nested for JSON conversion");
-					stack[l] = val;
+					if (len > MAX_JSON_DEPTH) throw nativeErrors.TypeError("Structure too deeply nested for JSON conversion");
+					stack[len] = val;
 					if ($getInternalProperty(val, "class") === "Array") {
-						var s = '', l = val.length;
-						for (var i = 0; i < l; ++i) {
+						var s = '', len = val.length;
+						for (var i = 0; i < len; ++i) {
 							s += (s ? ',' : '[') + lineEnd + gap;
 							s += str(i, val, indent + gap) || "null";
 						}

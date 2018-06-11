@@ -35,7 +35,9 @@
 
 root            <-                                          { $$ = '' }
                     (ws
-                    / c=(qString / aString / regexp)        { $$ #= $c }
+# can't differentiate regexp literal / from two divisions y / x / z without more advanced parsing, so lets not use regexp literals in stdlib
+#                   / c=(qString / aString / regexp)        { $$ #= $c }
+                    / c=(qString / aString)                 { $$ #= $c }
                     / t:token                               { $$ #= $t }
                         (ws t:token                         { $$ #= ' ' # $t }
                         )*
@@ -62,7 +64,7 @@ qString         <-  '"' ( !["\\\0-\37] . / escape )* '"'
 
 aString         <-  "'" ( !['\\\0-\37] . / escape )* "'"
 
-regexp          <-  "/" ( ![/\\\0-\37] . / "\\" .)+ "/" identifier?
+# regexp          <-  "/" ( ![/\\\0-\37] . / "\\" .)+ "/" identifier?
 
 escape          <-  "\\" ( 'x' hex hex / 'u' hex hex hex hex / . )
 

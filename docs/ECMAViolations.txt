@@ -1,3 +1,6 @@
+Violations
+----------
+
 *) \0 is interpreted as null char even if followed by decimals (octals are not supported)
 
 *) Number -> string conversion doesn't fully follow the ECMAScript rules. Uses slightly lower precision (and prefers E notation a bit more often) to avoid rouding errors.
@@ -52,12 +55,6 @@
 
 	Motiviation: performance. Object conversion is done directly by the GET_PROPERTY opcode. Conversion to primitive value must happen before this (via OBJ_TO_STRING) as it may require running script code.
 
-*) Implements the following feature from Ecmascript 5:
-
-		15.5.5.2: In Edition 5, the individual characters of a String object‘s [[PrimitiveValue] may be accessed as array indexed properties of the String object. These properties are non-writable and non-configurable and shadow any inherited properties with the same names. In Edition 3, these properties did not exist and ECMAScript code could dynamically add and remove writable properties with such names and could access inherited properties with such names.
-		
-	Motivation: performance and code compatibility. This seems to be something even older JS implementations had. Without it, many "native" library functions would be uglier to write or horribly slow.
-
 *) In regular expressions: lookahead operators ?= and ?! are not atoms with optional quantifier as in Ecmascript 3, but assertions *without* quantifier as in ES5. E.g. `(?=x)*` is invalid syntax.
 
 *) In regular expressions: not 100% certain that the following two features complies perfectly:
@@ -75,7 +72,14 @@
 		// elements to arrays. Since creating your own read-only properties isn't a part of Ecmascript 3 standard (and no
 		// built-in object has read-only numerical properties), I'm going to let this pass.
 
-*) For String.prototype.match the Ecmascript 3 specification doesn't state that null should be returned for global regular expression patterns when no match is found, but it seems like this has always been the de-facto behavior. It was documented first in Ecmascript 5 but NuXJScript conforms to this rule anyhow. Also, the ES3 spec doesn't say that the *standard* built-in function RegExp.prototype.exec should be used, so a strict interpretation would allow the user to change the function used by reassigning RegExp.prototype.exec. We follow the ES5 spec here and will disregard any custom RegExp.prototype.exec function. See 15.5.4.10.
+*) Also see all tests/unconforming
+
+*) You cannot assign an object to an array's "length" property even if it has a valueOf() method. This is because of the asynchronous design of this engine. It would require a complicated interrupt mechanism (think "property setter") and it simply isn't worth the effort for this alone.
+
+*) Not a violation but we impose a quite hard restriction on recursive grammar constructs such as deep object literals (64 levels only) and functions in functions etc. This is to avoid the risk of C++ stack overflow.
+
+Following later specs
+---------------------
 
 *) Implements the following ES5 methods:
 	15.4.3.2 Array.isArray ( arg )
@@ -84,10 +88,15 @@
 	15.2.3.2 Object.getPrototypeOf ( O )
 	15.2.3.6 Object.defineProperty ( O, P, Attributes )
 
-*) Also see all tests/unconforming
+*) Implements the following feature from Ecmascript 5:
 
-*) You cannot assign an object to an array's "length" property even if it has a valueOf() method. This is because of the asynchronous design of this engine. It would require a complicated interrupt mechanism (think "property setter") and it simply isn't worth the effort for this alone.
+		15.5.5.2: In Edition 5, the individual characters of a String object‘s [[PrimitiveValue] may be accessed as array indexed properties of the String object. These properties are non-writable and non-configurable and shadow any inherited properties with the same names. In Edition 3, these properties did not exist and ECMAScript code could dynamically add and remove writable properties with such names and could access inherited properties with such names.
+		
+	Motivation: performance and code compatibility. This seems to be something even older JS implementations had. Without it, many "native" library functions would be uglier to write or horribly slow.
 
-*) Not a violation but eval() conforms to the ES5 rules concerning direct vs non-direct call to eval(). In ES3 only behavior of direct calls are specified.
+*) eval() conforms to the ES5 rules concerning direct vs non-direct call to eval(). In ES3 only behavior of direct calls are specified.
 
-*) Not a violation but a quite hard restriction is imposed on recursive grammar constructs such as deep object literals (64 levels only). This is so that everything works well without increasing C++ stack size on Windows for example.
+*) For String.prototype.match the Ecmascript 3 specification doesn't state that null should be returned for global regular expression patterns when no match is found, but it seems like this has always been the de-facto behavior. It was documented first in Ecmascript 5 but NuXJScript conforms to this rule anyhow. Also, the ES3 spec doesn't say that the *standard* built-in function RegExp.prototype.exec should be used, so a strict interpretation would allow the user to change the function used by reassigning RegExp.prototype.exec. We follow the ES5 spec here and will disregard any custom RegExp.prototype.exec function. See 15.5.4.10.
+
+*) Array.prototype.splice follows the ES6 rule when called with a single argument only (deletes the rest of the array). This seems to have been de-facto standard since forever although ES3 and ES5 specified that no elements should be deleted.
+
