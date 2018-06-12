@@ -5224,5 +5224,2921 @@
 	},
 	"language/statements/try/cptn-catch": {
 		"category": "not_es3"
+	},
+	"built-ins/Array/S15.4.5.1_A1.3_T1": {
+		"category": "by_design"
+	},
+	"built-ins/Array/S15.4.5.1_A1.3_T2": {
+		"category": "by_design"
+	},
+	"built-ins/Array/S15.4.5.2_A3_T2": {
+		"category": "by_design"
+	},
+	"built-ins/Array/Symbol.species/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/Symbol.species/symbol-species-name": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/Symbol.species/symbol-species": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/Array.from-name": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/Array.from_arity": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/Array.from_forwards-length-for-array-likes": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/calling-from-valid-1-noStrict": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/Array.from-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/calling-from-valid-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/elements-added-after": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/elements-deleted-after": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/elements-updated-after": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/from-array": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/from-string": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/get-iter-method-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/items-is-arraybuffer": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-adv-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-cstm-ctor-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-cstm-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-get-iter-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-get-iter-val-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-map-fn-args": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-map-fn-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-map-fn-return": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-map-fn-this-arg": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-map-fn-this-non-strict": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-set-elem-prop-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-set-elem-prop": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-set-length-err": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/iter-set-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/mapfn-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/mapfn-throws-exception": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-array-boundary": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-iterator-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-iterator-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-missing": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/source-object-without": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/from/this-null": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/push/S15.4.4.7_A4_T1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/push/S15.4.4.7_A4_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-0-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-0-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-1-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-10-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-17": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-18": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-19": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-2-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-16": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-17": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-18": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-19": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-20": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-21": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-22": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-23": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-24": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-25": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-3-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-4-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-5-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-5-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-5-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-5-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-5-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-7-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-ii-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-ii-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-16": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-17": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-18": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-19": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-20": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-21": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-22": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-23": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-25": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-26": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-27": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-28": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-29": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-30": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-31": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-32": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-33": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-c-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-c-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-c-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-c-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-8-c-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-16": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-17": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-18": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-19": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-20": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-21": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-22": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-23": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-24": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-25": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-26": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-27": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-28": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-29": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-4": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-5": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-6": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-7": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-b-9": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-10": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-11": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-12": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-13": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-14": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-15": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-16": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-17": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-18": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-19": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-20": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-21": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-22": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-23": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/reverse/S15.4.4.8_A3_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/slice/S15.4.4.10_A3_T1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/slice/S15.4.4.10_A3_T2": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/slice/S15.4.4.10_A3_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/sort/S15.4.4.11_A4_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/sort/S15.4.4.11_A8": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/concat/Array.prototype.concat_non-array": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/splice/S15.4.4.12_A3_T1": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/splice/S15.4.4.12_A3_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/splice/S15.4.4.12_A6.1_T3": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/splice/set_length_no_args": {
+		"category": "not_es3"
+	},
+	"built-ins/Array/prototype/unshift/S15.4.4.13_A3_T2": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/acosh/acosh-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/acosh/acosh-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/acosh/acosh-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/acosh/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/asinh/asinh-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/asinh/asinh-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/asinh/asinh-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/asinh/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/atanh/atanh-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/atanh/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/atanh/atanh-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/atanh/atanh-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cbrt/cbrt-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cbrt/cbrt-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cbrt/cbrt-specialValues": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cbrt/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/clz32/Math.clz32": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/clz32/Math.clz32_1": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/clz32/Math.clz32_2": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/clz32/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/clz32/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cosh/cosh-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cosh/cosh-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cosh/cosh-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/cosh/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/expm1/expm1-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/expm1/expm1-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/expm1/expm1-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/expm1/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/fround/Math.fround_Infinity": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/fround/Math.fround_NaN": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/fround/Math.fround_Zero": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/fround/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/fround/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_Infinity": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_InfinityNaN": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_NaN": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_NegInfinity": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_NoArgs": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_Success": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_Success_2": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_Zero_2": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/Math.hypot_lengthProp": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/hypot-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/hypot/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/imul/imul-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/imul/imul-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/imul/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log10/Log10-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log10/Log10-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log10/Log10-specialVals": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log10/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log1p/Log1p-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log1p/Log1p-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log1p/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log2/log2-basicTests": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log2/log2-descriptor": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log2/log2-length": {
+		"category": "not_es3"
+	},
+	"built-ins/Math/log2/name": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/RangeError/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/RangeError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/ReferenceError/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/ReferenceError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/SyntaxError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/TypeError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/URIError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/URIError/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/TypeError/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/SyntaxError/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/NativeErrors/EvalError/prototype/not-error-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/Symbol.toStringTag": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/prototype-attributes": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/delete-entry-initial-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/empty-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/get-set-method-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterable-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-close-after-set-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-item-first-entry-returns-abrupt": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-item-second-entry-returns-abrupt": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-items-are-not-object-close-iterator": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-items-are-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-next-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/iterator-value-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/no-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/properties-of-map-instances": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/properties-of-the-weakmap-prototype-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype-of-weakmap": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/set-not-callable-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/undefined-newtarget": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/weakmap": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/delete-entry": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/delete": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-weakmap-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/returns-false-value-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/returns-false-when-delete-is-noop": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/delete/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/get": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/returns-undefined-key-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/returns-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/returns-value": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/get/this-not-object-throw": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-weakmap-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/has": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/returns-false-when-value-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/returns-false-when-value-not-present": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/returns-true-when-value-present": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/has/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/adds-element": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-weakmap-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/key-not-object-throw": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/returns-this-when-ignoring-duplicate": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/returns-this": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakMap/prototype/set/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/add-not-callable-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/empty-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/get-add-method-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/iterable-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/iterator-close-after-add-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/iterator-next-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/iterator-value-failure": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/no-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/properties-of-the-weakset-prototype-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype-of-weakset": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/symbol-disallowed-as-weakset-key": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/undefined-newtarget": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/weakset": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/Symbol.toStringTag": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/prototype-attributes": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/add": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/adds-element": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-weakset-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/returns-this-when-ignoring-duplicate": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/returns-this": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/add/value-not-object-throw": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/constructor/weakset-prototype-constructor-intrinsic": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/constructor/weakset-prototype-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/delete-entry-initial-iterable": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/delete-entry": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/delete": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-weakset-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/returns-false-value-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/returns-false-when-delete-is-noop": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/delete/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-array": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-map": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-set": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-weakset-prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/has": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/length": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/name": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/returns-false-when-value-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/returns-false-when-value-not-present": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/returns-true-when-value-present": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-null": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-number": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-string": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/WeakSet/prototype/has/this-not-object-throw-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/invoked": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/Symbol.species/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/Symbol.species/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/Symbol.species/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/Symbol.species/result": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/arylk-get-length-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/arylk-to-length-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/iter-access-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/iter-invoke-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/iter-next-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/iter-next-value-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/mapfn-is-not-callable": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/from/this-is-not-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/of/this-is-not-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.iterator": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toString": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/invoked-as-accessor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/return-typedarrayname": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/this-has-no-typedarrayname-internal": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/Symbol.toStringTag/this-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/invoked-as-accessor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/return-buffer": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/return-dataview-buffer": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/this-has-no-viewedarraybuffer-internal": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/buffer/this-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/invoked-as-accessor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/return-bytelength": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/return-dataview-bytelength": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/this-has-no-viewedarraybuffer-internal": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteLength/this-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/invoked-as-accessor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/return-byteoffset": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/return-dataview-byteoffset": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/this-has-no-viewedarraybuffer-internal": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/byteOffset/this-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/copyWithin/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/copyWithin/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/copyWithin/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/copyWithin/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/copyWithin/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/entries/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/entries/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/entries/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/entries/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/entries/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/every/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/every/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/every/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/every/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/every/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/fill/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/fill/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/fill/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/fill/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/fill/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/filter/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/filter/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/filter/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/filter/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/filter/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/find/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/find/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/find/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/find/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/find/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/findIndex/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/findIndex/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/findIndex/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/findIndex/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/findIndex/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/forEach/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/forEach/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/forEach/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/forEach/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/forEach/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/indexOf/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/indexOf/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/indexOf/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/indexOf/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/indexOf/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/join/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/join/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/join/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/join/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/join/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/keys/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/keys/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/keys/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/keys/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/keys/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/lastIndexOf/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/lastIndexOf/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/lastIndexOf/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/lastIndexOf/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/lastIndexOf/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/invoked-as-accessor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/return-length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/this-has-no-typedarrayname-internal": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/length/this-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/map/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/map/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/map/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/map/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/map/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduce/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduce/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduce/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduce/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduce/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduceRight/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduceRight/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduceRight/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduceRight/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reduceRight/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reverse/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reverse/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reverse/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reverse/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/reverse/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/set/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/set/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/set/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/set/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/set/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/slice/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/slice/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/slice/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/slice/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/slice/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/some/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/some/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/some/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/some/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/some/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/sort/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/sort/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/sort/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/sort/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/sort/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/subarray/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/subarray/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/subarray/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/subarray/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/subarray/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toLocaleString/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toLocaleString/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toLocaleString/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toLocaleString/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toLocaleString/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toString/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toString/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/toString/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/values/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/values/invoked-as-method": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/values/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/values/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArray/prototype/values/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-bufferbyteoffset-throws-from-modulo-element-size": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-byteoffset-is-negative-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-byteoffset-is-negative-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-byteoffset-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-byteoffset-throws-from-modulo-element-size": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-byteoffset-to-number-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-custom-proto-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-defined-length-and-offset": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-defined-length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-defined-negative-length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-defined-offset": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-excessive-length-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-excessive-offset-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-invoked-with-undefined-newtarget": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-is-referenced": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-length-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-length-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-returns-new-instance": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-use-custom-proto-if-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/buffer-arg-use-default-proto-if-custom-proto-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-custom-proto-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-float-throws-rangeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-infinity-throws-rangeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-nan-throws-rangeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-negative-number-throws-rangeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-not-valid-buffer-size-throws-rangeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-is-undefined-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-minus-signal-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-returns-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-undefined-newtarget-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-use-custom-proto-if-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/length-arg-use-default-proto-if-custom-proto-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/no-args-custom-proto-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/no-args-returns-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/no-args-undefined-newtarget-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/no-args-use-custom-proto-if-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/no-args-use-default-proto-if-custom-proto-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-as-array-returns": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-as-generator-iterable-returns": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-custom-proto-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-iterating-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-iterator-not-callable-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-iterator-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-length-excessive-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-length-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-length-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-returns": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-from-property": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-obj-to-primitive-typeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-obj-to-primitive": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-obj-tostring": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-obj-valueof-typeerror": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-obj-valueof": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-property": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-throws-setting-symbol-property": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-undefined-newtarget-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-use-custom-proto-if-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/object-arg-use-default-proto-if-custom-proto-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-custom-proto-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-custom-species": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-not-object-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-species-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-species-not-ctor-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-species-null": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-species-prototype-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-buffer-ctor-species-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-other-ctor-returns-new-typedarray": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-returns-new-instance": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-access-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-custom": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-not-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-null": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-prototype-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-species-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-buffer-ctor-value-not-obj-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-same-ctor-returns-new-cloned-typedarray": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-undefined-newtarget-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-use-custom-proto-if-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/typedarray-arg-use-default-proto-if-custom-proto-is-not-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float32Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Float64Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int16Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int32Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Int8Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint16Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint32Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8Array/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/length": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/name": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/prototype": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/prototype/BYTES_PER_ELEMENT": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/prototype/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/prototype/not-typedarray-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/Uint8ClampedArray/prototype/proto": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/arylk-get-length-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/arylk-to-length-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/custom-ctor-does-not-instantiate-ta-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/custom-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/iter-access-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/iter-invoke-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/iter-next-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/iter-next-value-error": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/mapfn-abrupt-completion": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/mapfn-arguments": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/mapfn-is-not-callable": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/mapfn-this-with-thisarg": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/mapfn-this-without-thisarg-non-strict": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/nan-conversion": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-empty": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-from-ordinary-object": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-from-sparse-array": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-from-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-using-custom-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-with-mapfn": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/new-instance-without-mapfn": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/property-abrupt-completion": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/set-value-abrupt-completion": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/source-value-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/from/this-is-not-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/argument-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/argument-number-value-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/custom-ctor-does-not-instantiate-ta-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/custom-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/invoked-as-func": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/nan-conversion": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/new-instance-empty": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/new-instance-from-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/new-instance-using-custom-ctor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/new-instance": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/of/this-is-not-constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/Symbol.iterator": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/Symbol.toStringTag/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/buffer/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/byteLength/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/byteOffset/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/copyWithin/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/entries/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/every/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/fill/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/filter/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/find/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/findIndex/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/forEach/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/indexOf/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/join/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/keys/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/lastIndexOf/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/length/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/map/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/reduce/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/reduceRight/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/reverse/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/set/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/slice/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/some/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/sort/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/subarray/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/toLocaleString/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/toString/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/TypedArrays/prototype/values/inherited": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/auto-boxing-non-strict": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/constructor": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/for/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/for/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/hasInstance/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/isConcatSpreadable/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/iterator/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/keyFor/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/keyFor/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/match/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toStringTag": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/intrinsic": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/this-val-non-obj": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/this-val-obj-non-symbol-wrapper": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/this-val-obj-symbol-wrapper": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/Symbol.toPrimitive/this-val-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/toString/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/toString/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/toString/toString-default-attributes-non-strict": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/toString/toString": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/valueOf/length": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/prototype/valueOf/name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/replace/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/search/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/species/basic": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/species/builtin-getter-name": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/species/subclassing": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/split/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/toPrimitive/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/toStringTag/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/Symbol/unscopables/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/Symbol.toStringTag": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/ancestry": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/next/length": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/next/name": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/next/next-iteration": {
+		"category": "not_es3"
+	},
+	"built-ins/StringIteratorPrototype/next/next-missing-internal-slots": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/nextkey-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/raw": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-from-empty-array-length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-negative-infinity": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-not-defined": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-undefined": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-zero-NaN": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-zero-boolean": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-zero-null": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-number": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-string": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-the-string-value-from-template": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/return-the-string-value": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/returns-abrupt-from-next-key-toString": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/returns-abrupt-from-next-key": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/returns-abrupt-from-substitution-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/returns-abrupt-from-substitution": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/special-characters": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/substitutions-are-appended-on-same-index": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/substitutions-are-limited-to-template-raw-length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/template-length-is-symbol-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/template-length-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/template-raw-throws": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/template-substitutions-are-appended-on-same-index": {
+		"category": "not_es3"
+	},
+	"built-ins/String/raw/zero-literal-segments": {
+		"category": "not_es3"
 	}
 }

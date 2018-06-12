@@ -94,3 +94,8 @@
 < c
 < d
 -
+> var o = { shift: Array.prototype.shift };
+> o.shift();
+> print(o.length);
+< 0
+-

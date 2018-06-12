@@ -23,8 +23,16 @@
 > print(a.pop())
 < undefined
 -
+> print(a.length)
 > print(''+a)
+< 0
 < 
+-
+> o={pop:Array.prototype.pop}
+> print(o.pop())
+> print(o.length)
+< undefined
+< 0
 -
 > o={length:3.3}
 > print(Array.prototype.push.call(o, 'a', 'b', 'c'))

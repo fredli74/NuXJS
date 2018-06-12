@@ -66,7 +66,7 @@ var unconstructable = support.specialConstructor; // these are the same now, but
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
 		, $Infinity = support.Infinity, $submatch = support.submatch, $substring = support.substring // "$submatch" and "$substring" are used from within regexps, so names has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
-		, $charCodeAt = support.charCodeAt, regExpExec, nativeErrors = { }
+		, $charCodeAt = support.charCodeAt, regExpExecMethod, nativeErrors = { }
 		, ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		, WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 
@@ -478,11 +478,11 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	match: unconstructable(function match(regexp) {
 		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
 		var args = [ objectToString(this) ];
-		if (!regexp.global) return $callWithArgs(regExpExec, regexp, args);
+		if (!regexp.global) return $callWithArgs(regExpExecMethod, regexp, args);
 		else {
 			var i = regexp.lastIndex = 0, a = [ ], s, r;
 			do {
-				if ((r = $callWithArgs(regExpExec, regexp, args)) === null) return (i === 0 ? null : a);
+				if ((r = $callWithArgs(regExpExecMethod, regexp, args)) === null) return (i === 0 ? null : a);
 				if (!(a[i++] = (s = r[0]))) ++regexp.lastIndex;
 			} while (true);
 		}
@@ -494,17 +494,48 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		else if ((end = toInt(end)) < 0) end += s.length;
 		return $substring(s, start, end);
 	}),
-/*	split: unconstructable(function split(separator, limit) {
+	split: unconstructable(function split(separator, limit) {
+		var separatorIsString;
+		function splitMatch(q) {
+			if (!separatorIsString) return $getInternalProperty(separator, "value")(string, q);
+			else if ($submatch(s, q, separator)) return [ q, q + separator ];
+		};
 		var s = objectToString(this);
 		var a = [ ];
-		limit = ((limit === void 0) ? 0xFFFFFFFF : toInt(limit));
+		limit = ((limit === void 0) ? 0xFFFFFFFF : toUInt32(limit));
 		var sl = s.length;
-		if ($getInternalProperty(separator, "class") !== "RegExp") separator = objectToString(separator);
-		if (limit === 0) {
+		if (separatorIsString = ($getInternalProperty(separator, "class") !== "RegExp")) separator = objectToString(separator);
+		if (limit === 0) return a;
+		if (separator === void 0) return [ s ];
+		if (sl === 0) {
+			if (splitMatch(0)) return [ ];
+			else return [ s ];
+		} else {
+			var p = 0;
+			var q = p;
+			while (q !== sl) {
+				var z = splitMatch(q);
+				if (!z) ++q;
+				else {
+					var e = z[1];
+					if (e === p) ++q;
+					else {
+						var T = $substring(s, p, q);
+						a[a.length] = T;
+						if (a.length === limit) return a;
+						p = e;
+						for (var i = 2; i < z.length; i += 2) {
+							a[a.length] = $substring(s, z[i], z[i + 1]);
+							if (a.length === limit) return a;
+						}
+						q = p;
+					}
+				}
+			}
+			a[a.length] = $substring(s, p, sl);
 			return a;
 		}
-
-	}),*/
+	}),
 	substr: unconstructable(function substr(start, length) {
 		var s = objectToString(this);
 		if ((start = toInt(start)) < 0) start = s.length + start;
@@ -572,10 +603,8 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	pop: unconstructable(function pop() {
 		var v = void 0, len;
-		if ((len = toUInt32(this.length)) > 0) {
-			v = this[--len];
-			this.length = len;
-		}
+		if ((len = toUInt32(this.length)) > 0) v = this[--len];
+		this.length = len;
 		return v;
 	}),
 	push: unconstructable(function push(item) {
@@ -602,8 +631,9 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 				if (i in this) this[i - 1] = this[i];
 				else delete this[i - 1];
 			}
-			this.length = --len;
-		}
+			--len;
+		};
+		this.length = len;
 		return elementZero;
 	}),
 	slice: unconstructable(function slice(start, end) {
@@ -669,7 +699,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		qsort(0, this.length >>> 0);
 	}),
 	splice: unconstructable(function splice(start, deleteCount) {
-		var a = [ ], len = toUInt32(this.length), argv, argc = (argv = arguments).length, end, itemCount;
+		var a = [ ], len = toUInt32(this.length), argv, argc = (argv = arguments).length, end, itemCount, move;
 		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
 		else if (start > len) start = len;
 		if (argc == 1 || (end = start + toInt(deleteCount)) > len) end = len;
@@ -677,20 +707,17 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
 		a.length = j;
 		if ((itemCount = argc - 2) < 0) itemCount = 0;
-		var move = start + itemCount - end;
-		if (move !== 0) {
+		if ((move = start + itemCount - end) !== 0) {
 			var step = 1, j = end;
-			if (move > 0) {
-				step = -1;
-				j = len - 1;
-			}
-			for (var i = len - end; --i >= 0; j += step) {
+			if (move > 0) { step = -1; j = len - 1; }
+			for (i = len - end; --i >= 0; j += step) {
 				if (j in this) this[j + move] = this[j];
 				else delete this[j + move];
 			}
+			for (i = len; --i >= len + move; ) delete this[i];
 		}
-		for (var i = 2, j = start; i < argc; ++i, ++j) this[j] = argv[i];
-		this.length = move + len;
+		for (i = 2, j = start; i < argc; ++i, ++j) this[j] = argv[i];
+		this.length = len + move;
 		return a;
 	}),
 	toLocaleString: Object.prototype.toLocaleString,
@@ -1407,6 +1434,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	return code
 }
 
+var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, origEval = eval
+		, regExpCache = { }, regExpPrototype;
+// eval without local variables but with access to all internals
+function evalThere(s) { var customEval = eval; eval = origEval; try { return eval(s) } finally { eval = customEval } }
 function execRegExp(re, string) {
 	var i, m, len;
 	string = objectToString(string);
@@ -1422,11 +1453,6 @@ function execRegExp(re, string) {
 	}
 	re.lastIndex = 0
 }
-
-var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, origEval = eval
-		, regExpCache = { }, regExpPrototype;
-// eval without local variables but with access to all internals
-function evalThere(s) { var customEval = eval; eval = origEval; try { return eval(s) } finally { eval = customEval } }
 var RegExp = support.createRegExp = support.specialConstructor(function RegExp(pattern, flags) {
 		return ($getInternalProperty(pattern, "class") === "RegExp" && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
 	}, function RegExp(pattern, flags) {
@@ -1455,7 +1481,7 @@ var RegExp = support.createRegExp = support.specialConstructor(function RegExp(p
 
 defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: regExpPrototype = RegExp.prototype });
 defineProperties(RegExp.prototype, { dontEnum: true }, {
-	exec: unconstructable(regExpExec = function exec(string) {
+	exec: unconstructable(regExpExecMethod = function exec(string) {
 		checkClass(this, "RegExp", "exec");
 		var m, a = null;
 		if (m = execRegExp(this, string)) {

@@ -98,3 +98,12 @@
 < a,i,q,r
 < 
 -
+> o = {splice:Array.prototype.splice,length:5,"0":"z","1":"x","2":"y","3":"c","4":"v"};
+> o.splice(0,3,"b")
+> for (var i = 0; i < 5; ++i) print(o[i])
+< b
+< c
+< v
+< undefined
+< undefined
+-
