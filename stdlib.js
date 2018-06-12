@@ -501,12 +501,12 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			else if ($submatch(s, q, separator)) return [ q, q + separator.length ];
 		};
 		var s = objectToString(this);
-		var a = [ ];
+		var a = [ ], aLength = 0;
 		limit = ((limit === void 0) ? 0xFFFFFFFF : toUInt32(limit));
 		var sl = s.length;
-		if (separatorIsString = ($getInternalProperty(separator, "class") !== "RegExp")) separator = objectToString(separator);
 		if (limit === 0) return a;
 		if (separator === void 0) return [ s ];
+		if (separatorIsString = ($getInternalProperty(separator, "class") !== "RegExp")) separator = objectToString(separator);
 		if (sl === 0) {
 			if (splitMatch(0)) return [ ];
 			else return [ s ];
@@ -520,19 +520,18 @@ defineProperties(String.prototype, { dontEnum: true }, {
 					var e = z[1];
 					if (e === p) ++q;
 					else {
-						var T = $substring(s, p, q);
-						a[a.length] = T;
-						if (a.length === limit) return a;
+						a[aLength] = $substring(s, p, q);
+						if (++aLength === limit) return a;
 						p = e;
 						for (var i = 2; i < z.length; i += 2) {
-							a[a.length] = (z[i] === void 0 ? void 0 : $substring(s, z[i], z[i + 1]));
-							if (a.length === limit) return a;
+							a[aLength] = (z[i] === void 0 ? void 0 : $substring(s, z[i], z[i + 1]));
+							if (++aLength === limit) return a;
 						}
 						q = p;
 					}
 				}
 			}
-			a[a.length] = $substring(s, p, sl);
+			a[aLength] = $substring(s, p, sl);
 			return a;
 		}
 	}),

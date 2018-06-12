@@ -31,4 +31,17 @@
 > print("A<B>bold</B>and<CODE>coded</CODE>".split(/<(\/)?([^<>]+)>/).toString())
 < A,,B,bold,/,B,and,,CODE,coded,/,CODE,
 -
-
+> var x
+> var __split = new String("1undefined").split(x);
+> print(typeof __split)
+< object
+-
+> print(__split.constructor === Array)
+< true
+-
+> print(__split.length)
+< 1
+-
+> print(__split[0])
+< 1undefined
+-

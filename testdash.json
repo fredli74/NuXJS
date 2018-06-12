@@ -8140,5 +8140,11 @@
 	},
 	"built-ins/String/raw/zero-literal-segments": {
 		"category": "not_es3"
+	},
+	"built-ins/String/prototype/split/cstm-split-get-err": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/split/cstm-split-invocation": {
+		"category": "not_es3"
 	}
 }
