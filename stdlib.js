@@ -16,8 +16,8 @@
 	@preserve: toFixed,toISOString,toLocaleDateString,toLocaleLowerCase,toLocaleString,toLocaleTimeString
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
-	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
-	@preserve: $substring,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
+	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$match
+	@preserve: $sub,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
 	@preserve: splice,split,search,replace
 
 	support: {
@@ -64,7 +64,7 @@ var globals = this;
 var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
-		, $Infinity = support.Infinity, $submatch = support.submatch, $substring = support.substring // "$submatch" and "$substring" are used from within regexps, so names has to be preserved
+		, $Infinity = support.Infinity, $match = support.submatch, $sub = support.substring // "$match" and "$sub" are used from within regexps, so names has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
 		, $charCodeAt = support.charCodeAt, nativeErrors = { }
 		, ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -470,13 +470,13 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	indexOf: unconstructable(function indexOf(searchString) { // .length should be 1
 		var s, i, e = (s = objectToString(this)).length - (searchString = objectToString(searchString)).length, pos = arguments[1];
 		if ((i = toInt(pos)) < 0) i = 0;
-		for (; i <= e; ++i) if ($submatch(s, i, searchString)) return i;
+		for (; i <= e; ++i) if ($match(s, i, searchString)) return i;
 		return -1;
 	}),
 	lastIndexOf: unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var s, i, e = (s = objectToString(this)).length - (searchString = objectToString(searchString)).length, pos = arguments[1];
 		if ($isNaN(pos = +pos) || (i = toInt(pos)) > e) i = e;
-		for (; i >= 0; --i) if ($submatch(s, i, searchString)) return i;
+		for (; i >= 0; --i) if ($match(s, i, searchString)) return i;
 		return -1;
 	}),
 	localeCompare: unconstructable(function localeCompare(that) {
@@ -494,25 +494,23 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		} while (true);
 	}),
 	replace: unconstructable(function replace(searchValue, replaceValue) {
-		var s = objectToString(this), replaceFunction = replaceValue, matches, i;
+		var s, sLength = (s = objectToString(this)).length, replaceFunction = replaceValue, matches, i, p, t, l, e;
 		if (typeof replaceFunction !== "function") {
 			var r = objectToString(replaceValue);
-			function matchOffset(args) { return args[args.length - 2]; }
-			function capture(args, i) { var c; return (i >= 1 && i < args.length - 2 ? ((c = args[i]) === void 0 ? '' : c) : null); }
 			replaceFunction = function(m) {
-				var t = '', p, ch, ch2, c, args;
+				var t = '', p, ch, ch2, c, args, n;
 				for (p = 0; ch = r[p]; ++p) {
 					if (ch !== '$') t += ch;
 					else switch (ch = r[++p]) {
 						case '$': t += '$'; break;
 						case '&': t += m; break;
-						case '`': t += $substring(s, 0, matchOffset(arguments)); break;
-						case "'": t += $substring(s, matchOffset(arguments) + m.length, s.length); break;
+						case '`': t += $sub(s, 0, arguments[arguments.length - 2]); break;
+						case "'": t += $sub(s, arguments[arguments.length - 2] + m.length, sLength); break;
 						default: {
 							if (ch >= '0' && ch <= '9') {
 								if ((ch2 = r[p + 1]) < '0' || ch2 > '9') ch2 = '';
-								if ((c = capture(arguments, +(ch + ch2))) !== null) {
-									t += c;
+								if ((n = +(ch + ch2)) >= 1 && n < arguments.length - 2) {
+									t += ((c = arguments[n]) === void 0 ? '' : c);
 									p += ch2.length;
 									break;
 								}
@@ -526,29 +524,23 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			}
 		};
 		if ($getInternalProperty(searchValue, "class") === "RegExp") {
-			if (!searchValue.global) {
-				if (!(matches = regExpExecMethod(searchValue, s))) return s;
-				else {
-					matches[i = matches.length] = matches.index;
-					matches[i + 1] = s;
-					return $substring(s, 0, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches)) + $substring(s, matches.index + matches[0].length, s.length);
-				}
-			} else {
-				var p = 0, t = ''; // FIX : StringBuilder?
-				searchValue.lastIndex = 0;
-				while (matches = regExpExecMethod(searchValue, s)) {
-					matches[i = matches.length] = matches.index;
-					matches[i + 1] = s;
-					t += $substring(s, p, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches));
-					p = matches.index + matches[0].length;
-					if (matches[0].length === 0) ++searchValue.lastIndex;
-				}
-				return t + $substring(s, p, s.length);
+			p = 0;
+			t = '';
+			// FIX : StringBuilder?
+			if (searchValue.global) searchValue.lastIndex = 0;
+			while (matches = regExpExecMethod(searchValue, s)) {
+				matches[i = matches.length] = matches.index;
+				matches[i + 1] = s;
+				t += $sub(s, p, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches));
+				p = matches.index + (l = matches[0].length);
+				if (!searchValue.global) break;
+				if (l === 0) ++searchValue.lastIndex;
 			}
+			return t + $sub(s, p, sLength);
 		} else {
-			var e = s.length - (searchValue = objectToString(searchValue)).length;
-			for (var p = 0; !$submatch(s, p, searchValue); ++p) if (p >= e) return s;
-			return $substring(s, 0, p) + objectToString($callWithArgs(replaceFunction, null, [ searchValue, p, s ])) + $substring(s, p + searchValue.length, s.length);
+			e = sLength - (l = (t = objectToString(searchValue)).length);
+			for (var p = 0; !$match(s, p, t); ++p) if (p >= e) return s;
+			return $sub(s, 0, p) + objectToString($callWithArgs(replaceFunction, null, [ t, p, s ])) + $sub(s, p + l, sLength);
 		}
 	}),
 	search: unconstructable(function search(regexp) {
@@ -562,7 +554,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		if ((start = toInt(start)) < 0) start += s.length;
 		if (end === void 0) end = $Infinity;
 		else if ((end = toInt(end)) < 0) end += s.length;
-		return $substring(s, start, end);
+		return $sub(s, start, end);
 	}),
 	split: unconstructable(function split(separator, limit) {
 		var s, sLength = (s = objectToString(this)).length, a = [ ], aLength = 0;
@@ -571,7 +563,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		if ($getInternalProperty(separator, "class") !== "RegExp") {
 			separator = objectToString(separator);
 			var separatorLength = separator.length;
-			var splitMatch = function(p) { if ($submatch(s, p, separator)) return [ p, p + separatorLength ]; }
+			var splitMatch = function(p) { if ($match(s, p, separator)) return [ p, p + separatorLength ]; }
 		} else {
 			var re = $getInternalProperty(separator, "value");
 			var splitMatch = function(p) { return re(s, p); }
@@ -585,18 +577,18 @@ defineProperties(String.prototype, { dontEnum: true }, {
 				m[1] = p;
 				p = b = e;
 				for (var i = 0; i < m.length; i += 2) {
-					a[aLength] = (m[i] === void 0 ? void 0 : $substring(s, m[i], m[i + 1]));
+					a[aLength] = (m[i] === void 0 ? void 0 : $sub(s, m[i], m[i + 1]));
 					if (++aLength === limit) return a;
 				}
 			}
 		}
-		a[aLength] = $substring(s, b, sLength);
+		a[aLength] = $sub(s, b, sLength);
 		return a;
 	}),
 	substr: unconstructable(function substr(start, length) {
 		var s = objectToString(this);
 		if ((start = toInt(start)) < 0) start = s.length + start;
-		return $substring(s, start, (length === void 0 ? $Infinity : start + toInt(length)));
+		return $sub(s, start, (length === void 0 ? $Infinity : start + toInt(length)));
 	}),
 	substring: unconstructable(function substring(start, end) {
 		start = toInt(start);
@@ -606,7 +598,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			start = end;
 			end = swap;
 		}
-		return $substring(objectToString(this), start, end);
+		return $sub(objectToString(this), start, end);
 	}),
 	toUpperCase: unconstructable(function toUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
 	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
@@ -1115,7 +1107,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 				case 'x':
 				case 'u': {
 					var n = (c1 === 'x' ? 2 : 4);
-					if (areClass(sub = $substring(s, p + 2, p + 2 + n), HEX_CHAR)) {
+					if (areClass(sub = $sub(s, p + 2, p + 2 + n), HEX_CHAR)) {
 						p += 2 + n;
 						return String.fromCharCode(parseInt(sub, 16));
 					}
@@ -1174,7 +1166,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		} else if (literalSequence.length === 2) {
 			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
 		} else {
-			return "$submatch(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+			return "$match(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 		}
 	}
 
@@ -1338,8 +1330,8 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							n = (n - 1) * 2;
 							var quantity = parseQuantifier();
 							var stepSize = 'c' + (n + 1) + "-c" + n;
-				// TODO: $submatch should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = "$submatch(s," + positionToCode(offset) + ",$substring(s, c" + n + ",c" + (n + 1) + "))";
+				// TODO: $match should take two additional optional params: start, end in match-string, thus eliminating need for substring here
+							var backMatchCode = "$match(s," + positionToCode(offset) + ",$sub(s, c" + n + ",c" + (n + 1) + "))";
 							var tail = compileTerms(0, junction);
 							var tailName = 't' + (++functionCounter);
 							addFunction(tailName, "return " + tail);
@@ -1515,7 +1507,7 @@ function regExpExecMethod(re, string) {
 		(a = [ ]).input = string;
 		a.index = m[0];
 		for (var j = 0; j < m.length; j += 2) {
-			a[a.length] = ((m[j] === void 0) ? void 0 : $substring(string, m[j], m[j + 1]));
+			a[a.length] = ((m[j] === void 0) ? void 0 : $sub(string, m[j], m[j + 1]));
 		}
 	}
 	return a;
@@ -1698,7 +1690,7 @@ defineProperties(JSON, { dontEnum: true }, {
         	space = +space;
             for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += ' ';
         } else if (typeof space === "string" || (typeof space === "object" && $getInternalProperty(space, "class") === "String")) {
-            gap = $substring('' + space, 0, 10);
+            gap = $sub('' + space, 0, 10);
         }
 
 		function quote(str) {
@@ -1809,8 +1801,8 @@ defineProperties(JSON, { dontEnum: true }, {
 			if (ch === '"') return ++p;
 		}
 		function literal(t, p) {
-			if ($submatch(t, p, "true") || $submatch(t, p, "null")) return p + 4;
-			else if ($submatch(t, p, "false")) return p + 5;
+			if ($match(t, p, "true") || $match(t, p, "null")) return p + 4;
+			else if ($match(t, p, "false")) return p + 5;
 		}
 		function object(t, p) {
 			if (nest > MAX_JSON_DEPTH) throw nativeErrors.TypeError("Structure too deeply nested for JSON conversion");
