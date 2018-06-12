@@ -18,7 +18,7 @@
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$submatch
 	@preserve: $substring,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
-	@preserve: splice
+	@preserve: splice,split
 
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -497,8 +497,8 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	split: unconstructable(function split(separator, limit) {
 		var separatorIsString;
 		function splitMatch(q) {
-			if (!separatorIsString) return $getInternalProperty(separator, "value")(string, q);
-			else if ($submatch(s, q, separator)) return [ q, q + separator ];
+			if (!separatorIsString) return $getInternalProperty(separator, "value")(s, q);
+			else if ($submatch(s, q, separator)) return [ q, q + separator.length ];
 		};
 		var s = objectToString(this);
 		var a = [ ];
@@ -525,7 +525,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 						if (a.length === limit) return a;
 						p = e;
 						for (var i = 2; i < z.length; i += 2) {
-							a[a.length] = $substring(s, z[i], z[i + 1]);
+							a[a.length] = (z[i] === void 0 ? void 0 : $substring(s, z[i], z[i + 1]));
 							if (a.length === limit) return a;
 						}
 						q = p;
