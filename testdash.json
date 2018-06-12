@@ -8146,5 +8146,362 @@
 	},
 	"built-ins/String/prototype/split/cstm-split-invocation": {
 		"category": "not_es3"
+	},
+	"annexB/built-ins/String/prototype/anchor/B.2.3.2": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/anchor/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/anchor/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/big/B.2.3.3": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/big/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/big/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/blink/B.2.3.4": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/blink/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/blink/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/bold/B.2.3.5": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/bold/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/bold/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fixed/B.2.3.6": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fixed/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fixed/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontcolor/B.2.3.7": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontcolor/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontcolor/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontsize/B.2.3.8": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontsize/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/fontsize/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/italics/B.2.3.9": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/italics/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/italics/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/link/B.2.3.10": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/link/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/link/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/small/B.2.3.11": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/small/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/small/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/strike/B.2.3.12": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/strike/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/strike/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sub/B.2.3.13": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sub/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sub/name": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sup/B.2.3.14": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sup/length": {
+		"category": "bad_test"
+	},
+	"annexB/built-ins/String/prototype/sup/name": {
+		"category": "bad_test"
+	},
+	"built-ins/String/symbol-string-coercion": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/argument-is-Symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/argument-is-not-integer": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/argument-not-coercible": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/arguments-is-empty": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/fromCodePoint": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/number-is-out-of-range": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/return-string-value": {
+		"category": "not_es3"
+	},
+	"built-ins/String/fromCodePoint/to-number-conversions": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/Symbol.iterator/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/Symbol.iterator/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/Symbol.iterator/prop-desc": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/Symbol.iterator/this-val-non-obj-coercible": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/Symbol.iterator/this-val-to-str-err": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-abrupt-from-symbol-pos-to-integer": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-abrupt-from-this-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-code-unit-coerced-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-first-code-unit": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-single-code-unit": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-utf16-decode": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/codePointAt": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-abrupt-from-object-pos-to-integer": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/codePointAt/return-abrupt-from-this": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail_2": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Success": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Success_2": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Success_3": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/String.prototype.endsWith_Success_4": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/coerced-values-of-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/endsWith": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-position-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-searchstring-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-searchstring-regexp-test": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-searchstring": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-this-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-abrupt-from-this": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-false-if-search-start-is-less-than-zero": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/return-true-if-searchstring-is-empty": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/searchstring-found-with-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/searchstring-found-without-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/searchstring-not-found-with-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/endsWith/searchstring-not-found-without-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_FailBadLocation": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_FailLocation": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_FailMissingLetter": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_Success": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_SuccessNoLocation": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/String.prototype.includes_lengthProp": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/coerced-values-of-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/includes": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/length": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/name": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-position-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-searchstring-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-searchstring-regexp-test": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-searchstring": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-this-as-symbol": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-abrupt-from-this": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-false-with-out-of-bounds-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/return-true-if-searchstring-is-empty": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/searchstring-found-with-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/searchstring-found-without-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/searchstring-not-found-with-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/includes/searchstring-not-found-without-position": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/indexOf/S15.5.4.7_A1_T12": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/lastIndexOf/S15.5.4.8_A1_T12": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/match/cstm-matcher-get-err": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/match/cstm-matcher-invocation": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/match/invoke-builtin-match": {
+		"category": "not_es3"
 	}
 }
