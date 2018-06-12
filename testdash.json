@@ -8503,5 +8503,23 @@
 	},
 	"built-ins/String/prototype/match/invoke-builtin-match": {
 		"category": "not_es3"
+	},
+	"built-ins/String/prototype/search/cstm-search-get-err": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/search/cstm-search-invocation": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/search/invoke-builtin-search-searcher-undef": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/search/invoke-builtin-search": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/replace/cstm-replace-get-err": {
+		"category": "not_es3"
+	},
+	"built-ins/String/prototype/replace/cstm-replace-invocation": {
+		"category": "not_es3"
 	}
 }
