@@ -103,7 +103,7 @@ function isPrimitive(v) {
 }
 
 // FIX : join these two maybe?
-support.toPrimitiveNumber = function toPrimitiveNumber(o) {
+support.toPrimitiveNumber = function(o) {
 	var f, v;
 	if ((typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))
 			&& (typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))) {
@@ -112,7 +112,7 @@ support.toPrimitiveNumber = function toPrimitiveNumber(o) {
 	return v
 };
 
-support.toPrimitiveString = function toPrimitiveString(o) {
+support.toPrimitiveString = function(o) {
 	var f, v;
 	if ((typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))
 			&& (typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))) {
@@ -494,64 +494,57 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		} while (true);
 	}),
 	replace: unconstructable(function replace(searchValue, replaceValue) {
-		var s = objectToString(this);
-		var replaceFunction = replaceValue;
+		var s = objectToString(this), replaceFunction = replaceValue, matches, i;
 		if (typeof replaceFunction !== "function") {
 			var r = objectToString(replaceValue);
 			function matchOffset(args) { return args[args.length - 2]; }
 			function capture(args, i) { var c; return (i >= 1 && i < args.length - 2 ? ((c = args[i]) === void 0 ? '' : c) : null); }
 			replaceFunction = function(m) {
-				var t = '', p = 0, ch, ch2, c, args;
-				while ((ch = r[p]) !== void 0) {
-					if (ch === '$') {
-						switch (ch = r[++p]) {
-							case '$': t += '$'; break;
-							case '&': t += m; break;
-							case '`': t += $substring(s, 0, matchOffset(arguments)); break;
-							case "'": t += $substring(s, matchOffset(arguments) + m.length, s.length); break;
-							default: {
-								if (ch >= '0' && ch <= '9') {
-									if ((ch2 = r[p + 1]) >= '0' && ch2 <= '9') {
-										if ((c = capture(arguments, +(ch + ch2))) !== null) {
-											++p;
-											t += c;
-											break;
-										}
-									} else {
-										if ((c = capture(arguments, +ch)) !== null) {
-											t += c;
-											break;
-										}
-									}
+				var t = '', p, ch, ch2, c, args;
+				for (p = 0; ch = r[p]; ++p) {
+					if (ch !== '$') t += ch;
+					else switch (ch = r[++p]) {
+						case '$': t += '$'; break;
+						case '&': t += m; break;
+						case '`': t += $substring(s, 0, matchOffset(arguments)); break;
+						case "'": t += $substring(s, matchOffset(arguments) + m.length, s.length); break;
+						default: {
+							if (ch >= '0' && ch <= '9') {
+								if ((ch2 = r[p + 1]) < '0' || ch2 > '9') ch2 = '';
+								if ((c = capture(arguments, +(ch + ch2))) !== null) {
+									t += c;
+									p += ch2.length;
+									break;
 								}
-								t += '$' + ch;
-								break;
 							}
+							t += '$' + ch;
+							break;
 						}
-					} else {
-						t += ch;
 					}
-					++p;
 				}
 				return t;
 			}
 		};
 		if ($getInternalProperty(searchValue, "class") === "RegExp") {
 			if (!searchValue.global) {
-				var r;
-				if (!(r = regExpExecMethod(searchValue, s))) return s;
+				if (!(matches = regExpExecMethod(searchValue, s))) return s;
 				else {
-					var i;
-					r[i = r.length] = r.index;
-					r[i + 1] = s;
-					return $substring(s, 0, r.index) + objectToString($callWithArgs(replaceFunction, null, r)) + $substring(s, r.index + r[0].length, s.length);
+					matches[i = matches.length] = matches.index;
+					matches[i + 1] = s;
+					return $substring(s, 0, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches)) + $substring(s, matches.index + matches[0].length, s.length);
 				}
+			} else {
+				var p = 0, t = ''; // FIX : StringBuilder?
+				searchValue.lastIndex = 0;
+				while (matches = regExpExecMethod(searchValue, s)) {
+					matches[i = matches.length] = matches.index;
+					matches[i + 1] = s;
+					t += $substring(s, p, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches));
+					p = matches.index + matches[0].length;
+					if (matches[0].length === 0) ++searchValue.lastIndex;
+				}
+				return t + $substring(s, p, s.length);
 			}
-			var i = searchValue.lastIndex = 0, a = [ ], r;
-			do {
-				if (!(r = regExpExecMethod(searchValue, s))) return (i === 0 ? null : a);
-				if (!(a[i++] = r[0])) ++searchValue.lastIndex;
-			} while (true);
 		} else {
 			var e = s.length - (searchValue = objectToString(searchValue)).length;
 			for (var p = 0; !$submatch(s, p, searchValue); ++p) if (p >= e) return s;
@@ -584,15 +577,15 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			var splitMatch = function(p) { return re(s, p); }
 		}
 		if (!sLength) return (splitMatch(0) ? a : [ s ]);
-		var p, b = p = 0, match, e;
+		var p, b = p = 0, m, e;
 		while (p !== sLength) {
-			if (!(match = splitMatch(p)) || (e = match[1]) === b) ++p;
+			if (!(m = splitMatch(p)) || (e = m[1]) === b) ++p;
 			else {
-				match[0] = b;
-				match[1] = p;
+				m[0] = b;
+				m[1] = p;
 				p = b = e;
-				for (var i = 0; i < match.length; i += 2) {
-					a[aLength] = (match[i] === void 0 ? void 0 : $substring(s, match[i], match[i + 1]));
+				for (var i = 0; i < m.length; i += 2) {
+					a[aLength] = (m[i] === void 0 ? void 0 : $substring(s, m[i], m[i + 1]));
 					if (++aLength === limit) return a;
 				}
 			}
@@ -1825,7 +1818,7 @@ defineProperties(JSON, { dontEnum: true }, {
 			try {
 				var ch, expectComma = false, open = t[p], close = (open === '[' ? ']' : '}');
 				p = space(t, ++p);
-				while ((ch = t[p]) !== close && ch !== '') {
+				while ((ch = t[p]) !== close && ch) {
 					if (expectComma) {
 						if (ch !== ',') return;
 						p = space(t, ++p);
