@@ -813,6 +813,7 @@ const Int32 MAX_PROTOTYPE_CHAIN_LENGTH = 32;
 const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 class Runtime : public GCItem {
 	friend class Processor;
+	friend class Support;
 	
 	protected:	struct GlobalScope : public Scope {
 					typedef Scope super;
@@ -821,13 +822,6 @@ class Runtime : public GCItem {
 					virtual void writeVar(Runtime& rt, const String* name, const Value& v);
 					virtual bool deleteVar(Runtime& rt, const String* name);
 					virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete);
-				};
-	
-				class EvalFunction : public Function {
-					public:		typedef Function super;
-								EvalFunction(GCList& gcList, bool direct) : super(gcList), direct(direct) { }
-								virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject);
-					protected:	bool direct;
 				};
 	
 				struct ErrorPrototype;
@@ -881,12 +875,10 @@ class Runtime : public GCItem {
 				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 				Object* prototypes[PROTOTYPE_COUNT];
 	
-	// FIX : public? v
-	public:		EvalFunction evalFunction;
-				EvalFunction evalDirectFunction;
 				Function* toNumberFunction;
 				Function* toStringFunction;
 				Function* createRegExpFunction;
+				Function* evalFunction;
 				double unixEpochTimeDiff;
 	
 	public:		virtual void gcMark(Heap& heap) const {

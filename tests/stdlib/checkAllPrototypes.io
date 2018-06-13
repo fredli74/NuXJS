@@ -536,9 +536,10 @@
 < OK: true
 < --------
 -
-> checkFunc('Math', 'random', 1);
+> checkFunc('Math', 'random', 0);
 < Math.random
 < --------
+< .name: random
 < .length: 0
 < 'random' in Math: true
 < random : dontEnum, (deleted:true)

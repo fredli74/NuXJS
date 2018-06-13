@@ -18,12 +18,13 @@
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$match
 	@preserve: $sub,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
-	@preserve: splice,split,search,replace
+	@preserve: splice,split,search,replace,random,evalFunction
 
 	support: {
 		prototypes: {	// built-in prototype objects
 			object, function, string, boolean, number, array
 		},
+		eval(code: string): any
 		asin(), atan() etc..
 		isNaN(), isFinite()
 		defineProperty(object: object, property: string, value: any, readOnly: boolean, dontEnum: boolean, dontDelete: boolean): boolean
@@ -49,6 +50,7 @@
 		exp(x: number): number
 		floor(x: number): number
 		log(x: number): number
+		random(): number
 		sin(x: number): number
 		sqrt(x: number): number
 		tan(x: number): number
@@ -203,7 +205,7 @@ function getInternalNumber(object, forFunction) {
 // eval without loads of local variables but with access to all internals
 function evalThere(s) {
 	var customEval = eval;
-	eval = origEval;
+	eval = support.evalFunction; // must reassign for "direct mode" eval
 	try { return eval(s); } finally { eval = customEval; }
 }
 
@@ -1483,8 +1485,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	return code
 }
 
-var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, origEval = eval
-		, regExpCache = { }, regExpPrototype;
+var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, regExpCache = { }, regExpPrototype;
 
 function execRegExp(re, string) {
 	string = objectToString(string);
@@ -1572,6 +1573,7 @@ defineProperties(globals, { dontEnum: true }, {
 	isFinite: unconstructable(function isFinite(v) { return $isFinite(+v) }),
 	isNaN: unconstructable(function isNaN(v) { return $isNaN(+v) }),
 	JSON: support.createWrapper("JSON", void 0),
+	eval: support.evalFunction = unconstructable(function eval(x) { return support.eval(x) }),
 	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(objectToString(string)) }),
 	parseInt: unconstructable(function parseInt(string, radix) {
 		string = objectToString(string);
@@ -1630,6 +1632,7 @@ defineProperties(Math, { dontEnum: true }, {
 	max: unconstructable(function max(x, y) { var m = -$Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) > m || $isNaN(v)) m = v; return m }),
 	min: unconstructable(function min(x, y) { var m = $Infinity, v, argv; for (var i = (argv = arguments).length - 1; i >= 0; --i) if ((v = +argv[i]) < m || $isNaN(v)) m = v; return m }),
 	pow: unconstructable(function pow(x, y) { return support.pow(+x, +y) }),
+	random: unconstructable(function random() { return support.random() }),
 	round: unconstructable(function round(v) { return (v === 0.0 ? v : (v >= -0.5 && v < 0.0 ? -0.0 : $floor(v + 0.5))) }),
 	sin: unconstructable(function sin(v) { return support.sin(+v) }),
 	sqrt: unconstructable(function sqrt(v) { return support.sqrt(+v) }),

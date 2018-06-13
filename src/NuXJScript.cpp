@@ -833,9 +833,6 @@ int Heap::calcPoolIndex(const size_t size) {
 
 void* Heap::alloc(size_t size) {
 	void* block = 0;
-if (size == 96) {
-static int x = 3;
-}
 	const int poolIndex = calcPoolIndex(size);
 	if (poolIndex >= 0) {
 		size = poolIndex * POOL_SIZE_GRANULARITY;
@@ -1703,6 +1700,27 @@ ScriptException::ScriptException(Heap& heap, const Value& value) throw()
 	*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
 }
 
+/* --- EvalFunction --- */
+
+static struct EvalFunction : public Function {
+	typedef Function super;
+	EvalFunction(bool direct) : direct(direct) { }
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		if (argc < 1) {
+			return Value::UNDEFINED;
+		}
+		if (!argv[0].isString()) {
+			return argv[0];
+		}
+
+		Heap& heap = rt.getHeap();
+		const String* expression = argv[0].toString(heap);
+		processor.enterEvalCode(rt.compileEvalCode(expression), direct);
+		return Value::UNDEFINED;
+	}
+	bool direct;
+} EVAL_FUNCTION(false), DIRECT_EVAL_FUNCTION(true);
+
 /* --- Processor --- */
 
 const Int32 MIN_OPERAND_VALUE = -(1 << 23);
@@ -2163,7 +2181,7 @@ void Processor::innerRun() {
 				return;
 			}
 			
-			case CALL_METHOD_OP: { // FIX : share more with the others...
+			case CALL_METHOD_OP: {
 				Object* const o = convertToObject(sp[-im - 1], true);
 				if (o != 0) {
 					Value v(Value::UNDEFINED);
@@ -2178,13 +2196,10 @@ void Processor::innerRun() {
 				return;
 			}
 			
-			case CALL_EVAL_OP: { // FIX : all these are too similar!
+			case CALL_EVAL_OP: {
 				Function* f = asFunction(sp[-im]);
 				if (f != 0) {
-					if (f == &rt.evalFunction) {
-						f = &rt.evalDirectFunction; // FIX : can't we implement this check with vm code instead of having a separate OP?
-					}
-					invokeFunction(f, im, im);
+					invokeFunction((f == rt.evalFunction ? &DIRECT_EVAL_FUNCTION : f), im, im);
 				}
 				return;
 			}
@@ -4260,20 +4275,6 @@ void SeparateConstructorFunction::constructCompleteObject(Runtime& rt) const {
 	}
 }
 
-Value Runtime::EvalFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-	if (argc < 1) {
-		return Value::UNDEFINED;
-	}
-	if (!argv[0].typeOfString()->isEqualTo(STRING_STRING)) {
-		return argv[0]; // FIX : better way to check type without involving typeOfString?
-	}
-
-	Heap& heap = rt.getHeap();
-	const String* expression = argv[0].toString(heap);
-	processor.enterEvalCode(rt.compileEvalCode(expression), direct);
-	return Value::UNDEFINED;
-}
-
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
 	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
@@ -4493,6 +4494,10 @@ struct Support {
 		const time_t newTime = mktime(&newTM);
 		return (newTime == -1 ? Value::NOT_A_NUMBER : Value(t * 1000.0 - newTime * 1000.0));
 	}
+	
+	static Value random(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		return rand() / (RAND_MAX + 1.0);
+	}
 };
 
 static struct {
@@ -4502,7 +4507,6 @@ static struct {
 	{ "acos", std::acos }, { "asin", std::asin }, { "atan", std::atan }, { "cos", std::cos }, { "exp", std::exp }
 	, { "floor", std::floor }, { "log", std::log }, { "sin", std::sin }, { "sqrt", std::sqrt }, { "tan", std::tan }
 };
-// TODO : min, max, random
 
 static struct {
 	String name;
@@ -4515,7 +4519,8 @@ static struct {
 	{ "isPropertyEnumerable", Support::isPropertyEnumerable }, { "atan2", Support::atan2 },
 	{ "pow", Support::pow }, { "parseFloat", Support::parseFloat }, { "charCodeAt", Support::charCodeAt },
 	{ "substring", Support::substring }, { "submatch", Support::submatch },
-	{ "getCurrentTime", Support::getCurrentTime }, { "localTimeDifference", Support::localTimeDifference }
+	{ "getCurrentTime", Support::getCurrentTime }, { "localTimeDifference", Support::localTimeDifference },
+	{ "random", Support::random }
 };
 
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
@@ -4536,12 +4541,9 @@ static struct NoRegExpSupport : public Function {
 
 Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globalObject(0)
 		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
-		, timeOut(0), memoryCap(MAX_MEMORY_CAP)
-		, gcThreshold(0), evalFunction(heap.roots(), false)
-		, evalDirectFunction(heap.roots(), true), toNumberFunction(&DEFAULT_CONVERSION)
-		, toStringFunction(&DEFAULT_CONVERSION), createRegExpFunction(&NO_REG_EXP_SUPPORT)
-		, unixEpochTimeDiff(0.0)
-		, evalCodeCache(&heap) {
+		, timeOut(0), memoryCap(MAX_MEMORY_CAP), gcThreshold(0), toNumberFunction(&DEFAULT_CONVERSION)
+		, toStringFunction(&DEFAULT_CONVERSION), createRegExpFunction(&NO_REG_EXP_SUPPORT), evalFunction(&EVAL_FUNCTION)
+		, unixEpochTimeDiff(0.0), evalCodeCache(&heap) {
 	std::fill(prototypes, prototypes + PROTOTYPE_COUNT, (Object*)(0));
 	Object* objectPrototype = new(heap) ScriptObject(heap.managed(), 0);
 	prototypes[OBJECT_PROTOTYPE] = objectPrototype;
@@ -4668,7 +4670,6 @@ void Runtime::setupStandardLibrary() {
 		unixEpochTimeDiff = 315532800000.0 - refTime * 2000.0 + refTimeAsUTC * 1000.0;
 	}
 	
-	globalObject->setOwnProperty(*this, &EVAL_STRING, &evalFunction, DONT_ENUM_FLAG);
 	ScriptObject* supportObject = new(heap) ScriptObject(heap.managed(), getObjectPrototype());
 	ScriptObject* prototypesObject = new(heap) ScriptObject(heap.managed(), getObjectPrototype());
 	const Var protectedSupportObject(*this, supportObject);
@@ -4679,12 +4680,13 @@ void Runtime::setupStandardLibrary() {
 	}
 	supportObject->setOwnProperty(*this, String::alloc(heap, "isNaN"), &IS_NAN_FUNCTION);
 	supportObject->setOwnProperty(*this, String::alloc(heap, "isFinite"), &IS_FINITE_FUNCTION);
+	supportObject->setOwnProperty(*this, &EVAL_STRING, &EVAL_FUNCTION);
 	supportObject->setOwnProperty(*this, &UNDEFINED_STRING, Value::UNDEFINED);
 	supportObject->setOwnProperty(*this, &NAN_STRING, Value::NOT_A_NUMBER);
 	supportObject->setOwnProperty(*this, &INFINITY_STRING, Value::INFINITE_NUMBER);
 	supportObject->setOwnProperty(*this, String::alloc(heap, "maxNumber"), std::numeric_limits<double>::max());
 	supportObject->setOwnProperty(*this, String::alloc(heap, "minNumber"), std::numeric_limits<double>::denorm_min());
-	
+
 	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, &NATIVE_MATH_FUNCTIONS[i].func);
 	}
@@ -4700,6 +4702,7 @@ void Runtime::setupStandardLibrary() {
 	fetchFunction(supportObject, "toPrimitiveNumber", &toNumberFunction);
 	fetchFunction(supportObject, "toPrimitiveString", &toStringFunction);
 	fetchFunction(supportObject, "createRegExp", &createRegExpFunction);
+	fetchFunction(supportObject, "evalFunction", &evalFunction);
 
 	heap.gc();
 }
