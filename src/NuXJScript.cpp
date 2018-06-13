@@ -71,6 +71,7 @@ static const String NUMBER_STRING("number");
 static const String N_UMBER_STRING("Number");
 static const String STRING_STRING("string");
 static const String S_TRING_STRING("String");
+static const String D_ATE_STRING("Date");
 static const String FUNCTION_STRING("function");
 static const String F_UNCTION_STRING("Function");
 static const String NULL_STRING("null");
@@ -103,9 +104,9 @@ static const String ERROR_NAMES[ERROR_TYPE_COUNT] = {
 	"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"
 };
 static const String* PROTOTYPE_NAMES[Runtime::PROTOTYPE_COUNT] = {
-	&O_BJECT_STRING, &F_UNCTION_STRING, &S_TRING_STRING, &B_OOLEAN_STRING, &N_UMBER_STRING, &A_RRAY_STRING
-	, &ERROR_NAMES[0], &ERROR_NAMES[1], &ERROR_NAMES[2], &ERROR_NAMES[3], &ERROR_NAMES[4], &ERROR_NAMES[5]
-	, &ERROR_NAMES[6]
+	&O_BJECT_STRING, &F_UNCTION_STRING, &S_TRING_STRING, &B_OOLEAN_STRING, &N_UMBER_STRING, &D_ATE_STRING
+	, &A_RRAY_STRING, &ERROR_NAMES[0], &ERROR_NAMES[1], &ERROR_NAMES[2], &ERROR_NAMES[3], &ERROR_NAMES[4]
+	, &ERROR_NAMES[5], &ERROR_NAMES[6]
 };
 
 /* --- Utilities --- */
@@ -4551,6 +4552,7 @@ Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap
 	prototypes[BOOLEAN_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &B_OOLEAN_STRING, false, objectPrototype);
 	prototypes[NUMBER_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &N_UMBER_STRING, 0.0, objectPrototype);
 	prototypes[STRING_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &S_TRING_STRING, &String::EMPTY, objectPrototype);
+	prototypes[DATE_PROTOTYPE] = new(heap) WrapperObject(heap.managed(), &D_ATE_STRING, NaN(), objectPrototype);
 	prototypes[ARRAY_PROTOTYPE] = new(heap) Array(heap.managed());
 	for (int i = 0; i < ERROR_TYPE_COUNT; ++i) {
 		prototypes[FIRST_ERROR_PROTOTYPE + i] = new(heap) ErrorPrototype(heap.managed(), static_cast<ErrorType>(i));

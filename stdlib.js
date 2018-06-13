@@ -197,11 +197,6 @@ function numberToString(num, digits, eNotationBelow) {
 	return string
 }
 
-function getInternalNumber(object, forFunction) {
-	checkClass(object, "Number", forFunction);
-	return $getInternalProperty(object, "value")
-}
-
 // eval without loads of local variables but with access to all internals
 function evalThere(s) {
 	var customEval = eval;
@@ -294,6 +289,11 @@ defineProperties(Boolean.prototype, { dontEnum: true }, {
 });
 
 /* --- Number --- */
+
+function getInternalNumber(object, forFunction) {
+	checkClass(object, "Number", forFunction);
+	return $getInternalProperty(object, "value")
+}
 
 var Number = support.specialConstructor(function Number(v) {
 		return (arguments.length ? +v : 0);
@@ -486,7 +486,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		return ((me = objectToString(this)) === (him = objectToString(that)) ? 0 : (me < him ? -1 : 1));
 	}),
 	match: unconstructable(function match(regexp) {
-		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = support.createRegExp(regexp);
+		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
 		var s = objectToString(this);
 		if (!regexp.global) return regExpExecMethod(regexp, s);
 		var i = regexp.lastIndex = 0, a = [ ], r;
@@ -546,7 +546,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		}
 	}),
 	search: unconstructable(function search(regexp) {
-		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = support.createRegExp(regexp);
+		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
 		var s, len = (s = objectToString(this)).length, f = $getInternalProperty(regexp, "value");
 		for (var i = 0; i <= len; ++i) if (f(s, i)) return i;
 		return -1;
@@ -790,149 +790,43 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 });
 
 /* --- Date --- */
-var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
-	var v;
-	if (!(this instanceof Date)) {
-		return (new Date()).toString();
-	} else if (arguments.length >= 2 && arguments.length <= 7) {
-		this.Value = timeClip(fromLocalTime(makeDateTime.apply(this, arguments)));
-	} else if (arguments.length === 1) {
-		this.Value = timeClip(typeof (v = arguments[0]) === "string" ? Date.parse('' + v) : +v);
-	} else {
-		this.Value = support.getCurrentTime();
-	}
-};
-Date.parse = function(s) {
-	var z, y, i = 0, ch, tz = support.undefined, tzh, tzm,
-		readPart = function(len) {
-			var v;
-			for (v = 0;len > 0;--len) if ("0" <= s[i] && s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
-			return v;
-		};
 
-	z = epochFromDate(
-		((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
-		s[i] === "-" && (++i, readPart(2) -1),
-		s[i] === "-" && (++i, readPart(2)) || 1) + epochFromTime(
-		((ch = s[i]) === "T" || ch === ' ') && (++i, readPart(2)) || 0,
-		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
-		(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
-		(ch = s[i]) === "." && (++i, readPart(3)) || 0);
+function getDateValue(object) {
+	if ($getInternalProperty(object, "class") !== "Date") throw nativeErrors.TypeError("this is not a Date object");
+	return $getInternalProperty(object, "value");
+}
 
-	while (ch !== support.undefined && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
-
-	if (ch === "Z") tz = 0;
-	else if (ch === "+" || ch === "-") {
-		++i, tzh = readPart(2) * msPerHour,
-		s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * msPerMinute,
-		$isNaN(tzh) || (tz = ch === "-" ? -tzh : tzh);
-    }
-	return (tz === support.undefined ? fromLocalTime(z) : z - tz)
-};
-Date.UTC = function(year, month, date, hours, minutes, seconds, ms) { 
-	return timeClip(makeDateTime(year, month, date, hours, minutes, seconds, ms))
-};
-Date.prototype.toISOString = function() {
-	var z = this.Value;
-	if ($isNaN(z)) throw nativeErrors.RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
-	return (epochToDateString(z) + "T" + epochToTimeString(z, true) + "Z")
-};
-Date.prototype.toUTCString = function() {
-	var z = this.Value;
-	if ($isNaN(z)) return "Invalid Date";
-	return (epochToDateString(z) + ' ' + epochToTimeString(z))
-};
-Date.prototype.toString = function() {
-	var l = toLocalTime(this.Value);
-	if ($isNaN(l)) return "Invalid Date";
-	return (epochToDateString(l) + ' ' + epochToTimeString(l))
-};
-Date.prototype.toDateString = function() {
-	var l = toLocalTime(this.Value);
-	if ($isNaN(l)) return "Invalid Date";
-	return epochToDateString(l)
-};
-Date.prototype.toTimeString = function() {
-	var l = toLocalTime(this.Value);
-	if ($isNaN(l)) return "Invalid Date";
-	return epochToTimeString(l)
-};
-
-Date.prototype.toLocaleString = Date.prototype.toString;
-Date.prototype.toLocaleDateString = Date.prototype.toDateString;
-Date.prototype.toLocaleTimeString = Date.prototype.toTimeString;
-
-Date.prototype.valueOf = function() { return this.Value };
-Date.prototype.getTime = function() { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return this.Value };
-Date.prototype.getFullYear = function() { return dateFromEpoch(toLocalTime(this.Value))[0] };
-Date.prototype.getUTCFullYear = function() { return dateFromEpoch(this.Value)[0] };
-Date.prototype.getMonth = function() { return dateFromEpoch(toLocalTime(this.Value))[1] };
-Date.prototype.getUTCMonth = function() { return dateFromEpoch(this.Value)[1] };
-Date.prototype.getDate = function() { return dateFromEpoch(toLocalTime(this.Value))[2] };
-Date.prototype.getUTCDate = function() { return dateFromEpoch(this.Value)[2] };
-Date.prototype.getDay = function() { return weekdayFromTime(toLocalTime(this.Value)) };
-Date.prototype.getUTCDay = function() { return weekdayFromTime(this.Value) };
-Date.prototype.getHours = function() { return hourFromTime(toLocalTime(this.Value)) };
-Date.prototype.getUTCHours = function() { return hourFromTime(this.Value) };
-Date.prototype.getMinutes = function() { return minFromTime(toLocalTime(this.Value)) };
-Date.prototype.getUTCMinutes = function() { return minFromTime(this.Value) };
-Date.prototype.getSeconds = function() { return secFromTime(toLocalTime(this.Value)) };
-Date.prototype.getUTCSeconds = function() { return secFromTime(this.Value) };
-Date.prototype.getMilliseconds = function() { return msFromTime(toLocalTime(this.Value)) };
-Date.prototype.getUTCMilliseconds = function() { return msFromTime(this.Value) };
-Date.prototype.getTimezoneOffset = function() { return (this.Value - toLocalTime(this.Value)) / msPerMinute };
-Date.prototype.setTime = function(time) { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) };
-Date.prototype.setMilliseconds = function(ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 3, arguments)))) };
-Date.prototype.setUTCMilliseconds = function(ms) { return (this.Value = timeClip(setTimeParts(this.Value, 3, arguments))) };
-Date.prototype.setSeconds = function(s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) };
-Date.prototype.setUTCSeconds = function(s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 2, arguments))) };
-Date.prototype.setMinutes = function(m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 1, arguments)))) };
-Date.prototype.setUTCMinutes = function(m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 1, arguments))) };
-Date.prototype.setHours = function(h, m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 0, arguments)))) };
-Date.prototype.setUTCHours = function(h, m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 0, arguments))) };
-Date.prototype.setDate = function(date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 2, arguments)))) };
-Date.prototype.setUTCDate = function(date) { return (this.Value = timeClip(setDateParts(this.Value, 2, arguments))) };
-Date.prototype.setMonth = function(month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 1, arguments)))) };
-Date.prototype.setUTCMonth = function(month, date) { return (this.Value = timeClip(setDateParts(this.Value, 1, arguments))) };
-Date.prototype.setFullYear = function(year, month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts($isNaN(this.Value) ? 0 : toLocalTime(this.Value), 0, arguments)))) };
-Date.prototype.setUTCFullYear = function(year, month, date) { return (this.Value = timeClip(setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))) };
-
-var msPerDay = 86400000,
-	msPerHour = 3600000,
-	msPerMinute = 60000,
-	msPerSecond = 1000,
-	mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
-	int = function(v) { return (!$isFinite(v = +v) ? $NaN : (v < 0 ? -$floor(-v) : $floor(v))) },
+var mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
 	epochFromDate = function(year, month, day) {
 		year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
-		var era = int( (year >= 0 ? year : year - 399) / 400 );
+		var era = toInt( (year >= 0 ? year : year - 399) / 400 );
 		var yoe = year - era * 400;
-		var doy = int( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
-		var doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy;
-		return (era * 146097 + doe - 719468) * msPerDay;
+		var doy = toInt( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
+		var doe = yoe * 365 + toInt(yoe / 4) - toInt(yoe / 100) + doy;
+		return (era * 146097 + doe - 719468) * 86400000;
 	},
 	dateFromEpoch = function(z) {
-		z = $floor(z / msPerDay) + 719468;
-		var era = int( (z >= 0 ? z : z - 146096) / 146097 );
+		z = $floor(z / 86400000) + 719468;
+		var era = toInt( (z >= 0 ? z : z - 146096) / 146097 );
 		var doe = z - era * 146097;
-		var yoe = int( (doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365 );
+		var yoe = toInt( (doe - toInt(doe / 1460) + toInt(doe / 36524) - toInt(doe / 146096)) / 365 );
 		var y = yoe + era * 400;
-	    var doy = doe - (365 * yoe + int(yoe / 4) - int(yoe/100) );
-	    var mp = int( (5 * doy + 2) / 153);
+	    var doy = doe - (365 * yoe + toInt(yoe / 4) - toInt(yoe/100) );
+	    var mp = toInt( (5 * doy + 2) / 153);
 	    var m = mp + (mp < 10 ? 2 : -10);
-	    var d = doy - int( (153 * mp + 2) / 5 ) + 1;
+	    var d = doy - toInt( (153 * mp + 2) / 5 ) + 1;
 	    return [ (y + (m <= 1)), m, d ];
 	},
-	epochFromTime = function(hour, minute, second, ms) { return hour * msPerHour + minute * msPerMinute + second * msPerSecond + ms },
-	timeFromEpoch = function(z) { return [ mod($floor(z / msPerHour), 24), mod($floor(z / msPerMinute), 60), mod($floor(z / msPerSecond), 60), mod(z, msPerSecond) ] },
+	epochFromTime = function(hour, minute, second, ms) { return hour * 3600000 + minute * 60000 + second * 1000 + ms },
+	timeFromEpoch = function(z) { return [ mod($floor(z / 3600000), 24), mod($floor(z / 60000), 60), mod($floor(z / 1000), 60), mod(z, 1000) ] },
 	setDateParts = function(z, n, a) {
-		var i, d = dateFromEpoch(z), r = mod(z, msPerDay);
-		for (i = 0; i < a.length; ++i, ++n) d[n] = int(a[i]);
+		var i, d = dateFromEpoch(z), r = mod(z, 86400000);
+		for (i = 0; i < a.length; ++i, ++n) d[n] = toInt(a[i]);
 		return epochFromDate.apply(null, d) + r;
 	},
 	setTimeParts = function(z, n, a) {
-		var i, t = timeFromEpoch(z), r = $floor(z / msPerDay) * msPerDay;
-		for (i = 0; i < a.length; ++i, ++n) t[n] = int(a[i]);
+		var i, t = timeFromEpoch(z), r = $floor(z / 86400000) * 86400000;
+		for (i = 0; i < a.length; ++i, ++n) t[n] = toInt(a[i]);
 		return epochFromTime.apply(null, t) + r;
 	},
 	startOfYearDiff = function() { return support.localTimeDifference(1451606400000) }, // 2016-01-01T00:00:00.000Z
@@ -942,22 +836,134 @@ var msPerDay = 86400000,
 	localTimeDiff = function(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) },
 	fromLocalTime = function(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) },
 	toLocalTime = function(z) { return $isNaN(z) ? z : z + localTimeDiff(z) },
-	weekdayFromTime = function(z) { return mod($floor(z / msPerDay) +4, 7) },
-	hourFromTime = function(z) { return mod($floor(z / msPerHour), 24) },
-	minFromTime = function(z) { return mod($floor(z / msPerMinute), 60) },
-	secFromTime = function(z) { return mod($floor(z / msPerSecond), 60) },
-	msFromTime = function(z) { return mod(z, msPerSecond) },
-	timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : int(z)) },
+	weekdayFromTime = function(z) { return mod($floor(z / 86400000) +4, 7) },
+	hourFromTime = function(z) { return mod($floor(z / 3600000), 24) },
+	minFromTime = function(z) { return mod($floor(z / 60000), 60) },
+	secFromTime = function(z) { return mod($floor(z / 1000), 60) },
+	msFromTime = function(z) { return mod(z, 1000) },
+	timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : toInt(z)) },
 	makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
 		var argc = arguments.length;
-		return epochFromDate( (year = int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
-			int(month), (argc > 2 ? int(date) : 1)) + epochFromTime( argc > 3 ? int(hours) : 0,
-			argc > 4 ? int(minutes) : 0, argc > 5 ? int(seconds) : 0, argc > 6 ? int(ms) : 0);
+		return epochFromDate( (year = toInt(year)) + (0 <= year && year <= 99 ? 1900 : 0),
+				toInt(month), (argc > 2 ? toInt(date) : 1)) + epochFromTime( argc > 3 ? toInt(hours) : 0,
+				argc > 4 ? toInt(minutes) : 0, argc > 5 ? toInt(seconds) : 0, argc > 6 ? toInt(ms) : 0);
 	},
 	epochToDateString = function(z) { var y, dt = dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
 	epochToTimeString = function(z, ms) { var tm = timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
 
+var Date = function Date(year, month, date, hours, minutes, seconds, ms) {
+	var v;
+	if (!(this instanceof Date)) {
+		return (new Date()).toString();
+	} else if (arguments.length >= 2 && arguments.length <= 7) {
+		v = timeClip(fromLocalTime(makeDateTime.apply(this, arguments)));
+	} else if (arguments.length === 1) {
+		v = timeClip(typeof (v = arguments[0]) === "string" ? Date.parse('' + v) : +v);
+	} else {
+		v = support.getCurrentTime();
+	}
+	return support.createWrapper("Date", v, support.prototypes.Date);
+};
 
+defineProperties(Date, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Date });
+defineProperties(Date, { dontEnum: true }, {
+	parse: unconstructable(function parse(s) {
+		var z, y, i = 0, ch, tz = void 0, tzh, tzm,
+			readPart = function(len) {
+				var v;
+				for (v = 0;len > 0;--len) if ("0" <= s[i] && s[i] <= "9") v = v * 10 + (+s[i++]); else return $NaN;
+				return v;
+			};
+
+		z = epochFromDate(
+			((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
+			s[i] === "-" && (++i, readPart(2) -1),
+			s[i] === "-" && (++i, readPart(2)) || 1) + epochFromTime(
+			((ch = s[i]) === "T" || ch === ' ') && (++i, readPart(2)) || 0,
+			(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+			(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+			(ch = s[i]) === "." && (++i, readPart(3)) || 0);
+
+		while (ch !== void 0 && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
+
+		if (ch === "Z") tz = 0;
+		else if (ch === "+" || ch === "-") {
+			++i, tzh = readPart(2) * 3600000,
+			s[i] === ":" && ++i, tzh += $isNaN(tzm = readPart(2)) ? 0 : tzm * 60000,
+			$isNaN(tzh) || (tz = ch === "-" ? -tzh : tzh);
+	    }
+		return (tz === void 0 ? fromLocalTime(z) : z - tz)
+	}),
+	UTC: unconstructable(function UTC(year, month, date, hours, minutes, seconds, ms) { 
+		return timeClip(makeDateTime(year, month, date, hours, minutes, seconds, ms))
+	})
+});
+
+defineProperties(Date.prototype, { dontEnum: true }, {
+	constructor: Date,
+	toISOString: unconstructable(function toISOString() {
+		var z = getDateValue(this);
+		if ($isNaN(z)) throw nativeErrors.RangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
+		return (epochToDateString(z) + "T" + epochToTimeString(z, true) + "Z")
+	}),
+	toUTCString: unconstructable(function toUTCString() {
+		var z = getDateValue(this);
+		if ($isNaN(z)) return "Invalid Date";
+		return (epochToDateString(z) + ' ' + epochToTimeString(z))
+	}),
+	toString: unconstructable(function toString() {
+		var l = toLocalTime(getDateValue(this));
+		if ($isNaN(l)) return "Invalid Date";
+		return (epochToDateString(l) + ' ' + epochToTimeString(l))
+	}),
+	toDateString: unconstructable(function toDateString() {
+		var l = toLocalTime(getDateValue(this));
+		if ($isNaN(l)) return "Invalid Date";
+		return epochToDateString(l)
+	}),
+	toTimeString: unconstructable(function toTimeString() {
+		var l = toLocalTime(getDateValue(this));
+		if ($isNaN(l)) return "Invalid Date";
+		return epochToTimeString(l)
+	}),
+	toLocaleString: Object.prototype.toLocaleString,
+	toLocaleDateString: unconstructable(function toLocaleDateString() { return this.toDateString() }),
+	toLocaleTimeString: unconstructable(function toLocaleTimeString() { return this.toTimeString() }),
+	valueOf: unconstructable(function valueOf() { return getDateValue(this) }),
+	getTime: unconstructable(function getTime() { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return getDateValue(this) }),
+	getFullYear: unconstructable(function getFullYear() { return dateFromEpoch(toLocalTime(getDateValue(this)))[0] }),
+	getUTCFullYear: unconstructable(function getUTCFullYear() { return dateFromEpoch(getDateValue(this))[0] }),
+	getMonth: unconstructable(function getMonth() { return dateFromEpoch(toLocalTime(getDateValue(this)))[1] }),
+	getUTCMonth: unconstructable(function getUTCMonth() { return dateFromEpoch(getDateValue(this))[1] }),
+	getDate: unconstructable(function getDate() { return dateFromEpoch(toLocalTime(getDateValue(this)))[2] }),
+	getUTCDate: unconstructable(function getUTCDate() { return dateFromEpoch(getDateValue(this))[2] }),
+	getDay: unconstructable(function getDay() { return weekdayFromTime(toLocalTime(getDateValue(this))) }),
+	getUTCDay: unconstructable(function getUTCDay() { return weekdayFromTime(getDateValue(this)) }),
+	getHours: unconstructable(function getHours() { return hourFromTime(toLocalTime(getDateValue(this))) }),
+	getUTCHours: unconstructable(function getUTCHours() { return hourFromTime(getDateValue(this)) }),
+	getMinutes: unconstructable(function getMinutes() { return minFromTime(toLocalTime(getDateValue(this))) }),
+	getUTCMinutes: unconstructable(function getUTCMinutes() { return minFromTime(getDateValue(this)) }),
+	getSeconds: unconstructable(function getSeconds() { return secFromTime(toLocalTime(getDateValue(this))) }),
+	getUTCSeconds: unconstructable(function getUTCSeconds() { return secFromTime(getDateValue(this)) }),
+	getMilliseconds: unconstructable(function getMilliseconds() { return msFromTime(toLocalTime(getDateValue(this))) }),
+	getUTCMilliseconds: unconstructable(function getUTCMilliseconds() { return msFromTime(getDateValue(this)) }),
+	getTimezoneOffset: unconstructable(function getTimezoneOffset() { var v = getDateValue(this); return (v - toLocalTime(v)) / 60000 }),
+	setTime: unconstructable(function setTime(time) { if (!(this instanceof Date)) throw nativeErrors.TypeError("this is not a Date object."); return (this.Value = timeClip(+time)) }),
+	setMilliseconds: unconstructable(function setMilliseconds(ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 3, arguments)))) }),
+	setUTCMilliseconds: unconstructable(function setUTCMilliseconds(ms) { return (this.Value = timeClip(setTimeParts(this.Value, 3, arguments))) }),
+	setSeconds: unconstructable(function setSeconds(s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 2, arguments)))) }),
+	setUTCSeconds: unconstructable(function setUTCSeconds(s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 2, arguments))) }),
+	setMinutes: unconstructable(function setMinutes(m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 1, arguments)))) }),
+	setUTCMinutes: unconstructable(function setUTCMinutes(m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 1, arguments))) }),
+	setHours: unconstructable(function setHours(h, m, s, ms) { return (this.Value = timeClip(fromLocalTime(setTimeParts(toLocalTime(this.Value), 0, arguments)))) }),
+	setUTCHours: unconstructable(function setUTCHours(h, m, s, ms) { return (this.Value = timeClip(setTimeParts(this.Value, 0, arguments))) }),
+	setDate: unconstructable(function setDate(date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 2, arguments)))) }),
+	setUTCDate: unconstructable(function setUTCDate(date) { return (this.Value = timeClip(setDateParts(this.Value, 2, arguments))) }),
+	setMonth: unconstructable(function setMonth(month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts(toLocalTime(this.Value), 1, arguments)))) }),
+	setUTCMonth: unconstructable(function setUTCMonth(month, date) { return (this.Value = timeClip(setDateParts(this.Value, 1, arguments))) }),
+	setFullYear: unconstructable(function setFullYear(year, month, date) { return (this.Value = timeClip(fromLocalTime(setDateParts($isNaN(this.Value) ? 0 : toLocalTime(this.Value), 0, arguments)))) }),
+	setUTCFullYear: unconstructable(function setUTCFullYear(year, month, date) { return (this.Value = timeClip(setDateParts($isNaN(this.Value) ? 0 : this.Value, 0, arguments))) })
+});
 
 /* --- RegExp --- */
 
@@ -1577,10 +1583,9 @@ defineProperties(globals, { dontEnum: true }, {
 	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(objectToString(string)) }),
 	parseInt: unconstructable(function parseInt(string, radix) {
 		string = objectToString(string);
-		var pic = PARSE_INT_CHARS, ch, i = -1;
+		var pic = PARSE_INT_CHARS, i = -1, sign = 1;
 		while (pic[string[++i]] === null) ;
-		var sign = 1;
-		switch (ch = string[i]) {
+		switch (string[i]) {
 			case '-': sign = -1;
 			case '+': ++i;
 		}
@@ -1588,15 +1593,10 @@ defineProperties(globals, { dontEnum: true }, {
 			i += 2;
 			radix = 16;
 		}
-		if (radix === 0) {
-			radix = 10;
-		} else if (radix < 2 || radix > 36) {
-			return $NaN;
-		}
+		if (radix === 0) radix = 10;
+		else if (radix < 2 || radix > 36) return $NaN;
 		var v = 0, b, e = string.length, n;
-		for (b = i; i < e && (n = pic[string[i]]) != null && n < radix; ++i) {
-			v = v * radix + n;
-		}
+		for (b = i; i < e && (n = pic[string[i]]) != null && n < radix; ++i) v = v * radix + n;
 		return (b === i ? $NaN : v * sign);
 	})
 });
