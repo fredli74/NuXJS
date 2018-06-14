@@ -314,7 +314,7 @@ const Flags EXISTS_FLAG = 1; // FIX : turn these into enum, that's ok
 const Flags READ_ONLY_FLAG = 2;
 const Flags DONT_ENUM_FLAG = 4;
 const Flags DONT_DELETE_FLAG = 8;
-const Flags INDEX_TYPE_FLAG = 16;	// internal index type, only used as an optimization for faster name -> index lookup
+const Flags INDEX_TYPE_FLAG = 16;	// internal index type, only used as an optimization for faster name -> local index lookup
 const Flags STANDARD_FLAGS = EXISTS_FLAG;	// use with setOwnProperty()
 const Flags HIDDEN_CONST_FLAGS = READ_ONLY_FLAG | DONT_ENUM_FLAG | DONT_DELETE_FLAG | EXISTS_FLAG;
 const Flags NONEXISTENT = 0;		// use with getOwnProperty() to check for existence, e.g. getOwnProperty(o, k, v) != NONEXISTENT
@@ -527,8 +527,9 @@ class WrapperObject : public ScriptObject {
 				WrapperObject(GCList& gcList, const String* className, const Value& value, Object* prototype);
 				virtual const String* getClassName() const;
 				virtual Value getInternalValue(Heap& heap) const;
+				void setInternalValue(const Value& v) { wrapped = v; } // FIX : inlines or not?
 	protected:	const String* const className;
-				const Value wrapped;
+				Value wrapped;
 				virtual void gcMark(Heap& heap) const {
 					heap.mark(className);
 					wrapped.gcMark(heap);

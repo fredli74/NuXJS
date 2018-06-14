@@ -372,7 +372,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.8045141"
+            timestampString = "550625702.463843"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "901"
@@ -388,7 +388,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.804888"
+            timestampString = "550625702.464265"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "903"
@@ -404,7 +404,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.805128"
+            timestampString = "550625702.464654"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "740"
@@ -420,7 +420,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.805432"
+            timestampString = "550625702.464972"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "811"
@@ -436,7 +436,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.h"
-            timestampString = "549843507.286991"
+            timestampString = "550625702.465216"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "501"
@@ -499,7 +499,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.805779"
+            timestampString = "550625702.465263"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "904"
@@ -562,7 +562,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.h"
-            timestampString = "549843507.287403"
+            timestampString = "550625702.465572"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "183"
@@ -700,7 +700,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.806079"
+            timestampString = "550625702.465616"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "869"
@@ -714,9 +714,42 @@
          <BreakpointContent
             shouldBeEnabled = "No"
             ignoreCount = "0"
+            condition = "size==96"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "550625702.465925"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "839"
+            endingLineNumber = "839"
+            landmarkName = "Heap::alloc(size_t size)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "550625702.466169"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "837"
+            endingLineNumber = "837"
+            landmarkName = "Heap::alloc(size_t size)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.h"
-            timestampString = "549843507.287823"
+            timestampString = "550625702.466411"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "185"
@@ -850,17 +883,17 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.806814"
+            timestampString = "550625702.466455"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "874"
             endingLineNumber = "874"
-            landmarkName = "Heap::gc()"
-            landmarkType = "7">
+            landmarkName = "unknown"
+            landmarkType = "0">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -870,7 +903,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.807107"
+            timestampString = "550625702.4667701"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "857"
@@ -886,7 +919,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.h"
-            timestampString = "549843507.2881809"
+            timestampString = "550625702.467012"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "156"
@@ -934,7 +967,7 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.807412"
+            timestampString = "550625702.467056"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "147"
@@ -1008,16 +1041,32 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "550182609.8077199"
+            timestampString = "550625702.467273"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4611"
             endingLineNumber = "4611"
-            landmarkName = "Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject)"
+            landmarkName = "unknown"
+            landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "550625702.467576"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "949"
+            endingLineNumber = "949"
+            landmarkName = "Object::setProperty(Runtime&amp; rt, const Value&amp; key, const Value&amp; v)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

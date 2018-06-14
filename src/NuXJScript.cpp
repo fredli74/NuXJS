@@ -4302,6 +4302,17 @@ struct Support {
 		}
 		return Value::UNDEFINED;
 	}
+	
+	static Value updateDateValue(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+		if (argc >= 2) {
+			Object* o = argv[0].asObject();
+			if (o != 0 && o->getClassName()->isEqualTo(D_ATE_STRING)) {
+				assert(dynamic_cast<WrapperObject*>(o) != 0);
+				reinterpret_cast<WrapperObject*>(o)->setInternalValue(argv[1]);
+			}
+		}
+		return Value::UNDEFINED;
+	}
 
 	static Value createWrapper(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 2) {
@@ -4521,7 +4532,7 @@ static struct {
 	{ "pow", Support::pow }, { "parseFloat", Support::parseFloat }, { "charCodeAt", Support::charCodeAt },
 	{ "substring", Support::substring }, { "submatch", Support::submatch },
 	{ "getCurrentTime", Support::getCurrentTime }, { "localTimeDifference", Support::localTimeDifference },
-	{ "random", Support::random }
+	{ "random", Support::random }, { "updateDateValue", Support::updateDateValue }
 };
 
 static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
