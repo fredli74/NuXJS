@@ -1050,7 +1050,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4611"
             endingLineNumber = "4611"
-            landmarkName = "Runtime::getErrorPrototype(ErrorType error)"
+            landmarkName = "Runtime::getPrototypeObject(Prototype prototype)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

@@ -69,7 +69,7 @@ var unconstructable = support.specialConstructor; // these are the same now, but
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
 		, $Infinity = support.Infinity, $match = support.submatch, $sub = support.substring // "$match" and "$sub" are used from within regexps, so names has to be preserved
 		, $getInternalProperty = support.getInternalProperty, $callWithArgs = support.callWithArgs
-		, $charCodeAt = support.charCodeAt, nativeErrors = { }
+		, $charCodeAt = support.charCodeAt, nativeErrors = { }, abs
 		, ALPHA_DIGITS_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz", ALPHA_DIGITS_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		, WHITE_SPACES = " \f\n\r\t\v\xA0\u2028\u2029";
 
@@ -310,71 +310,57 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 	toLocaleString: Object.prototype.toLocaleString,
 	toString: unconstructable(function toString(radix) {
 		var val = getInternalNumber(this, "toString");
-		if (radix === void 0 || !$isFinite(val)) {
-			return '' + val;
-		} else if ((radix = toInt(radix)) < 2 || radix > 36) {
-			throw nativeErrors.RangeError("Illegal radix for toString()");
-		} else {
+		if (radix === void 0 || !$isFinite(val)) return '' + val;
+		else if ((radix = toInt(radix)) < 2 || radix > 36) throw nativeErrors.RangeError("Illegal radix for toString()");
+		else {
 			// TODO : fraction?
 			var sign = '', s = '';
 			if ((val = toInt(val)) < 0) {
 				val = -val;
 				sign = '-';
 			}
-			do {
-				s = ALPHA_DIGITS_LOWER[val % radix] + s;
-				val = $floor(val / radix);
-			} while (val > 0);
+			do { s = ALPHA_DIGITS_LOWER[val % radix] + s } while ((val = $floor(val / radix)) > 0);
 			return sign + s;
 		}
 	}),
 	toExponential: unconstructable(function toExponential(fractionDigits) {
-		var val = getInternalNumber(this, "toExponential");
-		var string = '';
-		if (!$isFinite(val)) {
-			return val;
-		} else if (fractionDigits === void 0) {
-			return numberToString(val, void 0, $Infinity);
-		} else {
-			var digits = toInt(fractionDigits);
-			if (digits < 0 || digits > 20) {
+		var val, digits;
+		if (!$isFinite(val = getInternalNumber(this, "toExponential"))) return val;
+		else if (fractionDigits === void 0) return numberToString(val, void 0, $Infinity);
+		else {
+			if ((digits = toInt(fractionDigits)) < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal fractionDigits argument for toExponential()");
 			}
 			return numberToString(val, digits, $Infinity);
 		}
 	}),
 	toFixed: unconstructable(function toFixed(fractionDigits) {
-		var val = getInternalNumber(this, "toFixed");
-		var digits = toInt(fractionDigits);
-		if (digits < 0 || digits > 20) {
+		var val, digits;
+		if ((digits = toInt(fractionDigits)) < 0 || digits > 20) {
 			throw nativeErrors.RangeError("Illegal fractionDigits argument for toFixed()");
 		}
-		if ($isNaN(val) || val <= -1e21 || val >= 1e21) {
-			return '' + val;
-		} else {
-			var string = '';
+		if ($isNaN(val = getInternalNumber(this, "toFixed")) || val <= -1e21 || val >= 1e21) return '' + val;
+		else {
+			var s = '';
 			if (val < 0) {
 				val = -val;
-				string = '-';
+				s = '-';
 			}
 			var magnitude = support.pow(10, digits);
 			var integer = $floor(val);
 			var decimals = $floor((val - integer) * magnitude + 0.5);
-			string += integer + (decimals >= magnitude ? 1 : 0);
+			s += integer + (decimals >= magnitude ? 1 : 0);
 			if (digits > 0) {
-				string += '.' + ("00000000000000000000" + decimals).slice(-digits);
+				s += '.' + ("00000000000000000000" + decimals).slice(-digits);
 			}
-			return string;
+			return s;
 		}
 	}),
 	toPrecision: unconstructable(function toPrecision(precision) {
-		var val = getInternalNumber(this, "toPrecision");
-		var string = '';
-		if (precision === void 0 || !$isFinite(val)) {
-			return val;
-		} else {
-			var digits = toInt(precision) - 1;
-			if (digits < 0 || digits > 20) {
+		var val = getInternalNumber(this, "toPrecision"), digits;
+		if (precision === void 0 || !$isFinite(val)) return val;
+		else {
+			if ((digits = toInt(precision) - 1) < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal precision argument for toPrecision()");
 			}
 			return numberToString(val, digits, -6);
@@ -699,24 +685,16 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 			if (gotA) arr[bIndex] = aValue; else delete arr[bIndex];
 		};
 		function compare(arr, aIndex, bIndex) {
-			if (!(aIndex in arr) && !(bIndex in arr)) {
-				return 0;
-			} else if (!(aIndex in arr)) {
-				return 1;
-			} else if (!(bIndex in arr)) {
-				return -1;
-			} else {
+			if (!(aIndex in arr) && !(bIndex in arr)) return 0;
+			else if (!(aIndex in arr)) return 1;
+			else if (!(bIndex in arr)) return -1;
+			else {
 				var a = arr[aIndex];
 				var b = arr[bIndex];
-				if (a === void 0 && b === void 0) {
-					return 0;
-				} else if (a === void 0) {
-					return 1;
-				} else if (b === void 0) {
-					return -1;
-				} else {
-					return comparefn(a, b);
-				}
+				if (a === void 0 && b === void 0) return 0;
+				else if (a === void 0) return 1;
+				else if (b === void 0) return -1;
+				else return comparefn(a, b);
 			}
 		};
 		function qsort(from, to) {
@@ -811,7 +789,7 @@ function hourFromTime(z) { return mod($floor(z / 36e5), 24) }
 function minFromTime(z) { return mod($floor(z / 6e4), 60) }
 function secFromTime(z) { return mod($floor(z / 1e3), 60) }
 function msFromTime(z) { return mod(z, 1e3) }
-function timeClip(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : toInt(z)) }
+function timeClip(z) { return (!$isFinite(z) || abs(z) > 8.64e15 ? $NaN : toInt(z)) }
 
 function dateFromEpoch(z) {
 	z = $floor(z / 864e5) + 719468;
@@ -829,7 +807,7 @@ function dateFromEpoch(z) {
 function epochToDateString(z) {
 	var y, dt = dateFromEpoch(z);
 	return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+")
-			+ ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2)
+			+ ("00000" + abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2)
 }
 
 function epochToTimeString(z, ms) {
@@ -1630,7 +1608,7 @@ defineProperties(Math, { readOnly: true, dontEnum: true, dontDelete: true }, {
 });
 
 defineProperties(Math, { dontEnum: true }, {
-	abs: unconstructable(function abs(v) { return ((v = +v) < 0 ? -v : v) }),
+	abs: unconstructable(abs = function abs(v) { return ((v = +v) < 0 ? -v : v) }),
 	acos: unconstructable(function acos(v) { return support.acos(+v) }),
 	asin: unconstructable(function asin(v) { return support.asin(+v) }),
 	atan: unconstructable(function atan(v) { return support.atan(+v) }),
@@ -1704,7 +1682,7 @@ defineProperties(JSON, { dontEnum: true }, {
         	space = +space;
             for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += ' ';
         } else if (typeof space === "string" || (typeof space === "object" && $getInternalProperty(space, "class") === "String")) {
-            gap = $sub('' + space, 0, 10);
+            gap = $sub(objectToString(space), 0, 10);
         }
 
 		function quote(str) {
@@ -1727,7 +1705,7 @@ defineProperties(JSON, { dontEnum: true }, {
 	        if (typeof val === "object") {
 	        	switch ($getInternalProperty(val, "class")) {
 	        		case "Number": val = +val; break;
-	        		case "String": val = '' + val; break;
+	        		case "String": val = objectToString(val); break;
 	        		case "Boolean": val = $getInternalProperty(val, "value"); break;
 	        	}
 	        }
