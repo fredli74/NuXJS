@@ -109,7 +109,7 @@
 > 	print("--------");
 > }
 -
-> function checkGlobalFunction(funcName, expectedLength) {
+> function checkGlobalFunction(funcName, expectedLength, isConstructor) {
 > 	print(funcName);
 > 	print("--------");
 > 	var f = this[funcName];
@@ -124,10 +124,23 @@
 >	ok = ok && flags.dontEnum && !flags.readOnly && !flags.dontDelete;
 > 	flags = analyzeFlags(f, 'length');
 >	ok = ok && flags.dontEnum && flags.readOnly && flags.dontDelete;
->	try { var o = new f; print("constructable"); ok = false; } catch (x) { print("unconstructable: " + x); }
+>	try { var o = new f; print("constructable"); if (!isConstructor) ok = false; } catch (x) { print("unconstructable: " + x); if (isConstructor) ok = false }
 > 	print("OK: " + ok);
 > 	print("--------");
 > }
+-
+> checkGlobalFunction('Array', 1, true)
+< Array
+< --------
+< .name: Array
+< .length: 1
+< 'Array' in global: true
+< Array : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
+< OK: true
+< --------
 -
 > checkProtoFunc('Array', 'toString', 0);
 < Array.prototype.toString
@@ -319,6 +332,19 @@
 < name : dontEnum, (deleted:true)
 < length : dontEnum,readOnly,dontDelete, (deleted:false)
 < unconstructable: TypeError: isArray is not a constructor
+< OK: true
+< --------
+-
+> checkGlobalFunction('Function', 1, true)
+< Function
+< --------
+< .name: Function
+< .length: 1
+< 'Function' in global: true
+< Function : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
 < OK: true
 < --------
 -
@@ -673,6 +699,19 @@
 < OK: true
 < --------
 -
+> checkGlobalFunction('Number', 1, true)
+< Number
+< --------
+< .name: Number
+< .length: 1
+< 'Number' in global: true
+< Number : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
+< OK: true
+< --------
+-
 > checkProtoFunc('Number', 'toString', 1);
 < Number.prototype.toString
 < --------
@@ -808,6 +847,19 @@
 < OK: true
 < --------
 -
+> checkGlobalFunction('Object', 1, true)
+< Object
+< --------
+< .name: Object
+< .length: 1
+< 'Object' in global: true
+< Object : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
+< OK: true
+< --------
+-
 > checkProtoFunc('Object', 'toString', 0);
 < Object.prototype.toString
 < --------
@@ -909,6 +961,19 @@
 < OK: true
 < --------
 -
+> checkGlobalFunction('RegExp', 2, true)
+< RegExp
+< --------
+< .name: RegExp
+< .length: 2
+< 'RegExp' in global: true
+< RegExp : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
+< OK: true
+< --------
+-
 > checkProtoFunc('RegExp', 'exec', 1);
 < RegExp.prototype.exec
 < --------
@@ -951,6 +1016,19 @@
 < name : dontEnum, (deleted:true)
 < length : dontEnum,readOnly,dontDelete, (deleted:false)
 < unconstructable: TypeError: toString is not a constructor
+< OK: true
+< --------
+-
+> checkGlobalFunction('String', 1, true)
+< String
+< --------
+< .name: String
+< .length: 1
+< 'String' in global: true
+< String : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
 < OK: true
 < --------
 -
@@ -1208,6 +1286,650 @@
 < unconstructable: TypeError: toLocaleUpperCase is not a constructor
 < OK: true
 < --------
+-
+> checkGlobalFunction('Date', 7, true)
+< Date
+< --------
+< .name: Date
+< .length: 7
+< 'Date' in global: true
+< Date : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< constructable
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toISOString', 0);
+< Date.prototype.toISOString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toISOString
+< .length: 0
+< 'toISOString' in Date.prototype: true
+< toISOString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toISOString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toUTCString', 0);
+< Date.prototype.toUTCString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toUTCString
+< .length: 0
+< 'toUTCString' in Date.prototype: true
+< toUTCString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toUTCString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toString', 0);
+< Date.prototype.toString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toString
+< .length: 0
+< 'toString' in Date.prototype: true
+< toString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toDateString', 0);
+< Date.prototype.toDateString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toDateString
+< .length: 0
+< 'toDateString' in Date.prototype: true
+< toDateString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toDateString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toTimeString', 0);
+< Date.prototype.toTimeString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toTimeString
+< .length: 0
+< 'toTimeString' in Date.prototype: true
+< toTimeString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toTimeString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toLocaleString', 0);
+< Date.prototype.toLocaleString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toLocaleString
+< .length: 0
+< 'toLocaleString' in Date.prototype: true
+< toLocaleString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toLocaleString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toLocaleDateString', 0);
+< Date.prototype.toLocaleDateString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toLocaleDateString
+< .length: 0
+< 'toLocaleDateString' in Date.prototype: true
+< toLocaleDateString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toLocaleDateString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'toLocaleTimeString', 0);
+< Date.prototype.toLocaleTimeString
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: toLocaleTimeString
+< .length: 0
+< 'toLocaleTimeString' in Date.prototype: true
+< toLocaleTimeString : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: toLocaleTimeString is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'valueOf', 0);
+< Date.prototype.valueOf
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: valueOf
+< .length: 0
+< 'valueOf' in Date.prototype: true
+< valueOf : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: valueOf is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getTime', 0);
+< Date.prototype.getTime
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getTime
+< .length: 0
+< 'getTime' in Date.prototype: true
+< getTime : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getTime is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getFullYear', 0);
+< Date.prototype.getFullYear
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getFullYear
+< .length: 0
+< 'getFullYear' in Date.prototype: true
+< getFullYear : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getFullYear is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCFullYear', 0);
+< Date.prototype.getUTCFullYear
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCFullYear
+< .length: 0
+< 'getUTCFullYear' in Date.prototype: true
+< getUTCFullYear : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCFullYear is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getMonth', 0);
+< Date.prototype.getMonth
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getMonth
+< .length: 0
+< 'getMonth' in Date.prototype: true
+< getMonth : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getMonth is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCMonth', 0);
+< Date.prototype.getUTCMonth
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCMonth
+< .length: 0
+< 'getUTCMonth' in Date.prototype: true
+< getUTCMonth : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCMonth is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getDate', 0);
+< Date.prototype.getDate
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getDate
+< .length: 0
+< 'getDate' in Date.prototype: true
+< getDate : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getDate is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCDate', 0);
+< Date.prototype.getUTCDate
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCDate
+< .length: 0
+< 'getUTCDate' in Date.prototype: true
+< getUTCDate : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCDate is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getDay', 0);
+< Date.prototype.getDay
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getDay
+< .length: 0
+< 'getDay' in Date.prototype: true
+< getDay : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getDay is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCDay', 0);
+< Date.prototype.getUTCDay
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCDay
+< .length: 0
+< 'getUTCDay' in Date.prototype: true
+< getUTCDay : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCDay is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getHours', 0);
+< Date.prototype.getHours
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getHours
+< .length: 0
+< 'getHours' in Date.prototype: true
+< getHours : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getHours is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCHours', 0);
+< Date.prototype.getUTCHours
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCHours
+< .length: 0
+< 'getUTCHours' in Date.prototype: true
+< getUTCHours : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCHours is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getMinutes', 0);
+< Date.prototype.getMinutes
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getMinutes
+< .length: 0
+< 'getMinutes' in Date.prototype: true
+< getMinutes : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getMinutes is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCMinutes', 0);
+< Date.prototype.getUTCMinutes
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCMinutes
+< .length: 0
+< 'getUTCMinutes' in Date.prototype: true
+< getUTCMinutes : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCMinutes is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getSeconds', 0);
+< Date.prototype.getSeconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getSeconds
+< .length: 0
+< 'getSeconds' in Date.prototype: true
+< getSeconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getSeconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCSeconds', 0);
+< Date.prototype.getUTCSeconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCSeconds
+< .length: 0
+< 'getUTCSeconds' in Date.prototype: true
+< getUTCSeconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCSeconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getMilliseconds', 0);
+< Date.prototype.getMilliseconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getMilliseconds
+< .length: 0
+< 'getMilliseconds' in Date.prototype: true
+< getMilliseconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getMilliseconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getUTCMilliseconds', 0);
+< Date.prototype.getUTCMilliseconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getUTCMilliseconds
+< .length: 0
+< 'getUTCMilliseconds' in Date.prototype: true
+< getUTCMilliseconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getUTCMilliseconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'getTimezoneOffset', 0);
+< Date.prototype.getTimezoneOffset
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: getTimezoneOffset
+< .length: 0
+< 'getTimezoneOffset' in Date.prototype: true
+< getTimezoneOffset : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: getTimezoneOffset is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setTime', 1);
+< Date.prototype.setTime
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setTime
+< .length: 1
+< 'setTime' in Date.prototype: true
+< setTime : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setTime is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setMilliseconds', 1);
+< Date.prototype.setMilliseconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setMilliseconds
+< .length: 1
+< 'setMilliseconds' in Date.prototype: true
+< setMilliseconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setMilliseconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCMilliseconds', 1);
+< Date.prototype.setUTCMilliseconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCMilliseconds
+< .length: 1
+< 'setUTCMilliseconds' in Date.prototype: true
+< setUTCMilliseconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCMilliseconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setSeconds', 2);
+< Date.prototype.setSeconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setSeconds
+< .length: 2
+< 'setSeconds' in Date.prototype: true
+< setSeconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setSeconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCSeconds', 2);
+< Date.prototype.setUTCSeconds
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCSeconds
+< .length: 2
+< 'setUTCSeconds' in Date.prototype: true
+< setUTCSeconds : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCSeconds is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setMinutes', 3);
+< Date.prototype.setMinutes
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setMinutes
+< .length: 3
+< 'setMinutes' in Date.prototype: true
+< setMinutes : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setMinutes is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCMinutes', 3);
+< Date.prototype.setUTCMinutes
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCMinutes
+< .length: 3
+< 'setUTCMinutes' in Date.prototype: true
+< setUTCMinutes : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCMinutes is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setHours', 4);
+< Date.prototype.setHours
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setHours
+< .length: 4
+< 'setHours' in Date.prototype: true
+< setHours : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setHours is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCHours', 4);
+< Date.prototype.setUTCHours
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCHours
+< .length: 4
+< 'setUTCHours' in Date.prototype: true
+< setUTCHours : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCHours is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setDate', 1);
+< Date.prototype.setDate
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setDate
+< .length: 1
+< 'setDate' in Date.prototype: true
+< setDate : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setDate is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCDate', 1);
+< Date.prototype.setUTCDate
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCDate
+< .length: 1
+< 'setUTCDate' in Date.prototype: true
+< setUTCDate : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCDate is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setMonth', 2);
+< Date.prototype.setMonth
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setMonth
+< .length: 2
+< 'setMonth' in Date.prototype: true
+< setMonth : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setMonth is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCMonth', 2);
+< Date.prototype.setUTCMonth
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCMonth
+< .length: 2
+< 'setUTCMonth' in Date.prototype: true
+< setUTCMonth : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCMonth is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setFullYear', 3);
+< Date.prototype.setFullYear
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setFullYear
+< .length: 3
+< 'setFullYear' in Date.prototype: true
+< setFullYear : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setFullYear is not a constructor
+< OK: true
+< --------
+-
+> checkProtoFunc('Date', 'setUTCFullYear', 3);
+< Date.prototype.setUTCFullYear
+< --------
+< prototype : dontEnum,readOnly,dontDelete, (deleted:false)
+< Date.prototype.constructor == Date : true
+< .name: setUTCFullYear
+< .length: 3
+< 'setUTCFullYear' in Date.prototype: true
+< setUTCFullYear : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: setUTCFullYear is not a constructor
+< OK: true
+< --------
+-
 > checkGlobalConstant('NaN');
 < NaN
 < --------
@@ -1352,6 +2074,32 @@
 < OK: true
 < --------
 -
+> checkFunc('JSON', 'stringify', 3);
+< JSON.stringify
+< --------
+< .name: stringify
+< .length: 3
+< 'stringify' in JSON: true
+< stringify : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: stringify is not a constructor
+< OK: true
+< --------
+-
+> checkFunc('JSON', 'parse', 2);
+< JSON.parse
+< --------
+< .name: parse
+< .length: 2
+< 'parse' in JSON: true
+< parse : dontEnum, (deleted:true)
+< name : dontEnum, (deleted:true)
+< length : dontEnum,readOnly,dontDelete, (deleted:false)
+< unconstructable: TypeError: parse is not a constructor
+< OK: true
+< --------
+-
 > try { x = Math(); print("BAD"); } catch (e) { print(e) }
 < TypeError: [object Math] is not a function
 -
@@ -1360,4 +2108,13 @@
 -
 > try { x = new Math; print("BAD"); } catch (e) { print(e) }
 < TypeError: [object Math] is not a function
+-
+> try { x = JSON(); print("BAD"); } catch (e) { print(e) }
+< TypeError: [object JSON] is not a function
+-
+> try { x = new JSON(); print("BAD"); } catch (e) { print(e) }
+< TypeError: [object JSON] is not a function
+-
+> try { x = new JSON; print("BAD"); } catch (e) { print(e) }
+< TypeError: [object JSON] is not a function
 -

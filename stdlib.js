@@ -796,63 +796,77 @@ function localDateTimeToString(v) {
 	return $isNaN(v = toLocalTime(v)) ? "Invalid Date" : (epochToDateString(v) + ' ' + epochToTimeString(v));
 }
 
-var parseDate,
-	mod = function(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) },
-	epochFromDate = function(year, month, day) {
-		year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
-		var era = toInt( (year >= 0 ? year : year - 399) / 400 );
-		var yoe = year - era * 400;
-		var doy = toInt( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
-		var doe = yoe * 365 + toInt(yoe / 4) - toInt(yoe / 100) + doy;
-		return (era * 146097 + doe - 719468) * 864e5;
-	},
-	dateFromEpoch = function(z) {
-		z = $floor(z / 864e5) + 719468;
-		var era = toInt( (z >= 0 ? z : z - 146096) / 146097 );
-		var doe = z - era * 146097;
-		var yoe = toInt( (doe - toInt(doe / 1460) + toInt(doe / 36524) - toInt(doe / 146096)) / 365 );
-		var y = yoe + era * 400;
-	    var doy = doe - (365 * yoe + toInt(yoe / 4) - toInt(yoe/100) );
-	    var mp = toInt( (5 * doy + 2) / 153);
-	    var m = mp + (mp < 10 ? 2 : -10);
-	    var d = doy - toInt( (153 * mp + 2) / 5 ) + 1;
-	    return [ (y + (m <= 1)), m, d ];
-	},
-	epochFromTime = function(hour, minute, second, ms) { return hour * 36e5 + minute * 6e4 + second * 1e3 + ms },
-	timeFromEpoch = function(z) { return [ mod($floor(z / 36e5), 24), mod($floor(z / 6e4), 60), mod($floor(z / 1e3), 60), mod(z, 1e3) ] },
-	setDateParts = function(z, n, a) {
-		var i, d = dateFromEpoch(z), r = mod(z, 864e5);
-		for (i = 0; i < a.length; ++i, ++n) d[n] = toInt(a[i]);
-		return epochFromDate.apply(null, d) + r;
-	},
-	setTimeParts = function(z, n, a) {
-		var i, t = timeFromEpoch(z), r = $floor(z / 864e5) * 864e5;
-		for (i = 0; i < a.length; ++i, ++n) t[n] = toInt(a[i]);
-		return epochFromTime.apply(null, t) + r;
-	},
-	startOfYearDiff = function() { return support.localTimeDifference(14516064e5) }, // 2016-01-01T00:00:00.000Z
-	midOfYearDiff = function() { return support.localTimeDifference(14673312e5) }, // 2016-07-01T00:00:00.000Z
-	localMaxDiff = function() { return (startOfYearDiff() > midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) },	// local max is during DST
-	localMinDiff = function() { return (startOfYearDiff() < midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) }, // local min is timezone (non DST)
-	localTimeDiff = function(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) },
-	fromLocalTime = function(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) },
-	toLocalTime = function(z) { return $isNaN(z) ? z : z + localTimeDiff(z) },
-	weekdayFromTime = function(z) { return mod($floor(z / 864e5) + 4, 7) },
-	hourFromTime = function(z) { return mod($floor(z / 36e5), 24) },
-	minFromTime = function(z) { return mod($floor(z / 6e4), 60) },
-	secFromTime = function(z) { return mod($floor(z / 1e3), 60) },
-	msFromTime = function(z) { return mod(z, 1e3) },
-	timeClip = function(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : toInt(z)) },
-	makeDateTime = function(year, month, date, hours, minutes, seconds, ms) {
-		var argc = arguments.length;
-		return epochFromDate( (year = toInt(year)) + (0 <= year && year <= 99 ? 1900 : 0),
-				toInt(month), (argc > 2 ? toInt(date) : 1)) + epochFromTime( argc > 3 ? toInt(hours) : 0,
-				argc > 4 ? toInt(minutes) : 0, argc > 5 ? toInt(seconds) : 0, argc > 6 ? toInt(ms) : 0);
-	},
-	epochToDateString = function(z) { var y, dt = dateFromEpoch(z); return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+") + ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2) },
-	epochToTimeString = function(z, ms) { var tm = timeFromEpoch(z); return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2) + (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "") };
+function mod(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) }
+function epochFromTime(hour, minute, second, ms) { return hour * 36e5 + minute * 6e4 + second * 1e3 + ms }
+function timeFromEpoch(z) { return [ mod($floor(z / 36e5), 24), mod($floor(z / 6e4), 60), mod($floor(z / 1e3), 60), mod(z, 1e3) ] }
+function startOfYearDiff() { return support.localTimeDifference(14516064e5) } // 2016-01-01T00:00:00.000Z
+function midOfYearDiff() { return support.localTimeDifference(14673312e5) } // 2016-07-01T00:00:00.000Z
+function localMaxDiff() { return (startOfYearDiff() > midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) }	// local max is during DST
+function localMinDiff() { return (startOfYearDiff() < midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) } // local min is timezone (non DST)
+function localTimeDiff(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) }
+function fromLocalTime(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) }
+function toLocalTime(z) { return $isNaN(z) ? z : z + localTimeDiff(z) }
+function weekdayFromTime(z) { return mod($floor(z / 864e5) + 4, 7) }
+function hourFromTime(z) { return mod($floor(z / 36e5), 24) }
+function minFromTime(z) { return mod($floor(z / 6e4), 60) }
+function secFromTime(z) { return mod($floor(z / 1e3), 60) }
+function msFromTime(z) { return mod(z, 1e3) }
+function timeClip(z) { return (!$isFinite(z) || Math.abs(z) > 8.64e15 ? $NaN : toInt(z)) }
 
-var Date = support.specialConstructor(function Date() {
+function dateFromEpoch(z) {
+	z = $floor(z / 864e5) + 719468;
+	var era = toInt( (z >= 0 ? z : z - 146096) / 146097 );
+	var doe = z - era * 146097;
+	var yoe = toInt( (doe - toInt(doe / 1460) + toInt(doe / 36524) - toInt(doe / 146096)) / 365 );
+	var y = yoe + era * 400;
+    var doy = doe - (365 * yoe + toInt(yoe / 4) - toInt(yoe/100) );
+    var mp = toInt( (5 * doy + 2) / 153);
+    var m = mp + (mp < 10 ? 2 : -10);
+    var d = doy - toInt( (153 * mp + 2) / 5 ) + 1;
+    return [ (y + (m <= 1)), m, d ];
+}
+
+function epochToDateString(z) {
+	var y, dt = dateFromEpoch(z);
+	return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+")
+			+ ("00000" + Math.abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2)
+}
+
+function epochToTimeString(z, ms) {
+	var tm = timeFromEpoch(z);
+	return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2)
+			+ (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "")
+}
+
+function epochFromDate(year, month, day) {
+	year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
+	var era = toInt( (year >= 0 ? year : year - 399) / 400 );
+	var yoe = year - era * 400;
+	var doy = toInt( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
+	var doe = yoe * 365 + toInt(yoe / 4) - toInt(yoe / 100) + doy;
+	return (era * 146097 + doe - 719468) * 864e5;
+}
+
+function setDateParts(z, n, a) {
+	var i, d = dateFromEpoch(z), r = mod(z, 864e5);
+	for (i = 0; i < a.length; ++i, ++n) d[n] = toInt(a[i]);
+	return epochFromDate.apply(null, d) + r;
+}
+
+function setTimeParts(z, n, a) {
+	var i, t = timeFromEpoch(z), r = $floor(z / 864e5) * 864e5;
+	for (i = 0; i < a.length; ++i, ++n) t[n] = toInt(a[i]);
+	return epochFromTime.apply(null, t) + r;
+}
+
+function makeDateTime(year, month, date, hours, minutes, seconds, ms) {
+	var argc = arguments.length;
+	return epochFromDate( (year = toInt(year)) + (0 <= year && year <= 99 ? 1900 : 0),
+			toInt(month), (argc > 2 ? toInt(date) : 1)) + epochFromTime( argc > 3 ? toInt(hours) : 0,
+			argc > 4 ? toInt(minutes) : 0, argc > 5 ? toInt(seconds) : 0, argc > 6 ? toInt(ms) : 0);
+}
+
+var parseDate, Date = support.specialConstructor(function Date() {
 		return localDateTimeToString(support.getCurrentTime());
 	}, function Date(year, month, date, hours, minutes, seconds, ms) {
 		var v;
