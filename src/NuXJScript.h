@@ -876,8 +876,7 @@ class Runtime : public GCItem {
 				mutable Table evalCodeCache; // eval() has a cache of source code strings -> functions (as they are neutral to which closure they run in). It is emptied on each big gc sweep.
 				Object* prototypes[PROTOTYPE_COUNT];
 	
-				Function* toNumberFunction;
-				Function* toStringFunction;
+				Function* toPrimitiveFunctions[3]; // no preference, number, string
 				Function* createRegExpFunction;
 				Function* evalFunction;
 				double unixEpochTimeDiff;
@@ -885,9 +884,9 @@ class Runtime : public GCItem {
 	public:		virtual void gcMark(Heap& heap) const {
 					heap.mark(globalObject);
 					heap.markViaPointers(prototypes + 0, prototypes + PROTOTYPE_COUNT);
-					heap.mark(toNumberFunction);
-					heap.mark(toStringFunction);
+					heap.markViaPointers(toPrimitiveFunctions + 0, toPrimitiveFunctions + 3);
 					heap.mark(createRegExpFunction);
+					heap.mark(evalFunction);
 					evalCodeCache = Table(&heap); // Yeah we just empty everything on each gc sweep
 					evalCodeCache.gcMark(heap);
 					super::gcMark(heap);
@@ -1081,6 +1080,7 @@ class Processor : public GCItem {
 					, SET_PROPERTY_POP_OP							// stack: object, name, value ->
 					, ADD_PROPERTY_OP								// operand: const_index (name), stack: object, value -> object
 					, PUSH_ELEMENTS_OP								// operand: count, stack: object, count * elements ... -> object
+					, OBJ_TO_PRIMITIVE_OP							// stack: value -> primitive_value (no preference)	// these three must be in this exact order
 					, OBJ_TO_NUMBER_OP								// stack: value -> primitive_value (number preferred)
 					, OBJ_TO_STRING_OP								// stack: value -> primitive_value (string preferred)
 					, PRE_EQ_OP										// stack: value, value -> value, value				// if first *or* second is object (and not both) and the other is string or number, convert object to primitive value
@@ -1288,7 +1288,7 @@ class Compiler : public GCItem {
 				Processor::Opcode evalPopOpcode() const;
 				ExpressionResult safeKeep(); // Used to store result into a new temporary local (e.g. used by return statement if there are finally blocks to call first). Good rule of thumb is that anything that needs to be preserved over statements need to be safe-kept (except the completion value of course).
 				void returnSafeKept(const ExpressionResult& xr);
-				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, bool preferString = false); // Creates an r-value (i.e. pushed on value stack) out of a result.
+				ExpressionResult makeRValue(const ExpressionResult& xr, bool toPrimitive = false, Processor::Opcode toPrimitiveOp = Processor::OBJ_TO_NUMBER_OP); // Creates an r-value (i.e. pushed on value stack) out of a result.
 				ExpressionResult makeAssignment(const ExpressionResult& xr); // Creates an assignment out of an l-value (throws if xr is not a valid l-value)
 				ExpressionResult discard(const ExpressionResult& xr); // Discards result (e.g. popping it if it is on stack)
 

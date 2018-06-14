@@ -1741,6 +1741,7 @@ const Processor::OpcodeInfo Processor::opcodeInfo[Processor::OP_COUNT] = {
 	{ SET_PROPERTY_POP_OP        , "SET_PROPERTY_POP"        , -3     , 0 },
 	{ ADD_PROPERTY_OP            , "ADD_PROPERTY"            , -1     , 0 },
 	{ PUSH_ELEMENTS_OP           , "PUSH_ELEMENTS_OP"        , 0      , OpcodeInfo::POP_OPERAND },
+	{ OBJ_TO_PRIMITIVE_OP        , "OBJ_TO_PRIMITIVE"        , 0      , 0 },
 	{ OBJ_TO_NUMBER_OP           , "OBJ_TO_NUMBER"           , 0      , 0 },
 	{ OBJ_TO_STRING_OP           , "OBJ_TO_STRING"           , 0      , 0 },
 	{ PRE_EQ_OP                  , "PRE_EQ"                  , 0      , 0 },
@@ -2105,11 +2106,13 @@ void Processor::innerRun() {
 				break;
 			}
 
+			case OBJ_TO_PRIMITIVE_OP:
 			case OBJ_TO_NUMBER_OP:
 			case OBJ_TO_STRING_OP: {
 				const Object* o = sp[0].asObject();
 				if (o != 0) {
-					invokeFunction((opcode == OBJ_TO_NUMBER_OP ? rt.toNumberFunction : rt.toStringFunction), 0, 1);
+					assert(0 <= opcode - OBJ_TO_PRIMITIVE_OP && opcode - OBJ_TO_PRIMITIVE_OP < 3);
+					invokeFunction(rt.toPrimitiveFunctions[opcode - OBJ_TO_PRIMITIVE_OP], 0, 1);
 					return;
 				}
 				break;
@@ -2122,7 +2125,7 @@ void Processor::innerRun() {
 						std::swap(sp[-1], sp[0]);
 					}
 					if (sp[-1].isString() || sp[-1].isNumber() || sp[-1].isBoolean()) {
-						invokeFunction(rt.toNumberFunction, 0, 1);
+						invokeFunction(rt.toPrimitiveFunctions[OBJ_TO_NUMBER_OP - OBJ_TO_PRIMITIVE_OP], 0, 1);
 						return;
 					}
 				}
@@ -2803,7 +2806,7 @@ Char* Compiler::unescape(Char* buffer, const Char* e) {
 	return d;
 }
 
-Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, bool preferString) {
+Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool toPrimitive, Processor::Opcode toPrimitiveOp) {
 	switch (xr.t) {
 		case ExpressionResult::PUSHED: break;
 		case ExpressionResult::PUSHED_PRIMITIVE: return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
@@ -2816,7 +2819,7 @@ Compiler::ExpressionResult Compiler::makeRValue(const ExpressionResult& xr, bool
 		default: assert(0);
 	}
 	if (toPrimitive) {
-		emit(preferString ? Processor::OBJ_TO_STRING_OP : Processor::OBJ_TO_NUMBER_OP);
+		emit(toPrimitiveOp);
 		return ExpressionResult(ExpressionResult::PUSHED_PRIMITIVE);
 	} else {
 		return ExpressionResult(ExpressionResult::PUSHED);
@@ -3138,8 +3141,10 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
         }
             
 		case BINARY: {
-			makeRValue(xr, op.primitiveInput);
-			makeRValue(operand(op), op.primitiveInput);
+			const Processor::Opcode primitiveOp
+					= (op.vmOp == Processor::ADD_OP ? Processor::OBJ_TO_PRIMITIVE_OP : Processor::OBJ_TO_NUMBER_OP);
+			makeRValue(xr, op.primitiveInput, primitiveOp);
+			makeRValue(operand(op), op.primitiveInput, primitiveOp);
 			emit(op.vmOp);
             xr = (op.primitiveOutput ? ExpressionResult::PUSHED_PRIMITIVE : ExpressionResult::PUSHED);
 			break;
@@ -3164,7 +3169,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			}
 			assert(!op.primitiveInput);
             assert(op.primitiveOutput);
-			makeRValue(xr, true, true); // left should be primitive, right doesn't have to
+			makeRValue(xr, true, Processor::OBJ_TO_STRING_OP); // left should be primitive, right doesn't have to
 			makeRValue(operand(op), false);
 			emit(op.vmOp);
             xr = ExpressionResult::PUSHED_PRIMITIVE;
@@ -3255,11 +3260,13 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
         case COMPOUND_ASSIGNMENT: {
             assert(op.primitiveInput);
             assert(op.primitiveOutput);
+			const Processor::Opcode primitiveOp
+					= (op.vmOp == Processor::ADD_OP ? Processor::OBJ_TO_PRIMITIVE_OP : Processor::OBJ_TO_NUMBER_OP);
             if (xr.t == ExpressionResult::PROPERTY) {
                 emit(Processor::REPUSH_2_OP);
             }
-            makeRValue(xr, true);
-            makeRValue(operand(op), true);
+            makeRValue(xr, true, primitiveOp);
+            makeRValue(operand(op), true, primitiveOp);
             emit(op.vmOp);
             makeAssignment(xr);
             xr = ExpressionResult::PUSHED_PRIMITIVE;
@@ -3271,7 +3278,7 @@ bool Compiler::postOperate(ExpressionResult& xr, Precedence precedence) {
 			makeRValue(xr, false);
 			const bool didAcceptInOperator = acceptInOperator;
 			acceptInOperator = true;
-			makeRValue(operand(op), true, true); // left doesn't need to be primitive, but right does (and preferred string!)
+			makeRValue(operand(op), true, Processor::OBJ_TO_STRING_OP); // left doesn't need to be primitive, but right does (and preferred string!)
 			acceptInOperator = didAcceptInOperator;
 			xr = ExpressionResult(ExpressionResult::PROPERTY);
 			break;
@@ -4553,10 +4560,10 @@ static struct NoRegExpSupport : public Function {
 
 Runtime::Runtime(Heap& heap) : super(heap.roots()), heap(heap), globalScope(heap.roots()), globalObject(0)
 		, sharedConstants(heap.roots()), stackSize(DEFAULT_STACK_SIZE), callNestCounter(0), checkTimeOutCounter(0)
-		, timeOut(0), memoryCap(MAX_MEMORY_CAP), gcThreshold(0), toNumberFunction(&DEFAULT_CONVERSION)
-		, toStringFunction(&DEFAULT_CONVERSION), createRegExpFunction(&NO_REG_EXP_SUPPORT), evalFunction(&EVAL_FUNCTION)
-		, unixEpochTimeDiff(0.0), evalCodeCache(&heap) {
+		, timeOut(0), memoryCap(MAX_MEMORY_CAP), gcThreshold(0), createRegExpFunction(&NO_REG_EXP_SUPPORT)
+		, evalFunction(&EVAL_FUNCTION), unixEpochTimeDiff(0.0), evalCodeCache(&heap) {
 	std::fill(prototypes, prototypes + PROTOTYPE_COUNT, (Object*)(0));
+	std::fill(toPrimitiveFunctions + 0, toPrimitiveFunctions + 3, &DEFAULT_CONVERSION);
 	Object* objectPrototype = new(heap) ScriptObject(heap.managed(), 0);
 	prototypes[OBJECT_PROTOTYPE] = objectPrototype;
 	prototypes[FUNCTION_PROTOTYPE] = new(heap) FunctionPrototypeFunction(heap.managed());
@@ -4662,10 +4669,9 @@ Code* Runtime::compileGlobalCode(const String& source) {
 
 void Runtime::fetchFunction(const Object* supportObject, const char* name, Function** f) {
 	Value v;
-	if (supportObject->getProperty(*this, String::alloc(heap, name), &v) != NONEXISTENT) {
-		if (v.asFunction() != 0) {
-			*f = v.asFunction();
-		}
+	if (supportObject->getProperty(*this, String::alloc(heap, name), &v) != NONEXISTENT
+			&& v.asFunction() != 0) {
+		*f = v.asFunction();
 	}
 }
 
@@ -4712,8 +4718,9 @@ void Runtime::setupStandardLibrary() {
 	Value argv[1] = { protectedSupportObject };
 	call(func, 1, argv);
 	
-	fetchFunction(supportObject, "toPrimitiveNumber", &toNumberFunction);
-	fetchFunction(supportObject, "toPrimitiveString", &toStringFunction);
+	fetchFunction(supportObject, "toPrimitive", toPrimitiveFunctions + 0);
+	fetchFunction(supportObject, "toPrimitiveNumber", toPrimitiveFunctions + 1);
+	fetchFunction(supportObject, "toPrimitiveString", toPrimitiveFunctions + 2);
 	fetchFunction(supportObject, "createRegExp", &createRegExpFunction);
 	fetchFunction(supportObject, "evalFunction", &evalFunction);
 

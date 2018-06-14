@@ -18,7 +18,7 @@
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,$match
 	@preserve: $sub,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
-	@preserve: splice,split,search,replace,random,evalFunction,updateDateValue
+	@preserve: splice,split,search,replace,random,evalFunction,updateDateValue,toPrimitive
 
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -96,38 +96,32 @@ StringBuilder.prototype.build = function build() {
 	return s
 };
 
-function toInt(v) { return $isNaN(v = +v) ? 0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))); }
-function toInt32(v) { return toInt(v) | 0; }
-function toUInt32(v) { return toInt(v) >>> 0; }
-
 function isPrimitive(v) {
 	var v, t;
 	return (((t = typeof v) !== "object" || v === null) && t !== "function")
 }
 
-// FIX : join these two maybe?
-support.toPrimitiveNumber = function(o) {
-	var f, v;
-	if ((typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))
-			&& (typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))) {
+function objectToPrimitive(o, f1, f2) {
+	var v;
+	if ((typeof (o[f1]) !== "function" || !isPrimitive(v = o[f1]()))
+			&& (typeof (o[f2]) !== "function" || !isPrimitive(v = o[f2]()))) {
 		throw nativeErrors.TypeError("Error converting object to primitive type");
 	}
 	return v
+}
+
+support.toPrimitiveNumber = function(o) { return objectToPrimitive(o, "valueOf", "toString"); };
+support.toPrimitiveString = function(o) { return objectToPrimitive(o, "toString", "valueOf"); };
+support.toPrimitive = function(o) {
+	return support[$getInternalProperty(o, "class") === "Date" ? "toPrimitiveString" : "toPrimitiveNumber"](o);
 };
 
-support.toPrimitiveString = function(o) {
-	var f, v;
-	if ((typeof (f = o.toString) !== "function" || !isPrimitive(v = o.toString()))
-			&& (typeof (f = o.valueOf) !== "function" || !isPrimitive(v = o.valueOf()))) {
-		throw nativeErrors.TypeError("Error converting object to primitive type");
-	}
-	return v
-};
+function toInt(v) { return $isNaN(v = +v) ? 0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))); }
+function toInt32(v) { return toInt(v) | 0; }
+function toUInt32(v) { return toInt(v) >>> 0; }
 
 // TODO : what a waste of cycles, could be a simple OBJ_TO_STRING, problem with ''+s is that it uses OBJ_TO_NUMBER which only affects the priority of toString vs valueOf... so subtle!
-function objectToString(o) {
-	return '' + (isPrimitive(o) ? o : support.toPrimitiveString(o))
-}
+function objectToString(o) { return '' + (isPrimitive(o) ? o : support.toPrimitiveString(o)) }
 
 function defineProperties(object, attribs, props) {
 	var ro = attribs.readOnly, de = attribs.dontEnum, dd = attribs.dontDelete;
@@ -843,7 +837,7 @@ var parseDate,
 	localTimeDiff = function(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) },
 	fromLocalTime = function(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) },
 	toLocalTime = function(z) { return $isNaN(z) ? z : z + localTimeDiff(z) },
-	weekdayFromTime = function(z) { return mod($floor(z / 864e5) +4, 7) },
+	weekdayFromTime = function(z) { return mod($floor(z / 864e5) + 4, 7) },
 	hourFromTime = function(z) { return mod($floor(z / 36e5), 24) },
 	minFromTime = function(z) { return mod($floor(z / 6e4), 60) },
 	secFromTime = function(z) { return mod($floor(z / 1e3), 60) },
