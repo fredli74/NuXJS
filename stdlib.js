@@ -185,6 +185,16 @@ function numberToString(num, digits, eNotationBelow) {
 	return string
 }
 
+function numberToRadix(val, radix) {
+	var sign = '', s = '';
+	if ((val = int(val)) < 0) {
+		val = -val;
+		sign = '-';
+	}
+	do { s = ALPHA_DIGITS_LOWER[val % radix] + s } while ((val = $floor(val / radix)) > 0);
+	return sign + s;
+}
+
 // eval without loads of local variables but with access to all internals
 function evalThere(s) {
 	var customEval = eval;
@@ -305,16 +315,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		var val = getInternalNumber(this, "toString");
 		if (radix === void 0 || !$isFinite(val)) return '' + val;
 		else if ((radix = int(radix)) < 2 || radix > 36) throw rangeError("Illegal radix for toString()");
-		else {
-			// TODO : fraction?
-			var sign = '', s = '';
-			if ((val = int(val)) < 0) {
-				val = -val;
-				sign = '-';
-			}
-			do { s = ALPHA_DIGITS_LOWER[val % radix] + s } while ((val = $floor(val / radix)) > 0);
-			return sign + s;
-		}
+		else return numberToRadix(val, radix);
 	}),
 	toExponential: unconstructable(function toExponential(fractionDigits) {
 		var val, digits;
@@ -969,40 +970,31 @@ var CC = { }; // "CC" is used from within regexps, so the name has to be preserv
 	setupCharClass(ESCAPE_CHAR, "fnrtv");
 	for (var i = 32; i <= 126; ++i) {
 		var c = support.fromCharCode(i);
-		if (c !== '"' && c !== '\\') {
-			CC[support.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
-		}
+		if (c !== '"' && c !== '\\') CC[support.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
 	}
 	var IDENTITY_ESCAPE_RANGES = [ 0, 48, 58, 65, 91, 95, 96, 97, 123, 128 ];
-	for (var i = IDENTITY_ESCAPE_RANGES.length - 2; i >= 0; i -= 2) {
-		for (var j = IDENTITY_ESCAPE_RANGES[i], k = IDENTITY_ESCAPE_RANGES[i + 1]; j < k; ++j) {
+	for (var i = IDENTITY_ESCAPE_RANGES.length - 2; i >= 0; i -= 2)
+		for (var j = IDENTITY_ESCAPE_RANGES[i], k = IDENTITY_ESCAPE_RANGES[i + 1]; j < k; ++j)
 			CC[support.fromCharCode(j)] |= IDENTITY_ESCAPE_CHAR;
-		}
-	}
 })();
 
 // "regExpCanonicalize" is used from within regexps, so the name has to be preserved
 function regExpCanonicalize(s) {
 	var t = '', c, d;
 	if (!lowerToUpper) createCaseTables();
-	for (var i = 0, len = s.length; i < len; ++i) {
+	for (var i = 0, len = s.length; i < len; ++i)
 		t += ((d = lowerToUpper[c = s[i]]) && d.length === 1 && (c < '\x80' || d >= '\x80') ? d : c);
-	}
 	return t
 }
 
 // FIX : all charCodeAt etc need to be stowed away so that we won't destroy regexp if changing global objects. This is true for all the code in here actually.
 function compileRegExp(s, caseInsensitive, multiLine) {
-	function isClass(char, mask) {
-		return ((CC[char] & mask) !== 0);
-	}
+	var p = 0, functions = '', functionCounter = 0, captureCounter = 0, closureVars = '', maxBackReference = 0;
+
+	function isClass(char, mask) { return ((CC[char] & mask) !== 0); }
 
 	function areClass(s, mask) { // FIX : only used once
-		for (var i = s.length - 1; i >= 0; --i) {
-			if ((CC[s[i]] & mask) === 0) {
-				return false;
-			}
-		}
+		for (var i = s.length - 1; i >= 0; --i) if ((CC[s[i]] & mask) === 0) return false;
 		return true;
 	}
 
@@ -1012,8 +1004,6 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		'W': [ WORD_CHAR, true ], 'w': [ WORD_CHAR, false ],
 		'.': [ NEWLINE_CHAR, true ]
 	};
-
-	var p = 0, functions = '', functionCounter = 0, captureCounter = 0, closureVars = '', maxBackReference = 0;
 
 	function parseNumber(defaultValue) {
 		var n = defaultValue;
@@ -1064,12 +1054,9 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	}
 
 	function escapeCharacter(c) {
-		if (isClass(c, OK_IN_STRING_LITERAL)) {
-			return c;
-		} else {
-			// TODO : shorter escapes for \n etc
-			return (c <= '~' ? "\\x" : "\\u") + leftPad($charCodeAt(c, 0).toString(16), (c <= '~' ? 2 : 4));
-		}
+		if (isClass(c, OK_IN_STRING_LITERAL)) return c;
+		// TODO : shorter escapes for \n etc
+		return (c <= '~' ? "\\x" : "\\u") + leftPad(numberToRadix($charCodeAt(c, 0), 16), (c <= '~' ? 2 : 4));
 	}
 
 	function canonicalizeAndEscape(c) {
@@ -1122,17 +1109,15 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 
 	function parseLiteralSequence() {
 		var literalSequence = [ ], v;
-		while (!isClass(s[p], SPECIAL_CHAR) && (v = parseLiteralCharacter())) {
+		while (!isClass(s[p], SPECIAL_CHAR) && (v = parseLiteralCharacter()))
 			literalSequence.push(canonicalizeAndEscape(v));
-		}
 		return (literalSequence.length ? literalSequence : null);
 	}
 
 	function parseClassAtom() {
 		var v, rule, c;
-		if ((c = s[p]) !== ']' && (v = parseLiteralCharacter())) {
-			return v;
-		} else if (c === '\\') {
+		if ((c = s[p]) !== ']' && (v = parseLiteralCharacter())) return v;
+		if (c === '\\') {
 			if ((c = s[p + 1]) === 'b') {
 				p += 2;
 				return '\b';
@@ -1144,20 +1129,16 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		}
 	}
 	
-	function positionToCode(offset) {
-		return (offset === 0 ? 'p' : ((offset < 0 ? 'p' : 'p+') + offset));
-	}
+	function positionToCode(offset) { return (offset === 0 ? 'p' : ((offset < 0 ? 'p' : 'p+') + offset)); }
 
 	function literalSequenceToCode(literalSequence, offset) {
-		if (literalSequence.length === 0) {
-			return "true";
-		} else if (literalSequence.length === 1) {
+		if (literalSequence.length === 0) return "true";
+		else if (literalSequence.length === 1)
 			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '"';
-		} else if (literalSequence.length === 2) {
-			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1) + ']==="' + literalSequence[1] + '"';
-		} else {
-			return "$match(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
-		}
+		else if (literalSequence.length === 2)
+			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1)
+					+ ']==="' + literalSequence[1] + '"';
+		else return "$match(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
 	}
 
 	function and(a, b) {
@@ -1183,11 +1164,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 
 	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
 		// TODO : eliminate unnecessary b=p+0,e=p+Infinity and stuff
-		var functionName = 'q' + (++functionCounter);
-		var head = "var " + (stepSize ? "h=" + stepSize + ",b=p+" + quantity.mini + "*h,e=p+" + quantity.maxi + "*h" : "b=p+" + quantity.mini + ",e=p+" + quantity.maxi) + "; ";
-		if (stepSize) {
-			head += "if (h<=0 || h!==h) return " + tail + "; ";
-		} 
+		var functionName = 'q' + (++functionCounter)
+				, head = "var " + (stepSize ? "h=" + stepSize + ",b=p+" + quantity.mini + "*h,e=p+" + quantity.maxi
+				+ "*h" : "b=p+" + quantity.mini + ",e=p+" + quantity.maxi) + "; ";
+		if (stepSize) head += "if (h<=0 || h!==h) return " + tail + "; ";
 		if (quantity.greedy) {
 			addFunction(functionName, head + "while (" + and("p<e", repeatCode) + ") " + (stepSize ? "p+=h" : "++p")
 					+ "; while (" + and("p>=b", "!(" + tail + ")") + ") " + (stepSize ? "p-=h" : "--p") + "; return p>=b");
@@ -1253,18 +1233,14 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 					case '^': {
 						++p;
 						var condition = positionToCode(offset) + "===0";
-						if (multiLine) {
-							condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset - 1) + "]]&" + NEWLINE_CHAR + ')') + ')';
-						}
+						if (multiLine) condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset - 1) + "]]&" + NEWLINE_CHAR + ')') + ')';
 						code = and(code, condition);
 						break;
 					}
 					case '$': {
 						++p;
 						var condition = positionToCode(offset) + "===l";
-						if (multiLine) {
-							condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset) + "]]&" + NEWLINE_CHAR + ')') + ')';
-						}
+						if (multiLine) condition = '(' + or(condition, "!!(CC[s[" + positionToCode(offset) + "]]&" + NEWLINE_CHAR + ')') + ')';
 						code = and(code, condition);
 						break;
 					}
@@ -1314,22 +1290,17 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						var n;
 						++p;
 						if ((n = parseNumber(-1)) >= 0) {
-							if (n > maxBackReference) {
-								maxBackReference = n;
-							}
+							if (n > maxBackReference) maxBackReference = n;
 							n = (n - 1) * 2;
-							var quantity = parseQuantifier();
-							var stepSize = 'c' + (n + 1) + "-c" + n;
 				// TODO: $match should take two additional optional params: start, end in match-string, thus eliminating need for substring here
-							var backMatchCode = "$match(s," + positionToCode(offset) + ",$sub(s, c" + n + ",c" + (n + 1) + "))";
-							var tail = compileTerms(0, junction);
-							var tailName = 't' + (++functionCounter);
+							var quantity = parseQuantifier()
+									, stepSize = 'c' + (n + 1) + "-c" + n
+									, backMatchCode = "$match(s," + positionToCode(offset) + ",$sub(s, c" + n + ",c" + (n + 1) + "))"
+									, tail = compileTerms(0, junction)
+									, tailName = 't' + (++functionCounter);
 							addFunction(tailName, "return " + tail);
-							if (quantity) {
-								return quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize);
-							}
-							return and(code, '(c' + n + "<c" + (n + 1) + " ? " + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')')
-									+ " : " + tailName + '(' + positionToCode(offset) + "))");
+							return quantity ? quantify(code, offset, backMatchCode, tailName + '(' + positionToCode(0) + ')', quantity, stepSize)
+									: and(code, '(c' + n + "<c" + (n + 1) + " ? " + and(backMatchCode, tailName + '(' + positionToCode(offset) + '+' + stepSize + ')') + " : " + tailName + '(' + positionToCode(offset) + "))");
 						} else if ((c = s[p]) === 'b' || c === 'B') {
 							++p;
 							code = and(code, (c === 'b' ? "!!((CC[s[" : "!((CC[s[") + positionToCode(offset - 1) + "]]^CC[s[" + positionToCode(offset) + "]])&" + WORD_CHAR + ')');
@@ -1339,9 +1310,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 					}
 					case '.': {
 						var rule;
-						if (!(rule = CHAR_CLASS_RULES[c])) {
-							throw syntaxError("Invalid escape in regular expression");
-						}
+						if (!(rule = CHAR_CLASS_RULES[c])) throw syntaxError("Invalid escape in regular expression");
 						++p;
 						if (quantity = parseQuantifier()) {
 							return quantify(code, offset, charClassToCode("s[" + positionToCode(0) + ']', rule), compileTerms(0, junction), quantity);
@@ -1351,12 +1320,12 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						break;
 					}
 					case '(': {
-						var functionNumber = ++functionCounter;
-						var groupName = 'g' + functionNumber;
-						var groupCall = groupName + '(' + positionToCode(offset) + ')';
-						var junctionName = 'j' + functionNumber;
-						var junctionCall = junctionName + '(' + positionToCode(offset) + ')';
-						var doCapture = true, lookAhead = false, negativeLookAhead = false;
+						var functionNumber = ++functionCounter
+								, groupName = 'g' + functionNumber
+								, groupCall = groupName + '(' + positionToCode(offset) + ')'
+								, junctionName = 'j' + functionNumber
+								, junctionCall = junctionName + '(' + positionToCode(offset) + ')'
+								, doCapture = true, lookAhead = false, negativeLookAhead = false;
 						++p;
 						if (s[p] === '?') {
 							switch (s[p + 1]) {
@@ -1370,25 +1339,23 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 							(closeCapture = (openCapture = (captureCounter++) * 2) + 1);
 							closureVars += ",c" + openCapture + ",c" + closeCapture;
 						}
-						var innerCapturesStart = captureCounter; // FIX : these two are only used for negative lookAhead, use for open/close captures too?
-						var disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName));
-						var innerCapturesEnd = captureCounter;
+						var innerCapturesStart = captureCounter // FIX : these two are only used for negative lookAhead, use for open/close captures too?
+								, disjunction = compileDisjunction(0, (lookAhead ? void 0 : junctionName))
+								, innerCapturesEnd = captureCounter;
 						if ((c = s[p]) !== ')') {
 							throw syntaxError(c ? "Unterminated group in regular expression" : "Invalid regular expression");
 						}
 						++p;
-						var quantity = (lookAhead ? null : parseQuantifier());
-						var tail = compileTerms(0, junction);
-						var inner = disjunction;
-						var extraEndlessCheck = '';
-						var looping = (quantity && quantity.maxi > 1);
+						var quantity = (lookAhead ? null : parseQuantifier())
+								, tail = compileTerms(0, junction)
+								, inner = disjunction
+								, extraEndlessCheck = ''
+								, looping = (quantity && quantity.maxi > 1);
 						if (looping && (quantity.maxi < $Infinity || quantity.mini > 1)) {
 							closureVars += ",n" + functionNumber + "=0";
-							if (quantity.maxi < $Infinity) {
-								inner = and("++n" + functionNumber + "<=" + quantity.maxi, inner);
-							} else {
-								inner = "++n" + functionNumber + ", " + inner;
-							}
+							inner = ((quantity.maxi < $Infinity)
+									? and("++n" + functionNumber + "<=" + quantity.maxi, inner)
+									: "++n" + functionNumber + ", " + inner);
 							if (quantity.mini > 1) {
 								inner = and(inner, 'n' + functionNumber + ">=" + quantity.mini, inner);
 								extraEndlessCheck = 'n' + functionNumber + '<' + quantity.mini;
@@ -1401,9 +1368,8 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 								inner = "!(" + inner + ')';
 								if (innerCapturesStart < innerCapturesEnd) {
 									var captureResets = '';
-									for (var i = innerCapturesStart; i < innerCapturesEnd; ++i) {
+									for (var i = innerCapturesStart; i < innerCapturesEnd; ++i)
 										captureResets += 'c' + i * 2 + '=';
-									}
 									useCall = '(' + captureResets + "void 0, " + useCall + ')';
 								}
 							}
@@ -1416,19 +1382,16 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						}
 						addFunction(groupName, captureWrap(inner, openCapture, innerCapturesStart, innerCapturesEnd));
 						if (looping) {
-							var recursionCall = groupName + '(' + positionToCode(0) + ')';
-							var inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
+							var recursionCall = groupName + '(' + positionToCode(0) + ')'
+									, inner = (quantity.greedy ? or(recursionCall, tail) : or(tail, recursionCall));
 							addFunction(junctionName, captureWrap(inner, closeCapture));
 							var useCall = (quantity.mini === 0 ? junctionCall : groupCall);
 							code = and(code, (looping ? '(p' + functionNumber + "=void 0," + useCall + ')' : useCall));
 						} else {
 							addFunction(junctionName, captureWrap(tail, closeCapture));
-							if (quantity && quantity.mini === 0) {
-								code = and(code, (quantity.maxi === 0 ? junctionCall
-										: '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')'));
-							} else {
-								code = and(code, groupCall);
-							}
+							code = ((quantity && quantity.mini === 0)
+									? and(code, (quantity.maxi === 0 ? junctionCall : '(' + (quantity.greedy ? or(groupCall, junctionCall) : or(junctionCall, groupCall)) + ')'))
+									: and(code, groupCall));
 						}
 						return code;
 					}
@@ -1456,16 +1419,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	}
 
 	var disjunction = compileDisjunction(0, ''); 
-	if (p < s.length) {
-		throw syntaxError("Invalid regular expression");
-	}
-	if (maxBackReference > captureCounter) {
-		throw syntaxError("Invalid back reference in regular expression");
-	}
+	if (p < s.length) throw syntaxError("Invalid regular expression");
+	if (maxBackReference > captureCounter) throw syntaxError("Invalid back reference in regular expression");
 	var code = "(function(s, p) {\n";
-	if (caseInsensitive) {
-		code += "\ts=regExpCanonicalize(s)\n";
-	}
+	if (caseInsensitive) code += "\ts=regExpCanonicalize(s)\n";
 	code += "\tvar l=s.length,q";
 	code += closureVars + ";\n" + functions + "\tif (" + disjunction + ") return [p,q";
 	for (var i = 0; i < captureCounter * 2; ++i) code += ",c" + i;
@@ -1480,12 +1437,11 @@ function execRegExp(re, string) {
 	var i;
 	if ((i = (re.global ? int(re.lastIndex) : 0)) >= 0) {
 		var f = $getInternalProperty(re, "value"), len = string.length, m;
-		for (; i <= len; ++i) {
+		for (; i <= len; ++i)
 			if (m = f(string, i)) {
 				if (re.global) re.lastIndex = m[1];
 				return m;
 			}
-		}
 	}
 	re.lastIndex = 0
 }
@@ -1495,9 +1451,8 @@ function regExpExecMethod(re, string) {
 	if (m = execRegExp(re, string)) {
 		(a = [ ]).input = string;
 		a.index = m[0];
-		for (var j = 0; j < m.length; j += 2) {
+		for (var j = 0; j < m.length; j += 2)
 			a[a.length] = ((m[j] === void 0) ? void 0 : $sub(string, m[j], m[j + 1]));
-		}
 	}
 	return a;
 }
@@ -1520,15 +1475,13 @@ var RegExp = support.specialConstructor(function RegExp(pattern, flags) {
 		var template = { global: false, ignoreCase: false, multiline: false, source: pattern };
 		for (var i = flags.length - 1; i >= 0; --i) {
 			var p;
-			if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p]) {
+			if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p])
 				throw syntaxError("Invalid regular expression flags");
-			}
 			template[p] = true;
 		}
 		var key, func;
-		if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline])) {
+		if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline]))
 			regExpCache[key] = func = evalThere(compileRegExp(pattern, template.ignoreCase, template.multiline));
-		}
 		var re = support.createWrapper("RegExp", func, regExpPrototype);
 		defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
 		defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
@@ -1687,7 +1640,7 @@ defineProperties(JSON, { dontEnum: true }, {
 				var ch = s[i], seq;
 				t += ((seq = JSON_ESCAPE_SEQUENCES[ch])
 						? seq : ((ch >= ' ' && ch <= '~')
-						? ch : "\\u" + leftPad("0000" + $charCodeAt(ch, 0).toString(16), 4))); // FIX : sub <---
+						? ch : "\\u" + leftPad("0000" + numberToRadix($charCodeAt(ch, 0), 16), 4)));
 			}
 			return t + '"';
 		}
@@ -1777,10 +1730,9 @@ defineProperties(JSON, { dontEnum: true }, {
 						default: return;
 						case '"': case '/': case '\\': case 'b': case 'f': case 'n': case 'r': case 't': break;
 						case 'u':
-							for (var i = 4; --i >= 0; ) {
+							for (var i = 4; --i >= 0; )
 								if (!(((ch = t[++p]) >= '0' && ch <= '9')
 										|| (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) return;
-							};
 							break;
 					}
 				}
