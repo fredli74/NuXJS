@@ -12,7 +12,7 @@
 	@preserve: propertyIsEnumerable,prototype,push,readOnly,regExpCanonicalize,return,reverse,round,setDate
 	@preserve: setFullYear,setHours,setMilliseconds,setMinutes,setMonth,setSeconds,setTime,setUTCDate
 	@preserve: setUTCFullYear,setUTCHours,setUTCMilliseconds,setUTCMinutes,setUTCMonth,setUTCSeconds,shift,sin,slice
-	@preserve: sort,specialConstructor,sqrt,submatch,substr,substring,switch,tan,this,throw,time,toChar,toExponential
+	@preserve: sort,distinctConstructor,sqrt,submatch,substr,substring,switch,tan,this,throw,time,toChar,toExponential
 	@preserve: toFixed,toISOString,toLocaleDateString,toLocaleLowerCase,toLocaleString,toLocaleTimeString
 	@preserve: toLocaleUpperCase,toLowerCase,toPrecision,toString,toTimeString,toUTCString,toUpperCase,true,try,typeof
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
@@ -30,8 +30,8 @@
 		defineProperty(o: object, property: string, value: any, readOnly: boolean, dontEnum: boolean, dontDelete: boolean): boolean
 		compileFunction(sourceCode: string, name: string): function
 		createWrapper(className: string, internalValue: any, prototype: object): object
-		specialConstructor(regularCall: function): function									// = exception on construction and no .prototype either
-		specialConstructor(regularCall: function, constructorCall: function): function
+		distinctConstructor(regularCall: function): function									// = exception on construction and no .prototype either
+		distinctConstructor(regularCall: function, constructorCall: function): function
 		callWithArgs(func: function, [this: object], [args: array], [offset: number]): any
 		getInternalProperty(o: object, "class"|"value"|"prototype"): any
 		hasOwnProperty(o: object, name: string): boolean
@@ -64,7 +64,7 @@
 (function(support) {
 
 var globals = this;
-var unconstructable = support.specialConstructor; // these are the same now, but not guaranteed in the future
+var unconstructable = support.distinctConstructor; // these are the same now, but not guaranteed in the future
 
 var $isNaN = support.isNaN, $isFinite = support.isFinite, $floor = support.floor, $NaN = support.NaN
 		, $Infinity = support.Infinity, $match = support.submatch, $sub = support.substring // "$match" and "$sub" are used from within regexps, so names has to be preserved
@@ -267,12 +267,11 @@ defineProperties(Function.prototype, { dontEnum: true }, {
 
 /* --- Boolean --- */
 
-var Boolean = support.specialConstructor(function Boolean(v) {
-		return !!v;
-	}, function Boolean(v) {
-		return support.createWrapper("Boolean", !!v, support.prototypes.Boolean);
-	}
-);
+var Boolean = support.distinctConstructor(function Boolean(v) {
+	return !!v;
+}, function Boolean(v) {
+	return support.createWrapper("Boolean", !!v, support.prototypes.Boolean);
+});
 defineProperties(Boolean, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Boolean });
 defineProperties(Boolean.prototype, { dontEnum: true }, {
 	constructor: Boolean,
@@ -293,12 +292,11 @@ function getInternalNumber(object, forFunction) {
 	return $getInternalProperty(object, "value")
 }
 
-var Number = support.specialConstructor(function Number(v) {
-		return (arguments.length ? +v : 0);
-	}, function Number(v) {
-		return support.createWrapper("Number", arguments.length ? +v : 0, support.prototypes.Number);
-	}
-);
+var Number = support.distinctConstructor(function Number(v) {
+	return (arguments.length ? +v : 0);
+}, function Number(v) {
+	return support.createWrapper("Number", arguments.length ? +v : 0, support.prototypes.Number);
+});
 defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Number });
 defineProperties(Number, { dontEnum: true, readOnly: true, dontDelete: true }, {
 	MAX_VALUE: support.maxNumber,
@@ -412,15 +410,14 @@ function translateString(string, table) {
 	return s
 }
 
-var String = support.specialConstructor(function String(v) {
-		return (arguments.length ? str(v) : '');
-	}, function String(v) {
-		var s;
-		return defineProperties(
-				support.createWrapper("String", (s = (arguments.length ? str(v) : '')), support.prototypes.String)
-				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
-	}
-);
+var String = support.distinctConstructor(function String(v) {
+	return (arguments.length ? str(v) : '');
+}, function String(v) {
+	var s;
+	return defineProperties(
+			support.createWrapper("String", (s = (arguments.length ? str(v) : '')), support.prototypes.String)
+			,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
+});
 defineProperties(String, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.String });
 defineProperties(String, { dontEnum: true }, {
 	fromCharCode: unconstructable(function fromCharCode(v) {
@@ -758,11 +755,25 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 
 /* --- Date --- */
 
+function localMaxDiff() { // local max is during DST
+	var startOfYearDiff = support.localTimeDifference(14516064e5); // 2016-01-01T00:00:00.000Z
+	var midOfYearDiff = support.localTimeDifference(14673312e5); // 2016-07-01T00:00:00.000Z
+	return (startOfYearDiff > midOfYearDiff ? startOfYearDiff : midOfYearDiff)
+}
+function localMinDiff() { // local min is timezone (non DST)
+	var startOfYearDiff = support.localTimeDifference(14516064e5); // 2016-01-01T00:00:00.000Z
+	var midOfYearDiff = support.localTimeDifference(14673312e5); // 2016-07-01T00:00:00.000Z
+	return (startOfYearDiff < midOfYearDiff ? startOfYearDiff : midOfYearDiff)
+}
+function localTimeDiff(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) }
+function toLocalTime(z) { return $isNaN(z) ? z : z + localTimeDiff(z) }
+
 function checkDateClass(object) {
 	if ($getInternalProperty(object, "class") !== "Date") throw typeError("this is not a Date object");
 }
 
 function getDateValue(object) { checkDateClass(object); return $getInternalProperty(object, "value"); }
+function getLocalDateValue(object) { return toLocalTime(getDateValue(object)); }
 function setDateValue(object, v) { checkDateClass(object); support.updateDateValue(object, v); return v; }
 function localDateTimeToString(v) {
 	return $isNaN(v = toLocalTime(v)) ? "Invalid Date" : (epochToDateString(v) + ' ' + epochToTimeString(v));
@@ -771,19 +782,14 @@ function localDateTimeToString(v) {
 function mod(x, n) { return ((x %= n) < 0 ? (x + n) % n : x) }
 function epochFromTime(hour, minute, second, ms) { return hour * 36e5 + minute * 6e4 + second * 1e3 + ms }
 function timeFromEpoch(z) { return [ mod($floor(z / 36e5), 24), mod($floor(z / 6e4), 60), mod($floor(z / 1e3), 60), mod(z, 1e3) ] }
-function startOfYearDiff() { return support.localTimeDifference(14516064e5) } // 2016-01-01T00:00:00.000Z
-function midOfYearDiff() { return support.localTimeDifference(14673312e5) } // 2016-07-01T00:00:00.000Z
-function localMaxDiff() { return (startOfYearDiff() > midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) }	// local max is during DST
-function localMinDiff() { return (startOfYearDiff() < midOfYearDiff() ? startOfYearDiff() : midOfYearDiff()) } // local min is timezone (non DST)
-function localTimeDiff(z) { var l = support.localTimeDifference(z); return ($isNaN(l) ? localMinDiff() : l) }
 function fromLocalTime(z) { return $isNaN(z) ? z : (z - localTimeDiff(z - localMaxDiff())) }
-function toLocalTime(z) { return $isNaN(z) ? z : z + localTimeDiff(z) }
 function weekdayFromTime(z) { return mod($floor(z / 864e5) + 4, 7) }
 function hourFromTime(z) { return mod($floor(z / 36e5), 24) }
 function minFromTime(z) { return mod($floor(z / 6e4), 60) }
 function secFromTime(z) { return mod($floor(z / 1e3), 60) }
 function msFromTime(z) { return mod(z, 1e3) }
 function timeClip(z) { return (!$isFinite(z) || abs(z) > 8.64e15 ? $NaN : int(z)) }
+function timeLocalClip(z) { return fromLocalTime(timeClip(z)); }
 
 function dateFromEpoch(z) {
 	z = $floor(z / 864e5) + 719468;
@@ -838,19 +844,15 @@ function makeDateTime(year, month, date, hours, minutes, seconds, ms) {
 			argc > 4 ? int(minutes) : 0, argc > 5 ? int(seconds) : 0, argc > 6 ? int(ms) : 0);
 }
 
-var parseDate, Date = support.specialConstructor(function Date() {
-		return localDateTimeToString(support.getCurrentTime());
-	}, function Date(year, month, date, hours, minutes, seconds, ms) {
-		var v;
-		if (arguments.length >= 2 && arguments.length <= 7) {
-			v = timeClip(fromLocalTime($callWithArgs(makeDateTime, null, arguments)));
-		} else if (arguments.length === 1) {
-			v = timeClip(typeof (v = arguments[0]) === "string" ? parseDate('' + v) : +v); // FIX : toPrimitiveValue
-		} else {
-			v = support.getCurrentTime();
-		}
-		return support.createWrapper("Date", v, support.prototypes.Date);
-	});
+var parseDate, Date = support.distinctConstructor(function Date() {
+	return localDateTimeToString(support.getCurrentTime());
+}, function Date(year, month, date, hours, minutes, seconds, ms) {
+	var v, argc;
+	if ((argc = arguments.length) >= 2 && argc <= 7) v = timeClipLocal($callWithArgs(makeDateTime, null, arguments));
+	else if (argc === 1) v = timeClip(typeof (v = support.toPrimitive(year)) === "string" ? parseDate(v) : +v);
+	else v = support.getCurrentTime();
+	return support.createWrapper("Date", v, support.prototypes.Date);
+});
 
 defineProperties(Date, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: support.prototypes.Date });
 defineProperties(Date, { dontEnum: true }, {
@@ -862,14 +864,14 @@ defineProperties(Date, { dontEnum: true }, {
 			return v;
 		}
 		z = epochFromDate(
-			((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
-			s[i] === "-" && (++i, readPart(2) -1),
-			s[i] === "-" && (++i, readPart(2)) || 1)
-			+ epochFromTime(
-			((ch = s[i]) === "T" || ch === ' ') && (++i, readPart(2)) || 0,
-			(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
-			(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
-			(ch = s[i]) === "." && (++i, readPart(3)) || 0);
+				((ch = s[i]) === "+" || ch === "-") && (++i, y = readPart(6), ch === "-" ? -y : y) || readPart(4),
+				s[i] === "-" && (++i, readPart(2) -1),
+				s[i] === "-" && (++i, readPart(2)) || 1)
+				+ epochFromTime(
+				((ch = s[i]) === "T" || ch === ' ') && (++i, readPart(2)) || 0,
+				(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+				(ch = s[i]) === ":" && (++i, readPart(2)) || 0,
+				(ch = s[i]) === "." && (++i, readPart(3)) || 0);
 
 		while (ch !== void 0 && ch !== "Z" && ch !== "+" && ch !== "-") ch = s[++i];
 
@@ -889,24 +891,24 @@ defineProperties(Date, { dontEnum: true }, {
 defineProperties(Date.prototype, { dontEnum: true }, {
 	constructor: Date,
 	toISOString: unconstructable(function toISOString() {
-		var z = getDateValue(this);
-		if ($isNaN(z)) throw rangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
+		var z;
+		if ($isNaN(z = getDateValue(this))) throw rangeError("Invalid time value");	// Dont ask my why, but this is how V8 does it
 		return (epochToDateString(z) + "T" + epochToTimeString(z, true) + "Z")
 	}),
 	toUTCString: unconstructable(function toUTCString() {
-		var z = getDateValue(this);
-		if ($isNaN(z)) return "Invalid Date";
+		var z;
+		if ($isNaN(z = getDateValue(this))) return "Invalid Date";
 		return (epochToDateString(z) + ' ' + epochToTimeString(z))
 	}),
 	toString: unconstructable(function toString() { return localDateTimeToString(getDateValue(this)); }),
 	toDateString: unconstructable(function toDateString() {
-		var l = toLocalTime(getDateValue(this));
-		if ($isNaN(l)) return "Invalid Date";
+		var l;
+		if ($isNaN(l = getLocalDateValue(this))) return "Invalid Date";
 		return epochToDateString(l)
 	}),
 	toTimeString: unconstructable(function toTimeString() {
-		var l = toLocalTime(getDateValue(this));
-		if ($isNaN(l)) return "Invalid Date";
+		var l;
+		if ($isNaN(l = getLocalDateValue(this))) return "Invalid Date";
 		return epochToTimeString(l)
 	}),
 	toLocaleString: Object.prototype.toLocaleString,
@@ -914,37 +916,37 @@ defineProperties(Date.prototype, { dontEnum: true }, {
 	toLocaleTimeString: unconstructable(function toLocaleTimeString() { return this.toTimeString() }),
 	valueOf: unconstructable(function valueOf() { return getDateValue(this) }),
 	getTime: unconstructable(function getTime() { return getDateValue(this) }),
-	getFullYear: unconstructable(function getFullYear() { return dateFromEpoch(toLocalTime(getDateValue(this)))[0] }),
+	getFullYear: unconstructable(function getFullYear() { return dateFromEpoch(getLocalDateValue(this))[0] }),
 	getUTCFullYear: unconstructable(function getUTCFullYear() { return dateFromEpoch(getDateValue(this))[0] }),
-	getMonth: unconstructable(function getMonth() { return dateFromEpoch(toLocalTime(getDateValue(this)))[1] }),
+	getMonth: unconstructable(function getMonth() { return dateFromEpoch(getLocalDateValue(this))[1] }),
 	getUTCMonth: unconstructable(function getUTCMonth() { return dateFromEpoch(getDateValue(this))[1] }),
-	getDate: unconstructable(function getDate() { return dateFromEpoch(toLocalTime(getDateValue(this)))[2] }),
+	getDate: unconstructable(function getDate() { return dateFromEpoch(getLocalDateValue(this))[2] }),
 	getUTCDate: unconstructable(function getUTCDate() { return dateFromEpoch(getDateValue(this))[2] }),
-	getDay: unconstructable(function getDay() { return weekdayFromTime(toLocalTime(getDateValue(this))) }),
+	getDay: unconstructable(function getDay() { return weekdayFromTime(getLocalDateValue(this)) }),
 	getUTCDay: unconstructable(function getUTCDay() { return weekdayFromTime(getDateValue(this)) }),
-	getHours: unconstructable(function getHours() { return hourFromTime(toLocalTime(getDateValue(this))) }),
+	getHours: unconstructable(function getHours() { return hourFromTime(getLocalDateValue(this)) }),
 	getUTCHours: unconstructable(function getUTCHours() { return hourFromTime(getDateValue(this)) }),
-	getMinutes: unconstructable(function getMinutes() { return minFromTime(toLocalTime(getDateValue(this))) }),
+	getMinutes: unconstructable(function getMinutes() { return minFromTime(getLocalDateValue(this)) }),
 	getUTCMinutes: unconstructable(function getUTCMinutes() { return minFromTime(getDateValue(this)) }),
-	getSeconds: unconstructable(function getSeconds() { return secFromTime(toLocalTime(getDateValue(this))) }),
+	getSeconds: unconstructable(function getSeconds() { return secFromTime(getLocalDateValue(this)) }),
 	getUTCSeconds: unconstructable(function getUTCSeconds() { return secFromTime(getDateValue(this)) }),
-	getMilliseconds: unconstructable(function getMilliseconds() { return msFromTime(toLocalTime(getDateValue(this))) }),
+	getMilliseconds: unconstructable(function getMilliseconds() { return msFromTime(getLocalDateValue(this)) }),
 	getUTCMilliseconds: unconstructable(function getUTCMilliseconds() { return msFromTime(getDateValue(this)) }),
 	getTimezoneOffset: unconstructable(function getTimezoneOffset() { var v = getDateValue(this); return (v - toLocalTime(v)) / 6e4 }),
 	setTime: unconstructable(function setTime(time) { return setDateValue(timeClip(+time)) }),
-	setMilliseconds: unconstructable(function setMilliseconds(ms) { return setDateValue(this, timeClip(fromLocalTime(setTimeParts(toLocalTime(getDateValue(this)), 3, arguments)))) }),
+	setMilliseconds: unconstructable(function setMilliseconds(ms) { return setDateValue(this, timeClipLocal(setTimeParts(getLocalDateValue(this)), 3, arguments)) }),
 	setUTCMilliseconds: unconstructable(function setUTCMilliseconds(ms) { return setDateValue(this, timeClip(setTimeParts(getDateValue(this), 3, arguments))) }),
-	setSeconds: unconstructable(function setSeconds(s, ms) { return setDateValue(this, timeClip(fromLocalTime(setTimeParts(toLocalTime(getDateValue(this)), 2, arguments)))) }),
+	setSeconds: unconstructable(function setSeconds(s, ms) { return setDateValue(this, timeClipLocal(setTimeParts(getLocalDateValue(this)), 2, arguments)) }),
 	setUTCSeconds: unconstructable(function setUTCSeconds(s, ms) { return setDateValue(this, timeClip(setTimeParts(getDateValue(this), 2, arguments))) }),
-	setMinutes: unconstructable(function setMinutes(m, s, ms) { return setDateValue(this, timeClip(fromLocalTime(setTimeParts(toLocalTime(getDateValue(this)), 1, arguments)))) }),
+	setMinutes: unconstructable(function setMinutes(m, s, ms) { return setDateValue(this, timeClipLocal(setTimeParts(getLocalDateValue(this)), 1, arguments)) }),
 	setUTCMinutes: unconstructable(function setUTCMinutes(m, s, ms) { return setDateValue(this, timeClip(setTimeParts(getDateValue(this), 1, arguments))) }),
-	setHours: unconstructable(function setHours(h, m, s, ms) { return setDateValue(this, timeClip(fromLocalTime(setTimeParts(toLocalTime(getDateValue(this)), 0, arguments)))) }),
+	setHours: unconstructable(function setHours(h, m, s, ms) { return setDateValue(this, timeClipLocal(setTimeParts(getLocalDateValue(this)), 0, arguments)) }),
 	setUTCHours: unconstructable(function setUTCHours(h, m, s, ms) { return setDateValue(this, timeClip(setTimeParts(getDateValue(this), 0, arguments))) }),
-	setDate: unconstructable(function setDate(date) { return setDateValue(this, timeClip(fromLocalTime(setDateParts(toLocalTime(getDateValue(this)), 2, arguments)))) }),
+	setDate: unconstructable(function setDate(date) { return setDateValue(this, timeClipLocal(setDateParts(getLocalDateValue(this)), 2, arguments)) }),
 	setUTCDate: unconstructable(function setUTCDate(date) { return setDateValue(this, timeClip(setDateParts(getDateValue(this), 2, arguments))) }),
-	setMonth: unconstructable(function setMonth(month, date) { return setDateValue(this, timeClip(fromLocalTime(setDateParts(toLocalTime(getDateValue(this)), 1, arguments)))) }),
+	setMonth: unconstructable(function setMonth(month, date) { return setDateValue(this, timeClipLocal(setDateParts(getLocalDateValue(this)), 1, arguments)) }),
 	setUTCMonth: unconstructable(function setUTCMonth(month, date) { return setDateValue(this, timeClip(setDateParts(getDateValue(this), 1, arguments))) }),
-	setFullYear: unconstructable(function setFullYear(year, month, date) { var v; return setDateValue(this, timeClip(fromLocalTime(setDateParts($isNaN(v = getDateValue(this)) ? 0 : toLocalTime(v), 0, arguments)))) }),
+	setFullYear: unconstructable(function setFullYear(year, month, date) { var v; return setDateValue(this, timeClipLocal(setDateParts($isNaN(v = getDateValue(this)) ? 0 : toLocalTime(v), 0, arguments))) }),
 	setUTCFullYear: unconstructable(function setUTCFullYear(year, month, date) { var v; return setDateValue(this, timeClip(setDateParts($isNaN(v = getDateValue(this)) ? 0 : v, 0, arguments))) })
 });
 
@@ -1463,35 +1465,34 @@ function regExpExecMethod(re, string) {
 
 function convertFlagsToText(re) { return (re.global ? 'g' : '') + (re.ignoreCase ? 'i' : '') + (re.multiline ? 'm' : ''); }
 
-var RegExp = support.specialConstructor(function RegExp(pattern, flags) {
-		return ($getInternalProperty(pattern, "class") === "RegExp" && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
-	}, support.createRegExp = function RegExp(pattern, flags) {
-		if ($getInternalProperty(pattern, "class") === "RegExp") {
-			if (flags !== void 0) throw typeError("Cannot supply flags when constructing one RegExp from another");
-			flags = convertFlagsToText(pattern);
-			pattern = pattern.source;
-		}
-		
-		// TODO : short-cut most of this through cache instead of only the func def.
-		// TODO : limit number of entries in cache
-		pattern = (pattern === void 0 ? '' : str(pattern));
-		flags = (flags === void 0 ? '' : str(flags));
-		var template = { global: false, ignoreCase: false, multiline: false, source: pattern };
-		for (var i = flags.length - 1; i >= 0; --i) {
-			var p;
-			if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p])
-				throw syntaxError("Invalid regular expression flags");
-			template[p] = true;
-		}
-		var key, func;
-		if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline]))
-			regExpCache[key] = func = evalThere(compileRegExp(pattern, template.ignoreCase, template.multiline));
-		var re = support.createWrapper("RegExp", func, regExpPrototype);
-		defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
-		defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
-		return re;
+var RegExp = support.distinctConstructor(function RegExp(pattern, flags) {
+	return ($getInternalProperty(pattern, "class") === "RegExp" && flags === void 0 ? pattern : new support.createRegExp(pattern, flags));
+}, support.createRegExp = function RegExp(pattern, flags) {
+	if ($getInternalProperty(pattern, "class") === "RegExp") {
+		if (flags !== void 0) throw typeError("Cannot supply flags when constructing one RegExp from another");
+		flags = convertFlagsToText(pattern);
+		pattern = pattern.source;
 	}
-);
+	
+	// TODO : short-cut most of this through cache instead of only the func def.
+	// TODO : limit number of entries in cache
+	pattern = (pattern === void 0 ? '' : str(pattern));
+	flags = (flags === void 0 ? '' : str(flags));
+	var template = { global: false, ignoreCase: false, multiline: false, source: pattern };
+	for (var i = flags.length - 1; i >= 0; --i) {
+		var p;
+		if (!(p = REG_EXP_FLAG_TO_PROPERTY[flags[i]]) || template[p])
+			throw syntaxError("Invalid regular expression flags");
+		template[p] = true;
+	}
+	var key, func;
+	if (!(func = regExpCache[key = pattern + ',' + template.ignoreCase + ',' + template.multiline]))
+		regExpCache[key] = func = evalThere(compileRegExp(pattern, template.ignoreCase, template.multiline));
+	var re = support.createWrapper("RegExp", func, regExpPrototype);
+	defineProperties(re, { dontEnum: true, readOnly: true, dontDelete: true }, template);
+	defineProperties(re, { dontEnum: true, dontDelete: true }, { lastIndex: 0 });
+	return re;
+});
 
 defineProperties(RegExp, { dontEnum: true, readOnly: true, dontDelete: true }, { prototype: regExpPrototype = RegExp.prototype });
 defineProperties(RegExp.prototype, { dontEnum: true }, {

@@ -4349,7 +4349,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value specialConstructor(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value distinctConstructor(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 		if (argc >= 1) {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
@@ -4533,7 +4533,7 @@ static struct {
 } SUPPORT_FUNCTIONS[] = {
 	{ "getInternalProperty", Support::getInternalProperty }, { "createWrapper", Support::createWrapper },
 	{ "defineProperty", Support::defineProperty }, { "compileFunction", Support::compileFunction },
-	{ "specialConstructor", Support::specialConstructor }, { "callWithArgs", Support::callWithArgs },
+	{ "distinctConstructor", Support::distinctConstructor }, { "callWithArgs", Support::callWithArgs },
 	{ "hasOwnProperty", Support::hasOwnProperty }, { "fromCharCode", Support::fromCharCode },
 	{ "isPropertyEnumerable", Support::isPropertyEnumerable }, { "atan2", Support::atan2 },
 	{ "pow", Support::pow }, { "parseFloat", Support::parseFloat }, { "charCodeAt", Support::charCodeAt },
