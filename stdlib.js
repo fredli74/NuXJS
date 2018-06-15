@@ -822,13 +822,13 @@ function epochFromDate(year, month, day) {
 function setDateParts(z, n, a) {
 	var i, d = dateFromEpoch(z), r = mod(z, 864e5);
 	for (i = 0; i < a.length; ++i, ++n) d[n] = int(a[i]);
-	return epochFromDate.apply(null, d) + r;
+	return $callWithArgs(epochFromDate, null, d) + r;
 }
 
 function setTimeParts(z, n, a) {
 	var i, t = timeFromEpoch(z), r = $floor(z / 864e5) * 864e5;
 	for (i = 0; i < a.length; ++i, ++n) t[n] = int(a[i]);
-	return epochFromTime.apply(null, t) + r;
+	return $callWithArgs(epochFromDate, null, t) + r;
 }
 
 function makeDateTime(year, month, date, hours, minutes, seconds, ms) {
@@ -843,7 +843,7 @@ var parseDate, Date = support.specialConstructor(function Date() {
 	}, function Date(year, month, date, hours, minutes, seconds, ms) {
 		var v;
 		if (arguments.length >= 2 && arguments.length <= 7) {
-			v = timeClip(fromLocalTime(makeDateTime.apply(this, arguments)));
+			v = timeClip(fromLocalTime($callWithArgs(makeDateTime, null, arguments)));
 		} else if (arguments.length === 1) {
 			v = timeClip(typeof (v = arguments[0]) === "string" ? parseDate('' + v) : +v); // FIX : toPrimitiveValue
 		} else {
@@ -1108,9 +1108,9 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	}
 
 	function parseLiteralSequence() {
-		var literalSequence = [ ], v;
+		var literalSequence = [ ], v, n = 0;
 		while (!isClass(s[p], SPECIAL_CHAR) && (v = parseLiteralCharacter()))
-			literalSequence.push(canonicalizeAndEscape(v));
+			literalSequence[n++] = canonicalizeAndEscape(v);
 		return (literalSequence.length ? literalSequence : null);
 	}
 
@@ -1138,7 +1138,10 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		else if (literalSequence.length === 2)
 			return "s[" + positionToCode(offset) + ']==="' + literalSequence[0] + '" && s[' + positionToCode(offset + 1)
 					+ ']==="' + literalSequence[1] + '"';
-		else return "$match(s," + positionToCode(offset) + ',"' + literalSequence.join('') + '")';
+		else {
+			for (var i = 0, s = '', l = literalSequence.length; i < l; ++i) s += literalSequence[i];
+			return "$match(s," + positionToCode(offset) + ',"' + s + '")';
+		}
 	}
 
 	function and(a, b) {
@@ -1219,7 +1222,8 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		termLoop: for (;;) {
 			if (literalSequence = parseLiteralSequence()) {
 				if (quantity = parseQuantifier()) {
-					var repeatLiteral = literalSequence.pop();
+					var repeatLiteral = literalSequence[literalSequence.length - 1];
+					--literalSequence.length;
 					return quantify(and(code, literalSequenceToCode(literalSequence, offset))
 							, offset + literalSequence.length, literalSequenceToCode(repeatLiteral, 0)
 							, compileTerms(0, junction)
@@ -1640,7 +1644,7 @@ defineProperties(JSON, { dontEnum: true }, {
 				var ch = s[i], seq;
 				t += ((seq = JSON_ESCAPE_SEQUENCES[ch])
 						? seq : ((ch >= ' ' && ch <= '~')
-						? ch : "\\u" + leftPad("0000" + numberToRadix($charCodeAt(ch, 0), 16), 4)));
+						? ch : "\\u" + leftPad(numberToRadix($charCodeAt(ch, 0), 16), 4)));
 			}
 			return t + '"';
 		}
