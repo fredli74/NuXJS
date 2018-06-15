@@ -789,7 +789,7 @@ function minFromTime(z) { return mod($floor(z / 6e4), 60) }
 function secFromTime(z) { return mod($floor(z / 1e3), 60) }
 function msFromTime(z) { return mod(z, 1e3) }
 function timeClip(z) { return (!$isFinite(z) || abs(z) > 8.64e15 ? $NaN : int(z)) }
-function timeLocalClip(z) { return fromLocalTime(timeClip(z)); }
+function timeClipLocal(z) { return fromLocalTime(timeClip(z)); }
 
 function dateFromEpoch(z) {
 	z = $floor(z / 864e5) + 719468;
