@@ -116,12 +116,12 @@ support.toPrimitive = function(o) {
 	return support[$getInternalProperty(o, "class") === "Date" ? "toPrimitiveString" : "toPrimitiveNumber"](o);
 };
 
-function toInt(v) { return $isNaN(v = +v) ? 0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))); }
-function toInt32(v) { return toInt(v) | 0; }
-function toUInt32(v) { return toInt(v) >>> 0; }
+function int(v) { return $isNaN(v = +v) ? 0 : (!$isFinite(v) ? v : (v < 0 ? -$floor(-v) : $floor(v))); }
+function int32(v) { return int(v) | 0; }
+function uint32(v) { return int(v) >>> 0; }
 
 // TODO : what a waste of cycles, could be a simple OBJ_TO_STRING, problem with ''+s is that it uses OBJ_TO_NUMBER which only affects the priority of toString vs valueOf... so subtle!
-function objectToString(o) { return '' + (isPrimitive(o) ? o : support.toPrimitiveString(o)) }
+function str(o) { return '' + (isPrimitive(o) ? o : support.toPrimitiveString(o)) }
 
 function defineProperties(object, attribs, props) {
 	var ro = attribs.readOnly, de = attribs.dontEnum, dd = attribs.dontDelete;
@@ -134,6 +134,8 @@ function checkClass(object, expectedClass, forFunction) {
 		throw nativeErrors.TypeError(expectedClass + ".prototype." + forFunction + " is not generic");
 	}
 }
+
+function leftPad(s, l) { var n = (s = "00000000000000000000" + s).length; return $sub(s, n - l, n); }
 
 function numberToString(num, digits, eNotationBelow) {
 	var string = '';
@@ -149,9 +151,7 @@ function numberToString(num, digits, eNotationBelow) {
 			significand = num / 1e-323 * 10.0;
 		} else {
 			exponent = $floor(support.log(num) * 0.43429448190325182765113);
-			if (exponent < -323) {
-				exponent = -323;
-			}
+			if (exponent < -323) exponent = -323;
 			var magnitude = support.pow(10, exponent);
 			if (num >= magnitude * 10.0) {
 				magnitude *= 10.0;
@@ -160,9 +160,8 @@ function numberToString(num, digits, eNotationBelow) {
 			significand = num / magnitude;
 		}
 	}
-	if (digits === void 0) {
-		string += significand;
-	} else {
+	if (digits === void 0) string += significand;
+	else {
 		var magnitude = support.pow(10, digits);
 		var integer = $floor(significand);
 		var decimals = $floor((significand - integer) * magnitude + 0.5);
@@ -176,19 +175,13 @@ function numberToString(num, digits, eNotationBelow) {
 			var magnitude = support.pow(10, digits);
 			var integer = $floor(num);
 			var decimals = $floor((num - integer) * magnitude + 0.5);
-			if (decimals >= magnitude) {
-				++integer;
-			}
+			if (decimals >= magnitude) ++integer;
 			exponent = null;
 		}
 		string += integer;
-		if (digits > 0) {
-			string += '.' + ("00000000000000000000" + decimals).slice(-digits);
-		}
+		if (digits > 0) string += '.' + leftPad(decimals, digits);
 	}
-	if (exponent !== null) {
-		string += (exponent >= 0 ? "e+" : 'e') + exponent;
-	}
+	if (exponent !== null) string += (exponent >= 0 ? "e+" : 'e') + exponent;
 	return string
 }
 
@@ -220,8 +213,8 @@ defineProperties(Object.prototype, { dontEnum: true }, {
 		var s;
 		return "[object " + (((s = $getInternalProperty(this, "class")) === "Arguments") ? "Object" : s) + ']'
 	}),
-	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, objectToString(name)) }),
-	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, objectToString(name)) }),
+	hasOwnProperty: unconstructable(function hasOwnProperty(name) { return support.hasOwnProperty(this, str(name)) }),
+	propertyIsEnumerable: unconstructable(function propertyIsEnumerable(name) { return support.isPropertyEnumerable(this, str(name)) }),
 	isPrototypeOf: unconstructable(function isPrototypeOf(v) {
 		while (v = $getInternalProperty(v, "prototype")) {
 			if (v === this) return true;
@@ -311,11 +304,11 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 	toString: unconstructable(function toString(radix) {
 		var val = getInternalNumber(this, "toString");
 		if (radix === void 0 || !$isFinite(val)) return '' + val;
-		else if ((radix = toInt(radix)) < 2 || radix > 36) throw nativeErrors.RangeError("Illegal radix for toString()");
+		else if ((radix = int(radix)) < 2 || radix > 36) throw nativeErrors.RangeError("Illegal radix for toString()");
 		else {
 			// TODO : fraction?
 			var sign = '', s = '';
-			if ((val = toInt(val)) < 0) {
+			if ((val = int(val)) < 0) {
 				val = -val;
 				sign = '-';
 			}
@@ -328,7 +321,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		if (!$isFinite(val = getInternalNumber(this, "toExponential"))) return val;
 		else if (fractionDigits === void 0) return numberToString(val, void 0, $Infinity);
 		else {
-			if ((digits = toInt(fractionDigits)) < 0 || digits > 20) {
+			if ((digits = int(fractionDigits)) < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal fractionDigits argument for toExponential()");
 			}
 			return numberToString(val, digits, $Infinity);
@@ -336,7 +329,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 	}),
 	toFixed: unconstructable(function toFixed(fractionDigits) {
 		var val, digits;
-		if ((digits = toInt(fractionDigits)) < 0 || digits > 20) {
+		if ((digits = int(fractionDigits)) < 0 || digits > 20) {
 			throw nativeErrors.RangeError("Illegal fractionDigits argument for toFixed()");
 		}
 		if ($isNaN(val = getInternalNumber(this, "toFixed")) || val <= -1e21 || val >= 1e21) return '' + val;
@@ -351,7 +344,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 			var decimals = $floor((val - integer) * magnitude + 0.5);
 			s += integer + (decimals >= magnitude ? 1 : 0);
 			if (digits > 0) {
-				s += '.' + ("00000000000000000000" + decimals).slice(-digits);
+				s += '.' + leftPad(decimals, digits);
 			}
 			return s;
 		}
@@ -360,7 +353,7 @@ defineProperties(Number.prototype, { dontEnum: true }, {
 		var val = getInternalNumber(this, "toPrecision"), digits;
 		if (precision === void 0 || !$isFinite(val)) return val;
 		else {
-			if ((digits = toInt(precision) - 1) < 0 || digits > 20) {
+			if ((digits = int(precision) - 1) < 0 || digits > 20) {
 				throw nativeErrors.RangeError("Illegal precision argument for toPrecision()");
 			}
 			return numberToString(val, digits, -6);
@@ -419,11 +412,11 @@ function translateString(string, table) {
 }
 
 var String = support.specialConstructor(function String(v) {
-		return (arguments.length ? objectToString(v) : '');
+		return (arguments.length ? str(v) : '');
 	}, function String(v) {
 		var s;
 		return defineProperties(
-				support.createWrapper("String", (s = (arguments.length ? objectToString(v) : '')), support.prototypes.String)
+				support.createWrapper("String", (s = (arguments.length ? str(v) : '')), support.prototypes.String)
 				,  { readOnly: true, dontEnum: true, dontDelete: true }, { length: s.length });
 	}
 );
@@ -440,35 +433,35 @@ defineProperties(String.prototype, { dontEnum: true }, {
 	constructor: String,
 	charAt: unconstructable(function charAt(pos) {
 		var s;
-		return (((pos = toInt(pos)) < 0 || pos >= (s = objectToString(this)).length) ? '' : s[pos]);
+		return (((pos = int(pos)) < 0 || pos >= (s = str(this)).length) ? '' : s[pos]);
 	}),
 	charCodeAt: unconstructable(function charCodeAt(pos) {
-		return $charCodeAt(objectToString(this), +pos);
+		return $charCodeAt(str(this), +pos);
 	}),
 	concat: unconstructable(function concat(string1) {
-		var args, n = (args = arguments).length, s = objectToString(this);
-		for (var i = 0; i < n; ++i) s += objectToString(args[i]);
+		var args, n = (args = arguments).length, s = str(this);
+		for (var i = 0; i < n; ++i) s += str(args[i]);
 		return s;
 	}),
 	indexOf: unconstructable(function indexOf(searchString) { // .length should be 1
-		var s, i, e = (s = objectToString(this)).length - (searchString = objectToString(searchString)).length, pos = arguments[1];
-		if ((i = toInt(pos)) < 0) i = 0;
+		var s, i, e = (s = str(this)).length - (searchString = str(searchString)).length, pos = arguments[1];
+		if ((i = int(pos)) < 0) i = 0;
 		for (; i <= e; ++i) if ($match(s, i, searchString)) return i;
 		return -1;
 	}),
 	lastIndexOf: unconstructable(function lastIndexOf(searchString) { // .length should be 1
-		var s, i, e = (s = objectToString(this)).length - (searchString = objectToString(searchString)).length, pos = arguments[1];
-		if ($isNaN(pos = +pos) || (i = toInt(pos)) > e) i = e;
+		var s, i, e = (s = str(this)).length - (searchString = str(searchString)).length, pos = arguments[1];
+		if ($isNaN(pos = +pos) || (i = int(pos)) > e) i = e;
 		for (; i >= 0; --i) if ($match(s, i, searchString)) return i;
 		return -1;
 	}),
 	localeCompare: unconstructable(function localeCompare(that) {
 		var me, him;
-		return ((me = objectToString(this)) === (him = objectToString(that)) ? 0 : (me < him ? -1 : 1));
+		return ((me = str(this)) === (him = str(that)) ? 0 : (me < him ? -1 : 1));
 	}),
 	match: unconstructable(function match(regexp) {
 		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
-		var s = objectToString(this);
+		var s = str(this);
 		if (!regexp.global) return regExpExecMethod(regexp, s);
 		var i = regexp.lastIndex = 0, a = [ ], r;
 		do {
@@ -477,9 +470,9 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		} while (true);
 	}),
 	replace: unconstructable(function replace(searchValue, replaceValue) {
-		var s, sLength = (s = objectToString(this)).length, replaceFunction = replaceValue, matches, i, p, t, l, e;
+		var s, sLength = (s = str(this)).length, replaceFunction = replaceValue, matches, i, p, t, l, e;
 		if (typeof replaceFunction !== "function") {
-			var r = objectToString(replaceValue);
+			var r = str(replaceValue);
 			replaceFunction = function(m) {
 				var t = '', p, ch, ch2, c, args, n;
 				for (p = 0; ch = r[p]; ++p) {
@@ -514,37 +507,37 @@ defineProperties(String.prototype, { dontEnum: true }, {
 			while (matches = regExpExecMethod(searchValue, s)) {
 				matches[i = matches.length] = matches.index;
 				matches[i + 1] = s;
-				t += $sub(s, p, matches.index) + objectToString($callWithArgs(replaceFunction, null, matches));
+				t += $sub(s, p, matches.index) + str($callWithArgs(replaceFunction, null, matches));
 				p = matches.index + (l = matches[0].length);
 				if (!searchValue.global) break;
 				if (l === 0) ++searchValue.lastIndex;
 			}
 			return t + $sub(s, p, sLength);
 		} else {
-			e = sLength - (l = (t = objectToString(searchValue)).length);
+			e = sLength - (l = (t = str(searchValue)).length);
 			for (var p = 0; !$match(s, p, t); ++p) if (p >= e) return s;
-			return $sub(s, 0, p) + objectToString($callWithArgs(replaceFunction, null, [ t, p, s ])) + $sub(s, p + l, sLength);
+			return $sub(s, 0, p) + str($callWithArgs(replaceFunction, null, [ t, p, s ])) + $sub(s, p + l, sLength);
 		}
 	}),
 	search: unconstructable(function search(regexp) {
 		if ($getInternalProperty(regexp, "class") !== "RegExp") regexp = new RegExp(regexp);
-		var s, len = (s = objectToString(this)).length, f = $getInternalProperty(regexp, "value");
+		var s, len = (s = str(this)).length, f = $getInternalProperty(regexp, "value");
 		for (var i = 0; i <= len; ++i) if (f(s, i)) return i;
 		return -1;
 	}),
 	slice: unconstructable(function slice(start, end) {
-		var s = objectToString(this);
-		if ((start = toInt(start)) < 0) start += s.length;
+		var s = str(this);
+		if ((start = int(start)) < 0) start += s.length;
 		if (end === void 0) end = $Infinity;
-		else if ((end = toInt(end)) < 0) end += s.length;
+		else if ((end = int(end)) < 0) end += s.length;
 		return $sub(s, start, end);
 	}),
 	split: unconstructable(function split(separator, limit) {
-		var s, sLength = (s = objectToString(this)).length, a = [ ], aLength = 0;
-		if (!(limit = ((limit === void 0) ? 0xFFFFFFFF : toUInt32(limit)))) return a;
+		var s, sLength = (s = str(this)).length, a = [ ], aLength = 0;
+		if (!(limit = ((limit === void 0) ? 0xFFFFFFFF : uint32(limit)))) return a;
 		if (separator === void 0) return [ s ];
 		if ($getInternalProperty(separator, "class") !== "RegExp") {
-			separator = objectToString(separator);
+			separator = str(separator);
 			var separatorLength = separator.length;
 			var splitMatch = function(p) { if ($match(s, p, separator)) return [ p, p + separatorLength ]; }
 		} else {
@@ -569,24 +562,24 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	substr: unconstructable(function substr(start, length) {
-		var s = objectToString(this);
-		if ((start = toInt(start)) < 0) start = s.length + start;
-		return $sub(s, start, (length === void 0 ? $Infinity : start + toInt(length)));
+		var s = str(this);
+		if ((start = int(start)) < 0) start = s.length + start;
+		return $sub(s, start, (length === void 0 ? $Infinity : start + int(length)));
 	}),
 	substring: unconstructable(function substring(start, end) {
-		start = toInt(start);
+		start = int(start);
 		if (end === void 0) end = $Infinity;
-		else if ((end = toInt(end)) < start) {
+		else if ((end = int(end)) < start) {
 			var swap = start;
 			start = end;
 			end = swap;
 		}
-		return $sub(objectToString(this), start, end);
+		return $sub(str(this), start, end);
 	}),
-	toUpperCase: unconstructable(function toUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
-	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(objectToString(this), lowerToUpper) }),
-	toLowerCase: unconstructable(function toLowerCase() { return translateString(objectToString(this), upperToLower) }),
-	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return translateString(objectToString(this), upperToLower) }),
+	toUpperCase: unconstructable(function toUpperCase() { return translateString(str(this), lowerToUpper) }),
+	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(str(this), lowerToUpper) }),
+	toLowerCase: unconstructable(function toLowerCase() { return translateString(str(this), upperToLower) }),
+	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return translateString(str(this), upperToLower) }),
 	valueOf: unconstructable(function valueOf() {
 		checkClass(this, "String", "valueOf");
 		return $getInternalProperty(this, "value");
@@ -625,27 +618,27 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return a;
 	}),
 	join: unconstructable(function join(separator) {
-		var s = new StringBuilder, s2, len = toUInt32(this.length);
-		separator = (separator === void 0 ? ',' : objectToString(separator));
+		var s = new StringBuilder, s2, len = uint32(this.length);
+		separator = (separator === void 0 ? ',' : str(separator));
 		for (var i = 0; i < len; ++i) {
 			if (i > 0) s.append(separator);
-			if ((s2 = this[i]) != null) s.append(objectToString(s2));
+			if ((s2 = this[i]) != null) s.append(str(s2));
 		}
 		return s.build();
 	}),
 	pop: unconstructable(function pop() {
 		var v = void 0, len;
-		if ((len = toUInt32(this.length)) > 0) v = this[--len];
+		if ((len = uint32(this.length)) > 0) v = this[--len];
 		this.length = len;
 		return v;
 	}),
 	push: unconstructable(function push(item) {
-		var argv, offset = toUInt32(this.length), end = (argv = arguments).length + offset;
+		var argv, offset = uint32(this.length), end = (argv = arguments).length + offset;
 		for (var i = offset; i < end; ++i) this[i] = argv[i - offset];
 		return (this.length = end);
 	}),
 	reverse: unconstructable(function reverse() {
-		var len, mid = $floor((len = toUInt32(this.length)) / 2);
+		var len, mid = $floor((len = uint32(this.length)) / 2);
 		--len;
 		for (var leftIndex = 0; leftIndex < mid; ++leftIndex) {
 			var rightIndex = len - leftIndex;
@@ -657,7 +650,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	shift: unconstructable(function shift() {
 		var len, elementZero;
-		if (len = toUInt32(this.length)) {
+		if (len = uint32(this.length)) {
 			elementZero = this[0];
 			for (var i = 1; i < len; ++i) {
 				if (i in this) this[i - 1] = this[i];
@@ -669,9 +662,9 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		return elementZero;
 	}),
 	slice: unconstructable(function slice(start, end) {
-		var a = [ ], len = toUInt32(this.length);
-		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
-		if (end === void 0 || (end = toInt(end)) > len) end = len;
+		var a = [ ], len = uint32(this.length);
+		if ((start = int(start)) < 0) { start += len; if (start < 0) start = 0; }
+		if (end === void 0 || (end = int(end)) > len) end = len;
 		else if (end < 0) end += len;
 		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
 		a.length = j;
@@ -717,16 +710,16 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		};
 		if (comparefn === void 0) {
 			comparefn = function(a, b) {
-				return ((a = objectToString(a)) < (b = objectToString(b)) ? -1 : (a > b ? 1 : 0));
+				return ((a = str(a)) < (b = str(b)) ? -1 : (a > b ? 1 : 0));
 			}
 		};
 		qsort(0, this.length >>> 0);
 	}),
 	splice: unconstructable(function splice(start, deleteCount) {
-		var a = [ ], len = toUInt32(this.length), argv, argc = (argv = arguments).length, end, itemCount, move;
-		if ((start = toInt(start)) < 0) { start += len; if (start < 0) start = 0; }
+		var a = [ ], len = uint32(this.length), argv, argc = (argv = arguments).length, end, itemCount, move;
+		if ((start = int(start)) < 0) { start += len; if (start < 0) start = 0; }
 		else if (start > len) start = len;
-		if (argc == 1 || (end = start + toInt(deleteCount)) > len) end = len;
+		if (argc == 1 || (end = start + int(deleteCount)) > len) end = len;
 		else if (end < start) end = start;
 		for (var i = start, j = 0; i < end; ++i, ++j) if (i in this) a[j] = this[i];
 		a.length = j;
@@ -751,7 +744,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 	}),
 	unshift: unconstructable(function unshift(item1) {
 		var len, argv, n = (argv = arguments).length;
-		if (len = toUInt32(this.length)) {
+		if (len = uint32(this.length)) {
 			for (var i = len; --i >= 0; ) {
 				if (i in this) this[i + n] = this[i];
 				else delete this[i + n];
@@ -759,7 +752,7 @@ defineProperties(Array.prototype, { dontEnum: true }, {
 		}
 		for (var i = 0; i < n; ++i) this[i] = argv[i];
 		return (this.length = len + n);
-	}),
+	})
 });
 
 /* --- Date --- */
@@ -789,59 +782,59 @@ function hourFromTime(z) { return mod($floor(z / 36e5), 24) }
 function minFromTime(z) { return mod($floor(z / 6e4), 60) }
 function secFromTime(z) { return mod($floor(z / 1e3), 60) }
 function msFromTime(z) { return mod(z, 1e3) }
-function timeClip(z) { return (!$isFinite(z) || abs(z) > 8.64e15 ? $NaN : toInt(z)) }
+function timeClip(z) { return (!$isFinite(z) || abs(z) > 8.64e15 ? $NaN : int(z)) }
 
 function dateFromEpoch(z) {
 	z = $floor(z / 864e5) + 719468;
-	var era = toInt( (z >= 0 ? z : z - 146096) / 146097 );
+	var era = int( (z >= 0 ? z : z - 146096) / 146097 );
 	var doe = z - era * 146097;
-	var yoe = toInt( (doe - toInt(doe / 1460) + toInt(doe / 36524) - toInt(doe / 146096)) / 365 );
+	var yoe = int( (doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365 );
 	var y = yoe + era * 400;
-    var doy = doe - (365 * yoe + toInt(yoe / 4) - toInt(yoe/100) );
-    var mp = toInt( (5 * doy + 2) / 153);
+    var doy = doe - (365 * yoe + int(yoe / 4) - int(yoe/100) );
+    var mp = int( (5 * doy + 2) / 153);
     var m = mp + (mp < 10 ? 2 : -10);
-    var d = doy - toInt( (153 * mp + 2) / 5 ) + 1;
+    var d = doy - int( (153 * mp + 2) / 5 ) + 1;
     return [ (y + (m <= 1)), m, d ];
 }
 
 function epochToDateString(z) {
 	var y, dt = dateFromEpoch(z);
-	return (0 <= (y = dt[0]) && y <= 9999 ? ("000" + y).slice(-4) : (y < 0 ? "-" : "+")
-			+ ("00000" + abs(y)).slice(-6)) + "-" + ("0" + (dt[1] + 1)).slice(-2) + "-" + ("0" + dt[2]).slice(-2)
+	return (0 <= (y = dt[0]) && y <= 9999 ? leftPad(y, 4) : (y < 0 ? "-" : "+") + leftPad(abs(y), 6))
+			+ "-" + leftPad(dt[1] + 1, 2) + "-" + leftPad(dt[2], 2);
 }
 
 function epochToTimeString(z, ms) {
 	var tm = timeFromEpoch(z);
-	return ("0" + tm[0]).slice(-2) + ":" + ("0" + tm[1]).slice(-2) + ":" + ("0" + tm[2]).slice(-2)
-			+ (ms ? "." + ("00" + String(tm[3]).slice(0,3)).slice(-3) : "")
+	return leftPad(tm[0], 2) + ":" + leftPad(tm[1], 2) + ":" + leftPad(tm[2], 2)
+			+ (ms ? "." + leftPad($sub(tm[3], 0, 3), 3) : "")
 }
 
 function epochFromDate(year, month, day) {
 	year += $floor(month / 12) - ((month = ((month %= 12) < 0 ? (12 + month) % 12 : month)) <= 1);
-	var era = toInt( (year >= 0 ? year : year - 399) / 400 );
+	var era = int( (year >= 0 ? year : year - 399) / 400 );
 	var yoe = year - era * 400;
-	var doy = toInt( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
-	var doe = yoe * 365 + toInt(yoe / 4) - toInt(yoe / 100) + doy;
+	var doy = int( (153 * (month + (month > 1 ? -2 : 10)) + 2) / 5 ) + day-1;
+	var doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy;
 	return (era * 146097 + doe - 719468) * 864e5;
 }
 
 function setDateParts(z, n, a) {
 	var i, d = dateFromEpoch(z), r = mod(z, 864e5);
-	for (i = 0; i < a.length; ++i, ++n) d[n] = toInt(a[i]);
+	for (i = 0; i < a.length; ++i, ++n) d[n] = int(a[i]);
 	return epochFromDate.apply(null, d) + r;
 }
 
 function setTimeParts(z, n, a) {
 	var i, t = timeFromEpoch(z), r = $floor(z / 864e5) * 864e5;
-	for (i = 0; i < a.length; ++i, ++n) t[n] = toInt(a[i]);
+	for (i = 0; i < a.length; ++i, ++n) t[n] = int(a[i]);
 	return epochFromTime.apply(null, t) + r;
 }
 
 function makeDateTime(year, month, date, hours, minutes, seconds, ms) {
 	var argc = arguments.length;
-	return epochFromDate( (year = toInt(year)) + (0 <= year && year <= 99 ? 1900 : 0),
-			toInt(month), (argc > 2 ? toInt(date) : 1)) + epochFromTime( argc > 3 ? toInt(hours) : 0,
-			argc > 4 ? toInt(minutes) : 0, argc > 5 ? toInt(seconds) : 0, argc > 6 ? toInt(ms) : 0);
+	return epochFromDate( (year = int(year)) + (0 <= year && year <= 99 ? 1900 : 0),
+			int(month), (argc > 2 ? int(date) : 1)) + epochFromTime( argc > 3 ? int(hours) : 0,
+			argc > 4 ? int(minutes) : 0, argc > 5 ? int(seconds) : 0, argc > 6 ? int(ms) : 0);
 }
 
 var parseDate, Date = support.specialConstructor(function Date() {
@@ -975,15 +968,15 @@ var CC = { }; // "CC" is used from within regexps, so the name has to be preserv
 	CC[''] |= EMPTY_CHAR;
 	setupCharClass(ESCAPE_CHAR, "fnrtv");
 	for (var i = 32; i <= 126; ++i) {
-		var c = String.fromCharCode(i);
+		var c = support.fromCharCode(i);
 		if (c !== '"' && c !== '\\') {
-			CC[String.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
+			CC[support.fromCharCode(i)] |= OK_IN_STRING_LITERAL;
 		}
 	}
 	var IDENTITY_ESCAPE_RANGES = [ 0, 48, 58, 65, 91, 95, 96, 97, 123, 128 ];
 	for (var i = IDENTITY_ESCAPE_RANGES.length - 2; i >= 0; i -= 2) {
 		for (var j = IDENTITY_ESCAPE_RANGES[i], k = IDENTITY_ESCAPE_RANGES[i + 1]; j < k; ++j) {
-			CC[String.fromCharCode(j)] |= IDENTITY_ESCAPE_CHAR;
+			CC[support.fromCharCode(j)] |= IDENTITY_ESCAPE_CHAR;
 		}
 	}
 })();
@@ -1004,9 +997,9 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		return ((CC[char] & mask) !== 0);
 	}
 
-	function areClass(str, mask) { // FIX : only used once
-		for (var i = str.length - 1; i >= 0; --i) {
-			if ((CC[str[i]] & mask) === 0) {
+	function areClass(s, mask) { // FIX : only used once
+		for (var i = s.length - 1; i >= 0; --i) {
+			if ((CC[s[i]] & mask) === 0) {
 				return false;
 			}
 		}
@@ -1075,7 +1068,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 			return c;
 		} else {
 			// TODO : shorter escapes for \n etc
-			return (c <= '~' ? "\\x" : "\\u") + ("0000" + $charCodeAt(c, 0).toString(16)).slice(c <= '~' ? -2 : -4);
+			return (c <= '~' ? "\\x" : "\\u") + leftPad($charCodeAt(c, 0).toString(16), (c <= '~' ? 2 : 4));
 		}
 	}
 
@@ -1097,7 +1090,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 				case 'c': {
 					if (isClass(s[p + 2], LETTER_CHAR)) {
 						p += 3;
-						return String.fromCharCode($charCodeAt(s, p - 1) & 31);
+						return support.fromCharCode($charCodeAt(s, p - 1) & 31);
 					}
 					break;
 				}
@@ -1106,7 +1099,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 					var n = (c1 === 'x' ? 2 : 4);
 					if (areClass(sub = $sub(s, p + 2, p + 2 + n), HEX_CHAR)) {
 						p += 2 + n;
-						return String.fromCharCode(parseInt(sub, 16));
+						return support.fromCharCode(parseInt(sub, 16));
 					}
 					break;
 				}
@@ -1483,9 +1476,9 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 var REG_EXP_FLAG_TO_PROPERTY = { 'g': "global", 'i': "ignoreCase", 'm': "multiline" }, regExpCache = { }, regExpPrototype;
 
 function execRegExp(re, string) {
-	string = objectToString(string);
+	string = str(string);
 	var i;
-	if ((i = (re.global ? toInt(re.lastIndex) : 0)) >= 0) {
+	if ((i = (re.global ? int(re.lastIndex) : 0)) >= 0) {
 		var f = $getInternalProperty(re, "value"), len = string.length, m;
 		for (; i <= len; ++i) {
 			if (m = f(string, i)) {
@@ -1522,8 +1515,8 @@ var RegExp = support.specialConstructor(function RegExp(pattern, flags) {
 		
 		// TODO : short-cut most of this through cache instead of only the func def.
 		// TODO : limit number of entries in cache
-		pattern = (pattern === void 0 ? '' : objectToString(pattern));
-		flags = (flags === void 0 ? '' : objectToString(flags));
+		pattern = (pattern === void 0 ? '' : str(pattern));
+		flags = (flags === void 0 ? '' : str(flags));
 		var template = { global: false, ignoreCase: false, multiline: false, source: pattern };
 		for (var i = flags.length - 1; i >= 0; --i) {
 			var p;
@@ -1569,16 +1562,16 @@ defineProperties(globals, { dontEnum: true }, {
 	isNaN: unconstructable(function isNaN(v) { return $isNaN(+v) }),
 	JSON: support.createWrapper("JSON", void 0),
 	eval: support.evalFunction = unconstructable(function eval(x) { return support.eval(x) }),
-	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(objectToString(string)) }),
+	parseFloat: unconstructable(function parseFloat(string) { return support.parseFloat(str(string)) }),
 	parseInt: unconstructable(function parseInt(string, radix) {
-		string = objectToString(string);
+		string = str(string);
 		var pic = PARSE_INT_CHARS, i = -1, sign = 1;
 		while (pic[string[++i]] === null) ;
 		switch (string[i]) {
 			case '-': sign = -1;
 			case '+': ++i;
 		}
-		if (((radix = toInt32(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
+		if (((radix = int32(radix)) === 0 || radix === 16) && (string[i] === '0' && string[i + 1] === 'x')) {
 			i += 2;
 			radix = 16;
 		}
@@ -1634,7 +1627,7 @@ function createErrorConstructor(name, prototype) {
 	return function(message) {
 		var e;
 		support.defineProperty(e = support.createWrapper("Error", name, prototype), "message"
-				, (message !== void 0 ? objectToString(message) : ''), false, true, false);
+				, (message !== void 0 ? str(message) : ''), false, true, false);
 		return e
 	}
 };
@@ -1682,21 +1675,21 @@ defineProperties(JSON, { dontEnum: true }, {
         	space = +space;
             for (var i = (space > 10 ? 10 : space); --i >= 0;) gap += ' ';
         } else if (typeof space === "string" || (typeof space === "object" && $getInternalProperty(space, "class") === "String")) {
-            gap = $sub(objectToString(space), 0, 10);
+            gap = $sub(str(space), 0, 10);
         }
 
-		function quote(str) {
-			var s = '"', len = str.length;
+		function quote(s) {
+			var t = '"', len = s.length;
 			for (var i = 0; i < len; ++i) {
-				var ch = str[i], seq;
-				s += ((seq = JSON_ESCAPE_SEQUENCES[ch])
+				var ch = s[i], seq;
+				t += ((seq = JSON_ESCAPE_SEQUENCES[ch])
 						? seq : ((ch >= ' ' && ch <= '~')
-						? ch : "\\u" + ("0000" + $charCodeAt(ch, 0).toString(16)).slice(-4))); // FIX : sub <---
+						? ch : "\\u" + leftPad("0000" + $charCodeAt(ch, 0).toString(16), 4))); // FIX : sub <---
 			}
-			return s + '"';
+			return t + '"';
 		}
 
-		function str(key, holder, indent) {
+		function string(key, holder, indent) {
 			var val;
 	        if ((val = holder[key]) && typeof val === "object" && typeof val.toJSON === "function") val = val.toJSON(key);
 	        if (replacerFunction) val = $callWithArgs(replacerFunction, holder, [ key, val ]);
@@ -1705,7 +1698,7 @@ defineProperties(JSON, { dontEnum: true }, {
 	        if (typeof val === "object") {
 	        	switch ($getInternalProperty(val, "class")) {
 	        		case "Number": val = +val; break;
-	        		case "String": val = objectToString(val); break;
+	        		case "String": val = str(val); break;
 	        		case "Boolean": val = $getInternalProperty(val, "value"); break;
 	        	}
 	        }
@@ -1722,14 +1715,14 @@ defineProperties(JSON, { dontEnum: true }, {
 						var s = '', len = val.length;
 						for (var i = 0; i < len; ++i) {
 							s += (s ? ',' : '[') + lineEnd + gap;
-							s += str(i, val, indent + gap) || "null";
+							s += string(i, val, indent + gap) || "null";
 						}
 						return (s ? s + lineEnd + ']' : "[]");
 					} else {
 						var s = '', v;
 						for (var k in (includeProps ? includeProps : val)) {
 							if (support.hasOwnProperty(val, k)) {
-								if (v = str(k, val, indent + gap)) {
+								if (v = string(k, val, indent + gap)) {
 									s += (s ? ',' : '{') + lineEnd + gap;
 									s += quote(k) + (gap ? ": " : ':') + v;
 								}
@@ -1740,11 +1733,11 @@ defineProperties(JSON, { dontEnum: true }, {
 				}
 
 				case "string": return quote(val);
-				case "number": return ($isFinite(val) ? objectToString(val) : "null");
-				case "boolean": return objectToString(val);
+				case "number": return ($isFinite(val) ? str(val) : "null");
+				case "boolean": return str(val);
 			}
 		}
-		return str('', { '': val }, '');
+		return string('', { '': val }, '');
 	}),
 
 	parse: unconstructable(function parse(text, reviver) {
@@ -1826,7 +1819,7 @@ defineProperties(JSON, { dontEnum: true }, {
 			, '-': number, '0': number, '1': number, '2': number, '3': number, '4': number
 			, '5': number, '6': number, '7': number, '8': number, '9': number
 		};
-		text = objectToString(text);
+		text = str(text);
 		var p, parser;
 		if ((parser = PARSERS[text[p = space(text, 0)]]) && (p = parser(text, p))
 				&& (p = space(text, p)) === text.length) {
@@ -1860,7 +1853,7 @@ defineProperties(Array, { dontEnum: true }, {
 
 defineProperties(Object, { dontEnum: true }, {
 	defineProperty: unconstructable(function defineProperty(o, p, d) {
-		support.defineProperty(o, objectToString(p), d.value, !d.writable, !d.enumerable, !d.configurable);
+		support.defineProperty(o, str(p), d.value, !d.writable, !d.enumerable, !d.configurable);
 	}),
 	getPrototypeOf: unconstructable(function getPrototypeOf(o) {
 		return $getInternalProperty(o, "prototype");
