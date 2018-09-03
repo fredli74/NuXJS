@@ -82,7 +82,7 @@ class GCList : public GCItem {
 	friend class Heap;
 	
 	public:		Heap& getHeap() const throw() { return heap; }
-				bool owns(GCItem* item) throw() { return item->_gcList == this; } // FIX : drop?
+				bool owns(const GCItem* item) throw() { return item->_gcList == this; }
 				void claim(GCItem* item) throw();
 				void relinquish(GCItem* item) throw();
 				void deleteAll() throw();

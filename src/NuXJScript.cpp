@@ -475,7 +475,6 @@ double Value::toDouble() const {
 	}
 }
 
-// TODO : toInt32 and toUInt32
 Int32 Value::toInt() const { // FIX : could be faster without toDouble I thinkus
 	const double v = toDouble();
 	const Int32 i = static_cast<Int32>(v);
@@ -1695,7 +1694,7 @@ void ScriptException::throwError(Heap& heap, ErrorType type, const char* message
 }
 
 ScriptException::ScriptException(Heap& heap, const Value& value) throw()
-		: super("Unknown exception (failed conversion to string)"), value(value) { // FIX : not inline
+		: super("Unknown exception (failed conversion to string)"), value(value) {
 	const String* src = value.toString(heap);
 	const UInt32 l = (sizeof (sz) / sizeof (*sz) - 1);
 	*std::copy(src->begin(), (src->size() < l ? src->end() : src->begin() + l), sz) = 0;
@@ -4641,7 +4640,9 @@ void Runtime::run(const String& source) {
 
 Var Runtime::eval(const String& expression) {
 	Processor processor(*this);
-	processor.enterEvalCode(compileEvalCode(new(heap) String(expression)));
+	const String* retainedExpression = (heap.managed().owns(&expression)
+			? &expression : new(heap) String(heap.managed(), expression.begin(), expression.end()));
+	processor.enterEvalCode(compileEvalCode(retainedExpression));
 	return runUntilReturn(processor);
 }
 
@@ -4714,7 +4715,7 @@ void Runtime::setupStandardLibrary() {
 		prototypesObject->setOwnProperty(*this, PROTOTYPE_NAMES[i], prototypes[i]);
 	}
 	
-	const Var func = eval(String(STDLIB_JS));
+	const Var func = eval(*String::alloc(heap, STDLIB_JS));
 	Value argv[1] = { protectedSupportObject };
 	call(func, 1, argv);
 	
