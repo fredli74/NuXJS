@@ -55,6 +55,7 @@ class GCItem {
 	friend class GCList;
 	friend class Heap;
 
+				// FIX : these makes it impossible to allocate GCItem without heap, but maybe that's good?
 	public:		static void* operator new(size_t n, Heap& heap);
 				static void operator delete(void* ptr);
 				static void operator delete(void* ptr, Heap& heap);
@@ -477,6 +478,7 @@ class String : public Object, public QuickArray<Char> {
 				static const String EMPTY;
 	
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
+				// FIX : make next two private?
 				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
 				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
 				String(GCList& gcList);
