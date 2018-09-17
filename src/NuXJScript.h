@@ -1,6 +1,10 @@
 #if !defined(NuXJScript_h)
 #define NuXJScript_h 1
 
+#ifdef _MSC_VER
+#pragma float_control(precise, on, push)  
+#endif
+
 #include "assert.h"
 #include <algorithm>
 #include <string>
@@ -816,7 +820,7 @@ const Int32 MAX_PROTOTYPE_CHAIN_LENGTH = 32;
 const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 class Runtime : public GCItem {
 	friend class Processor;
-	friend class Support;
+	friend struct Support;
 	
 	protected:	struct GlobalScope : public Scope {
 					typedef Scope super;
@@ -1371,5 +1375,9 @@ inline void* operator new(size_t size, NuXJScript::Heap* heap) { return (heap !=
 inline void* operator new[](size_t size, NuXJScript::Heap* heap) { return (heap != 0 ? heap->allocArray(size) : ::operator new[](size)); }
 inline void operator delete(void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->free(ptr) : ::operator delete(ptr)); }
 inline void operator delete[](void* ptr, NuXJScript::Heap* heap) { return (heap != 0 ? heap->freeArray(ptr) : ::operator delete[](ptr)); }
+
+#ifdef _MSC_VER
+#pragma float_control(pop)  
+#endif
 
 #endif

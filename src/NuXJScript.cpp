@@ -1,4 +1,10 @@
+#ifdef __GNUC__
 #pragma GCC optimize ("no-finite-math-only")
+#endif
+
+#ifdef _MSC_VER
+#pragma float_control(precise, on, push)  
+#endif
 
 #ifdef __FAST_MATH__
 	#error This code requires IEEE compliant floating point handling. Avoid -Ofast / -ffast-math etc, at least for this source file.
@@ -4736,3 +4742,6 @@ void Runtime::noTimeOut() { checkTimeOutCounter = 0; }
 
 } /* namespace NuXJScript */
 
+#ifdef _MSC_VER
+#pragma float_control(pop)  
+#endif
