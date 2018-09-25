@@ -372,12 +372,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.927232"
+            timestampString = "559595251.469564"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "901"
-            endingLineNumber = "901"
-            landmarkName = "Heap::~Heap()"
+            startingLineNumber = "913"
+            endingLineNumber = "913"
+            landmarkName = "Heap::purgePooled()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -388,45 +388,45 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.927768"
+            timestampString = "559595251.470052"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "903"
-            endingLineNumber = "903"
-            landmarkName = "unknown"
-            landmarkType = "0">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.9281271"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "740"
-            endingLineNumber = "740"
-            landmarkName = "unknown"
-            landmarkType = "0">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.928477"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "811"
-            endingLineNumber = "811"
-            landmarkName = "GCList::claim(GCItem* item)"
+            startingLineNumber = "915"
+            endingLineNumber = "915"
+            landmarkName = "Heap::purgePooled()"
             landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "559595251.470361"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "752"
+            endingLineNumber = "752"
+            landmarkName = "String::createBloomCode()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "559595251.470721"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "823"
+            endingLineNumber = "823"
+            landmarkName = "unknown"
+            landmarkType = "0">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -499,13 +499,13 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.928907"
+            timestampString = "559595251.4711339"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "904"
-            endingLineNumber = "904"
-            landmarkName = "unknown"
-            landmarkType = "0">
+            startingLineNumber = "916"
+            endingLineNumber = "916"
+            landmarkName = "Heap::purgePooled()"
+            landmarkType = "7">
             <Locations>
                <Location
                   shouldBeEnabled = "No"
@@ -700,13 +700,13 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.929445"
+            timestampString = "559595251.471483"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "869"
-            endingLineNumber = "869"
-            landmarkName = "unknown"
-            landmarkType = "0">
+            startingLineNumber = "881"
+            endingLineNumber = "881"
+            landmarkName = "Heap::free(void *ptr)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -717,12 +717,12 @@
             condition = "size==96"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.9297611"
+            timestampString = "559595251.471802"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "839"
-            endingLineNumber = "839"
-            landmarkName = "Heap::alloc(size_t size)"
+            startingLineNumber = "851"
+            endingLineNumber = "851"
+            landmarkName = "Heap::calcPoolIndex(const size_t size)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -733,12 +733,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.930051"
+            timestampString = "559595251.4720401"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "837"
-            endingLineNumber = "837"
-            landmarkName = "Heap::alloc(size_t size)"
+            startingLineNumber = "849"
+            endingLineNumber = "849"
+            landmarkName = "Heap::Heap()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -887,12 +887,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.930468"
+            timestampString = "559595251.472311"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "874"
-            endingLineNumber = "874"
-            landmarkName = "Heap::gc()"
+            startingLineNumber = "886"
+            endingLineNumber = "886"
+            landmarkName = "Heap::free(void *ptr)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -903,12 +903,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.9307539"
+            timestampString = "559595251.4726"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "857"
-            endingLineNumber = "857"
-            landmarkName = "Heap::free(void *ptr)"
+            startingLineNumber = "869"
+            endingLineNumber = "869"
+            landmarkName = "Heap::alloc(size_t size)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -967,106 +967,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.931061"
+            timestampString = "559595251.472874"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "147"
-            endingLineNumber = "147"
-            landmarkName = "QuickConstants"
-            landmarkType = "14">
-            <Locations>
-               <Location
-                  shouldBeEnabled = "No"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
-                  moduleName = "NuXJScript"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
-                  timestampString = "549736410.425469"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "148"
-                  endingLineNumber = "148"
-                  offsetFromSymbolStart = "21">
-               </Location>
-               <Location
-                  shouldBeEnabled = "No"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
-                  moduleName = "NuXJScript"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
-                  timestampString = "549736410.4269021"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "148"
-                  endingLineNumber = "148"
-                  offsetFromSymbolStart = "546">
-               </Location>
-               <Location
-                  shouldBeEnabled = "No"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
-                  moduleName = "NuXJScript"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
-                  timestampString = "549736410.428297"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "148"
-                  endingLineNumber = "148"
-                  offsetFromSymbolStart = "756">
-               </Location>
-               <Location
-                  shouldBeEnabled = "No"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NuXJScript::QuickConstants::QuickConstants()"
-                  moduleName = "NuXJScript"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/magnus/projects/NuXJS/src/NuXJScript.cpp"
-                  timestampString = "549736410.429758"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "148"
-                  endingLineNumber = "148"
-                  offsetFromSymbolStart = "1030">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.931294"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "4611"
-            endingLineNumber = "4611"
-            landmarkName = "unknown"
-            landmarkType = "0">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.93163"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "949"
-            endingLineNumber = "949"
-            landmarkName = "Object::setProperty(Runtime&amp; rt, const Value&amp; key, const Value&amp; v)"
+            startingLineNumber = "4623"
+            endingLineNumber = "4623"
+            landmarkName = "Runtime::runUntilReturn(Processor&amp; processor)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -1077,12 +983,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704656.931914"
+            timestampString = "559595251.473192"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "4643"
-            endingLineNumber = "4643"
-            landmarkName = "Runtime::eval(const String&amp; expression)"
+            startingLineNumber = "961"
+            endingLineNumber = "961"
+            landmarkName = "Object::getProperty(Runtime&amp; rt, const Value&amp; key, Value* v)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -1093,12 +999,28 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "src/NuXJScript.cpp"
-            timestampString = "557704659.798979"
+            timestampString = "559595251.473433"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "4644"
-            endingLineNumber = "4644"
-            landmarkName = "Runtime::eval(const String&amp; expression)"
+            startingLineNumber = "4655"
+            endingLineNumber = "4655"
+            landmarkName = "Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "src/NuXJScript.cpp"
+            timestampString = "559595251.473745"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "4656"
+            endingLineNumber = "4656"
+            landmarkName = "Runtime::call(Function* function, UInt32 argc, const Value* argv, Object* thisObject)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

@@ -152,6 +152,19 @@ struct QuickConstants {
 		for (int i = MIN_EXPONENT; i <= MAX_EXPONENT; ++i) {
 			exp10s[i - MIN_EXPONENT] = pow(10.0, static_cast<double>(i));
 		}
+		/*
+		FIX : drop
+		double x = 1.0;
+		for (int i = 0; i <= MAX_EXPONENT; ++i) {
+			exp10s[i - MIN_EXPONENT] = x;
+			exp10s[-i - MIN_EXPONENT] = 1.0 / x;
+			x *= 10.0;
+		}
+		x = exp10s[-MAX_EXPONENT - MIN_EXPONENT];
+		for (int i = -MAX_EXPONENT - 1; i >= MIN_EXPONENT; --i) {
+			x /= 10.0;
+			exp10s[i - MIN_EXPONENT] = x;
+		}*/
 	}
 	Value ascii[127];
 	String asciiChars[127];
@@ -308,12 +321,14 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 			value = std::numeric_limits<double>::infinity();
 		} else {
 			double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
-			double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
+			int xp = exponent + (exponent < MIN_EXPONENT + 20 ? 1 : 0);
 			volatile double compensation = 0.0;
 			
 			double d = 0.0;
 			while (p != significandEnd) {
 				if (*p != '.') {
+					assert(MIN_EXPONENT <= xp && xp <= MAX_EXPONENT);
+					const double magnitude = QUICK_CONSTANTS.exp10s[xp - MIN_EXPONENT];
 					const Int32 digit = (*p - '0');
 					const double x = digit * magnitude * scale;
 					const double adjusted = x - compensation;	// Kahan summation for greater accuracy
@@ -321,7 +336,7 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 					compensation = sum - d;
 					compensation -= adjusted;
 					d = sum;
-					magnitude /= 10.0;
+					--xp;
 				}
 				++p;
 			}
@@ -360,11 +375,13 @@ Char* doubleToString(Char buffer[32], const double value) {
 	}
 	
 	const double scale = (exponent < MIN_EXPONENT + 20 ? 0.1 : 1.0);	// An extra scaling step is necessary to reach the lowest denormal (approx 0.5e-324) since 1e-325 is out of range.
-	double magnitude = QUICK_CONSTANTS.exp10s[exponent - MIN_EXPONENT + (exponent < MIN_EXPONENT + 20 ? 1 : 0)];
+	int xp = exponent + (exponent < MIN_EXPONENT + 20 ? 1 : 0);
 	double residual = absValue;
 	double reconstructed = 0.0;
 	volatile double compensation = 0.0;
-	while (p < buffer + 27 && magnitude != 0.0 && residual != 0.0) {	// p < buffer + 27 is an extra precaution if toNumber(toString(x)) == x is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
+	while (p < buffer + 27 && xp >= MIN_EXPONENT && residual != 0.0) {	// p < buffer + 27 is an extra precaution if toNumber(toString(x)) == x is never met (e.g. because of too aggressive optimizations). 27 leaves room for longest exponent.
+		assert(MIN_EXPONENT <= xp && xp <= MAX_EXPONENT);
+		const double magnitude = QUICK_CONSTANTS.exp10s[xp - MIN_EXPONENT];
 		if (p == periodPosition) {
 			*p++ = '.';
 		}
@@ -372,7 +389,7 @@ Char* doubleToString(Char buffer[32], const double value) {
 		*p++ = '0' + digit;
 		double x = digit * magnitude * scale;
 		if (residual - x < 0 || digit == 10) { 	// When underflowing the residual (because of rounding problems) we drop to a lower digit. Also with some extreme values (e.g. the lowest denormals), rounding can cause residual / magnitude to become 1.0 and we must turn the 10 into a 9.
-			p[-1]--;
+			--p[-1];
 			x = (digit - 1) * magnitude * scale;
 		}
 		residual -= x;
@@ -388,7 +405,7 @@ Char* doubleToString(Char buffer[32], const double value) {
 			const double altAdjusted = (digit + 1) * magnitude * scale - compensation;
 			volatile double altSum = reconstructed + altAdjusted;
 			if (altSum == absValue) {
-				p[-1]++;
+				++p[-1];
 				break;
 			}
 		}
@@ -396,7 +413,7 @@ Char* doubleToString(Char buffer[32], const double value) {
 		compensation = sum - reconstructed;
 		compensation -= adjusted;
 		reconstructed = sum;
-		magnitude /= 10.0;
+		--xp;
 	}
 	while (p < periodPosition) {
 		*p++ = '0';
