@@ -1167,7 +1167,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 		switch (a) {
 			case "false": return b;
 			case "true": return "true";
-			default: return (b === "false" ? a: a + " || " + b);
+			default: return (b === "false" ? a : a + " || " + b);
 		}
 	}
 	
@@ -1179,14 +1179,18 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 	function quantify(code, offset, repeatCode, tail, quantity, stepSize) {
 		// TODO : eliminate unnecessary b=p+0,e=p+Infinity and stuff
 		var functionName = 'q' + (++functionCounter)
-				, head = "var " + (stepSize ? "h=" + stepSize + ",b=p+" + quantity.mini + "*h,e=p+" + quantity.maxi
-				+ "*h" : "b=p+" + quantity.mini + ",e=p+" + quantity.maxi) + "; ";
+				, head = (stepSize ? "var h=" + stepSize + "," : "var ")
+				+ (quantity.mini ? "b=p+" + quantity.mini + (stepSize ? "*h" : "") : "b=p")
+				+ (quantity.maxi < $Infinity ? ",e=p+" + quantity.maxi + (stepSize ? "*h" : "") : "") + "; ";
 		if (stepSize) head += "if (h<=0 || h!==h) return " + tail + "; ";
 		if (quantity.greedy) {
-			addFunction(functionName, head + "while (" + and("p<e", repeatCode) + ") " + (stepSize ? "p+=h" : "++p")
-					+ "; while (" + and("p>=b", "!(" + tail + ")") + ") " + (stepSize ? "p-=h" : "--p") + "; return p>=b");
+			addFunction(functionName, head + "while (" + and((quantity.maxi < $Infinity ? "p<e" : "true"), repeatCode) + ") "
+					+ (stepSize ? "p+=h" : "++p") + "; while (" + and("p>=b", "!(" + tail + ")") + ") " + (stepSize ? "p-=h" : "--p")
+					+ "; return p>=b");
 		} else {
-			addFunction(functionName, head + "while (" + or("p<b", "!(" + tail + ")") + ") { if (" + or("p>=e", "!(" + repeatCode + ")") + ") return false; " + (stepSize ? "p+=h" : "++p") + " }; return true");
+			addFunction(functionName, head + "while (" + or((quantity.mini ? "p<b" : "false"), "!(" + tail + ")")
+					+ ") { if (" + or((quantity.maxi < $Infinity ? "p>=e" : "false"), "!(" + repeatCode + ")") + ") return false; " + (stepSize ? "p+=h" : "++p")
+					+ " }; return true");
 		}
 		return and(code, functionName + "(" + positionToCode(offset) + ")");
 	}
