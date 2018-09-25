@@ -404,10 +404,19 @@ function createCaseTables() {
 };
 
 function translateString(string, table) {
-	if (!lowerToUpper) createCaseTables();
 	var i = -1, len = string.length, s = '', t, c;
 	while (++i < len) s += (t = table[c = string[i]]) ? t : c;
 	return s
+}
+
+function toLower(o) {
+	if (!lowerToUpper) createCaseTables();
+	return translateString(str(o), upperToLower);
+}
+
+function toUpper(o) {
+	if (!lowerToUpper) createCaseTables();
+	return translateString(str(o), lowerToUpper);
 }
 
 var String = support.distinctConstructor(function String(v) {
@@ -574,10 +583,10 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		}
 		return $sub(str(this), start, end);
 	}),
-	toUpperCase: unconstructable(function toUpperCase() { return translateString(str(this), lowerToUpper) }),
-	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return translateString(str(this), lowerToUpper) }),
-	toLowerCase: unconstructable(function toLowerCase() { return translateString(str(this), upperToLower) }),
-	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return translateString(str(this), upperToLower) }),
+	toUpperCase: unconstructable(function toUpperCase() { return toUpper(this) }),
+	toLocaleUpperCase: unconstructable(function toLocaleUpperCase() { return toUpper(this) }),
+	toLowerCase: unconstructable(function toLowerCase() { return toLower(this) }),
+	toLocaleLowerCase: unconstructable(function toLocaleLowerCase() { return toLower(this) }),
 	valueOf: unconstructable(function valueOf() {
 		checkClass(this, "String", "valueOf");
 		return $getInternalProperty(this, "value");
