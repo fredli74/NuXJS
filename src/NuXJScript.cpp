@@ -152,19 +152,6 @@ struct QuickConstants {
 		for (int i = MIN_EXPONENT; i <= MAX_EXPONENT; ++i) {
 			exp10s[i - MIN_EXPONENT] = pow(10.0, static_cast<double>(i));
 		}
-		/*
-		FIX : drop
-		double x = 1.0;
-		for (int i = 0; i <= MAX_EXPONENT; ++i) {
-			exp10s[i - MIN_EXPONENT] = x;
-			exp10s[-i - MIN_EXPONENT] = 1.0 / x;
-			x *= 10.0;
-		}
-		x = exp10s[-MAX_EXPONENT - MIN_EXPONENT];
-		for (int i = -MAX_EXPONENT - 1; i >= MIN_EXPONENT; --i) {
-			x /= 10.0;
-			exp10s[i - MIN_EXPONENT] = x;
-		}*/
 	}
 	Value ascii[127];
 	String asciiChars[127];

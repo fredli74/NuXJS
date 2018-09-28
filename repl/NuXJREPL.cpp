@@ -387,7 +387,7 @@ Var test1(Runtime& rt, const Var& thisVar, const VarList& args) {
 	return Var(rt, static_cast<double>(args[0]) + args[1]);
 }
 
-Var load(Runtime& rt, const Var& thisVar, const VarList& args) {
+Var read(Runtime& rt, const Var& thisVar, const VarList& args) {
 	std::wifstream stdlibStream;
 	std::wstring contentsWide;
 	try {
@@ -403,6 +403,12 @@ Var load(Runtime& rt, const Var& thisVar, const VarList& args) {
 		ScriptException::throwError(rt.getHeap(), GENERIC_ERROR, x.what());
 	}
 	return Var(rt, contentsWide);
+}
+
+Var load(Runtime& rt, const Var& thisVar, const VarList& args) {
+	Var source = read(rt, thisVar, args);
+	rt.run(source);
+	return Var(rt);
 }
 
 int testMain(int argc, const char* argv[]) {
@@ -450,8 +456,9 @@ suppressStdErr = true;
     Runtime rt(heap);
 	Object& globals = *rt.getGlobalObject();
 	Var globs = rt.getGlobals();
+	globs["read"] = read;
 	globs["load"] = load;
-	
+
 #if 0
     rt.setMemoryCap(8192*10);
     Var anObject = rt.eval("({ a: 123.45, b: 'y' })");
