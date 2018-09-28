@@ -483,8 +483,8 @@ class String : public Object, public QuickArray<Char> {
 	
 				String();													// Create empty string (allocated on standard C++ heap). Used for constant string generation on startup.
 				// FIX : make next two private?
-				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap). Will also generate hash and bloom code. Use for global string constants.
-				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap). Will also generate hash and bloom code. Used for constant string generation on startup.
+				String(const char* s);										// Create string from constant 8-bit string (allocated on standard C++ heap, so it will not be gc'ed). Will also generate hash and bloom code. Use for global string constants.
+				String(const Char* b, const Char* e);						// Create string from begin to end pointers (allocated on standard C++ heap, so it will not be gc'ed). Will also generate hash and bloom code. Used for constant string generation on startup.
 				String(GCList& gcList);
 				String(GCList& gcList, const Char* b, const Char* e);		// Create string from begin to end pointers.
 				String(GCList& gcList, const String& l, const String& r);	// Create string by concatenating two strings.
