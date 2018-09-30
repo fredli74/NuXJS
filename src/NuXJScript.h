@@ -916,6 +916,14 @@ struct ScriptException : public Exception {
 };
 
 extern const String LENGTH_STRING; // FIX : placement?
+extern const String UNDEFINED_STRING;
+extern const String NULL_STRING;
+extern const String BOOLEAN_STRING;
+extern const String NUMBER_STRING;
+extern const String STRING_STRING;
+extern const String OBJECT_STRING;
+extern const String FUNCTION_STRING;
+
 class VarList;
 class Property;
 typedef Var (*VarFunction)(Runtime&, const Var&, const VarList&);
@@ -939,6 +947,10 @@ class AccessorBase {
 				template<typename T> const Property operator[](const T& key) const;
 				template<typename T> bool operator==(const T& t) const { return get().isStrictlyEqualTo(makeValue(t)); }
 				template<typename T> bool operator!=(const T& t) const { return !get().isStrictlyEqualTo(makeValue(t)); }
+				template<typename T> bool operator<(const T& t) const { return get().isLessThan(makeValue(t)); }
+				template<typename T> bool operator<=(const T& t) const { return get().isLessThanOrEqualTo(makeValue(t)); }
+				template<typename T> bool operator>(const T& t) const { return t < (*this); }
+				template<typename T> bool operator>=(const T& t) const { return t <= (*this); }
 				Var typeOf() const;
 				template<typename T> bool has(const T& key) const { Value dummy; return get().toObject(rt, false)->getProperty(rt, makeValue(key), &dummy) != NONEXISTENT; }
 				UInt32 length();
