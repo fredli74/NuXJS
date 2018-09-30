@@ -837,9 +837,9 @@ Heap::Heap() : allocated(0), managedListA(*this), managedListB(*this), rootList(
 }
 
 int Heap::calcPoolIndex(const size_t size) {
-	return -1;/*(0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
+	return (0 < size && size <= MAX_POOLED_SIZE - POOL_SIZE_GRANULARITY)
 			? static_cast<int>((size + (POOL_SIZE_GRANULARITY - 1)) / POOL_SIZE_GRANULARITY)
-			: -1;*/
+			: -1;
 }
 
 void* Heap::alloc(size_t size) {
