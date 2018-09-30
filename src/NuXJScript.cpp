@@ -4504,11 +4504,22 @@ struct Support {
 	}
 
 	static Value getCurrentTime(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		return time(0) * 1000.0 + rt.unixEpochTimeDiff;
+		time_t t;
+		time(&t);
+		return t * 1000.0 + rt.unixEpochTimeDiff;
 	}
 
 	static Value localTimeDifference(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
-		const time_t t = (argc > 0 ? static_cast<time_t>((argv[0].toDouble() - rt.unixEpochTimeDiff) / 1000.0 + 0.5) : time(0));
+		time_t t;
+		if (argc == 0) {
+			time(&t);
+		} else {
+			const double dt = (argv[0].toDouble() - rt.unixEpochTimeDiff) / 1000.0 + 0.5;
+			if (dt < 0.0) { // MSVC can crash on conversion although documentation says it should return null.
+				return Value::NOT_A_NUMBER;
+			}
+			t = static_cast<time_t>(dt);
+		}
 		const struct tm localTM = *localtime(&t);
 		const struct tm utcTM = *gmtime(&t);
 		struct tm newTM;
