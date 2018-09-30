@@ -139,7 +139,9 @@ class Heap {
 const UInt32 STANDARD_BUILT_IN_COUNT = 8;
 template<typename T, UInt32 BUILT_IN_COUNT = STANDARD_BUILT_IN_COUNT> class QuickArray {
 	public:		explicit QuickArray(UInt32 n, Heap* optionalHeap)
-						: associatedHeap(optionalHeap), n(n), p(n <= BUILT_IN_COUNT ? a : new(optionalHeap) T[n]) { }
+						: associatedHeap(optionalHeap), n(n), p(n <= BUILT_IN_COUNT ? a : new(optionalHeap) T[n]) {
+				}
+
 				explicit QuickArray(const QuickArray& copy) : n(0), associatedHeap(copy.associatedHeap), p(a) {
 					(*this) = copy;
 				}
@@ -976,8 +978,8 @@ template<> inline bool AccessorBase::to<bool>() const { return get().toBool(); }
 
 class Var : public GCItem, public AccessorBase {
 	public:		typedef GCItem super;
-				Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
-				Var(Runtime& rt, const Var& that) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(that)) { }
+				explicit Var(Runtime& rt) : super(rt.getHeap().roots()), AccessorBase(rt), v(Value::UNDEFINED) { }
+				explicit Var(Runtime& rt, const Var& that) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(that)) { }
 				template<class C> Var(Runtime& rt, C* cppObject, Var (C::*const& cppMethod)(Runtime&, const Var&, const VarList&));
 				template<typename T> Var(Runtime& rt, const T& t) : super(rt.getHeap().roots()), AccessorBase(rt), v(makeValue(t)) { }
 				Var& operator =(const Var& that) { this->v = makeValue(that); return *this; }
