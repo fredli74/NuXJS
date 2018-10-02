@@ -242,7 +242,7 @@ static const Char* parseUnsignedInt(const Char* p, const Char* e, UInt32& i) {
 	return p;
 }
 
-const Char* parseDouble(const Char* const b, const Char* const e, double& value) {
+static const Char* parseDouble(const Char* const b, const Char* const e, double& value) {
 	Int32 exponent = -1;
 	double sign = 1.0;
 	const Char* significandBegin = b;
@@ -335,7 +335,7 @@ const Char* parseDouble(const Char* const b, const Char* const e, double& value)
 	return numberEnd;
 }
 
-Char* doubleToString(Char buffer[32], const double value) {
+static Char* doubleToString(Char buffer[32], const double value) {
 	Char* p = buffer;
 	if (value == 0.0) {
 		*p++ = '0';
@@ -682,7 +682,7 @@ String::String(GCList& gcList, const std::wstring& fromStdString) : super(gcList
 
 const String* String::typeOfString() const { return &STRING_STRING; }
 const String* String::getClassName() const { return &S_TRING_STRING; }
-const String* String::toString(Heap& heap) const { return this; }
+const String* String::toString(Heap&) const { return this; }
 Object* String::getPrototype(Runtime& rt) const { return rt.getPrototypeObject(Runtime::STRING_PROTOTYPE); }
 
 Flags String::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
@@ -780,8 +780,8 @@ void GCItem::operator delete(void* ptr) { Heap** p = reinterpret_cast<Heap**>(pt
 void GCItem::operator delete(void* ptr, Heap& heap) { ::operator delete(reinterpret_cast<Heap**>(ptr) - 1, &heap); }
 GCItem::GCItem() throw() : _gcList(0), _gcPrev(this), _gcNext(this) { }
 GCItem::GCItem(GCList& gcList) throw() : _gcList(0), _gcPrev(this), _gcNext(this) { gcList.claim(this); }
-GCItem& GCItem::operator=(const GCItem& copy) throw() { return *this; }
-void GCItem::gcMark(Heap& heap) const { }
+GCItem& GCItem::operator=(const GCItem&) throw() { return *this; }
+void GCItem::gcMark(Heap&) const { }
 GCItem::~GCItem() { if (_gcList != 0) { _gcList->relinquish(this); } }
 
 void* GCItem::operator new(size_t n, Heap& heap) {
@@ -919,11 +919,11 @@ Function* Object::asFunction() { return 0; }
 const String* Object::typeOfString() const { return &OBJECT_STRING; }
 const String* Object::getClassName() const { return &O_BJECT_STRING; }
 Object* Object::getPrototype(Runtime& rt) const { return rt.getObjectPrototype(); }
-Value Object::getInternalValue(Heap& heap) const { return Value::UNDEFINED; }
-Flags Object::getOwnProperty(Runtime& rt, const Value& key, Value* v) const { return NONEXISTENT; }
-bool Object::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags) { return false; }
-bool Object::deleteOwnProperty(Runtime& rt, const Value& key) { return false; }
-Enumerator* Object::getPropertyEnumerator(Runtime& rt) const { return &EMPTY_ENUMERATOR; }
+Value Object::getInternalValue(Heap&) const { return Value::UNDEFINED; }
+Flags Object::getOwnProperty(Runtime&, const Value&, Value*) const { return NONEXISTENT; }
+bool Object::setOwnProperty(Runtime&, const Value&, const Value&, Flags) { return false; }
+bool Object::deleteOwnProperty(Runtime&, const Value&) { return false; }
+Enumerator* Object::getPropertyEnumerator(Runtime&) const { return &EMPTY_ENUMERATOR; }
 
 bool Object::updateOwnProperty(Runtime& rt, const Value& key, const Value& v) {
 	return (hasOwnProperty(rt, key) && ((void)(setOwnProperty(rt, key, v)), true));
@@ -1102,7 +1102,7 @@ UInt32 Table::rebuild(UInt32 newSize) {
 ScriptObject::ScriptObject(GCList& gcList, Object* prototype)
 		: super(gcList), Table(&gcList.getHeap()), prototype(prototype) { }
 
-Object* ScriptObject::getPrototype(Runtime& rt) const { return prototype; }
+Object* ScriptObject::getPrototype(Runtime&) const { return prototype; }
 
 bool ScriptObject::setOwnProperty(Runtime& rt, const Value& key, const Value& v, Flags flags) {
 	return update(insert(key.toString(rt.getHeap())), v, flags);
@@ -1145,15 +1145,15 @@ WrapperObject::WrapperObject(GCList& gcList, const String* className, const Valu
 }
 
 const String* WrapperObject::getClassName() const { return className; }
-Value WrapperObject::getInternalValue(Heap& heap) const { return wrapped; }
+Value WrapperObject::getInternalValue(Heap&) const { return wrapped; }
 
 /* --- StringWrapper --- */
 
 StringWrapper::StringWrapper(GCList& gcList, const String* string, Object* prototype)
 		: super(gcList, prototype), wrapped(string) { }
 const String* StringWrapper::getClassName() const { return &S_TRING_STRING; }
-const String* StringWrapper::toString(Heap& heap) const { return wrapped; }
-Value StringWrapper::getInternalValue(Heap& heap) const { return wrapped; }
+const String* StringWrapper::toString(Heap&) const { return wrapped; }
+Value StringWrapper::getInternalValue(Heap&) const { return wrapped; }
 
 Flags StringWrapper::getOwnProperty(Runtime& rt, const Value& key, Value* v) const {
 	Flags flags = wrapped->getOwnProperty(rt, key, v);
@@ -1232,15 +1232,15 @@ bool Code::lookupNameIndex(const String* name, Int32& index) const {
 Function* Function::asFunction() { return this; }
 const String* Function::typeOfString() const { return &FUNCTION_STRING; }
 const String* Function::getClassName() const { return &F_UNCTION_STRING; }
-const String* Function::toString(Heap& heap) const { return &NATIVE_FUNCTION_STRING; }
-Value Function::getInternalValue(Heap& heap) const { return &NATIVE_FUNCTION_STRING; }
+const String* Function::toString(Heap&) const { return &NATIVE_FUNCTION_STRING; }
+Value Function::getInternalValue(Heap&) const { return &NATIVE_FUNCTION_STRING; }
 Object* Function::getPrototype(Runtime& rt) const { return rt.getPrototypeObject(Runtime::FUNCTION_PROTOTYPE); }
 
 Value Function::construct(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	return invoke(rt, processor, argc, argv, thisObject);
 }
 
-bool Function::hasInstance(Runtime& rt, Processor& processor, Object* object) const {
+bool Function::hasInstance(Runtime& rt, Processor&, Object* object) const {
 	if (object == 0) {
 		return false;
 	}
@@ -1359,7 +1359,7 @@ bool Array::deleteOwnProperty(Runtime& rt, const Value& key) {
 	return (key.equalsString(LENGTH_STRING) ? false : ((void)(sliceDenseVector(rt, key)), super::deleteOwnProperty(rt, key)));
 }
 
-void Array::constructCompleteObject(Runtime& rt) const { }
+void Array::constructCompleteObject(Runtime&) const { }
 
 Enumerator* Array::getPropertyEnumerator(Runtime& rt) const {
 	Heap& heap = rt.getHeap();
@@ -1426,7 +1426,7 @@ const String* ScriptFunction::toString(Heap& heap) const {
 	return (s != 0 ? s : Object::toString(heap));
 }
 
-Value ScriptFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value ScriptFunction::invoke(Runtime&, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
 	processor.enterFunctionCode(this, argc, argv, thisObject);
 	return Value::UNDEFINED;
 }
@@ -1445,7 +1445,7 @@ Error::Error(GCList& gcList, ErrorType type, const String* message)
 }
 
 const String* Error::getClassName() const { return &E_RROR_STRING; }
-Value Error::getInternalValue(Heap& heap) const { return &ERROR_NAMES[errorType]; }
+Value Error::getInternalValue(Heap&) const { return &ERROR_NAMES[errorType]; }
 Object* Error::getPrototype(Runtime& rt) const { return rt.getErrorPrototype(errorType); }
 
 const String* Error::toString(Heap& heap) const {
@@ -1716,7 +1716,7 @@ ScriptException::ScriptException(Heap& heap, const Value& value) throw()
 static struct EvalFunction : public Function {
 	typedef Function super;
 	EvalFunction(bool direct) : direct(direct) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object*) {
 		if (argc < 1) {
 			return Value::UNDEFINED;
 		}
@@ -1834,7 +1834,7 @@ const Processor::OpcodeInfo& Processor::getOpcodeInfo(const Opcode opcode) {
 struct Processor::EvalScope : public Scope {
 	typedef Scope super;
 	EvalScope(GCList& gcList, Scope* parentScope) : super(gcList, parentScope) { }
-	virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool dontDelete) {
+	virtual void declareVar(Runtime& rt, const String* name, const Value& initValue, bool) {
 		parentScope->declareVar(rt, name, initValue, false);
 	}
 };
@@ -2636,7 +2636,7 @@ Compiler::BranchPoint Compiler::markBackwardBranch() {
 
 void Compiler::emitBackwardBranch(Processor::Opcode opcode, const BranchPoint& point) {
 	if (!currentSection->inDeadCode()) {
-		assert(!point.inDeadCode() && 0 <= point.codeOffset && point.codeOffset < currentSection->code.size());
+		assert(!point.inDeadCode() && 0 <= point.codeOffset && static_cast<UInt32>(point.codeOffset) < currentSection->code.size());
 		emit(opcode, point.codeOffset - 1 - currentSection->code.size());
 	}
 }
@@ -2851,6 +2851,7 @@ Compiler::ExpressionResult Compiler::safeKeep() {
 }
 
 void Compiler::returnSafeKept(const ExpressionResult& xr) {
+	(void)xr;
 	assert(xr.t == ExpressionResult::SAFEKEPT);
 	assert(currentSection->inDeadCode() || xr.v.toInt() == currentSection->stackDepth - (compilingFor == FOR_EVAL ? 2 : 1));
 	emit(evalPopOpcode(), 1);
@@ -4220,7 +4221,7 @@ struct Runtime::FunctionPrototypeFunction : public ExtensibleFunction {
 	virtual void constructCompleteObject(Runtime& rt) const;
 };
 
-Value Runtime::FunctionPrototypeFunction::invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+Value Runtime::FunctionPrototypeFunction::invoke(Runtime&, Processor&, UInt32, const Value*, Object*) {
 	return Value::UNDEFINED;
 }
 
@@ -4295,14 +4296,14 @@ void SeparateConstructorFunction::constructCompleteObject(Runtime& rt) const {
 
 template<class F> struct UnaryMathFunction : public Function {
 	UnaryMathFunction(const F& f) : f(f) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime&, Processor&, UInt32 argc, const Value* argv, Object*) {
 		return (argc >= 1 ? Value(f(argv[0].toDouble())) : Value::NOT_A_NUMBER);
 	}
 	const F* f;
 };
 
 struct Support {
-	static Value getInternalProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value getInternalProperty(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0) {
@@ -4320,7 +4321,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 	
-	static Value updateDateValue(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value updateDateValue(Runtime&, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
 			if (o != 0 && o->getClassName()->isEqualTo(D_ATE_STRING)) {
@@ -4331,7 +4332,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value createWrapper(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value createWrapper(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 2) {
 			Heap& heap = rt.getHeap();
 			const String* const className = argv[0].toString(heap);
@@ -4359,7 +4360,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value distinctConstructor(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value distinctConstructor(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 1) {
 			Function* regularFunction = argv[0].asFunction();
 			if (regularFunction != 0) {
@@ -4371,7 +4372,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value defineProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value defineProperty(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		bool success = false;
 		if (argc >= 2) {
 			Object* o = argv[0].asObject();
@@ -4385,7 +4386,7 @@ struct Support {
 		return success;
 	}
 
-	static Value compileFunction(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value compileFunction(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 1) {
 			Heap& heap = rt.getHeap();
 			const String* source = argv[0].toString(heap);
@@ -4397,7 +4398,7 @@ struct Support {
 		return Value::UNDEFINED;
 	}
 
-	static Value callWithArgs(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value callWithArgs(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object*) {
 		Heap& heap = rt.getHeap();
 		Function* callFunction = (argc > 0 ? argv[0].asFunction() : 0);
 		if (callFunction == 0) {
@@ -4425,31 +4426,31 @@ struct Support {
 		}
 	}
 	
-	static Value hasOwnProperty(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value hasOwnProperty(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		Object* object = (argc >= 2 ? argv[0].toObjectOrNull(rt, false) : 0);
 		return (object != 0 ? object->hasOwnProperty(rt, argv[1]) : false);
 	}
 
-	static Value isPropertyEnumerable(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value isPropertyEnumerable(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		Object* object = (argc >= 2 ? argv[0].toObjectOrNull(rt, false) : 0);
 		return (object != 0 ? object->isOwnPropertyEnumerable(rt, argv[1]) : false);
 	}
 
-	static Value fromCharCode(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value fromCharCode(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		Char c = static_cast<Char>(argc > 0 ? argv[0].toInt() : 0);
 		Heap& heap = rt.getHeap();
 		return ((0 <= c && c < 127) ? QUICK_CONSTANTS.ascii[c] : Value(new(heap) String(heap.managed(), &c, &c + 1)));
 	}
 
-	static Value atan2(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value atan2(Runtime&, Processor&, UInt32 argc, const Value* argv, Object*) {
 		return (argc >= 2 ? Value(std::atan2(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 
-	static Value pow(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value pow(Runtime&, Processor&, UInt32 argc, const Value* argv, Object*) {
 		return (argc >= 2 ? Value(std::pow(argv[0].toDouble(), argv[1].toDouble())) : Value::NOT_A_NUMBER);
 	}
 
-	static Value parseFloat(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value parseFloat(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 1) {
 			const String* s = argv[0].toString(rt.getHeap());
 			const Char* e = s->end();
@@ -4462,7 +4463,7 @@ struct Support {
 		return Value::NOT_A_NUMBER;
 	}
 
-	static Value charCodeAt(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value charCodeAt(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 2) {
 			const String* s = argv[0].toString(rt.getHeap());
 			const double d = nanToZero(argv[1].toDouble());
@@ -4473,7 +4474,7 @@ struct Support {
 		return Value::NOT_A_NUMBER;
 	}
 
-	static Value substring(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value substring(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 3) {
 			const String* s = argv[0].toString(rt.getHeap());
 			const double l = s->size();
@@ -4489,7 +4490,7 @@ struct Support {
 		return &String::EMPTY;
 	}
 
-	static Value submatch(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value submatch(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 3) {
 			const String* const text = argv[0].toString(rt.getHeap());
 			const Int32 offset = argv[1].toInt();
@@ -4503,13 +4504,13 @@ struct Support {
 		return false;
 	}
 
-	static Value getCurrentTime(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value getCurrentTime(Runtime& rt, Processor&, UInt32, const Value*, Object*) {
 		time_t t;
 		time(&t);
 		return t * 1000.0 + rt.unixEpochTimeDiff;
 	}
 
-	static Value localTimeDifference(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value localTimeDifference(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		time_t t;
 		if (argc == 0) {
 			time(&t);
@@ -4535,7 +4536,7 @@ struct Support {
 		return (newTime == -1 ? Value::NOT_A_NUMBER : Value(t * 1000.0 - newTime * 1000.0));
 	}
 	
-	static Value random(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	static Value random(Runtime&, Processor&, UInt32, const Value*, Object*) {
 		return rand() / (RAND_MAX + 1.0);
 	}
 };
@@ -4567,13 +4568,13 @@ static UnaryMathFunction<bool (double)> IS_NAN_FUNCTION(isNaN);
 static UnaryMathFunction<bool (double)> IS_FINITE_FUNCTION(isFinite);
 
 static struct DefaultConversion : public Function {
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime&, Processor&, UInt32, const Value* argv, Object*) {
 		return argv[0];
 	}
 } DEFAULT_CONVERSION;
 
 static struct NoRegExpSupport : public Function {
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor&, UInt32, const Value*, Object*) {
 		ScriptException::throwError(rt.getHeap(), REFERENCE_ERROR, "No RegExp support");
 		return Value::UNDEFINED;
 	}
@@ -4717,7 +4718,7 @@ void Runtime::setupStandardLibrary() {
 	const Var protectedSupportObject(*this, supportObject);
 	// FIX : static strings?
 	supportObject->setOwnProperty(*this, String::alloc(heap, "prototypes"), prototypesObject);
-	for (int i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
+	for (size_t i = 0; i < sizeof (SUPPORT_FUNCTIONS) / sizeof (*SUPPORT_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, &SUPPORT_FUNCTIONS[i].name, &SUPPORT_FUNCTIONS[i].func);
 	}
 	supportObject->setOwnProperty(*this, String::alloc(heap, "isNaN"), &IS_NAN_FUNCTION);
@@ -4729,7 +4730,7 @@ void Runtime::setupStandardLibrary() {
 	supportObject->setOwnProperty(*this, String::alloc(heap, "maxNumber"), std::numeric_limits<double>::max());
 	supportObject->setOwnProperty(*this, String::alloc(heap, "minNumber"), std::numeric_limits<double>::denorm_min());
 
-	for (int i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
+	for (size_t i = 0; i < sizeof (NATIVE_MATH_FUNCTIONS) / sizeof (*NATIVE_MATH_FUNCTIONS); ++i) {
 		supportObject->setOwnProperty(*this, &NATIVE_MATH_FUNCTIONS[i].name, &NATIVE_MATH_FUNCTIONS[i].func);
 	}
 	

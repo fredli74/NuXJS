@@ -499,7 +499,7 @@ class String : public Object, public QuickArray<Char> {
 				virtual Object* getPrototype(Runtime& rt) const;
 				virtual Flags getOwnProperty(Runtime& rt, const Value& key, Value* v) const;
 				virtual Enumerator* getPropertyEnumerator(Runtime& rt) const;
-				virtual Value getInternalValue(Heap& heap) const { return Value(this); }
+				virtual Value getInternalValue(Heap&) const { return Value(this); }
 				UInt32 calcHash() const;
 				bool isEqualTo(const String& o) const;
 				bool isLessThan(const String& o) const;
@@ -711,7 +711,7 @@ template<class F> struct FunctorAdapter : public Function {
 class ExtensibleFunction : public LazyScriptObject<Function> {
 	public:		typedef LazyScriptObject<Function> super;
 				ExtensibleFunction(GCList& gcList) : super(gcList) { }
-	protected:	virtual void constructCompleteObject(Runtime& rt) const { }
+	protected:	virtual void constructCompleteObject(Runtime&) const { }
 				void createPrototypeObject(Runtime& rt, Object* forObject, bool dontEnumPrototype) const;
 };
 
@@ -1013,7 +1013,7 @@ class VarList : public GCItem, public QuickArray<Value> {
 						: super(rt.getHeap().roots()), rt(rt), QuickArray<Value>(count, &rt.getHeap()) {
 					std::copy(values + 0, values + count, begin());
 				}
-				Var operator[](int index) const { return Var(rt, (index < size() ? *(begin() + index) : Value::UNDEFINED)); }
+				Var operator[](int index) const { return Var(rt, (static_cast<size_t>(index) < size() ? *(begin() + index) : Value::UNDEFINED)); }
 	
 	protected:	Runtime& rt;
 				virtual void gcMark(Heap& heap) const {
@@ -1039,7 +1039,7 @@ inline std::wostream& operator<<(std::wostream& out, const AccessorBase& v) { ou
 template<class F> struct AccessorBase::VarFunctorAdapter : public ExtensibleFunction {
 	typedef ExtensibleFunction super;
 	VarFunctorAdapter(GCList& gcList, const F& f) : super(gcList), f(f) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object* thisObject) {
 		return f(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
 	const F f;
@@ -1052,7 +1052,7 @@ template<class C> struct AccessorBase::VarMemberFunctionAdapter : public Extensi
 	typedef ExtensibleFunction super;
 	VarMemberFunctionAdapter(GCList& gcList, Var (C::*const &cppMethod)(Runtime&, const Var&, const VarList&))
 			: super(gcList), cppMethod(cppMethod) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object* thisObject) {
 		C* me = reinterpret_cast<C*>(thisObject);
 		if ((me->C::getClassName()) != (me->getClassName())) {
 			ScriptException::throwError(rt.getHeap(), TYPE_ERROR, "Invalid class");
@@ -1070,7 +1070,7 @@ template<class C> struct BoundVarMemberFunctionAdapter : public ExtensibleFuncti
 	typedef ExtensibleFunction super;
 	BoundVarMemberFunctionAdapter(GCList& gcList, C* cppObject, Var (C::*const &cppMethod)(Runtime&, const Var&, const VarList&))
 			: super(gcList), cppObject(cppObject), cppMethod(cppMethod) { }
-	virtual Value invoke(Runtime& rt, Processor& processor, UInt32 argc, const Value* argv, Object* thisObject) {
+	virtual Value invoke(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object* thisObject) {
 		return (cppObject->*cppMethod)(rt, Var(rt, thisObject), VarList(rt, argc, argv));
 	}
 	C* cppObject;
