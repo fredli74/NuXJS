@@ -1297,7 +1297,7 @@ function compileRegExp(s, caseInsensitive, multiLine) {
 						}
 						++p;
 						var functionName = 'k' + (++functionCounter);
-						addFunction(functionName, "var c=s[p]; return " + (negative ? "!(" + classCode + ')' : classCode));
+						addFunction(functionName, "var c=s[p]; return " + (negative ? "p!==l && !(" + classCode + ')' : classCode));
 						if (quantity = parseQuantifier()) {
 							return quantify(code, offset, functionName + '(' + positionToCode(0) + ')', compileTerms(0, junction), quantity);
 						}
