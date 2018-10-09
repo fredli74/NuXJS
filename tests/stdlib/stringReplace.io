@@ -64,3 +64,6 @@
 > print("apan bapan laban banan babian".replace(/ba(.)an/g,"X $'"))
 < apan X  laban banan babian laban X  babian babian
 -
+> print("xyzzy".replace("z", "$"))
+< xy$zy
+-

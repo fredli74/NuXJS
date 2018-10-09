@@ -485,7 +485,7 @@ defineProperties(String.prototype, { dontEnum: true }, {
 				for (p = 0; ch = r[p]; ++p) {
 					if (ch !== '$') t += ch;
 					else switch (ch = r[++p]) {
-						case '$': t += '$'; break;
+						case (void 0): case '$': t += '$'; break;
 						case '&': t += m; break;
 						case '`': t += $sub(s, 0, arguments[arguments.length - 2]); break;
 						case "'": t += $sub(s, arguments[arguments.length - 2] + m.length, sLength); break;
