@@ -42,7 +42,7 @@ if (PLATFORM === 'UNIX') {
 	TIME_COMMAND_FORMAT = '(time -p {exe} benchmarks/{fn} >{outPath}) 2>{timePath}';
 // FIX : option to support this:
 //	TIME_COMMAND_FORMAT = '{exe} benchmarks/{fn} >{outPath} 2>{timePath}';
-	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp stdlibJS.cpp';
+	BUILD_CPP_COMMAND = './BuildCpp.sh NuXJScript NuXJScript.cpp stdlibJS.cpp NuXJREPL.cpp';
 	parseTimeOutput = function { a = $1; tokenize($0, >append(a, $0)); }
 } else if (PLATFORM == 'WINDOWS') {
 	defaults(@exe, (if (!doRevRange) 'Release/NuXJScript -s' else 'NuXJScript -s'));
@@ -71,7 +71,7 @@ iterate(@revs, >{
 	err = try(>{
 		if (rev !== void) {
 			print('Checking out ' # rev # '...');
-			pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h stdlib.js stdlibJS.cpp');
+			pipe('svn update -r' # rev # ' NuXJScript.cpp NuXJScript.h stdlib.js stdlibJS.cpp NuXJREPL.cpp');
 			print('Building...');
 			pipe(BUILD_CPP_COMMAND);
 			print('Done.');
