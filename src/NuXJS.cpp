@@ -5428,6 +5428,22 @@ template<class F> struct UnaryMathFunction : public Function {
 	F& f;
 };
 
+/*
+	Fills `tm` without the buffer that `std::localtime` and `std::gmtime` share across threads on glibc and musl, and
+	returns false when `t` does not convert. `tzset()` makes a `TZ` change apply, as `std::localtime` does on each call.
+*/
+static bool breakDownTime(std::time_t t, std::tm& tm, bool local) {
+#ifdef _WIN32
+	return (local ? localtime_s(&tm, &t) : gmtime_s(&tm, &t)) == 0;
+#else
+	if (local) {
+		tzset();
+		return localtime_r(&t, &tm) != 0;
+	}
+	return gmtime_r(&t, &tm) != 0;
+#endif
+}
+
 struct Support {
 	static Value getInternalProperty(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
 		if (argc >= 2) {
@@ -5649,16 +5665,11 @@ struct Support {
 			return NAN_VALUE;
 		}
 		t = static_cast<std::time_t>(dt);
-		const struct std::tm* const localPtr = std::localtime(&t);
-		if (localPtr == 0) {
+		struct std::tm localTM;
+		struct std::tm utcTM;
+		if (!breakDownTime(t, localTM, true) || !breakDownTime(t, utcTM, false)) {
 			return NAN_VALUE;
 		}
-		const struct std::tm localTM = *localPtr;
-		const struct std::tm* const utcPtr = std::gmtime(&t);
-		if (utcPtr == 0) {
-			return NAN_VALUE;
-		}
-		const struct std::tm utcTM = *utcPtr;
 		struct std::tm newTM;
 		std::memset(&newTM, 0, sizeof (newTM));
 		newTM.tm_year = utcTM.tm_year;
@@ -5897,8 +5908,9 @@ void Runtime::setupStandardLibrary() {
 		refTM.tm_year = 80;
 		refTM.tm_mday = 1;
 		const std::time_t refTime = std::mktime(&refTM);
-		struct std::tm* const refUTC = (refTime == static_cast<std::time_t>(-1) ? 0 : std::gmtime(&refTime));
-		const std::time_t refTimeAsUTC = (refUTC == 0 ? static_cast<std::time_t>(-1) : std::mktime(refUTC));
+		struct std::tm refUTC;
+		const std::time_t refTimeAsUTC = (refTime == static_cast<std::time_t>(-1)
+				|| !breakDownTime(refTime, refUTC, false) ? static_cast<std::time_t>(-1) : std::mktime(&refUTC));
 		assert(refTime != -1 && refTimeAsUTC != -1);
 		unixEpochTimeDiff = (refTime == static_cast<std::time_t>(-1) || refTimeAsUTC == static_cast<std::time_t>(-1))
 				? 0.0 : 315532800000.0 - static_cast<double>(refTime) * 2000.0
