@@ -321,6 +321,10 @@ Garbage collection is either invoked manually with `Heap::gc()` or automatically
 
 `Runtime::setMemoryCap` limits the live data a script may hold: after each automatic collection, a heap still at or above the cap raises "Out of memory". `Heap::setMaxAllocationSize` bounds every single allocation, 2 GB by default and at most (string lengths and offsets are 32-bit), so set it at or below the memory cap. Both are checked where the layering puts them, the cap between batches and the allocation limit in the heap, so the memory a process holds can exceed the cap by what one batch allocates, garbage included. Code that repeatedly copies something large makes most of that garbage: measured under a 64 MB cap, arrays and objects peak at 1 to 2.5 times their live data, repeated string or array copies at 4 to 9 times, and building a string with `s += chunk` at around 60 times.
 
+## Sharing Compiled Code
+
+A `Code` is compiled bytecode: instructions, primitive constants, nested functions and name tables. Every object it creates when it runs is allocated on the running runtime's own heap, so runtimes running the same `Code` share no state a script can reach. A host that creates many runtimes can therefore compile once and hand the result to each: `setupStandardLibrary` takes `STDLIB_JS` compiled with `compileEvalCode`, and `Processor::enterGlobalCode` and `enterEvalCode` take any compiled script. Measured on x64, a runtime set up from a shared standard library takes 0.19 ms and 109 KiB of heap, against 4.9 ms and 1624 KiB when it compiles its own. The heap holding the `Code` must outlive every runtime that runs it, and must not be garbage collected while they do.
+
 ## Number Conversion
 
 Decimal text and doubles are converted in both directions with exact integer arithmetic, so parsing always gives the

@@ -2058,6 +2058,24 @@ void testTables() {
 	the engine is a failure. The paths come from a list file because enumerating a directory is not portable, and
 	buildAndTest writes it. See docs/fuzzing.md.
 */
+static void testSharedCode() {
+	std::cout << std::endl << "***** Shared code *****" << std::endl << std::endl;
+	std::cout << "	- one compiled standard library sets up runtimes that stay isolated" << std::endl;
+	Heap codeHeap;
+	Runtime compiling(codeHeap);
+	const Code* stdlib = compiling.compileEvalCode(String::allocate(codeHeap, STDLIB_JS));
+	Heap heapA;
+	Runtime a(heapA);
+	a.setupStandardLibrary(stdlib);
+	a.eval("Array.prototype.join = function () { return 'hijacked' }; Object.prototype.leak = 1");
+	EXPECT_EQUAL(a.eval("[1, 2].join('-')").to<std::wstring>(), L"hijacked");
+	Heap heapB;
+	Runtime b(heapB);
+	b.setupStandardLibrary(stdlib);
+	EXPECT_EQUAL(b.eval("[1, 2].join('-')").to<std::wstring>(), L"1-2");
+	EXPECT_EQUAL(b.eval("typeof ({}).leak").to<std::wstring>(), L"undefined");
+}
+
 static void testFuzzCorpus(const char* listPath) {
 	std::cout << std::endl << "***** Fuzz corpus *****" << std::endl << std::endl;
 
@@ -2113,6 +2131,7 @@ int main(int argc, const char* argv[]) {
 			testLimits();
 			testExceptions();
 			testHighLevelAPI();
+			testSharedCode();
 			readMeSample1();
 			readMeSample2();
 		}

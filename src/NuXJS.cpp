@@ -5918,15 +5918,13 @@ void Runtime::fetchFunction(const Object* supportObject, const char* name, Funct
 	}
 }
 
-extern const char* STDLIB_JS;
-
 double Runtime::getCurrentEpochTime() {
 	std::time_t t;
 	std::time(&t);
 	return static_cast<double>(t) * 1000.0 + unixEpochTimeDiff;
 }
 
-void Runtime::setupStandardLibrary() {
+void Runtime::setupStandardLibrary(const Code* stdlibCode) {
 	{	// time() is not guaranteed to return utc time, so we perform some conversions to find the actual implementation
 		struct std::tm refTM;
 		std::memset(&refTM, 0, sizeof (refTM));
@@ -5966,7 +5964,9 @@ void Runtime::setupStandardLibrary() {
 		prototypesObject->setOwnProperty(*this, PROTOTYPE_NAMES[i], prototypes[i]);
 	}
 	
-	const Var func = eval(*String::allocate(heap, STDLIB_JS));
+	Processor processor(*this);
+	processor.enterEvalCode(stdlibCode != 0 ? stdlibCode : compileEvalCode(String::allocate(heap, STDLIB_JS)));
+	const Var func = runUntilReturn(processor);
 	Value argv[1] = { protectedSupportObject };
 	call(func, 1, argv);
 	

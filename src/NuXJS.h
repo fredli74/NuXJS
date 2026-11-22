@@ -1192,6 +1192,8 @@ const size_t STRING_CONSTANTS_CACHE_SIZE = (1 << STRING_CONSTANTS_CACHE_SIZE_N);
 const size_t STRING_CONSTANTS_CACHE_MAX_LENGTH = 64;	///< Max length of a string to cache.
 const size_t MAX_MEMORY_CAP = std::numeric_limits<std::size_t>::max();
 
+extern const char* STDLIB_JS;	// The standard library source, src/stdlibJS.cpp
+
 /**
 	Runtime bundles together the heap, global objects and execution state required to run JavaScript code.
 **/
@@ -1230,7 +1232,7 @@ class Runtime : public GCItem {
 		void resetTimeOut(Int32 timeOutSeconds);		///< Sets a time-out after which an exception is thrown (by checkTimeOut() which is called from runUntilReturn()).
 		void noTimeOut();								///< Disables the time-out (default).
 		void setRandomSeed(UInt32 seed);				// restarts Math.random; every runtime starts from the same seed
-		void setupStandardLibrary();					///< Sets up all the standard library functions and support routines. It is possible to execute script code without calling setupStandardLibrary() but apart from missing all built-in "native objects" defined in EcmaScript there will be some other limitations (e.g. no support for regular expression literals and no support for implicit valueOf() / toString() conversions).
+		void setupStandardLibrary(const Code* stdlibCode = 0);	// Sets up all the standard library functions and support routines. It is possible to execute script code without calling setupStandardLibrary() but apart from missing all built-in "native objects" defined in EcmaScript there will be some other limitations (e.g. no support for regular expression literals and no support for implicit valueOf() / toString() conversions). A `stdlibCode` other than 0 is `STDLIB_JS` from `compileEvalCode`, possibly of another runtime: it must stay reachable in a heap that outlives this runtime, and saves compiling it again.
 
 		Heap& getHeap() const { return heap; }
 		Object* getObjectPrototype() const { return prototypes[OBJECT_PROTOTYPE]; }
