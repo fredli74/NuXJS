@@ -2047,6 +2047,28 @@ void testTables() {
 		}
 		EXPECT_EQUAL(count, 21);
 	}
+
+	std::cout << "	- lookupWithoutReordering finds every key and leaves the table as it was" << std::endl;
+	{
+		Table table(&heap);
+		for (int i = 0; i < 200; ++i) {
+			table.update(table.insert(String::fromInt(heap, i)), i);
+		}
+		table.growForReading();
+		std::vector<const String*> before;
+		for (Table::Bucket* it = table.getFirst(); it != 0; it = table.getNext(it)) {
+			before.push_back(it->getKey());
+		}
+		for (int i = 0; i < 200; ++i) {
+			const Table::Bucket* bucket = table.lookupWithoutReordering(String::fromInt(heap, i));
+			EXPECT(bucket != 0 && bucket->getIndexValue() == i);
+		}
+		std::vector<const String*> after;
+		for (Table::Bucket* it = table.getFirst(); it != 0; it = table.getNext(it)) {
+			after.push_back(it->getKey());
+		}
+		EXPECT(before == after);
+	}
 }
 
 // --- main ---

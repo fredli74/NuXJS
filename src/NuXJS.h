@@ -97,6 +97,7 @@ class GCItem {
 			_gcReferenceMarkingComplete = true;
 	#endif
 		}
+		virtual void computeLazyState() const { }	// See Heap::computeLazyState.
 		virtual ~GCItem();
 		friend void gcMark(Heap& heap, const GCItem* item);
 
@@ -158,6 +159,7 @@ class Heap {
 		size_t pooled() const { return pooledSize; }
 		void setMaxAllocationSize(size_t maxSize) { assert(maxSize <= 0x7FFFFFFF); maxAllocationSize = maxSize; }		// 2 GB at most: string lengths and offsets are 32-bit
 		void gc();
+		void computeLazyState() const;					// Fills lazy state, so threads can share the heap.
 		virtual ~Heap();
 		friend void gcMark(Heap& heap, const GCItem* item);
 
@@ -526,15 +528,18 @@ class Table {
 		Bucket* getNext(Bucket* bucket) const;								///< Returns next bucket with an existing value or 0.
 		const Bucket* lookup(const String* key) const;						///< Return bucket pointer for key or 0.
 		Bucket* lookup(const String* key);									///< Return bucket pointer for key or 0.
+		const Bucket* lookupWithoutReordering(const String* key) const;		// Never writes, so threads can share it.
 		Bucket* insert(const String* key);									///< Insert key (if necessary) and return bucket pointer.
 		bool update(Bucket* bucket, const Value& value, Flags flags = 0);	///< Update value. Returns false if bucket is marked as read-only.
 		bool erase(Bucket* bucket);											///< Deletes bucket. Returns false if bucket is marked as dont-delete.
 		UInt32 getLoadCount() const;										///< Returns number of used hash table entries (not necessarily the same as the number of existing buckets!).
 		void update(Bucket* bucket, const Int32 index);						///< Update value as an index. Only used by name to index tables as an optimization.
+		void growForReading();												// To at most a quarter full.
 		void gcMarkReferences(Heap& heap) const;
 	
 	protected:
 		static UInt32 calcMaxLoad(UInt32 bucketCount);
+		UInt32 probe(const String* key, UInt32 hash) const;					// Slot of `key`, else where its run ends.
 		Bucket* find(const String* key, UInt32 hash);
 		UInt32 rebuild(UInt32 newN);
 
@@ -693,6 +698,7 @@ class String : public Object {
 		std::string toUTF8String() const;												///< returns WTF-8 for host error/reporting paths
 		std::wstring toWideString() const;												///< If wchar_t is 32-bit, UTF16 will be decoded automatically. Unmatched surrogate code units are copied through unchanged.
 		UInt32 createBloomCode() const;
+		virtual void computeLazyState() const { createBloomCode(); }					// computes the hash too
 
 	protected:
 		Vector<Char> chars;

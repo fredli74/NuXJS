@@ -325,6 +325,8 @@ Garbage collection is either invoked manually with `Heap::gc()` or automatically
 
 A `Code` is compiled bytecode: instructions, primitive constants, nested functions and name tables. Every object it creates when it runs is allocated on the running runtime's own heap, so runtimes running the same `Code` share no state a script can reach. A host that creates many runtimes can therefore compile once and hand the result to each: `setupStandardLibrary` takes `STDLIB_JS` compiled with `compileEvalCode`, and `Processor::enterGlobalCode` and `enterEvalCode` take any compiled script. Measured on x64, a runtime set up from a shared standard library takes 0.19 ms and 109 KiB of heap, against 4.9 ms and 1624 KiB when it compiles its own. The heap holding the `Code` must outlive every runtime that runs it, and must not be garbage collected while they do.
 
+Runtimes on different threads may run the same `Code` at once after `Heap::computeLazyState()` has filled the string hashes that would otherwise be written on first use, provided nothing else uses that heap meanwhile: no compiling and no allocating in it. A `Code` reads its own name tables with `Table::lookupWithoutReordering`, which never writes, and the compiler sizes those tables at most a quarter full so that such reads stay short.
+
 ## Number Conversion
 
 Decimal text and doubles are converted in both directions with exact integer arithmetic, so parsing always gives the
