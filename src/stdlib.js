@@ -18,7 +18,7 @@
 	@preserve: undefined,upperToLower,value,valueOf,var,void,while,writable,pop,parse,toDateString,instanceof,test
 	@preserve: toPrimitiveNumber,toPrimitiveString,constructor,isPrototypeOf,prototypes,createWrapper,createTable,$match
 	@preserve: $sub,createRegExp,CC,global,source,JSON,stringify,toJSON,unshift,compileFunction,localTimeDifference
-	@preserve: splice,split,search,replace,random,evalFunction,updateDateValue,toPrimitive
+	@preserve: splice,split,search,replace,random,evalFunction,updateDateValue,toPrimitive,catch
 
 	support: {
 		prototypes: {	// built-in prototype objects
@@ -1898,7 +1898,18 @@ defineProperties(JSON, { dontEnum: true }, {
 		var p, parser;
 		if ((parser = PARSERS[text[p = space(text, 0)]]) && (p = parser(text, p))
 				&& space(text, p) === text.length) {
-			var val = eval('(' + text + ')');
+			// A JSON string may hold a raw U+2028 or U+2029, which end a string literal, so escape them and retry.
+			var val;
+			try { val = eval('(' + text + ')') } catch (e) {
+				var b = new StringBuilder, from = 0, c, i = -1, n = text.length;
+				while (++i < n)
+					if ((c = text[i]) === '\u2028' || c === '\u2029') {
+						b.append($sub(text, from, i) + (c === '\u2028' ? '\\u2028' : '\\u2029'));
+						from = i + 1;
+					}
+				if (!from) throw e;
+				val = eval('(' + b.append($sub(text, from, n)).build() + ')')
+			}
 			if (typeof reviver === "function") {
 				function walk(holder, key) {
 					var k, v, o;
