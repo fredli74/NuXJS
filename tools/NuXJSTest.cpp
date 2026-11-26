@@ -814,6 +814,14 @@ static void testLimits() {
 	rt.setMemoryCap(512*1024*1024);
 	rt.resetTimeOut(1);
 	EXPECT_EXCEPTION(rt.run("while(true) {}"), "Time out");
+	rt.noTimeOut();
+	rt.run("var t = 'a', u; while (t.length < 2097152) t += t; u = t.substring(0, 65536) + 'b';");
+	rt.resetTimeOut(1);	// some 10^11 compares in one support.indexOf call, which must check the time-out itself
+	EXPECT_EXCEPTION(rt.eval("t.indexOf(u)"), "Time out");
+	rt.noTimeOut();
+	rt.run("var v = t.substring(0, 1048576) + 'b', w = t.substring(0, 1049576);");
+	rt.resetTimeOut(0);	// the clock is read every 1024 checks: 1000 starts of a 1M search must make a million
+	EXPECT_EXCEPTION(rt.eval("w.indexOf(v)"), "Time out");
 	rt.resetTimeOut(10);	// a constant lookup quadratic in the number of distinct numbers takes over 20 s here
 	EXPECT_EQUAL(rt.eval("var a = []; for (var i = 0; i < 200000; ++i) a[i] = i + 0.5; "
 			"JSON.parse('[' + a.join(',') + ']')[199999]"), 199999.5);

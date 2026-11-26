@@ -142,3 +142,19 @@
 -
 > print("abc".lastIndexOf("a", -5))
 < 0
+-
+// Long strings and long needles, searched in one native call.
+> var s = 'x'; while (s.length < 2048) s += s; print((s + 'y').indexOf('y'))
+< 2048
+-
+> var s = 'x'; while (s.length < 2048) s += s; print((s + 'xy').indexOf(s + 'y'))
+< 1
+-
+> var s = 'x'; while (s.length < 2048) s += s; print((s + 'xy').indexOf(s + 'y', 2))
+< -1
+-
+> var s = 'x'; while (s.length < 2048) s += s; print(s.indexOf(s + 'x'))
+< -1
+-
+> print("abc".indexOf("c", 2.5))
+< 2

@@ -5681,6 +5681,41 @@ struct Support {
 		return false;
 	}
 
+	// The first offset at or after `from` where `search` occurs in `text`, or -1; `from` is an integer in
+	// [0, text length]. Checks the time-out every 1024 characters compared, as runUntilReturn() does every 1024 cycles.
+	static Value indexOf(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
+		assert(argc == 3 && argv[0].isString() && argv[1].isString());
+		(void)argc;
+		const String* const text = argv[0].getString();
+		const String* const search = argv[1].getString();
+		const UInt32 textLength = text->size();
+		const UInt32 searchLength = search->size();
+		const UInt32 from = static_cast<UInt32>(argv[2].toDouble());
+		assert(from == argv[2].toDouble() && from <= textLength);
+		if (searchLength > textLength - from) {
+			return -1.0;
+		}
+		const Char* const t = text->begin();
+		const Char* const s = search->begin();
+		const UInt32 lastStart = textLength - searchLength;
+		UInt32 compared = 0;
+		for (UInt32 i = from; i <= lastStart; ++i) {
+			UInt32 j = 0;
+			while (j < searchLength && t[i + j] == s[j]) {
+				++j;
+			}
+			if (j == searchLength) {
+				return static_cast<double>(i);
+			}
+			compared += j + 1;
+			while (compared >= STANDARD_CYCLES_BETWEEN_AUTO_GC) {
+				compared -= STANDARD_CYCLES_BETWEEN_AUTO_GC;
+				rt.checkTimeOut();
+			}
+		}
+		return -1.0;
+	}
+
 	static Value getCurrentTime(Runtime& rt, Processor&, UInt32, const Value*, Object*) {
 		return rt.getCurrentEpochTime();
 	}
@@ -5732,7 +5767,7 @@ static struct {
 	{ "hasOwnProperty", Support::hasOwnProperty }, { "fromCharCode", Support::fromCharCode },
 	{ "isPropertyEnumerable", Support::isPropertyEnumerable }, { "atan2", Support::atan2 },
 	{ "pow", Support::pow }, { "parseFloat", Support::parseFloat }, { "charCodeAt", Support::charCodeAt },
-	{ "substring", Support::substring }, { "submatch", Support::submatch },
+	{ "substring", Support::substring }, { "submatch", Support::submatch }, { "indexOf", Support::indexOf },
 	{ "getCurrentTime", Support::getCurrentTime }, { "localTimeDifference", Support::localTimeDifference },
 	{ "random", Support::random }, { "updateDateValue", Support::updateDateValue }
 };
