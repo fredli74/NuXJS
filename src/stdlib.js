@@ -42,7 +42,7 @@
 		charCodeAt(s: string, i: number): string
 		substring(s: string, from: number, to: number): string
 		submatch(text: string, offset: number, match: string): boolean
-		indexOf(text: string, search: string, from: number): number					// 0 <= from <= text.length
+		indexOf(text: string, search: string, from: number): number					// 0 <= from <= text.length; -2 - i: call again from i
 		getCurrentTime(): number
 		localTimeDifference(epochTime: number): number
 		updateDateValue(o: object, v: number): number
@@ -494,11 +494,13 @@ defineProperties(String.prototype, { dontEnum: true }, {
 		return s;
 	}),
 	indexOf: unconstructable(function indexOf(searchString) { // .length should be 1
-		var s = str(this), i, pos = arguments[1];
+		var s = str(this), i, pos = arguments[1], r;
 		searchString = str(searchString);
 		if ((i = int(pos)) < 0) i = 0;
 		else if (i > s.length) i = s.length;
-		return $indexOf(s, searchString, i);
+		r = $indexOf(s, searchString, i);
+		while (r < -1) r = $indexOf(s, searchString, -2 - r);	// it stops every 4096 compares, so a host can yield
+		return r;
 	}),
 	lastIndexOf: unconstructable(function lastIndexOf(searchString) { // .length should be 1
 		var s, i, e = (s = str(this)).length - (searchString = str(searchString)).length, pos = arguments[1];

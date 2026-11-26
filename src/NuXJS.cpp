@@ -5681,9 +5681,7 @@ struct Support {
 		return false;
 	}
 
-	// The first offset at or after `from` where `search` occurs in `text`, or -1; `from` is an integer in
-	// [0, text length]. Checks the time-out every 1024 characters compared, as runUntilReturn() does every 1024 cycles.
-	static Value indexOf(Runtime& rt, Processor&, UInt32 argc, const Value* argv, Object*) {
+	static Value indexOf(Runtime&, Processor&, UInt32 argc, const Value* argv, Object*) {
 		assert(argc == 3 && argv[0].isString() && argv[1].isString());
 		(void)argc;
 		const String* const text = argv[0].getString();
@@ -5695,22 +5693,23 @@ struct Support {
 		if (searchLength > textLength - from) {
 			return -1.0;
 		}
+		if (searchLength == 0) {
+			return static_cast<double>(from);
+		}
 		const Char* const t = text->begin();
 		const Char* const s = search->begin();
 		const UInt32 lastStart = textLength - searchLength;
 		UInt32 compared = 0;
 		for (UInt32 i = from; i <= lastStart; ++i) {
-			UInt32 j = 0;
-			while (j < searchLength && t[i + j] == s[j]) {
-				++j;
+			if (compared >= 4096) {
+				return -2.0 - i;
 			}
-			if (j == searchLength) {
+			if (t[i] != s[0]) {
+				++compared;
+			} else if (std::equal(s + 1, s + searchLength, t + i + 1)) {
 				return static_cast<double>(i);
-			}
-			compared += j + 1;
-			while (compared >= STANDARD_CYCLES_BETWEEN_AUTO_GC) {
-				compared -= STANDARD_CYCLES_BETWEEN_AUTO_GC;
-				rt.checkTimeOut();
+			} else {
+				compared += searchLength;
 			}
 		}
 		return -1.0;
